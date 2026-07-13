@@ -2382,3 +2382,11 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Keep the visible Chinese pre-command explanation and once-per-user-turn launch guard. The guard must resolve literal PowerShell working-directory variables before comparing absolute and relative launch targets.
 - Keep `latest-ui-launch-once-smoke.json` release-required. Its accepted evidence is one shell call, one launch command, launch count `1`, exact fixture files, real tool history, and no duplicate program start.
 - Keep the versioned local-feature source snapshot bridge. Diagnostics may override a stale startup snapshot only when the refresh report has the known schema, complete required-source coverage, clean parity, and mtime coverage of the current source.
+
+## 2026-07-13 Human Edge Task Matrix
+
+- Added a release-required real desktop matrix for the three user-reported failure modes: same-task requirement correction, an already-running program that must not be launched again, and a failed first launch that must be diagnosed without relaunching.
+- Fresh full real-traffic evidence passed 3/3 in 222782 ms (`20260713-000005-ui-human-edge-matrix.json`). All three scenarios were result-validated from files, tests, CLI output, launch counters, and exact completion markers; no scenario needed a repair turn.
+- Preserve the execution-state fixes: normalize wrapped launch targets such as `cmd.exe /c start.bat`, redirect duplicate launch attempts to read-only verification, distinguish mixed read/write repair tasks from pure read-only requests, and keep the same chat active for follow-up corrections.
+- Keep `latest-ui-human-edge-matrix.json` in runtime sync, diagnostics, Manager latest reports, installed report integrity, and strict release gates. Future changes must retain the 3/3 semantic checks rather than accepting model prose as completion proof.
+- Full source preflight passed 1205 tests: 1171 pass, 34 skipped, 0 failed. Installed runtime is synced and loaded, Manager reports 0 stale / 0 missing with the human-edge matrix visible, real upper/center/lower close clicks pass, and passive release gates are green. Only final diff inspection and checkpoint commit remain.

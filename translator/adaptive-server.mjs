@@ -3907,6 +3907,7 @@ function latestManagerReportsPayload() {
         latestManagerReportItem("Current-channel worker recovery", "latest-current-channel-worker-recovery.json"),
         latestManagerReportItem("桌面聊天验收", "latest-ui-chat-smoke.json"),
         latestManagerReportItem("桌面单次启动验收", "latest-ui-launch-once-smoke.json"),
+        latestManagerReportItem("桌面边缘任务矩阵", "latest-ui-human-edge-matrix.json"),
         latestManagerReportItem("桌面联网搜索验收", "latest-ui-web-search-smoke.json"),
         latestManagerReportItem("桌面小项目验收", "latest-ui-local-project-smoke.json"),
         latestManagerReportItem("桌面编码项目验收", "latest-ui-coding-project-smoke.json"),
@@ -7430,6 +7431,15 @@ function commandLooksLikeFilesystemMutation(cmd) {
 function userTextRequiresReadOnlyVerification(text = "") {
     const value = String(text || "").trim();
     if (!value) return false;
+    const explicitlyRequiresMutation = value
+        .split(/[\r\n.!?\u3002\uff01\uff1f]+/u)
+        .map(sentence => sentence
+            .replace(/\b(?:do not|don't|must not|never|without)\s+(?:modify|edit|write|change|create|delete|remove|touch)\b[^.;!?]*/gi, "")
+            .replace(/(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u4e0d\u5141\u8bb8|\u65e0\u9700|\u65e0\u987b|\u4e0d).{0,16}(?:\u4fee\u6539|\u7f16\u8f91|\u5199\u5165|\u521b\u5efa|\u65b0\u5efa|\u5220\u9664|\u79fb\u9664|\u6539\u52a8|\u91cd\u5199)(?:\u4efb\u4f55|\u4efb\u610f|\u6240\u6709|\u5176\u4ed6|\u5176\u5b83|\u9879\u76ee)?(?:\u6587\u4ef6|\u5185\u5bb9|\u76ee\u5f55)?/gu, "")
+            .replace(/(?:\u662f\u5426|\u6709\u6ca1\u6709|\u6709\u65e0|\u5df2\u7ecf|\u5df2).{0,12}(?:\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u5220\u9664)/gu, ""))
+        .some(sentence => /\b(?:create|write|edit|modify|delete|remove|overwrite)\b/i.test(sentence)
+            || /(?:\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u7f16\u8f91|\u5220\u9664|\u79fb\u9664|\u91cd\u5199)/u.test(sentence));
+    if (explicitlyRequiresMutation) return false;
     const requiresWriteBeforeVerification = /(?:\u7b2c\u4e00|\u4e0b\u4e00)\u6b65.{0,60}(?:shell_command|exec_command|run_command).{0,120}(?:\u6062\u590d|\u4fee\u6539|\u7f16\u8f91|\u5199\u5165|\u521b\u5efa|\u5220\u9664)|(?:first|next)\s+step.{0,60}(?:shell_command|exec_command|run_command).{0,120}(?:restore|modify|edit|write|create|delete)/i.test(value);
     if (requiresWriteBeforeVerification) return false;
     return /\b(?:do not|don't|must not|never)\s+(?:modify|edit|write|change|create|delete|remove|touch)\s+(?:any\s+)?files?\b|\bno\s+file\s+changes?\b|\bread[- ]only\s+(?:verification|check|test)\b|\b(?:verification|verify|check|test)\s+only\b/i.test(value)
@@ -8817,7 +8827,7 @@ function artifactMarkerMismatchRelayPrompt(mismatch) {
     const requiredFiles = mismatch?.autonomousReasoning || mismatch?.complexProject
         ? "For the autonomous analyzer project, batch-create the remaining files from this exact checklist: package.json, codex-update-analyzer.mjs, codex-update-analyzer.test.mjs, sources.json, report.md, index.html, and done.txt. sources.json must contain at least three valid URLs whose host is openai.com or a subdomain of openai.com. The CLI must print one JSON object with numeric sourceCount and codexMentionCount fields. report.md and index.html must include the exact Chinese phrase 真实来源. Run node --test codex-update-analyzer.test.mjs and node codex-update-analyzer.mjs sources.json; then read done.txt, report.md, and index.html so the tool output proves the exact marker and source URLs."
         : mismatch?.multiTurnProject
-        ? "For the multi-turn project, modify word-tally.mjs, update word-tally.test.mjs, create followup.txt and CHANGELOG.md, then read the files back."
+        ? "For the multi-turn project, preserve tallyWords, its original tests, and the existing JSON CLI output contract. Add uniqueWords and its test without replacing old behavior. Create followup.txt and CHANGELOG.md; write followup.txt as UTF-8 without BOM or trailing newline so it contains only the exact marker, and include the marker in CHANGELOG.md. Run node --test and the original CLI command, require JSON red=2 blue=1 green=1, then read the marker files back."
         : mismatch?.codingProject
             ? "For the Node.js CLI project, verify package.json, word-tally.mjs, word-tally.test.mjs, and done.txt; run node --test word-tally.test.mjs and node word-tally.mjs \"red blue red\"; then read done.txt so the tool output shows the exact marker."
         : "Fix done.txt so it contains the exact marker and make sure index.html also contains that exact marker.";
@@ -9855,6 +9865,7 @@ function appendExactMarkerOnlyFileRewrite(command = "", requirement = null) {
 
 function appendAgenticStepFlowArtifactRewrite(command = "", requirement = null) {
     if (typeof command !== "string" || requirement?.agenticStepFlow !== true || !requirement?.marker || !requirement?.targetPath) return command;
+    if (userTextRequiresProcessLaunch(requirement.userText || "")) return command;
     if (!/(?:done\.txt|index\.html|README\.md|WriteAllText|Set-Content|New-Item|Out-File)/i.test(command)) return command;
     const marker = String(requirement.marker);
     const dirLiteral = psSingleQuoted(requirement.targetPath);
@@ -10232,7 +10243,7 @@ function userTextRequiresLocalArtifactToolForCompletion(userText = "") {
     if (!value.trim()) return false;
     if (!/[A-Za-z]:\\|\/[^ \n\r]+/.test(value)) return false;
     const mentionsArtifact = /(?:package\.json|done\.txt|index\.html|README\.md|sources\.json|report\.md|\.test\.mjs|\.(?:bat|cmd|ps1|mjs|json|html)\b|fixture directory|local project|artifact|project|script|\u811a\u672c)/i.test(value);
-    const asksForWork = /(?:create|write|edit|modify|fix|implement|generate|run|execute|start|launch|open|verify|test|node --test|PowerShell file commands|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u6253\u5f00|\u9a8c\u8bc1|\u6d4b\u8bd5)/iu.test(value);
+    const asksForWork = /(?:create|write|edit|modify|fix|repair|implement|generate|run|execute|start|launch|open|verify|test|node --test|PowerShell file commands|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u4fee\u590d|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u6253\u5f00|\u9a8c\u8bc1|\u6d4b\u8bd5)/iu.test(value);
     return mentionsArtifact && asksForWork;
 }
 
@@ -10364,6 +10375,7 @@ function localProjectEditToolInstructionForBody(body) {
 function localProjectToolMarkupExampleForBody(body) {
     const messages = Array.isArray(body?.messages) ? body.messages : [];
     const userText = latestUserTextFromChatMessages(messages);
+    if (userTextRequiresProcessLaunch(userText)) return "";
     const requirement = artifactMarkerRequirementFromUserText(userText);
     if (!requirement?.targetPath || !requirement?.marker) return "";
     const toolNames = (Array.isArray(body?.tools) ? body.tools : [])
@@ -10484,6 +10496,9 @@ function localProjectToolMarkupExampleForBody(body) {
         "- Do not read the terminal, list the directory, inspect project state, or produce repeated progress lines before that tool call.",
         "- If the marker ends with _FIRST, this command creates the first-turn project files, runs node:test, runs the CLI, reads done.txt, and prints the first marker.",
         "- If the marker does not end with _FIRST, this command updates the same project, creates followup.txt and CHANGELOG.md, runs node:test, runs the CLI, reads marker files, and prints the final marker.",
+        "- A follow-up adds behavior: preserve tallyWords, every prior test, and the JSON CLI output shape unless the user explicitly asks to replace them.",
+        "- Marker-only files must use WriteAllText with UTF8Encoding(false), no BOM, and no trailing newline; apply_patch is not suitable for those files.",
+        "- If a patch fails, switch to the supplied shell command instead of retrying malformed patches.",
     ] : [];
     const codingProjectInstructions = requirement.codingProject && !requirement.complexProject && !requirement.multiTurnProject ? [
         "- Coding-project task: copy the exact PowerShell command below as the first tool action.",
@@ -10505,7 +10520,16 @@ function localProjectToolMarkupExampleForBody(body) {
 }
 
 function userTextRequiresProcessLaunch(userText = "") {
-    return /(?:\b(?:start|launch|open|run)\b.{0,80}(?:script|app|application|program|service|server|\.bat|\.cmd|\.ps1)|(?:启动|打开|运行).{0,80}(?:脚本|软件|程序|服务|项目|\.bat|\.cmd|\.ps1)|(?:一直|反复|重复|疯狂).{0,20}启动)/iu.test(String(userText || ""));
+    const value = String(userText || "");
+    const requiresLaunch = /(?:\b(?:start|launch|open|run)\b.{0,80}(?:script|app|application|program|service|server|\.bat|\.cmd|\.ps1)|(?:启动|打开|运行).{0,80}(?:脚本|软件|程序|服务|项目|\.bat|\.cmd|\.ps1)|(?:一直|反复|重复|疯狂).{0,20}启动)/iu.test(value);
+    if (!requiresLaunch) return false;
+    const sentences = value.split(/[\r\n\u3002.!\uff01?\uff1f]+/u).map(sentence => sentence.trim()).filter(Boolean);
+    const noRelaunchSentence = sentences.some(sentence => /(?:不要|无需|别|禁止|must\s+not|do\s+not|don't|never).{0,32}(?:再|重新|again)?\s*(?:启动|运行|Start-Process|\b(?:launch|start)\b)/iu.test(sentence));
+    if (!noRelaunchSentence) return true;
+    return sentences.some(sentence => {
+        if (/(?:不要|无需|别|禁止|must\s+not|do\s+not|don't|never).{0,32}(?:启动|运行|Start-Process|\b(?:launch|start)\b)/iu.test(sentence)) return false;
+        return /(?:(?:必须|需要|请|先|然后|使用|用|must|need|please|first|then|use).{0,40}(?:Start-Process|启动|\b(?:launch|start)\b(?![-.]))|(?:Start-Process|启动|\b(?:launch|start)\b(?![-.])).{0,20}(?:必须|需要|must|need)).{0,20}(?:一次|1\s*次|once)/iu.test(sentence);
+    });
 }
 
 function launchSafetyToolInstructionForBody(body) {
@@ -10693,6 +10717,27 @@ function powerShellLiteralVariableValue(command = "", token = "") {
     return String(assignment?.[1] || assignment?.[2] || "").trim();
 }
 
+function wrappedCommandLaunchTarget(command = "", outerTarget = "") {
+    const outerLeaf = normalizedWindowsFilePath(outerTarget).split("\\").at(-1) || "";
+    if (!/^cmd(?:\.exe)?$/i.test(outerLeaf)) return "";
+    const argumentList = String(command || "").match(
+        /\s-ArgumentList\s+([\s\S]*?)(?=\s+-(?:NoNewWindow|Wait|WindowStyle|PassThru|WorkingDirectory|Verb)\b|[;\r\n]|$)/i,
+    )?.[1]?.trim() || "";
+    if (!argumentList) return "";
+    let nested = argumentList
+        .replace(/^["']?\/[dc]["']?\s*,?\s*/i, "")
+        .replace(/^call\s+/i, "")
+        .trim();
+    if (/^start(?:\.exe)?\s+/i.test(nested)) {
+        nested = nested
+            .replace(/^start(?:\.exe)?\s+/i, "")
+            .replace(/^(?:\/(?:b|wait|min|max)\s+)*/i, "")
+            .replace(/^["']{2}\s*/, "")
+            .trim();
+    }
+    return matchedCommandValue(nested.match(/^(?:"([^"]+)"|'([^']+)'|([^,\s;&|"']+))/));
+}
+
 function commandLaunchTargetKey(command = "", cwd = "") {
     const value = String(command || "");
     if (!commandLooksLikeLaunchSideEffect(value)) return "";
@@ -10704,6 +10749,7 @@ function commandLaunchTargetKey(command = "", cwd = "") {
     let target = matchedCommandValue(startProcessFile || startProcessPositional || invokeItem || cmdStart || explorer);
     if (!target) return `command:${normalizedRepeatedCommand(value)}`;
     target = powerShellLiteralVariableValue(value, target) || target;
+    target = wrappedCommandLaunchTarget(value, target) || target;
     const rawWorkingDirectory = matchedCommandValue(value.match(/(?:^|\s)-WorkingDirectory\s+(?:"([^"]+)"|'([^']+)'|([^\s;|]+))/i));
     const workingDirectory = powerShellLiteralVariableValue(value, rawWorkingDirectory) || rawWorkingDirectory;
     const root = workingDirectory || String(cwd || "").trim();
@@ -10715,6 +10761,38 @@ function commandLaunchTargetKey(command = "", cwd = "") {
 
 function launchNudgeMarker(targetKey = "") {
     return `Anti-Codex 已阻止重复启动 [${String(targetKey || "unknown")}]`;
+}
+
+function namedLaunchVerificationFiles(userText = "") {
+    const files = [];
+    const seen = new Set();
+    const pattern = /\b([A-Za-z0-9_.-]+\.(?:txt|log|json|bat|cmd|ps1|mjs|js|md|html))\b/gi;
+    for (const match of String(userText || "").matchAll(pattern)) {
+        const file = String(match[1] || "");
+        const key = file.toLowerCase();
+        if (!file || key === ".env" || seen.has(key)) continue;
+        seen.add(key);
+        files.push(file);
+    }
+    return files.slice(0, 16);
+}
+
+function duplicateLaunchVerificationCommand(userText = "") {
+    const files = namedLaunchVerificationFiles(userText);
+    const artifactFiles = files.filter(file => !/\.(?:bat|cmd|ps1)$/i.test(file));
+    if (artifactFiles.length === 0 || files.length === 0) return "";
+    const fileLiterals = files.map(file => psSingleQuoted(file)).join(", ");
+    return [
+        `$__antiCodexLaunchVerificationFiles = @(${fileLiterals})`,
+        "foreach ($__antiCodexLaunchVerificationFile in $__antiCodexLaunchVerificationFiles) {",
+        "  if (Test-Path -LiteralPath $__antiCodexLaunchVerificationFile) {",
+        "    Write-Output ('FILE: ' + $__antiCodexLaunchVerificationFile)",
+        "    Get-Content -LiteralPath $__antiCodexLaunchVerificationFile",
+        "  } else {",
+        "    Write-Output ('MISSING: ' + $__antiCodexLaunchVerificationFile)",
+        "  }",
+        "}",
+    ].join("\n");
 }
 
 function currentUserTurnLaunchNudgeCount(targetKey, originalRequest = {}, chatMessages = []) {
@@ -10750,11 +10828,18 @@ function blockRepeatedLaunchCommand(args, codexName, originalRequest = {}, chatM
     if (!key || !commandLooksLikeLaunchSideEffect(parsed[key])) return args;
     const cwd = typeof parsed.workdir === "string" ? parsed.workdir : typeof parsed.cwd === "string" ? parsed.cwd : "";
     const targetKey = commandLaunchTargetKey(parsed[key], cwd);
-    const priorLaunchCount = currentUserTurnShellCommandCallsBest(originalRequest, chatMessages)
+    const priorCommands = currentUserTurnShellCommandCallsBest(originalRequest, chatMessages);
+    const priorLaunchCount = priorCommands
         .filter(command => commandLooksLikeLaunchSideEffect(command)
             && commandLaunchTargetKey(command, cwd) === targetKey)
         .length;
     if (priorLaunchCount < 1) return args;
+    const userText = latestUserTextFromChatMessages(chatMessages) || latestUserTextFromRequest(originalRequest);
+    const verificationCommand = duplicateLaunchVerificationCommand(userText);
+    if (verificationCommand) {
+        parsed[key] = verificationCommand;
+        return JSON.stringify(parsed);
+    }
     const marker = launchNudgeMarker(targetKey).replace(/'/g, "''");
     parsed[key] = `Write-Output '${marker}：同一程序在本轮已经启动过，不能再次执行启动命令。现在必须验证进程/窗口，或检查错误日志并修复原因；不要再次启动。'; exit 0`;
     return JSON.stringify(parsed);
@@ -11552,9 +11637,33 @@ function normalizeExistingGeneratedArtifactAddPatches(patch = "", targetRoot = "
     return next.join("\n");
 }
 
+function requestNeedsGeneratedArtifactPatchSafety(originalRequest = {}, requirement = null) {
+    if (requestNeedsModelLedLocalArtifactWork(originalRequest)) return true;
+    const userText = latestUserTextFromRequest(originalRequest);
+    if (!requirement?.targetPath || !userTextRequiresLocalArtifactToolForCompletion(userText)) return false;
+    const target = normalizedWindowsFilePath(resolvePath(requirement.targetPath));
+    return [process.env.TEMP, process.env.TMP]
+        .filter(Boolean)
+        .map(root => normalizedWindowsFilePath(resolvePath(root)))
+        .some(root => target === root || target.startsWith(`${root}\\`));
+}
+
+function stripAccidentalJsonPatchSeparators(patch = "") {
+    let jsonUpdate = false;
+    return String(patch || "")
+        .split("\n")
+        .filter(line => {
+            const header = line.match(/^\*\*\* (?:Add|Delete|Update) File:\s*(.+?)\s*$/);
+            if (header) jsonUpdate = /\.json$/i.test(String(header[1] || "").replace(/^(?:"|')|(?:"|')$/g, ""));
+            return !(jsonUpdate && /^\+\s*-{4,}\s*$/.test(line));
+        })
+        .join("\n");
+}
+
 function generatedArtifactExistingRepairPatch(args = "", originalRequest = {}) {
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
-    if (!requirement?.targetPath || !requestNeedsModelLedLocalArtifactWork(originalRequest)) return null;
+    if (!requestNeedsGeneratedArtifactPatchSafety(originalRequest, requirement)) return null;
+    if (!requirement?.targetPath) return null;
     const targetRoot = resolvePath(requirement.targetPath);
     try {
         if (!statSync(targetRoot).isDirectory()) return null;
@@ -11566,7 +11675,9 @@ function generatedArtifactExistingRepairPatch(args = "", originalRequest = {}) {
     const gitDiffPatch = generatedArtifactGitDiffPatch(rawPatch, targetRoot, allowedTargets);
     const normalized = normalizeCustomToolInput(gitDiffPatch || rawPatch, "apply_patch", targetRoot);
     const scoped = filterGeneratedArtifactPatchTargets(normalized, targetRoot, allowedTargets);
-    const patch = normalizeExistingGeneratedArtifactAddPatches(scoped, targetRoot).replace(/\r\n/g, "\n");
+    const patch = stripAccidentalJsonPatchSeparators(
+        normalizeExistingGeneratedArtifactAddPatches(scoped, targetRoot).replace(/\r\n/g, "\n"),
+    );
     if (!/^\*\*\* Begin Patch\s*$/m.test(patch) || !/^\*\*\* End Patch\s*$/m.test(patch)) return null;
     if (/^\*\*\* (?:Add|Delete) File:|^\*\*\* Move to:/m.test(patch)) return null;
     const updatePaths = [...patch.matchAll(/^\*\*\* Update File:\s*(.+?)\s*$/gm)]
@@ -11603,7 +11714,7 @@ function generatedArtifactInspectionPatchTarget(args = "", originalRequest = {})
 function generatedArtifactPatchShellRedirect(routing = null, codexName = "", originalRequest = {}, args = "", artifactRepair = null) {
     if (!/^apply_patch$/i.test(String(codexName || ""))) return null;
     const requirement = artifactMarkerRequirementFromOriginalRequest(originalRequest);
-    if (!requirement?.targetPath || !requestNeedsModelLedLocalArtifactWork(originalRequest)) return null;
+    if (!requestNeedsGeneratedArtifactPatchSafety(originalRequest, requirement)) return null;
     const inspectionTarget = generatedArtifactInspectionPatchTarget(args, originalRequest);
     if (!inspectionTarget && artifactRepair) return null;
     const shellEntry = Object.entries(routing || {}).find(([upstreamName, route]) => {
@@ -12931,6 +13042,49 @@ function verifiedLaunchExactReplyReady(originalRequest = {}, chatBody = null, us
     return true;
 }
 
+function genericLocalArtifactExactReplyEvidence(originalRequest = {}, chatBody = null, userText = "") {
+    const value = String(userText || "");
+    const localArtifactRequired = userTextRequiresLocalArtifactToolForCompletion(value);
+    const processLaunchRequired = userTextRequiresProcessLaunch(value);
+    const requirement = artifactMarkerRequirementFromUserText(value);
+    const knownArtifactRequirement = deterministicArtifactRequirementEligible(requirement);
+    const messages = Array.isArray(chatBody?.messages) ? chatBody.messages : [];
+    const hasToolEvidence = requestIncludesToolOutput(originalRequest) || messagesHaveToolEvidence(messages);
+    const evidenceText = [
+        currentRequestArtifactToolEvidenceText(originalRequest),
+        currentArtifactTaskToolEvidenceText(messages),
+    ].filter(Boolean).join("\n");
+    const evidenceMatches = localArtifactToolEvidenceMatchesUserText(value, evidenceText);
+    const exactMarkerSeen = Boolean(requirement?.marker && evidenceContainsExactMarker(evidenceText, requirement.marker));
+    const commands = currentUserTurnShellCommandCallsBest(originalRequest, messages);
+    const markerWriteSeen = Boolean(requirement?.marker && commands.some(command => commandLooksLikeWrite(command)
+        && evidenceContainsExactMarker(command, requirement.marker)));
+    const ready = localArtifactRequired
+        && !processLaunchRequired
+        && Boolean(requirement?.marker)
+        && !knownArtifactRequirement
+        && hasToolEvidence
+        && evidenceMatches
+        && exactMarkerSeen
+        && markerWriteSeen;
+    return {
+        ready,
+        localArtifactRequired,
+        processLaunchRequired,
+        marker: requirement?.marker || "",
+        knownArtifactRequirement,
+        hasToolEvidence,
+        evidenceMatches,
+        exactMarkerSeen,
+        markerWriteSeen,
+        commandCount: commands.length,
+    };
+}
+
+function verifiedGenericLocalArtifactExactReplyReady(originalRequest = {}, chatBody = null, userText = "") {
+    return genericLocalArtifactExactReplyEvidence(originalRequest, chatBody, userText).ready;
+}
+
 function deterministicExactReplyCompletion(originalRequest = {}, chatBody = null) {
     const latestText = latestUserTextFromRequest(originalRequest) || latestUserTextFromChatMessages(chatBody?.messages || []);
     const value = String(latestText || "");
@@ -12939,13 +13093,15 @@ function deterministicExactReplyCompletion(originalRequest = {}, chatBody = null
         || userTextRequiresLocalArtifactToolForCompletion(value)
         || /(?:create|write|edit|modify|generate|run|execute|start|launch|install|search|download|move|copy|delete|open|verify|\u521b\u5efa|\u65b0\u5efa|\u5199\u5165|\u4fee\u6539|\u751f\u6210|\u8fd0\u884c|\u6267\u884c|\u542f\u52a8|\u5b89\u88c5|\u641c\u7d22|\u4e0b\u8f7d|\u79fb\u52a8|\u590d\u5236|\u5220\u9664|\u6253\u5f00|\u9a8c\u8bc1).{0,140}(?:file|script|command|program|service|project|result|\.bat|\.cmd|\.ps1|\u6587\u4ef6|\u811a\u672c|\u547d\u4ee4|\u7a0b\u5e8f|\u670d\u52a1|\u9879\u76ee|\u7ed3\u679c)/iu.test(value);
     const match = value.match(/^\s*(?:reply|respond)\s+with\s+exactly\s+([\s\S]+?)\s+and\s+nothing\s+else\.?\s*$/i)
-        || value.match(/(?:\u8bf7\s*)?(?:\u4ec5|\u53ea)\s*\u56de\u590d(?:\u4e3a|\uff1a|:)?\s+([\s\S]{1,500}?)(?:[\u3002.!\uff01]\s*)?$/u);
+        || value.match(/(?:\u8bf7\s*)?(?:\u4ec5|\u53ea)\s*\u56de\u590d(?:\u4e3a|\uff1a|:)?\s+([\s\S]{1,500}?)(?:[\u3002.!\uff01]\s*)?$/u)
+        || value.match(/(?:\u6700\u540e(?:\u4e00\u884c)?|\u6700\u7ec8)(?:\u53ea)?\s*(?:\u5199|\u56de\u590d|\u8f93\u51fa)(?:\u4e3a|\uff1a|:)?\s*([A-Z][A-Z0-9_]{10,})(?:[\u3002.!\uff01]\s*)?$/u);
     if (!match) return null;
     const content = match[1].trim().replace(/^["'`]+|["'`]+$/g, "");
     if (!content || content.length > 500) return null;
     if (requiresActionBeforeReply
         && !readOnlyRecoveryReply
-        && !verifiedLaunchExactReplyReady(originalRequest, chatBody, value)) return null;
+        && !verifiedLaunchExactReplyReady(originalRequest, chatBody, value)
+        && !verifiedGenericLocalArtifactExactReplyReady(originalRequest, chatBody, value)) return null;
     return makeTextCompletion(chatBody?.model || originalRequest?.model || "gemini-pro-agent", content);
 }
 
@@ -16133,4 +16289,4 @@ if (process.env.NODE_ENV !== "test" && isMainModule()) {
     });
 }
 
-export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicArtifactToolCallCompletion, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicRepoMultiFileEditCompletionResponse, deterministicRepoMultiFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, shouldUseDeterministicInternalWebSearchResponse, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, antigravityStreamingTimeouts, antigravityWorkspaceForRequest, workspaceCwdFromCodexSession, workspaceCwdFromRequest, MAX_TOOL_LOOPS };
+export { HOST, LISTEN_HOST, CDP_PORT, antigravityProfileFromCatalog, buildAntigravityModelRefresh, refreshAntigravityModels, providerModelRefreshSnapshot, refreshModelsForActiveUpstream, antigravityAccountFallbackSnapshot, antigravityFailureDetails, antigravityTrafficSnapshot, shouldRecordAntigravityTrafficFailure, applyAntigravityTrafficSuccess, applyAntigravityTrafficFailure, antigravityReadinessFailure, antigravityVisibleModelIds, translatorHealthPayload, diagnosticsPayload, visibleModelPayload, computeStartupSnapshotSourceFingerprint, buildSystemBlock, hasPseudoToolMarkup, stripPseudoToolMarkup, sanitizeMarkdownUrlFormatting, parsePseudoToolCalls, responsesToChatBody, callUpstreamWithInternalTools, callAntigravityWithInternalTools, chatBodyWithInternalTools, deterministicArtifactCompletionResponse, deterministicArtifactToolCallCompletion, deterministicAmbientSuggestionsCompletion, deterministicBackgroundRolloutAnalysisCompletion, deterministicTaskTitleCompletion, deterministicExactReplyCompletion, genericLocalArtifactExactReplyEvidence, verifiedGenericLocalArtifactExactReplyReady, userTextRequiresProcessLaunch, localProjectToolMarkupExampleForBody, commandLaunchTargetKey, deterministicRepoFileEditCompletionResponse, deterministicRepoFileEditToolCallCompletion, deterministicRepoMultiFileEditCompletionResponse, deterministicRepoMultiFileEditToolCallCompletion, deterministicWebBackedArtifactResponse, deterministicWebSocketPrewarmResponse, requestNeedsInternalWebTools, requestNeedsWebBackedArtifactOutput, requestLooksLikePlainChatNoTools, shouldUseDeterministicInternalWebSearchResponse, chatBodyHasInternalTools, ChatToResponsesStreamMapper, chatToResponsesFormat, chatToCompactResponseFormat, prepareCompactChatBody, normalizeCompactSummary, canUseNativeStreaming, inputTokensResponse, unknownInputItemText, usageDiagnostics, classifyUpstreamFailure, localBackendApiResponse, isLocalTranslatorAddress, isResponsesWebSocketPath, unsupportedResponsesWebSocketResponse, unsupportedResponsesWebSocketHttpResponse, responsesWebSocketAuditSnapshot, recordResponsesWebSocketAttempt, RESPONSES_WEBSOCKET_PING_INTERVAL_MS, parseClientWebSocketFrames, assembleResponsesWebSocketPayloads, applyResponsesEndTurnHint, upstreamDisplayName, pipeAntigravityResponseAsSSE, pipeAntigravityInternalToolsAsSSE, artifactMarkerMismatchForChat, artifactMarkerMismatchRelayPrompt, antigravityStreamingTimeouts, antigravityWorkspaceForRequest, workspaceCwdFromCodexSession, workspaceCwdFromRequest, MAX_TOOL_LOOPS };

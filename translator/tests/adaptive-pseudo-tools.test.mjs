@@ -20,11 +20,15 @@ const {
   chatToCompactResponseFormat,
   chatToResponsesFormat,
   classifyUpstreamFailure,
+  commandLaunchTargetKey,
   deterministicArtifactCompletionResponse,
   deterministicArtifactToolCallCompletion,
   deterministicAmbientSuggestionsCompletion,
   deterministicBackgroundRolloutAnalysisCompletion,
   deterministicExactReplyCompletion,
+  genericLocalArtifactExactReplyEvidence,
+  verifiedGenericLocalArtifactExactReplyReady,
+  userTextRequiresProcessLaunch,
   deterministicRepoFileEditCompletionResponse,
   deterministicRepoFileEditToolCallCompletion,
   deterministicRepoMultiFileEditCompletionResponse,
@@ -35,6 +39,7 @@ const {
   inputTokensResponse,
   localBackendApiResponse,
   localArtifactToolEvidenceMatchesUserText,
+  localProjectToolMarkupExampleForBody,
   applyResponsesEndTurnHint,
   normalizeCompactSummary,
   parsePseudoToolCalls,
@@ -1381,6 +1386,101 @@ test("deterministic exact reply refuses duplicate launch evidence", () => {
   });
 
   assert.equal(completion, null);
+});
+
+test("deterministic exact reply closes a verified already-running artifact task without launching again", () => {
+  const marker = "UI_ALREADY_RUNNING_VERIFIED_REPLY_123";
+  const prompt = `软件已经启动好了，目录是 C:\\Temp\\already-running。不要再启动 start.bat。读取 running-state.json 和 launch-count.txt，然后只创建 status.json，内容的 marker 为 ${marker}，写完后读回，launch-count.txt 必须保持 1。最后一行写 ${marker}。`;
+  const command = [
+    `Set-Content -Path C:\\Temp\\already-running\\status.json -Value '{"state":"already-running","observedLaunchCount":1,"marker":"${marker}"}'`,
+    "Get-Content C:\\Temp\\already-running\\status.json -TotalCount 20",
+    "Get-Content C:\\Temp\\already-running\\launch-count.txt -TotalCount 2",
+  ].join("; ");
+  const request = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_already_running", name: "shell_command", arguments: JSON.stringify({ command }) },
+      { type: "function_call_output", call_id: "call_already_running", output: `Exit code: 0\nOutput:\n{"state":"already-running","observedLaunchCount":1,"marker":"${marker}"}\n1` },
+    ],
+  };
+  const chatBody = responsesToChatBody(request, { allowTools: true });
+  const completion = deterministicExactReplyCompletion(request, chatBody);
+
+  assert.equal(userTextRequiresProcessLaunch(prompt), false);
+  const genericEvidence = genericLocalArtifactExactReplyEvidence(request, null, prompt);
+  assert.equal(genericEvidence.ready, true, JSON.stringify(genericEvidence));
+  assert.equal(completion.choices[0].message.content, marker);
+});
+
+test("deterministic exact reply does not close an already-running task after read-only evidence", () => {
+  const marker = "UI_ALREADY_RUNNING_READ_ONLY_123";
+  const prompt = `软件已经启动好了，目录是 C:\\Temp\\already-running。不要再启动 start.bat。读取状态后创建 status.json。最后一行写 ${marker}。`;
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_read_only", name: "shell_command", arguments: JSON.stringify({ command: "Get-Content C:\\Temp\\already-running\\running-state.json -TotalCount 20" }) },
+      { type: "function_call_output", call_id: "call_read_only", output: `Exit code: 0\nOutput:\n{"marker":"${marker}"}` },
+    ],
+  });
+
+  assert.equal(completion, null);
+});
+
+test("deterministic exact reply does not hide a failed already-running artifact verification", () => {
+  const marker = "UI_ALREADY_RUNNING_FAILED_VERIFY_123";
+  const prompt = `软件已经启动好了，目录是 C:\\Temp\\already-running。不要再启动 start.bat。创建 status.json 并验证。最后一行写 ${marker}。`;
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_failed_verify", name: "shell_command", arguments: JSON.stringify({ command: `Set-Content C:\\Temp\\already-running\\status.json '${marker}'` }) },
+      { type: "function_call_output", call_id: "call_failed_verify", output: `Exit code: 1\nOutput:\n${marker}\nstatus verification failed` },
+    ],
+  });
+
+  assert.equal(completion, null);
+});
+
+test("deterministic exact reply does not treat a first-turn marker as completed requirement correction", () => {
+  const marker = "UI_HUMAN_CORRECTION_FINAL_123";
+  const prompt = `继续 C:\\Temp\\correction 项目，追加 uniqueWords，更新 word-tally.test.mjs，创建 CHANGELOG.md 和 followup.txt。followup.txt 只写 ${marker}。最后一行写 ${marker}。`;
+  const completion = deterministicExactReplyCompletion({
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+      { type: "function_call", call_id: "call_old_marker", name: "shell_command", arguments: JSON.stringify({ command: "Get-Content done.txt; Set-Content word-tally.mjs 'export function uniqueWords() {}'" }) },
+      { type: "function_call_output", call_id: "call_old_marker", output: `Exit code: 0\nOutput:\n${marker}_FIRST` },
+    ],
+  });
+
+  assert.equal(completion, null);
+});
+
+test("process launch intent keeps one required launch when a later sentence forbids relaunch", () => {
+  const prompt = [
+    "请处理启动失败，目录是 C:\\Temp\\failed-launch，里面已有 launch-target.ps1。",
+    "先用中文说明只尝试启动一次，然后创建 start.bat。",
+    "必须用 shell_command 的 Start-Process 启动 start.bat 一次。",
+    "这个启动预期会失败；即使 Start-Process 返回 0，也绝对不能再启动第二次。",
+    "随后读取 launch-count.txt 和 error.log，创建 config.json 与 diagnosis.json。",
+  ].join("\n");
+
+  assert.equal(userTextRequiresProcessLaunch(prompt), true);
+});
+
+test("failed launch diagnosis does not receive a generic HTML project tool template", () => {
+  const marker = "UI_FAILED_LAUNCH_TEMPLATE_GUARD_123";
+  const prompt = `请在 C:\\Temp\\failed-launch 创建 start.bat，用 Start-Process 启动一次；失败后读取 error.log，创建 config.json 和 diagnosis.json，绝对不能再启动第二次。diagnosis.json 的 marker=${marker}。最后一行写 ${marker}。`;
+  const body = {
+    messages: [{ role: "user", content: prompt }],
+    tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } } } } }],
+  };
+
+  const instruction = localProjectToolMarkupExampleForBody(body);
+  assert.equal(instruction, "");
+  assert.doesNotMatch(instruction, /index\.html|README\.md|阶段1：准备创建文件/);
 });
 
 test("deterministic artifact tool call does not replace a batch launch task with report files", () => {
@@ -7976,6 +8076,41 @@ test("a Chinese read-only status request blocks a stale filesystem write", () =>
   assert.match(JSON.parse(call.arguments).command, /blocked a filesystem mutation because the latest user requested read-only verification/i);
 });
 
+test("a read-only diagnosis step does not block explicitly requested repair files", () => {
+  const marker = "UI_FAILED_LAUNCH_MIXED_READ_WRITE_123";
+  const userText = [
+    "继续当前同一个任务，绝对不能再次启动。",
+    "先只读取 launch-count.txt 和 error.log。",
+    "随后创建 config.json 和 diagnosis.json。",
+    `diagnosis.json 必须写入 marker=${marker}。`,
+  ].join(" ");
+  const command = [
+    "[System.IO.File]::WriteAllText('C:\\Project\\config.json', '{\"mode\":\"repaired\"}')",
+    `[System.IO.File]::WriteAllText('C:\\Project\\diagnosis.json', '{\"marker\":\"${marker}\"}')`,
+  ].join("; ");
+  const fmt = chatToResponsesFormat({
+    model: "gemini-3.5-flash-low",
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "call_mixed_read_write_repair",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command }) },
+        }],
+      },
+      finish_reason: "tool_calls",
+    }],
+  }, {
+    model: "gemini-3.5-flash-low",
+    input: [{ type: "message", role: "user", content: [{ type: "input_text", text: userText }] }],
+  });
+
+  const call = fmt.output.find(item => item.type === "function_call");
+  assert.equal(JSON.parse(call.arguments).command, command);
+});
+
 test("explicit exclusive artifact constraints bound reads and block unrelated writes", () => {
   const targetDir = "C:\\Temp\\final-product-audit-work";
   const userText = `禁止使用 Get-Content -Raw 整文件读取。请创建目录 ${targetDir}，并写入 audit-v1.md。不要修改项目源文件，不要读取 .env，不要写其他文件。`;
@@ -10790,6 +10925,70 @@ test("autonomous generated artifact repairs preserve existing-file update patche
   assert.doesNotMatch(call.input, /\*\*\* Add File:/);
 });
 
+test("generated JSON artifact repairs strip accidental patch separator content", (t) => {
+  const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-json-repair-"));
+  t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(targetPath, "config.json"), '{"mode":"repaired"}\n', "utf8");
+  fs.writeFileSync(path.join(targetPath, "diagnosis.json"), '{"fixed":true}\n', "utf8");
+  const marker = "UI_AUTONOMOUS_REASONING_SMOKE_JSON_SEPARATOR_20260713";
+  const request = {
+    model: "gemini-pro-agent",
+    input: [{
+      type: "message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: `Continue the autonomous task. Working directory: ${targetPath}. Repair config.json and diagnosis.json. done.txt must equal ${marker}.`,
+      }],
+    }],
+  };
+  const routing = {
+    apply_patch: { type: "custom", codexName: "apply_patch", parameters: { type: "string" } },
+    exec_command: {
+      type: "function",
+      codexName: "exec_command",
+      parameters: {
+        type: "object",
+        properties: { cmd: { type: "string" }, workdir: { type: "string" } },
+        required: ["cmd"],
+      },
+    },
+  };
+  const patch = [
+    "*** Begin Patch",
+    "*** Update File: config.json",
+    "@@",
+    '-{"mode":"repaired"}',
+    "+----",
+    '+{"mode":"repaired","reason":"CONFIG_MISSING"}',
+    "*** Update File: diagnosis.json",
+    "@@",
+    '-{"fixed":true}',
+    "+----",
+    '+{"fixed":true,"launchCount":1}',
+    "*** End Patch",
+  ].join("\n");
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "call_json_separator_repair",
+          type: "function",
+          function: { name: "apply_patch", arguments: JSON.stringify({ content: patch }) },
+        }],
+      },
+    }],
+  }, request, routing, { strictTools: true });
+
+  const call = formatted.output.find(item => item.type === "custom_tool_call");
+  assert.ok(call);
+  assert.doesNotMatch(call.input, /^\+----\s*$/m);
+  assert.match(call.input, /CONFIG_MISSING/);
+  assert.match(call.input, /launchCount/);
+});
+
 test("autonomous generated artifact repairs convert existing-file Add patches to updates", (t) => {
   const targetPath = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-artifact-replace-"));
   t.after(() => fs.rmSync(targetPath, { recursive: true, force: true }));
@@ -12634,6 +12833,152 @@ test("A variable working directory cannot disguise a repeated relative Start-Pro
   const command = JSON.parse(call.arguments).command;
   assert.doesNotMatch(command, /(?:^|[;\r\n]\s*)Start-Process\b/i);
   assert.match(command, /已阻止重复启动/);
+});
+
+test("cmd.exe ArgumentList cannot disguise a repeated Start-Process batch target", () => {
+  const targetDir = "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-launch-wrapper";
+  const firstCommand = `Start-Process -FilePath "${targetDir}\\start.bat" -WorkingDirectory "${targetDir}" -Wait`;
+  const repeatedCommand = 'Start-Process -FilePath "cmd.exe" -ArgumentList "/c start.bat" -NoNewWindow -Wait';
+  assert.equal(commandLaunchTargetKey(firstCommand, targetDir), commandLaunchTargetKey(repeatedCommand, targetDir));
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: "Create start.bat and launch it exactly once." }] },
+      { type: "function_call", name: "shell_command", call_id: "wrapped_launch_1", arguments: JSON.stringify({ command: firstCommand }) },
+      { type: "function_call_output", call_id: "wrapped_launch_1", output: "Exit code: 0\nOutput:\n" },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const completion = {
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "wrapped_launch_2",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: repeatedCommand, workdir: targetDir }) },
+        }],
+      },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat(completion, parsed, chatBody._routing, { strictTools: true });
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  const command = JSON.parse(call.arguments).command;
+  assert.doesNotMatch(command, /Start-Process/i);
+  assert.match(command, /已阻止重复启动/);
+  assert.match(command, /target:c:\\users\\xd\\appdata\\local\\temp\\anticodex-launch-wrapper\\start\.bat/i);
+});
+
+test("a duplicate launch after artifact writes is redirected to read-only verification and exact completion", () => {
+  const targetDir = "C:\\Temp\\failed-launch-verification";
+  const marker = "UI_FAILED_LAUNCH_VERIFICATION_123";
+  const userText = [
+    `工作目录是 ${targetDir}，创建 start.bat 并用 Start-Process 只启动一次。`,
+    "读取 launch-count.txt 和 error.log，创建 config.json 与 diagnosis.json。",
+    `diagnosis.json 必须包含 marker=${marker}，最后一行写 ${marker}。`,
+  ].join(" ");
+  const startWrite = "Set-Content -Path start.bat -Value 'powershell -File launch-target.ps1'";
+  const launch = 'Start-Process -FilePath "start.bat" -Wait';
+  const artifactWrite = `Set-Content config.json '{"mode":"repaired","reason":"CONFIG_MISSING"}'; Set-Content diagnosis.json '{"reason":"CONFIG_MISSING","launchCount":1,"fixed":true,"marker":"${marker}"}'`;
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+      { type: "function_call", name: "shell_command", call_id: "verification_start_write", arguments: JSON.stringify({ command: startWrite, workdir: targetDir }) },
+      { type: "function_call_output", call_id: "verification_start_write", output: "Exit code: 0" },
+      { type: "function_call", name: "shell_command", call_id: "verification_launch", arguments: JSON.stringify({ command: launch, workdir: targetDir }) },
+      { type: "function_call_output", call_id: "verification_launch", output: "Exit code: 0" },
+      { type: "function_call", name: "shell_command", call_id: "verification_read_error", arguments: JSON.stringify({ command: "Get-Content launch-count.txt; Get-Content error.log", workdir: targetDir }) },
+      { type: "function_call_output", call_id: "verification_read_error", output: "Exit code: 0\nOutput:\n1\nCONFIG_MISSING" },
+      { type: "function_call", name: "shell_command", call_id: "verification_artifact_write", arguments: JSON.stringify({ command: artifactWrite, workdir: targetDir }) },
+      { type: "function_call_output", call_id: "verification_artifact_write", output: "Exit code: 0" },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: {
+        role: "assistant",
+        tool_calls: [{
+          id: "verification_duplicate_launch",
+          type: "function",
+          function: { name: "shell_command", arguments: JSON.stringify({ command: launch, workdir: targetDir }) },
+        }],
+      },
+    }],
+  }, parsed, chatBody._routing, { strictTools: true });
+  const verificationCall = formatted.output.find(item => item.type === "function_call");
+  assert.ok(verificationCall);
+  const verificationCommand = JSON.parse(verificationCall.arguments).command;
+  assert.doesNotMatch(verificationCommand, /Start-Process/i);
+  assert.match(verificationCommand, /Get-Content/);
+  assert.match(verificationCommand, /launch-count\.txt/);
+  assert.match(verificationCommand, /config\.json/);
+  assert.match(verificationCommand, /diagnosis\.json/);
+
+  const completionRequest = {
+    ...parsed,
+    input: [
+      ...parsed.input,
+      { ...verificationCall, call_id: verificationCall.call_id || verificationCall.id },
+      {
+        type: "function_call_output",
+        call_id: verificationCall.call_id || verificationCall.id,
+        output: `Exit code: 0\nOutput:\n1\nCONFIG_MISSING\n{"mode":"repaired","reason":"CONFIG_MISSING"}\n{"reason":"CONFIG_MISSING","launchCount":1,"fixed":true,"marker":"${marker}"}`,
+      },
+    ],
+  };
+  const completion = deterministicExactReplyCompletion(completionRequest, responsesToChatBody(completionRequest, { allowTools: true }));
+  assert.equal(completion.choices[0].message.content, marker);
+});
+
+test("a duplicate launch before repair writes is redirected to requested failure evidence", () => {
+  const targetDir = "C:\\Temp\\failed-launch-before-repair";
+  const marker = "UI_FAILED_LAUNCH_BEFORE_REPAIR_123";
+  const userText = `在 ${targetDir} 创建 start.bat，用 Start-Process 只启动一次。随后读取 launch-count.txt 和 error.log，创建 config.json 与 diagnosis.json，最后写 ${marker}。`;
+  const launch = 'Start-Process -FilePath "start.bat" -Wait';
+  const parsed = {
+    model: "gemini-3.5-flash-low",
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: userText }] },
+      { type: "function_call", name: "shell_command", call_id: "before_repair_start_write", arguments: JSON.stringify({ command: "Set-Content start.bat 'powershell -File launch-target.ps1'", workdir: targetDir }) },
+      { type: "function_call_output", call_id: "before_repair_start_write", output: "Exit code: 0" },
+      { type: "function_call", name: "shell_command", call_id: "before_repair_launch", arguments: JSON.stringify({ command: launch, workdir: targetDir }) },
+      { type: "function_call_output", call_id: "before_repair_launch", output: "Exit code: 0" },
+    ],
+    tools: [{
+      type: "function",
+      name: "shell_command",
+      parameters: { type: "object", properties: { command: { type: "string" }, workdir: { type: "string" } }, required: ["command"] },
+    }],
+  };
+  const chatBody = responsesToChatBody(parsed, { allowTools: true });
+  const formatted = chatToResponsesFormat({
+    choices: [{
+      finish_reason: "tool_calls",
+      message: { role: "assistant", tool_calls: [{ id: "before_repair_duplicate", type: "function", function: { name: "shell_command", arguments: JSON.stringify({ command: launch, workdir: targetDir }) } }] },
+    }],
+  }, parsed, chatBody._routing, { strictTools: true });
+  const call = formatted.output.find(item => item.type === "function_call");
+  assert.ok(call);
+  const command = JSON.parse(call.arguments).command;
+  assert.doesNotMatch(command, /Start-Process/i);
+  assert.match(command, /Get-Content/);
+  assert.match(command, /launch-count\.txt/);
+  assert.match(command, /error\.log/);
 });
 
 test("A third Start-Process request ends the tool loop after the duplicate-launch nudge", () => {

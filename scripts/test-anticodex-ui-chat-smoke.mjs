@@ -43,6 +43,9 @@ Options:
   --project-label <text>   Expected project label (default: Anti-Codex).
   --artifact-dir <path>    Directory for task artifacts.
   --prompt-file <path>     UTF-8 prompt file.
+  --followup-prompt-file <path>  UTF-8 second-turn prompt file for multi-turn-project.
+  --followup-prompt <text>       Inline second-turn prompt for multi-turn-project.
+  --report-name <name>     Isolated report name for a custom scenario.
   --required-file <path>   Require this file to be newly created or updated and non-empty.
   --required-file-contains <a|b>  Require every pipe-separated UTF-8 string in the file.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
@@ -84,7 +87,13 @@ if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath
 const sameChatTitleContains = String(args.get("--same-chat-title-contains") || "").trim();
 const isolateChat = !(args.has("--same-chat") || sameChatTitleContains);
 const preserveSameChatActiveTask = !isolateChat && !args.has("--force-reset-same-chat");
-const baseReportName = taskMode === "web-search"
+const customBaseReportName = String(args.get("--report-name") || "")
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9_-]+/g, "-")
+  .replace(/^-+|-+$/g, "")
+  .slice(0, 100);
+const baseReportName = customBaseReportName || (taskMode === "web-search"
   ? "ui-web-search-smoke"
   : taskMode === "free-chat"
     ? "ui-free-chat-smoke"
@@ -106,7 +115,7 @@ const baseReportName = taskMode === "web-search"
       ? "ui-agentic-step-flow-smoke"
     : taskMode === "local-project"
       ? "ui-local-project-smoke"
-  : "ui-chat-smoke";
+  : "ui-chat-smoke");
 const requiredModelReportSuffix = requiredModel
   ? `-model-${requiredModel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80)}`
   : "";
@@ -182,6 +191,9 @@ let repoMultiFileExpectedTest = "";
 let repoMultiFileExpectedData = "";
 const promptFile = args.get("--prompt-file") ? resolve(String(args.get("--prompt-file"))) : "";
 const promptFromFile = promptFile ? readFileSync(promptFile, "utf8") : "";
+const followupPromptFile = args.get("--followup-prompt-file") ? resolve(String(args.get("--followup-prompt-file"))) : "";
+const followupPromptFromFile = followupPromptFile ? readFileSync(followupPromptFile, "utf8") : "";
+const customFollowupPromptText = String(followupPromptFromFile || args.get("--followup-prompt") || "").trim();
 const requiredFile = args.get("--required-file") ? resolve(String(args.get("--required-file"))) : "";
 const requiredFileContains = String(args.get("--required-file-contains") || "")
   .split("|")
@@ -4207,7 +4219,7 @@ async function main() {
 
     if (taskMode === "multi-turn-project") {
       const firstMarker = `${marker}_FIRST`;
-      followupPromptText = `继续同一个项目：${artifactDir}。不要重建项目，也不要查看 Antigravity brain、transcript、history 或 log 目录。修改 word-tally.mjs，让它额外导出 uniqueWords(text)，返回排序后的唯一单词数组。更新 word-tally.test.mjs：保留原来的 tallyWords 断言，再增加一个 node:test 断言，要求 uniqueWords("red blue red") 返回 ["blue","red"]。创建 CHANGELOG.md，里面要提到这次 uniqueWords 追加任务和准确标记 ${marker}。创建 followup.txt，内容必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red green"，确认 red=2、blue=1、green=1 后，最后回复 ${marker}。`;
+      followupPromptText = customFollowupPromptText || `继续同一个项目：${artifactDir}。不要重建项目，也不要查看 Antigravity brain、transcript、history 或 log 目录。修改 word-tally.mjs，让它额外导出 uniqueWords(text)，返回排序后的唯一单词数组。更新 word-tally.test.mjs：保留原来的 tallyWords 断言，再增加一个 node:test 断言，要求 uniqueWords("red blue red") 返回 ["blue","red"]。创建 CHANGELOG.md，里面要提到这次 uniqueWords 追加任务和准确标记 ${marker}。创建 followup.txt，内容必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red green"，确认 red=2、blue=1、green=1 后，最后回复 ${marker}。`;
       followupPromptLanguage = /[\u3400-\u9fff]/u.test(followupPromptText) ? "zh" : "en";
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs, { requiresProjectChat });
       failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));

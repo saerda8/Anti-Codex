@@ -15627,6 +15627,36 @@ test("launch-once desktop verifier requires real traffic and checks duplicate la
   assert.match(releaseGates, /test-anticodex-launch-once\.mjs --allow-real-traffic/);
 });
 
+test("human edge matrix covers requirement correction, already-running, and failed-launch recovery with artifact evidence", () => {
+  const uiSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
+  const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-human-edge-matrix.mjs"), "utf8");
+  const releaseGates = readFileSync(resolve(root, "scripts", "test-anticodex-release-gates.mjs"), "utf8");
+  const sourcePreflight = readFileSync(resolve(root, "scripts", "test-anticodex-source-preflight.ps1"), "utf8");
+  const diagnostics = readFileSync(resolve(root, "scripts", "collect-anticodex-diagnostics.ps1"), "utf8");
+
+  assert.match(uiSmoke, /--followup-prompt-file/);
+  assert.match(uiSmoke, /--followup-prompt/);
+  assert.match(uiSmoke, /followupPromptFromFile/);
+  assert.match(uiSmoke, /customFollowupPromptText/);
+
+  assert.match(verifier, /requirement-correction/);
+  assert.match(verifier, /already-running-no-relaunch/);
+  assert.match(verifier, /failed-launch-diagnose-without-relaunch/);
+  assert.match(verifier, /latest-ui-human-edge-matrix\.json/);
+  assert.match(verifier, /launchCommandCount/);
+  assert.match(verifier, /launchCountText/);
+  assert.match(verifier, /testPassed/);
+  assert.match(verifier, /cliPassed/);
+  assert.match(verifier, /artifactEvidence/);
+  assert.match(verifier, /usedRealTraffic/);
+  assert.match(releaseGates, /latest-ui-human-edge-matrix\.json/);
+  assert.match(releaseGates, /requireUiHumanEdgeMatrixSemantics/);
+  assert.match(releaseGates, /ui_human_edge_scenario_count/);
+  assert.match(releaseGates, /ui_human_edge_failed_launch_command_count/);
+  assert.match(sourcePreflight, /test-anticodex-human-edge-matrix\.mjs/);
+  assert.match(diagnostics, /latest-ui-human-edge-matrix\.json/);
+});
+
 test("real-small-project verifier defaults to Gemini and reports the requested model on failures", () => {
   const verifier = readFileSync(resolve(root, "scripts", "test-anticodex-real-small-project.ps1"), "utf8");
   assert.match(verifier, /else \{ "gemini-3\.5-flash-low" \}/);

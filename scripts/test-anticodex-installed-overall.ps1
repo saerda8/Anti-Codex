@@ -945,6 +945,7 @@ function Test-ReportEncoding {
         "latest-current-channel-worker-recovery.json",
         "latest-ui-chat-smoke.json",
         "latest-ui-launch-once-smoke.json",
+        "latest-ui-human-edge-matrix.json",
         "latest-ui-web-search-smoke.json",
         "latest-ui-local-project-smoke.json",
         "latest-ui-coding-project-smoke.json",

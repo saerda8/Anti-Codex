@@ -137,6 +137,7 @@ const runtimeSyncFiles = [
   "scripts/build-anticodex-goal-unblock-package.mjs",
   "scripts/build-anticodex-fresh-channel-worker-proof-kit.mjs",
   "scripts/test-anticodex-ui-chat-smoke.mjs",
+  "scripts/test-anticodex-human-edge-matrix.mjs",
   "scripts/test-anticodex-ui-state.mjs",
   "scripts/test-anticodex-ui-state.ps1",
   "scripts/test-anticodex-ui-idle-stability.ps1",
@@ -207,6 +208,7 @@ const gateDefinitions = [
   { id: "codexResponses", group: "real-traffic", file: "latest-codex-responses.json", requiredForRelease: true, requireCodexResponsesSemantics: true },
   { id: "uiChatSmoke", group: "real-traffic", file: "latest-ui-chat-smoke.json", requiredForRelease: true, requireUiChatSmokeSemantics: true },
   { id: "uiLaunchOnceSmoke", group: "real-traffic", file: "latest-ui-launch-once-smoke.json", requiredForRelease: true, requireLaunchOnceSemantics: true },
+  { id: "uiHumanEdgeMatrix", group: "real-traffic", file: "latest-ui-human-edge-matrix.json", requiredForRelease: true, requireUiHumanEdgeMatrixSemantics: true },
   { id: "uiWebSearchSmoke", group: "real-traffic", file: "latest-ui-web-search-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-web-search-smoke", taskMode: "web-search", prefix: "ui_web_search_smoke", requireSourceUrls: true } },
   { id: "uiLocalProjectSmoke", group: "real-traffic", file: "latest-ui-local-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-local-project-smoke", taskMode: "local-project", prefix: "ui_local_project_smoke", requiredFiles: ["indexHtml", "readmeMd", "doneTxt"] } },
   { id: "uiCodingProjectSmoke", group: "real-traffic", file: "latest-ui-coding-project-smoke.json", requiredForRelease: true, requireUiTaskSmokeSemantics: { reportName: "ui-coding-project-smoke", taskMode: "coding-project", prefix: "ui_coding_project_smoke", requiredFiles: ["packageJson", "wordTally", "testFile", "doneTxt"], requirePromptLanguage: "zh", requireCodingProject: true } },
@@ -814,6 +816,44 @@ function summarizeGate(definition) {
       if (history.chinesePreCommandSeen !== true) semanticFailures.push("ui_launch_once_chinese_pre_command");
       if (history.assistantFinalMarkerSeen !== true) semanticFailures.push("ui_launch_once_assistant_marker");
       if (history.parseErrorSeen === true) semanticFailures.push("ui_launch_once_parse_error");
+    }
+    if (definition.requireUiHumanEdgeMatrixSemantics) {
+      const expectedScenarioIds = ["requirement-correction", "already-running-no-relaunch", "failed-launch-diagnose-without-relaunch"];
+      const scenarios = Array.isArray(report.scenarios) ? report.scenarios : [];
+      const byId = new Map(scenarios.map((scenario) => [String(scenario?.id || ""), scenario]));
+      const correction = byId.get("requirement-correction") || {};
+      const alreadyRunning = byId.get("already-running-no-relaunch") || {};
+      const failedLaunch = byId.get("failed-launch-diagnose-without-relaunch") || {};
+      const correctionFinal = correction.artifactEvidence?.final || {};
+      const alreadyHistory = alreadyRunning.responseHistory || {};
+      const failedHistory = failedLaunch.responseHistory || {};
+      const failedFinal = failedLaunch.artifactEvidence?.final || {};
+      const expectedCorrectionFiles = ["CHANGELOG.md", "done.txt", "followup.txt", "package.json", "word-tally.mjs", "word-tally.test.mjs"];
+      const expectedFailedFiles = ["config.json", "diagnosis.json", "error.log", "launch-count.txt", "launch-target.ps1", "start.bat"];
+      if (report.reportName !== "ui-human-edge-matrix") semanticFailures.push("ui_human_edge_report_name");
+      if (report.requestedRealTraffic !== true) semanticFailures.push("ui_human_edge_real_traffic_not_requested");
+      if (report.usedRealTraffic !== true) semanticFailures.push("ui_human_edge_real_traffic_missing");
+      if (report.behaviorCovered !== true) semanticFailures.push("ui_human_edge_behavior_not_covered");
+      if (report.coverageKind !== "desktop-ui-real-human-edge-matrix") semanticFailures.push("ui_human_edge_coverage_kind");
+      if (Array.isArray(report.failures) && report.failures.length > 0) semanticFailures.push("ui_human_edge_failures");
+      if (JSON.stringify(report.scenarioIds || []) !== JSON.stringify(expectedScenarioIds)) semanticFailures.push("ui_human_edge_scenario_ids");
+      if (Number(report.scenarioCount || 0) !== 3 || scenarios.length !== 3) semanticFailures.push("ui_human_edge_scenario_count");
+      if (Number(report.passedScenarioCount || 0) !== 3) semanticFailures.push("ui_human_edge_passed_scenario_count");
+      if (Number(report.resultValidatedScenarioCount || 0) !== 3) semanticFailures.push("ui_human_edge_result_validated_count");
+      if (scenarios.some((scenario) => scenario?.ok !== true || scenario?.usedRealTraffic !== true || (Array.isArray(scenario?.failures) && scenario.failures.length > 0))) semanticFailures.push("ui_human_edge_scenario_failure");
+      if (JSON.stringify(correction.actualFiles || []) !== JSON.stringify(expectedCorrectionFiles)) semanticFailures.push("ui_human_edge_correction_files");
+      if (correction.testPassed !== true || correction.cliPassed !== true) semanticFailures.push("ui_human_edge_correction_execution");
+      if (correctionFinal.sourceContractsOk !== true || correctionFinal.testContractsOk !== true || correctionFinal.doneExact !== true || correctionFinal.followupExact !== true || correctionFinal.changelogHasMarker !== true) semanticFailures.push("ui_human_edge_correction_contract");
+      if (String(alreadyRunning.launchCountText || "") !== "1") semanticFailures.push("ui_human_edge_already_running_count");
+      if (Number(alreadyRunning.launchCommandCount ?? -1) !== 0 || Number(alreadyHistory.startProcessOccurrences ?? -1) !== 0) semanticFailures.push("ui_human_edge_already_running_launch_command_count");
+      if (alreadyRunning.artifactEvidence?.status?.state !== "already-running" || Number(alreadyRunning.artifactEvidence?.status?.observedLaunchCount || 0) !== 1) semanticFailures.push("ui_human_edge_already_running_status");
+      if (alreadyHistory.toolOutputSeen !== true || alreadyHistory.assistantFinalMarkerSeen !== true || alreadyHistory.parseErrorSeen === true) semanticFailures.push("ui_human_edge_already_running_history");
+      if (String(failedLaunch.launchCountText || "") !== "1") semanticFailures.push("ui_human_edge_failed_launch_count");
+      if (Number(failedLaunch.launchCommandCount ?? -1) !== 1 || Number(failedHistory.startProcessOccurrences ?? -1) !== 1) semanticFailures.push("ui_human_edge_failed_launch_command_count");
+      if (failedFinal.config?.mode !== "repaired" || failedFinal.config?.reason !== "CONFIG_MISSING") semanticFailures.push("ui_human_edge_failed_launch_config");
+      if (failedFinal.diagnosis?.reason !== "CONFIG_MISSING" || Number(failedFinal.diagnosis?.launchCount || 0) !== 1 || failedFinal.diagnosis?.fixed !== true || failedFinal.diagnosis?.marker !== failedLaunch.marker) semanticFailures.push("ui_human_edge_failed_launch_diagnosis");
+      if (failedFinal.errorText !== "CONFIG_MISSING" || JSON.stringify(failedFinal.actualFiles || []) !== JSON.stringify(expectedFailedFiles)) semanticFailures.push("ui_human_edge_failed_launch_artifacts");
+      if (failedHistory.toolOutputSeen !== true || failedHistory.assistantFinalMarkerSeen !== true || failedHistory.chinesePreCommandSeen !== true || failedHistory.parseErrorSeen === true) semanticFailures.push("ui_human_edge_failed_launch_history");
     }
     if (definition.requireDesktopTaskSuiteSemantics) {
       const selectedTasks = Array.isArray(report.selectedTasks) ? report.selectedTasks.map((task) => String(task || "")) : [];
@@ -3000,6 +3040,7 @@ const realTrafficRefreshOrder = [
   ["codexResponses", "real-traffic-low-state", "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\\test-anticodex-codex-responses.ps1 -TimeoutSec 90"],
   ["uiChatSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --timeout-ms 90000"],
   ["uiLaunchOnceSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-launch-once.mjs --allow-real-traffic"],
+  ["uiHumanEdgeMatrix", "real-traffic-high-state", "node scripts\\test-anticodex-human-edge-matrix.mjs --allow-real-traffic --timeout-ms 300000"],
   ["uiWebSearchSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode web-search --timeout-ms 90000"],
   ["uiLocalProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode local-project --timeout-ms 120000"],
   ["uiCodingProjectSmoke", "real-traffic-low-state", "node scripts\\test-anticodex-ui-chat-smoke.mjs --task-mode coding-project --timeout-ms 120000"],

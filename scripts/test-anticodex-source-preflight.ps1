@@ -321,6 +321,12 @@ function Get-SourceJsonReportText {
 
 function Test-JavaScriptSyntax {
     $node = (Get-Command "node" -ErrorAction Stop).Source
+    $requiredScripts = @("scripts\test-anticodex-human-edge-matrix.mjs")
+    foreach ($requiredScript in $requiredScripts) {
+        if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot $requiredScript) -PathType Leaf)) {
+            Add-Failure "Required JavaScript verifier missing: $requiredScript"
+        }
+    }
     $scanRoots = @("translator", "scripts")
     $files = @($scanRoots | ForEach-Object {
         $scanRoot = Join-Path $SourceRoot $_

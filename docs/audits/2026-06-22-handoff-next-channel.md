@@ -710,3 +710,13 @@ Update: installed `native-panel-v85` `viewLatestReports` now passes, installed f
 - The user's repeated-launch case is now covered by a required real desktop gate. The failed proof counted two launches for an absolute command followed by `$workdir` plus relative `.\start.bat`; the fixed rerun counted exactly one launch, showed Chinese intent before execution, captured real tool output, and ended normally.
 - Preserve the launch guard's canonical path comparison and do not remove `latest-ui-launch-once-smoke.json` from release, diagnostics, Manager reports, or installed integrity checks.
 - Local-feature refresh reports now use `anticodex-source-snapshot-v1`. Diagnostics accepts a refresh report across the startup fingerprint boundary only with complete required-source coverage, clean parity, and source-mtime coverage. Current live diagnostics is fresh through `schema-mtime-coverage`.
+
+## 2026-07-13 Human Edge Task Handoff
+
+- The three user-visible execution failures now have one release-required real desktop matrix: same-task requirement correction, already-running/no-relaunch, and failed-launch/diagnose-without-relaunch.
+- Latest full proof is `%APPDATA%\anticodex\reports\20260713-000005-ui-human-edge-matrix.json`: `ok:true`, real traffic requested and used, 3/3 scenarios passed, all 3 result-validated, elapsed 222782 ms, and no repair turn required.
+- The key product behavior is stateful: wrapped launch targets normalize to the real batch file; duplicate launches become read-only verification; mixed inspect-and-repair tasks may write only the required repair files; pure read-only requests still block writes; same-chat corrections preserve prior files/tests/CLI contracts.
+- Release integration includes runtime sync, diagnostics collection, Manager latest reports (`桌面边缘任务矩阵`), installed report integrity, source preflight syntax coverage, and strict per-scenario semantic checks in passive release gates.
+- Do not weaken this matrix to transcript/prose checks. Completion must continue to come from host-observed files, test/CLI results, launch counters, exact markers, and real tool history. Keep Xiaoqiang1/2/3/4 sealed.
+- Final source preflight for this change passed 1205 tests: 1171 pass, 34 skipped, 0 failed. The first attempt exposed and led to fixes for a null repair target and a multi-turn relay wording regression; neither is deferred.
+- Installed runtime was restarted only after the session lock was idle, then confirmed to expose `桌面边缘任务矩阵：通过`. Manager latest reports ended at 0 stale / 0 missing, full real-button verification passed both local actions plus upper/center/lower close clicks, and passive release gates ended `releaseReady:true`, `shortReady:true`, with no required, short, or damaged reports.
