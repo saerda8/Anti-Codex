@@ -220,10 +220,24 @@ $changedSharedSkillDetails = @()
 $skillFingerprintSkipped = $false
 $skillFingerprintSkipReason = "skill fingerprint skipped because verifier budget is exhausted"
 $sharedMcpNames = @()
+$sharedMcpNamesAll = @()
 $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
 $changedSharedMcpNames = @()
 $changedSharedMcpDetails = @()
+$developmentWorkerMcpNames = @(
+    "deepseek-code-worker",
+    "mimo-claude-coworker",
+    "mimocode-worker",
+    "deveco-code-worker",
+    "opencode-worker",
+    "kilo-worker",
+    "codebuddy-worker",
+    "agnes-worker",
+    "antigravity-code-worker"
+)
+$excludedSharedDevelopmentMcpNames = @()
+$unexpectedLocalDevelopmentMcpNames = @()
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $directoryFingerprintCache = @{}
@@ -925,11 +939,17 @@ if ($configText) {
     if (Test-Path -LiteralPath $sharedConfigPath -PathType Leaf) {
         try {
             $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw -Encoding UTF8
-            $sharedMcpNames = @(Get-McpServerNamesFromToml $sharedConfigText)
+            $sharedMcpNamesAll = @(Get-McpServerNamesFromToml $sharedConfigText)
+            $excludedSharedDevelopmentMcpNames = @($sharedMcpNamesAll | Where-Object { $developmentWorkerMcpNames -contains $_ })
+            $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $developmentWorkerMcpNames -notcontains $_ })
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
             $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
+            $unexpectedLocalDevelopmentMcpNames = @($mcpNames | Where-Object { $developmentWorkerMcpNames -contains $_ })
             foreach ($mcpName in $missingSharedMcpNames) {
                 Add-Failure "shared MCP server '$mcpName' exists but Anti-Codex local config is missing it"
+            }
+            foreach ($mcpName in $unexpectedLocalDevelopmentMcpNames) {
+                Add-Failure "Anti-Codex local config must not include development MCP worker '$mcpName'"
             }
             foreach ($mcpName in @($sharedMcpNames | Where-Object { $mcpNames -contains $_ })) {
                 $sharedSection = Get-McpSectionText $sharedConfigText $mcpName
@@ -1210,6 +1230,11 @@ $result = [pscustomobject]@{
         names = $mcpNames
         sharedCount = $sharedMcpNames.Count
         sharedNames = $sharedMcpNames
+        sharedAllCount = $sharedMcpNamesAll.Count
+        sharedAllNames = $sharedMcpNamesAll
+        excludedSharedDevelopmentMcpNames = $excludedSharedDevelopmentMcpNames
+        unexpectedLocalDevelopmentMcpNames = $unexpectedLocalDevelopmentMcpNames
+        developmentWorkersAllowed = $false
         missingShared = $missingSharedMcpNames
         extraLocal = $extraLocalMcpNames
         changedShared = $changedSharedMcpNames
@@ -1292,6 +1317,11 @@ $consoleResult = [pscustomobject]@{
         names = $mcpNames
         sharedCount = $sharedMcpNames.Count
         sharedNames = $sharedMcpNames
+        sharedAllCount = $sharedMcpNamesAll.Count
+        sharedAllNames = $sharedMcpNamesAll
+        excludedSharedDevelopmentMcpNames = $excludedSharedDevelopmentMcpNames
+        unexpectedLocalDevelopmentMcpNames = $unexpectedLocalDevelopmentMcpNames
+        developmentWorkersAllowed = $false
         missingShared = $missingSharedMcpNames
         changedShared = $changedSharedMcpNames
         changedSharedDetails = @($changedSharedMcpDetails)

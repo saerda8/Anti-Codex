@@ -767,6 +767,10 @@ async function fixedRouteHealthSnapshot(fixedHealthUrl) {
             : "";
         const state = String(body?.state || "unknown");
         const ready = res.ok && body?.ok === true && state === "ready" && Boolean(provider);
+        const relayProtocol = ["chatCompletions", "responses"].includes(String(body?.route?.relayProtocol || ""))
+            ? String(body.route.relayProtocol)
+            : "";
+        const catalogModelCount = Number(body?.catalogModelCount);
         return {
             ready,
             state,
@@ -775,6 +779,8 @@ async function fixedRouteHealthSnapshot(fixedHealthUrl) {
             pid: Number.isInteger(Number(body?.pid)) ? Number(body.pid) : null,
             readyAt: String(body?.readyAt || ""),
             adapterPort: validLoopbackPort(body?.ports?.adapter),
+            relayProtocol,
+            catalogModelCount: Number.isInteger(catalogModelCount) && catalogModelCount >= 0 ? catalogModelCount : 0,
         };
     } catch {
         return {
@@ -785,6 +791,8 @@ async function fixedRouteHealthSnapshot(fixedHealthUrl) {
             pid: null,
             readyAt: "",
             adapterPort: null,
+            relayProtocol: "",
+            catalogModelCount: 0,
         };
     }
 }
@@ -1366,6 +1374,14 @@ export function createAntiCodexManagerService(options = {}) {
     if (req.method === "GET" && pathname === "/health") {
       const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
       const account = await fixedRouteAccountSnapshot(fixedRoute);
+      const upstreamMode = fixedRoute.provider === "third-party"
+        ? "third-party"
+        : fixedRoute.provider === "antigravity"
+          ? "antigravity"
+          : "unknown";
+      const upstreamProtocol = upstreamMode === "third-party"
+        ? (fixedRoute.relayProtocol === "responses" ? "responses" : "openai-compatible")
+        : "";
       return jsonResponse(res, 200, {
         schema: "anticodex-manager-service-v1",
         ok: true,
@@ -1375,7 +1391,14 @@ export function createAntiCodexManagerService(options = {}) {
         routeReady: fixedRoute.ready,
         provider: fixedRoute.provider,
         model: fixedRoute.model,
+        modelCount: Number(fixedRoute.catalogModelCount ?? 0),
+        upstreamProfile: {
+          mode: upstreamMode,
+          protocol: upstreamProtocol,
+          model: fixedRoute.model || "",
+        },
         accountReady: fixedRoute.provider === "antigravity" ? account.signedIn === true && account.identityAvailable === true : null,
+        accountMessage: account.message || account.state || "",
         accountState: account.state,
         accountTrafficReady: null,
         accountTrafficModel: fixedRoute.provider === "antigravity" ? fixedRoute.model : "",

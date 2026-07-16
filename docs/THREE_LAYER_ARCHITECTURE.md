@@ -40,6 +40,12 @@ Keep:
 - Anti-Codex application/taskbar/tray/shortcut icons and product name;
 - a minimal Chinese `管理` entry and launcher-owned diagnostics.
 
+Development-worker boundary:
+
+- the nine project-development MCP workers (DeepSeek, MIMO Claude Coworker, MiMoCode, DevEco, OpenCode, Kilo, CodeBuddy, Agnes and Antigravity Code Worker) belong to the outer development environment and must not be synchronized into the Anti-Codex product configuration;
+- the copied Codex shell may keep its own native runtime MCP such as `node_repl`, plus future user-configured product MCPs that pass the normal isolation rules;
+- a verifier must fail if a development worker appears in the Anti-Codex product config, not when those workers are absent.
+
 Forbidden:
 
 - replacing the Codex task loop;

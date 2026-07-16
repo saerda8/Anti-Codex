@@ -102,6 +102,42 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body.object, undefined);
   });
 
+  await t.test("GET /health exposes a safe third-party profile summary", async () => {
+    const healthServer = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        state: "ready",
+        provider: "third-party",
+        model: "gpt-5.6-terra",
+        catalogModelCount: 1,
+        route: { relayProtocol: "chatCompletions" },
+      }));
+    });
+    await listenOnLoopback(healthServer);
+    const manager = createAntiCodexManagerService({
+      port: 0,
+      host: "127.0.0.1",
+      stateRoot: tempDir,
+      fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
+    });
+    const managerServer = await manager.listen();
+    try {
+      const res = await fetch(`http://127.0.0.1:${managerServer.address().port}/health`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.deepEqual(body.upstreamProfile, {
+        mode: "third-party",
+        protocol: "openai-compatible",
+        model: "gpt-5.6-terra",
+      });
+      assert.equal(body.modelCount, 1);
+    } finally {
+      await manager.close();
+      await closeServer(healthServer);
+    }
+  });
+
   await t.test("diagnostics report route facts and fail closed when the fixed route is offline", async () => {
     const offlineService = createAntiCodexManagerService({
       port: 0,

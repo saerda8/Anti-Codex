@@ -120,6 +120,49 @@ test("plan-json proves third-party bypass without starting processes or exposing
   });
 });
 
+test("third-party route explicitly points Codex at a complete compatibility catalog", () => {
+  const plan = buildFixedRoutePlan([
+    "--install-root", "G:\\AntiCodex-Test-Install",
+    "--state-root", "G:\\AntiCodex-Test-State",
+    "--provider", "third-party",
+    "--proxy-port", "41002",
+    "--adapter-port", "41003",
+    "--cdp-port", "41004",
+    "--health-port", "41005",
+  ], {
+    ...process.env,
+    UPSTREAM_PROTOCOL: "openai-compatible",
+    UPSTREAM_URL: "https://api.example.test/v1",
+    UPSTREAM_MODEL: "gpt-5.6-terra",
+    UPSTREAM_API_KEY: "catalog-test-key",
+  });
+
+  assert.match(plan.route.config, /^model_catalog_json = ".*third-party-model-catalog\.json"$/m);
+});
+
+test("third-party compatibility catalog clones native Codex tool capabilities", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  assert.equal(typeof supervisor.buildThirdPartyModelCatalog, "function");
+  const catalog = supervisor.buildThirdPartyModelCatalog({
+    models: [{
+      slug: "gpt-5.4",
+      display_name: "GPT-5.4",
+      shell_type: "shell_command",
+      apply_patch_tool_type: "freeform",
+      supports_parallel_tool_calls: true,
+      supported_reasoning_levels: [{ effort: "medium", description: "Medium" }],
+      context_window: 272000,
+      max_context_window: 272000,
+    }],
+  }, "gpt-5.6-terra");
+
+  assert.equal(catalog.models.length, 1);
+  assert.equal(catalog.models[0].slug, "gpt-5.6-terra");
+  assert.equal(catalog.models[0].shell_type, "shell_command");
+  assert.equal(catalog.models[0].apply_patch_tool_type, "freeform");
+  assert.equal(catalog.models[0].supports_parallel_tool_calls, true);
+});
+
 test("plan-json keeps Antigravity behind the thin adapter", () => {
   const output = execFileSync(process.execPath, [
     supervisorPath,

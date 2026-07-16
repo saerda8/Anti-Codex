@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 const syncSharedConfig = path.join(repoRoot, "scripts", "sync-shared-codex-config.mjs");
 const syncRegistrations = path.join(repoRoot, "scripts", "sync-deepcodex-plugin-registrations.mjs");
+const mcpSkillsVerifier = path.join(repoRoot, "scripts", "test-anticodex-mcp-skills.ps1");
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-config-sync-"));
@@ -165,6 +166,25 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   for (const worker of developmentWorkers) {
     assert.match(included, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}\\]`));
   }
+});
+
+test("MCP verifier rejects development workers inside the Anti-Codex product config", () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+  for (const worker of [
+    "deepseek-code-worker",
+    "mimo-claude-coworker",
+    "mimocode-worker",
+    "deveco-code-worker",
+    "opencode-worker",
+    "kilo-worker",
+    "codebuddy-worker",
+    "agnes-worker",
+    "antigravity-code-worker",
+  ]) {
+    assert.equal(verifier.includes(worker), true, `verifier must classify ${worker}`);
+  }
+  assert.match(verifier, /excludedSharedDevelopmentMcpNames/);
+  assert.match(verifier, /must not include development MCP worker/);
 });
 
 test("DeepCodex-only plugin registrations are written back to current and global config", () => {

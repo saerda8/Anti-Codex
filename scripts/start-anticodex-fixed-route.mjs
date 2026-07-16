@@ -63,7 +63,9 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
 
   const catalogPath = provider === "antigravity"
     ? join(paths.codexHome, "antigravity-model-catalog.json")
-    : undefined;
+    : provider === "third-party"
+      ? join(paths.codexHome, "third-party-model-catalog.json")
+      : undefined;
   const route = generateRouteConfig({
     provider,
     model,
@@ -238,6 +240,12 @@ async function runSupervisor(plan) {
         host: "127.0.0.1",
         port: plan.ports.adapter,
       });
+    } else if (plan.provider === "third-party") {
+      catalog = buildThirdPartyModelCatalog(readBundledCatalog(plan.paths.codexCli), plan.model);
+      writeTextAtomic(
+        join(plan.paths.codexHome, "third-party-model-catalog.json"),
+        `${JSON.stringify(catalog, null, 2)}\n`,
+      );
     }
 
     const configPath = join(plan.paths.codexHome, "config.toml");
@@ -492,12 +500,35 @@ function ensureProductDirectories(paths) {
   ]) mkdirSync(path, { recursive: true });
 }
 
-function buildRuntimeCatalog(codexCli, availableModels) {
-  const bundled = JSON.parse(execFileSync(codexCli, ["debug", "models", "--bundled"], {
+function readBundledCatalog(codexCli) {
+  return JSON.parse(execFileSync(codexCli, ["debug", "models", "--bundled"], {
     encoding: "utf8",
     windowsHide: true,
     timeout: 30_000,
   }));
+}
+
+export function buildThirdPartyModelCatalog(bundled, model) {
+  const modelId = String(model ?? "").trim();
+  if (!modelId) throw new Error("Third-party model is required for the compatibility catalog.");
+  const template = bundled.models?.find((entry) => entry.slug === "gpt-5.4") ?? bundled.models?.[0];
+  if (!template) throw new Error("The copied Codex CLI returned no bundled model template.");
+  return {
+    ...bundled,
+    models: [{
+      ...template,
+      slug: modelId,
+      display_name: modelId,
+      description: `Third-party API model ${modelId}`,
+      priority: 0,
+      visibility: "list",
+      supported_in_api: true,
+    }],
+  };
+}
+
+function buildRuntimeCatalog(codexCli, availableModels) {
+  const bundled = readBundledCatalog(codexCli);
   const template = bundled.models?.find((entry) => entry.slug === "gpt-5.4") ?? bundled.models?.[0];
   if (!template) throw new Error("The copied Codex CLI returned no bundled model template.");
   return buildAntigravityModelCatalog(
