@@ -118,7 +118,32 @@ test("Contract 3: Third-party Chat API directly becomes CodexPlusPlus upstream w
   // 3.4 Antigravity URL/adapter port must not appear
   const configText = routeConfig.config;
   assert.ok(!configText.includes(`127.0.0.1:${adapterPort}`), "Configuration contains Antigravity adapter URL/port");
-  assert.ok(!configText.includes("antigravity"), "Configuration contains 'antigravity' references");
+  assert.equal(routeConfig.profileId, "anticodex-third-party");
+  assert.equal(routeConfig.profileName, "Anti-Codex third-party API");
+});
+
+test("Contract 3b: switching upstream routes preserves the Codex provider identity used by thread history", () => {
+  const antigravity = generateRouteConfig({
+    provider: "antigravity",
+    proxyPort: 41002,
+    adapterPort: 41003,
+  });
+  const thirdParty = generateRouteConfig({
+    provider: "third-party",
+    proxyPort: 41002,
+    thirdPartyConfig: {
+      baseUrl: "https://provider.example/v1",
+      apiKey: "upstream-provider-key",
+      protocol: "chatCompletions",
+      model: "third-party-model",
+    },
+  });
+  const providerName = (config) => /^model_provider = "([^"]+)"$/m.exec(config)?.[1] ?? null;
+
+  assert.equal(providerName(antigravity.config), "anticodex_antigravity");
+  assert.equal(providerName(thirdParty.config), providerName(antigravity.config));
+  assert.match(thirdParty.config, /\[model_providers\.anticodex_antigravity\]/);
+  assert.doesNotMatch(thirdParty.config, /\[model_providers\.anticodex_third_party\]/);
 });
 
 test("Contract 4: Visible launcher args strictly use --app-path/--debug-port/--helper-port only", () => {

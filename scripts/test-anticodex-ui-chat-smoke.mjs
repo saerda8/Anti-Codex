@@ -4098,17 +4098,172 @@ function sameChatClickExpression(titleNeedle) {
   })()`;
 }
 
+function historyShowMoreExpression() {
+  return `(() => {
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 1
+        && rect.height > 1
+        && rect.left < 420
+        && style.display !== "none"
+        && style.visibility !== "hidden";
+    };
+    const candidates = Array.from(document.querySelectorAll('button, [role="button"]'))
+      .filter(visible)
+      .map((el) => ({
+        el,
+        text: String(el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim(),
+        rect: el.getBoundingClientRect(),
+      }))
+      .filter((item) => /^(展开显示|show more)$/i.test(item.text))
+      .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+    const selected = candidates[0];
+    if (!selected) return { found: false, labels: [] };
+    return {
+      found: true,
+      text: selected.text,
+      rect: {
+        x: selected.rect.x,
+        y: selected.rect.y,
+        w: selected.rect.width,
+        h: selected.rect.height,
+      },
+      labels: candidates.map((item) => item.text),
+    };
+  })()`;
+}
+
+function historySidebarScrollExpression({ reset = false, restoreOriginal = false, originalScrollTop = 0 } = {}) {
+  return `(() => {
+    const reset = ${reset ? "true" : "false"};
+    const restoreOriginal = ${restoreOriginal ? "true" : "false"};
+    const requestedOriginalScrollTop = ${Number(originalScrollTop) || 0};
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width >= 100
+        && rect.height >= 80
+        && rect.left < 420
+        && rect.right <= 520
+        && style.display !== "none"
+        && style.visibility !== "hidden";
+    };
+    const candidates = Array.from(document.querySelectorAll("*"))
+      .filter((el) => visible(el) && el.scrollHeight > el.clientHeight + 8)
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        const overflowScrollable = /auto|scroll|overlay/i.test(style.overflowY || "");
+        return {
+          el,
+          rect,
+          overflowScrollable,
+          range: Math.max(0, el.scrollHeight - el.clientHeight),
+        };
+      })
+      .sort((a, b) => Number(b.overflowScrollable) - Number(a.overflowScrollable)
+        || b.range - a.range
+        || (a.rect.width * a.rect.height) - (b.rect.width * b.rect.height));
+    const selected = candidates[0];
+    if (!selected) return { scrolled: false, reason: "sidebar_scroll_container_not_found" };
+    const target = selected.el;
+    const originalScrollTop = target.scrollTop;
+    const maxScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    const step = Math.max(120, Math.floor(target.clientHeight * 0.75));
+    const nextScrollTop = restoreOriginal
+      ? Math.min(maxScrollTop, Math.max(0, requestedOriginalScrollTop))
+      : reset
+        ? 0
+        : Math.min(maxScrollTop, target.scrollTop + step);
+    target.scrollTop = nextScrollTop;
+    target.dispatchEvent(new Event("scroll", { bubbles: true }));
+    return {
+      scrolled: true,
+      reset,
+      restoreOriginal,
+      originalScrollTop,
+      nextScrollTop,
+      maxScrollTop,
+      clientHeight: target.clientHeight,
+      scrollHeight: target.scrollHeight,
+      atEnd: nextScrollTop >= maxScrollTop,
+      rect: {
+        x: selected.rect.x,
+        y: selected.rect.y,
+        w: selected.rect.width,
+        h: selected.rect.height,
+      },
+    };
+  })()`;
+}
+
 async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTimeoutMs = 20_000 } = {}) {
   const openedAt = Date.now();
-  const clickedSameChat = await ws.send("Runtime.evaluate", {
-    expression: sameChatClickExpression(titleNeedle),
-    returnByValue: true,
-    awaitPromise: true,
-  });
-  const evidence = clickedSameChat.result?.result?.value || null;
+  const findVisibleTask = async () => {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: sameChatClickExpression(titleNeedle),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    return result.result?.result?.value || null;
+  };
+  let evidence = await findVisibleTask();
+  const historyExpandEvidence = [];
   if (evidence?.clicked !== true) {
+    for (let historyExpandAttempt = 0; historyExpandAttempt < 8; historyExpandAttempt += 1) {
+      const showMoreResult = await ws.send("Runtime.evaluate", {
+        expression: historyShowMoreExpression(),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const showMore = showMoreResult.result?.result?.value || null;
+      if (showMore?.found !== true) break;
+      const rect = showMore.rect || {};
+      const x = Number(rect.x) + Number(rect.w) / 2;
+      const y = Number(rect.y) + Number(rect.h) / 2;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) break;
+      await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+      await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+      await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      historyExpandEvidence.push({ ...showMore, actualMouseClick: true });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+      evidence = await findVisibleTask();
+      if (evidence?.clicked === true) break;
+    }
+  }
+  const historyScrollEvidence = [];
+  let originalScrollTop = null;
+  if (evidence?.clicked !== true) {
+    for (let historyScrollAttempt = 0; historyScrollAttempt < 40; historyScrollAttempt += 1) {
+      const scrollResult = await ws.send("Runtime.evaluate", {
+        expression: historySidebarScrollExpression({ reset: historyScrollAttempt === 0 }),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const scrollEvidence = scrollResult.result?.result?.value || null;
+      historyScrollEvidence.push(scrollEvidence);
+      if (historyScrollAttempt === 0 && Number.isFinite(Number(scrollEvidence?.originalScrollTop))) {
+        originalScrollTop = Number(scrollEvidence.originalScrollTop);
+      }
+      if (scrollEvidence?.scrolled !== true) break;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
+      evidence = await findVisibleTask();
+      if (evidence?.clicked === true || scrollEvidence.atEnd === true) break;
+    }
+  }
+  if (evidence?.clicked !== true) {
+    if (originalScrollTop !== null) {
+      await ws.send("Runtime.evaluate", {
+        expression: historySidebarScrollExpression({ restoreOriginal: true, originalScrollTop }),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+    }
     throw new Error(`same-chat task title was not found: ${titleNeedle}`);
   }
+  evidence.historyExpandEvidence = historyExpandEvidence;
+  evidence.historyScrollEvidence = historyScrollEvidence;
   const sameChatRect = evidence.rect || {};
   const sameChatX = Number(sameChatRect.x) + Number(sameChatRect.w) / 2;
   const sameChatY = Number(sameChatRect.y) + Number(sameChatRect.h) / 2;

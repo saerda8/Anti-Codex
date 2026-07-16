@@ -1,6 +1,7 @@
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 
 export const FIXED_ROUTE_SCHEMA = "anticodex-fixed-route-v1";
+const CODEX_THREAD_PROVIDER_NAME = "anticodex_antigravity";
 
 export function resolveProductPaths(installRoot, stateRoot) {
   const install = requireAbsoluteRoot(installRoot, "installRoot");
@@ -64,7 +65,8 @@ export function generateRouteConfig(options = {}) {
     throw new Error("provider must be antigravity or third-party");
   }
 
-  const providerName = provider === "antigravity" ? "anticodex_antigravity" : "anticodex_third_party";
+  // Codex persists this id in thread metadata, so upstream switches must not change it.
+  const providerName = CODEX_THREAD_PROVIDER_NAME;
   const catalogLine = options.catalogPath
     ? `model_catalog_json = ${tomlString(resolve(String(options.catalogPath)))}`
     : "";

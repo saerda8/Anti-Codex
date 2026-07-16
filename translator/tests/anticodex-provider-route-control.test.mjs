@@ -35,6 +35,14 @@ test("apply route restarts the fixed supervisor instead of the legacy model tran
   assert.doesNotMatch(applyRoute, /\/IM|Anti-Codex\.exe.*Stop-Process/i);
 });
 
+test("apply route tolerates a taskkill child-exit race only after the supervisor PID is gone", () => {
+  assert.match(applyRoute, /\$savedErrorActionPreference\s*=\s*\$ErrorActionPreference/);
+  assert.match(applyRoute, /\$ErrorActionPreference\s*=\s*"Continue"/);
+  assert.match(applyRoute, /\$taskkillExitCode\s*=\s*\$LASTEXITCODE/);
+  assert.match(applyRoute, /Get-Process\s+-Id\s+\$supervisorPid\s+-ErrorAction\s+SilentlyContinue/);
+  assert.match(applyRoute, /if\s*\(\$taskkillExitCode\s+-ne\s+0\s+-and\s+\$stillRunning\)/);
+});
+
 test("Manager control plane probes CodexPlusPlus protocols and waits for the fixed route", () => {
   assert.match(controlApi, /from "\.\.\/translator\/provider\/codexplusplus-upstream-probe\.mjs"/);
   assert.match(controlApi, /testCodexPlusPlusUpstreamConnection\(/);

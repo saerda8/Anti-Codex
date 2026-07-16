@@ -19,6 +19,8 @@ isolated official Codex copy
 
 There is no fourth task-control layer. Codex owns planning, tools, commands, files, approvals, retries, continuation, compaction and completion. CodexPlusPlus owns all ordinary third-party provider integration and the general Codex Responses/Chat conversion. Third-party models bypass Antigravity completely. Anti-Codex owns only the smallest Chat-to-Cascade mapping for Antigravity models.
 
+The provider identity persisted by the copied Codex client is a stable local Anti-Codex bridge identity, not the selected upstream route. Switching between Antigravity and a third-party API may change the CodexPlusPlus relay profile, model, protocol and upstream URL, but it must not change `model_provider`. Codex thread history defaults to the current provider identity; changing that identity hides otherwise healthy same-task history and breaks the required quota-fallback continuation.
+
 Changing this target, routing third-party APIs through Antigravity, moving task decisions out of Codex, replacing CodexPlusPlus conversion, or changing the adapter to a self-written Responses translator requires an explicit user decision and a prior update to the cornerstone architecture.
 
 ## 2. Mandatory Work-Cycle Gate
@@ -47,7 +49,7 @@ At the end of every cycle:
 - CodexPlusPlus isolation review, rebaseable patch, reproducible Windows launcher build and real copied-client isolation proof: complete.
 - Deterministic third-party Chat Completions route: complete. The only non-isolation CodexPlusPlus change is the documented abortive-close transport for plain HTTP loopback model streams; remote provider payloads, protocol conversion, retries and task behavior remain upstream.
 - Thin Antigravity adapter and isolated CodexPlusPlus route switch: complete. The persistent copied-client matrix, visible-client short proof, formal edge/recovery matrix, legacy zero-hit gate, release packaging proof and final multi-style Gate 8 are green.
-- Post-release real-artifact validation is active maintenance, not a new gate. The current sweep produced and independently verified a short video, PPTX, responsive website and cross-deliverable audit project. A provider 429 after completed tool work and a separate optional third-party HTTP 503 are external route conditions; neither permits adding task control to the adapter or replacing CodexPlusPlus translation.
+- Post-release real-artifact validation is active maintenance, not a new gate. The current sweep produced and independently verified a short video, PPTX, responsive website and cross-deliverable audit project. The website passes 28/28 Node tests, complete real-browser interaction evidence, desktop/mobile browser QA and a 37-entry release-package content audit. Gemini and Claude 429 plus a third-party HTTP 503 are external route conditions; neither permits adding task control to the adapter or replacing CodexPlusPlus translation.
 
 Old percentages from the mixed translator describe historical reusable evidence only. They are not completion claims for this plan.
 

@@ -33,8 +33,16 @@ function Get-RunningFixedRouteSupervisor {
 $stoppedSupervisorPids = @()
 foreach ($supervisor in @(Get-RunningFixedRouteSupervisor)) {
     $supervisorPid = [int]$supervisor.ProcessId
-    & taskkill.exe /PID $supervisorPid /T /F 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & taskkill.exe /PID $supervisorPid /T /F 2>$null | Out-Null
+        $taskkillExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorActionPreference
+    }
+    $stillRunning = Get-Process -Id $supervisorPid -ErrorAction SilentlyContinue
+    if ($taskkillExitCode -ne 0 -and $stillRunning) {
         throw "Could not stop fixed-route supervisor PID $supervisorPid."
     }
     $stoppedSupervisorPids += $supervisorPid
