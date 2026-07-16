@@ -14,6 +14,7 @@ import {
 import os from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { markerScopedHistoryEntries } from "./lib/native-codex-rollout-history.mjs";
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -124,12 +125,7 @@ function commandLooksLikeLaunchSideEffect(command = "") {
 }
 
 function markerHistoryEvidence(expectedMarker) {
-  let history = null;
-  try {
-    history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
-  } catch {}
-  const entries = (Array.isArray(history?.entries) ? history.entries : [])
-    .filter((entry) => JSON.stringify(entry).includes(expectedMarker));
+  const entries = markerScopedHistoryEntries(expectedMarker, { responseHistoryPath });
   const orderedItems = [];
   const seen = new Set();
   for (const entry of entries) {
@@ -235,12 +231,12 @@ function runCorrectionScenario(matrixRoot) {
     "帮我直接做个能用的小工具，不用先问一堆问题。",
     `目录是 ${artifactDir}。先做第一版词频 CLI，只能创建 package.json、word-tally.mjs、word-tally.test.mjs、done.txt。`,
     "word-tally.mjs 导出 tallyWords(text)，命令行输入 red blue red 时输出 JSON，red=2、blue=1。测试必须用 node:test。",
-    `done.txt 只写 ${marker}_FIRST。实际运行测试和 CLI，确认结果后最后一行写 ${marker}_FIRST。`,
+    `done.txt 的原始 UTF-8 字节必须严格等于 ${marker}_FIRST，没有 BOM、回车、换行或空格；用 [System.IO.File]::WriteAllText 和 UTF8Encoding(false) 写入。实际运行测试和 CLI，并检查 done.txt 原始字节，确认结果后最后一行写 ${marker}_FIRST。`,
   ].join("\n"), "utf8");
   writeFileSync(followupPromptPath, [
     "我刚才说漏了一个需求，别推倒重做，也别删掉原来的 tallyWords 和旧测试。",
     "在同一个项目追加 uniqueWords(text)，结果要排序并去重；把测试扩充为同时验证旧功能和 uniqueWords(\"red blue red\") 等于 [\"blue\",\"red\"]。",
-    `再创建 CHANGELOG.md 说明这是需求纠正并写入 ${marker}；followup.txt 只能写 ${marker}。`,
+    `再创建 CHANGELOG.md 说明这是需求纠正并写入 ${marker}；followup.txt 的原始 UTF-8 字节必须严格等于 ${marker}，没有 BOM、回车、换行或空格。`,
     "重新运行 node --test 和 node word-tally.mjs \"red blue red green\"，必须确认 red=2、blue=1、green=1。不要只告诉我改好了。",
     `结果都对以后，最后一行写 ${marker}。`,
   ].join("\n"), "utf8");
@@ -290,7 +286,7 @@ function runCorrectionScenario(matrixRoot) {
       "继续当前同一个项目。上一轮回复说完成了，但实际结果没有通过验收；不要重建项目，也不要删除已经正确的旧功能。",
       "修复 word-tally.mjs：必须保留 tallyWords 和 JSON CLI 输出，运行 node word-tally.mjs \"red blue red green\" 时标准输出必须是可 JSON.parse 的对象，red=2、blue=1、green=1。",
       "word-tally.test.mjs 必须同时保留 tallyWords 旧测试和 uniqueWords 新测试，node --test 必须 2/2 通过。",
-      `用 [System.IO.File]::WriteAllText 和 UTF8Encoding(false) 重写 followup.txt，使字节内容严格等于 ${marker}，没有 BOM、换行或空格。CHANGELOG.md 必须包含 ${marker}。`,
+      `用 [System.IO.File]::WriteAllText 和 UTF8Encoding(false) 同时重写 done.txt 和 followup.txt，使字节内容分别严格等于 ${marker}_FIRST 和 ${marker}，没有 BOM、回车、换行或空格。CHANGELOG.md 必须包含 ${marker}。`,
       "实际运行 node --test、CLI 和文件字节检查；不要只回复完成。",
       `全部结果通过后，最后一行写 ${repairMarker}。`,
     ].join("\n"), "utf8");

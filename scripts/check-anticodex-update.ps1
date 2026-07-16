@@ -203,7 +203,7 @@ function Test-ActiveHostGuardrails {
     $failures = New-Object System.Collections.Generic.List[string]
     if ($null -eq $Manifest) {
         $failures.Add("active host marker is missing or unreadable") | Out-Null
-    } elseif ([string]$Manifest.schema -ne "anticodex-host-manifest-v1") {
+    } elseif ([string]$Manifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
         $failures.Add("active host marker schema is invalid") | Out-Null
     }
     $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"

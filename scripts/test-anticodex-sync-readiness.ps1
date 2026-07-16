@@ -157,7 +157,7 @@ $syncFailureSafetyScript = Join-Path $scriptsRoot "test-anticodex-sync-failure-s
 $modelThinkingVerifier = Join-Path $scriptsRoot "test-anticodex-model-thinking.ps1"
 $postSyncVerifier = Join-Path $scriptsRoot "test-anticodex-installed-overall.ps1"
 $startScript = Join-Path $scriptsRoot "start-anticodex.ps1"
-$runtimeStartScript = Join-Path $scriptsRoot "start-deepcodex.ps1"
+$fixedRouteSupervisorScript = Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"
 $programsPath = [Environment]::GetFolderPath("Programs")
 if (-not $programsPath) {
     $programsPath = if ($env:APPDATA) { Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" } else { Join-Path $env:USERPROFILE "AppData\Roaming\Microsoft\Windows\Start Menu\Programs" }
@@ -201,7 +201,7 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
     Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock"
 }
 
-foreach ($path in @($syncScript, $syncLauncherScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $runtimeStartScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
+foreach ($path in @($syncScript, $syncLauncherScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure "sync readiness missing required path: $path"
     }
@@ -249,19 +249,18 @@ if (-not (Has-Text $rollbackScript "\-RecoveryAttempt")) { Add-Failure "rollback
 if (-not (Has-Text $rollbackLauncherScript "Anti-Codex was not changed")) { Add-Failure "rollback launcher missing failure safety message" }
 if (-not (Has-Text $updateCheckScript "updateNeeded")) { Add-Failure "update checker missing version drift result" }
 if (-not (Has-Text $startScript "check-anticodex-update\.ps1")) { Add-Failure "start script missing visible update check" }
-if (-not (Has-Text $runtimeStartScript '\$codexWorkingDirectory\s*=\s*Split-Path\s+-Parent\s+\$CODEX_BIN')) { Add-Failure "runtime launcher does not start the host from its own directory for icon/resource resolution" }
-if (-not (Has-Text $runtimeStartScript '-WorkingDirectory\s+\$codexWorkingDirectory')) { Add-Failure "runtime launcher missing host working directory on process launch" }
-if (-not (Has-Text $runtimeStartScript "anticodex-manager-inject\.js")) { Add-Failure "runtime launcher missing in-app manager injection" }
-if (-not (Has-Text $runtimeStartScript "anticodex-manager-bridge\.mjs")) { Add-Failure "runtime launcher missing in-app manager bridge" }
-if (-not (Has-Text $runtimeStartScript "function Start-AntiCodexManagerBridge")) { Add-Failure "runtime launcher missing manager bridge start helper" }
-if (-not (Has-Text $runtimeStartScript "function Ensure-AntiCodexManagerBridgeRunning")) { Add-Failure "runtime launcher missing manager bridge watchdog helper" }
-if (-not (Has-Text $runtimeStartScript "Manager bridge watchdog restart failed; retrying after 30-second cooldown")) { Add-Failure "runtime launcher missing manager bridge watchdog cooldown" }
+if (-not (Has-Text $startScript "start-anticodex-fixed-route\.mjs")) { Add-Failure "formal launcher does not select the fixed three-layer supervisor" }
+if (-not (Has-Text $fixedRouteSupervisorScript "codexplusplus-component-manifest-v1")) { Add-Failure "fixed-route supervisor missing CodexPlusPlus component contract" }
+if (-not (Has-Text $fixedRouteSupervisorScript "startAntigravityChatProvider")) { Add-Failure "fixed-route supervisor missing thin Antigravity Chat provider" }
+if (-not (Has-Text $fixedRouteSupervisorScript "anticodex-manager-inject\.js")) { Add-Failure "fixed-route supervisor missing in-app manager injection" }
+if (-not (Has-Text $fixedRouteSupervisorScript "anticodex-manager-bridge\.mjs")) { Add-Failure "fixed-route supervisor missing in-app manager bridge" }
+if (-not (Has-Text $fixedRouteSupervisorScript "windowsHide:\s*true")) { Add-Failure "fixed-route supervisor does not hide background child windows" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_OPEN_MANAGER__")) { Add-Failure "manager injection missing in-app open function" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_MANAGER_API__")) { Add-Failure "manager injection missing configured gateway URL support" }
 if (-not (Has-Text $managerInjectScript "apiCandidates")) { Add-Failure "manager injection missing gateway URL fallback candidates" }
 if (Has-Text $managerInjectScript 'createElement\("button"\)[\s\S]{0,500}anticodex-manager-button') { Add-Failure "manager injection still creates the removed floating Manager button" }
 if (-not (Has-Text $managerInjectScript "anticodex-panel")) { Add-Failure "manager injection missing embedded manager panel" }
-if (-not (Has-Text $managerInjectScript "native-panel-v104")) { Add-Failure "manager injection did not bump native panel version" }
+if (-not (Has-Text $managerInjectScript "native-panel-v105")) { Add-Failure "manager injection did not bump native panel version" }
 if (-not (Has-Text $managerInjectScript 'accountSwitch')) { Add-Failure "manager injection is missing the Antigravity account switch action" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager injection missing CDP action bridge support" }
 if (-not (Has-Text $managerInjectScript "/anticodex/manager/action-script")) { Add-Failure "manager injection missing script-based action endpoint" }
@@ -275,18 +274,16 @@ if (-not (Has-Text $cdpInjectScript "ANTICODEX_MANAGER_SNAPSHOT")) { Add-Failure
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_MANAGER_ACTION_QUEUE__")) { Add-Failure "manager bridge missing CDP action queue" }
 if (-not (Has-Text $managerBridgeScript "splice\(0\)")) { Add-Failure "manager bridge missing action queue drain" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager bridge missing page action function" }
-if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v104"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
+if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v105"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
 if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure "manager open injection still creates a separate script tag" }
-if (-not (Has-Text $runtimeStartScript "ANTICODEX_NATIVE_TOOL_BRIDGE")) { Add-Failure "runtime launcher missing Antigravity native bridge default guard" }
-if (-not (Has-Text $runtimeStartScript 'ANTICODEX_NATIVE_TOOL_BRIDGE\s*=\s*"0"')) { Add-Failure "runtime launcher does not keep Antigravity coworker/tool bridge disabled by default" }
 if (-not (Has-Text $validatorScript "resources\\codex\.exe")) { Add-Failure "candidate validator missing bundled Codex CLI check" }
 if (-not (Has-Text $validatorScript "resources\\icon\.ico")) { Add-Failure "candidate validator missing host icon check" }
 if (-not (Has-Text $validatorScript "--version")) { Add-Failure "candidate validator missing CLI version probe" }
 if (-not (Has-Text $validatorScript "ProductName")) { Add-Failure "candidate validator missing executable branding check" }
 if (-not (Has-Text $validatorScript "FileDescription")) { Add-Failure "candidate validator missing executable file-description check" }
 if (-not (Has-Text $validatorScript "OriginalFilename")) { Add-Failure "candidate validator missing executable original-filename check" }
-if (-not (Has-Text $validatorScript "anticodex-host-manifest-v1")) { Add-Failure "candidate validator missing signed host manifest check" }
+if (-not (Has-Text $validatorScript "anticodex-host-manifest-v2")) { Add-Failure "candidate validator missing fixed-shell signed host manifest check" }
 if (-not (Has-Text $validatorScript "Get-FileHash")) { Add-Failure "candidate validator missing host content hash checks" }
 if (-not (Has-Text $installScript "Anti-Codex is already installed")) { Add-Failure "installer can overwrite an existing active installation without the safe sync flow" }
 if (-not (Has-Text $installScript "Windows branding verification failed")) { Add-Failure "installer does not hard-fail when Windows branding verification fails" }
@@ -673,7 +670,7 @@ if (-not $startMenuManagerShortcutExists) {
 try {
     if (Test-Path -LiteralPath $activeMarker) {
         $activeManifest = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
-        if ($activeManifest.schema -ne "anticodex-host-manifest-v1") {
+        if ([string]$activeManifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
             Add-Failure "active host marker schema is invalid"
         } else {
             if ($activeManifest.source) {
@@ -741,7 +738,7 @@ try {
             }
         }
         $rollbackManifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
-        if ($rollbackManifest.schema -ne "anticodex-host-manifest-v1") {
+        if ([string]$rollbackManifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
             Add-Failure "rollback host marker schema is invalid"
         } else {
             if ($rollbackManifest.source) {

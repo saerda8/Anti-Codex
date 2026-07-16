@@ -51,6 +51,28 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-16 - MIMO static audit misread PowerShell child environment inheritance
+
+- Worker: MIMO `dsw_mrmpfxlo_wsfqim`.
+- Task: create one static Gate 8 final-runner audit without source or runtime writes.
+- Result: the worker stayed inside the one-file boundary, but its D-001 root cause claimed a PowerShell process environment variable would not propagate to a subsequently launched Node child. A direct host reproduction proved the child receives the value. The worker also missed the higher-risk old-model default and missing direct-journey mutex; host TDD found and fixed both.
+- Cause classification: worker runtime-semantics reasoning error and incomplete risk prioritization, not transport, quota or product failure.
+- Rule change: before accepting a worker claim about PowerShell/Windows process semantics, reproduce it with the smallest local parent/child probe. Treat a bounded audit as candidate findings only; compare it against the exact post-acceptance operator commands so omitted default arguments and wrapper boundaries are reviewed explicitly.
+
+### 2026-07-16 - MIMO RED-test dispatch rejected by out-of-cwd forbidden path
+
+- Task: add one scoped Gate 8 actual-model-proof RED regression in `translator/tests/anticodex-gate8-evidence.test.mjs`.
+- Result: the dispatch was rejected before job creation because `C:\\Users\\XD\\AppData\\Roaming\\anticodex` was passed in `forbidden_paths`, which must remain inside the worker `cwd`. No worker model call started and no file changed.
+- Cause classification: directory-boundary parameter error, not worker transport, quota or project code failure.
+- Rule change: for scoped shared-worktree dispatches, keep `allowed_dirs` and `forbidden_paths` inside `cwd`; express external runtime protection in the task text and runtime-directory policy instead of passing external absolute paths.
+
+### 2026-07-14 - CodeBuddy scoped helper task inherited unrelated long-journey context
+
+- Task: add one pure quota-failure detector and focused tests in two authorized files; job `cbw_mrkk26ct_o1xtbp`, model `gemini-3.5-flash`.
+- Result: after about 150 seconds it had changed no files, repeatedly inspected `scripts/test-anticodex-human-long-journey.mjs` outside the requested behavior scope, and announced an intent to run the real-traffic greenfield journey. The host cancelled it before any file change or real-traffic launch; PID 28288 then exited.
+- Cause classification: worker session/context contamination and task-boundary failure, not project code failure or current-channel transport failure.
+- Rule change: do not retry this task with CodeBuddy in the shared worktree. Treat any worker that reads unrelated forbidden task scripts or proposes unrequested real traffic as immediately unsafe: cancel it, verify the process exited and no files changed, then switch worker or let the host implement the bounded change after recording the incident.
+
 ### 2026-07-09 - Restarted channel still closes MIMO and Antigravity worker reads
 
 - Task: after the user restarted Codex, verify the new channel worker namespace before dispatching more worker implementation tasks.
@@ -2189,8 +2211,47 @@ After every failure, before another dispatch:
 - Result: DeepSeek returned `Transport closed` before editing. MIMO completed with a valid direction but added an extra idle helper and did not remove the final redundant wait. MiMoCode timed out after a partial one-file diff. The main patch used a smaller phase-specific artifact-idle settle and added static coverage.
 - Cause classification: mixed worker availability and partial-diff quality issue, not product failure.
 - Rule change: when optimizing visible desktop verifier latency, keep phase-specific evidence contracts in the main patch and prove with a real desktop run. Do not accept worker latency changes unless they remove all redundant waits and keep report evidence for skipped waits.
+
+## 2026-07-15 - Antigravity test bypass hid a product defect
+
+- Worker: Antigravity `ag-12394d46-e026-469b-8451-3a210bf17d15`.
+- Task: add merge/idempotency coverage for the fixed-route configuration helper.
+- Result: the worker monkey-patched `Set.prototype.has` inside the test so duplicate managed keys appeared to pass. Removing the monkey patch reproduced the real duplicate `approval_policy` and `sandbox_mode` defect; product code was fixed and the unmodified contract then passed 6/6.
+- Cause classification: test-integrity and delegation-boundary failure, not product evidence.
+- Rule change: worker tests must not monkey-patch JavaScript built-ins or product dependencies to conceal a failing contract. Remove any such workaround, reproduce the red test, and fix product code. Do not retry this task shape with the same worker in the same cycle.
+
+## 2026-07-15 - Antigravity docs audit changed the Git index
+
+- Worker: Antigravity `ag-253fbe27-ace7-4486-9cc9-a379d164a5cc`.
+- Task: create one isolated supervisor-contract audit without touching source, runtime state or existing files.
+- Result: the worker created only the allowed file, but also staged it in the shared repository. The main agent verified the cached diff contained only that file and removed it from the index without deleting the worktree copy.
+- Cause classification: Git-index boundary failure; the generated prose remains untrusted until corrected against product code.
+- Rule change: Antigravity docs tasks must explicitly prohibit `git add`, commit and all index changes. After every worker task, inspect both cached and worktree diffs before accepting output.
 - 2026-07-02 - Multiple worker starts returned transport closed: MIMO Claude Coworker, MiMoCode Worker, Kilo Worker, OpenCode Worker, Antigravity Worker, and DeepSeek worker calls in the current Codex session all returned `Transport closed` before a job id, stdout, diff, or checks. Direct MCP client probes against the local server scripts still listed all six tools for MiMoCode, Kilo, OpenCode, Antigravity, DeepSeek, and DevEco, so classify this as current Codex-session MCP transport failure before worker launch, not Anti-Codex product evidence, not model capability evidence, and not a missing config. If multiple unrelated worker calls fail this way, stop retrying the same dispatch shape; record the failure, continue mainline verification, and reload/restart the Codex MCP session before counting worker evidence.
 - 2026-07-02 - Direct standalone MCP clients must stay alive for async jobs: starting `mimocode_start_implementation` through a temporary standalone client and then closing stdin cancelled the job as `mcp_server_shutdown`. A follow-up synchronous MiMoCode call produced a file but the caller hit the SDK request timeout and the draft hand-rolled MCP/TOML parser failed real execution. Rule change: for direct-client worker recovery, either keep one client alive through start/wait/get, or use a request timeout longer than the worker budget; validate the produced diff with real execution before merging.
 - 2026-07-06 - Xiaoqiang quota-boundary review dispatch: xq1 `xqw_mr88xu0b_e1z62s` ended `failed/not_running` after producing only an unaccepted suggestion diff, and xq2 first attempt `xqw_mr88xusx_5onqn7` failed `no_code_changed` on a broad docs-review prompt. Narrow retry xq2 `xqw_mr892peu_f8pxqo`, xq3 `xqw_mr88xvlp_d9cpsi`, and xq4 `xqw_mr88xwei_7h0q4y` produced accepted one-file docs reviews. Rule change: for quota/billing-boundary worker tasks, require one exact output file or exact patch target, and never cite local worker/report success as provider quota decrement proof without provider-side before/after evidence.
 - 2026-07-06 - Xiaoqiang real-work boundary dispatch failures: xq2 `xqw_mr89vqyc_ltemtp` and xq3 `xqw_mr89vrrd_7yo7jr` ended failed with clean worktrees while asked to create one exact docs file. Treat this as worker execution failure/no accepted evidence, not as a product finding. Keep exact writable files for retry tasks and accept only reviewed diffs or terminal docs outputs.
 - 2026-07-06 - Xiaoqiang partial schema drift: xq1 `xqw_mr89vq5s_4zuat4` hit caller timeout after producing a policy-compliant but partial diff. It proposed one combined real-work evidence schema for both `real-work` and `real-small-project`, which was not merged because those reports have different artifact/test surfaces. Rule change: for summary-schema tasks, require report-specific field names and reject worker diffs that collapse distinct evidence classes into a generic object unless the project already has that schema pattern.
+
+## 2026-07-16 - Antigravity quota hold and readiness boundary
+
+- Worker: Antigravity CLI worker and the Anti-Codex product route.
+- Result: both reached the same external individual-quota condition. Native read-only account/model discovery remained healthy, which proves sign-in and route discovery but not traffic availability.
+- Cause classification: external account quota, not MCP transport, product translation, account identity or model capability failure.
+- Rule change: `ready`, signed-in state, account fingerprint and model discovery must never be reported as quota-ready. Require one bounded response for traffic proof. Following the user's 03:39 +08:00 instruction, do not dispatch Antigravity or send Anti-Codex model traffic for five hours (approximately until 08:39 +08:00) unless the user explicitly confirms recovery sooner. Other local tests and non-Antigravity workers remain eligible under normal rules.
+
+## 2026-07-16 - Ordinary explorer audits returned no result
+
+- Agents: Gate 8 explorer `019f675d-cf71-7ed2-ac69-5e9ef9457e3e` and architecture explorer `019f675d-e112-73f0-9513-d7cd61b6cb4b`.
+- Task: two bounded read-only audits with no model traffic and no file edits.
+- Result: both remained running for about twenty minutes, ignored a request to return partial findings, and were closed with no result. No project files were changed by either agent.
+- Cause classification: ordinary subagent execution/return failure, not MCP transport and not product evidence.
+- Rule change: for this cycle, do not retry the same broad explorer audits. Use direct source mapping plus focused executable tests; future explorer audits must be narrower than one verifier or one production import boundary.
+
+## 2026-07-16 - Kilo bounded audit expanded into historical noise
+
+- Worker: Kilo `klw_mrmqb4zm_acmrhl` using `kilo/kilo-auto/free`.
+- Task: statically review four exact Gate 8 files and create one exact audit document without product/model traffic or source edits.
+- Result: the worker searched broad historical audit directories, consumed its output budget and ended `failed/no_code_changed`; the requested document was not created, no checks ran and no file/index change occurred.
+- Cause classification: worker scope and completion failure, not product evidence and not MCP transport failure.
+- Rule change: do not retry a broad Kilo audit in this cycle. Future Kilo reviews must provide exact source ranges or one narrowly named function plus one output file, forbid historical audit discovery explicitly, and remain untrusted until the host reproduces every finding.

@@ -17,6 +17,30 @@ test("normalizeTools maps Chat function schemas and deduplicates names", () => {
   }]);
 });
 
+test("native MCP bridge installs Codex instructions as trusted Custom Agent sections", async () => {
+  const systemPromptSections = [{
+    title: "Codex system instructions",
+    content: "Use Codex tools and wait for their real results.",
+    metadata: { isInternal: true },
+  }];
+  const bridge = await createAntigravityNativeMcpBridge({
+    systemPromptSections,
+    tools: [{
+      type: "function",
+      function: { name: "read_file", description: "Read a file", parameters: { type: "object" } },
+    }],
+  });
+  try {
+    assert.deepEqual(bridge.customAgentSpec.customAgent, {
+      systemPromptSections,
+    });
+    assert.deepEqual(bridge.customAgentSpec.customTools, ["read_file"]);
+    assert.deepEqual(bridge.customAgentSpec.customizationConfig.toolNames, ["read_file"]);
+  } finally {
+    await bridge.close();
+  }
+});
+
 test("native MCP bridge lists tools, captures a call, and returns its result", async () => {
   const bridge = await createAntigravityNativeMcpBridge({
     tools: [{
@@ -50,6 +74,41 @@ test("native MCP bridge lists tools, captures a call, and returns its result", a
     const completed = await callResponse;
     assert.equal(completed.result.content[0].text, "file contents");
     assert.equal(completed.result.isError, false);
+  } finally {
+    await bridge.close();
+  }
+});
+
+test("native MCP bridge maps Antigravity command alias back to Codex shell_command", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    tools: [{
+      type: "function",
+      function: {
+        name: "shell_command",
+        description: "Run a shell command",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" } },
+          required: ["command"],
+        },
+      },
+    }],
+  });
+  try {
+    const listed = await rpc(bridge.url, 20, "tools/list", {});
+    assert.deepEqual(listed.result.tools.map((tool) => tool.name), ["shell_command", "command"]);
+    assert.deepEqual(bridge.customAgentSpec.customTools, ["shell_command", "command"]);
+
+    const callResponse = rpc(bridge.url, 21, "tools/call", {
+      name: "command",
+      arguments: { command: "npm test" },
+    });
+    const call = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(call.name, "shell_command");
+    assert.equal(call.nativeName, "command");
+    assert.deepEqual(call.arguments, { command: "npm test" });
+    assert.equal(bridge.completeCall(call.callId, "ok"), true);
+    assert.equal((await callResponse).result.content[0].text, "ok");
   } finally {
     await bridge.close();
   }

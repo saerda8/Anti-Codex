@@ -12,19 +12,23 @@ export function extractAvailableAgentModels(payload) {
 
   const response = payload.response;
   const models = response.models || {};
-  const sorts = response.agentModelSorts || [];
+  const sorts = response.agentModelSorts || response.agent_model_sorts || [];
 
   const modelIds = [];
   for (const sort of sorts) {
     const groups = sort.groups || [];
     for (const group of groups) {
-      const ids = group.modelIds || [];
+      const ids = group.modelIds || group.model_ids || [];
       for (const id of ids) {
         if (id && !modelIds.includes(id)) {
           modelIds.push(id);
         }
       }
     }
+  }
+
+  if (modelIds.length === 0) {
+    modelIds.push(...Object.keys(models));
   }
 
   const result = [];

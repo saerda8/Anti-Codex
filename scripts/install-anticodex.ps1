@@ -10,6 +10,20 @@ $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $PSScriptRoot
 $PATCH_EXE_ICON_SCRIPT = Join-Path $ROOT "scripts\patch-exe-icon.ps1"
 $SOURCE_PREFLIGHT_SCRIPT = Join-Path $ROOT "scripts\test-anticodex-source-preflight.ps1"
+$fixedShellCriticalPatches = @(
+    "package-json",
+    "webview-html-title",
+    "app-name",
+    "app-user-model-id",
+    "session-title",
+    "startup-mcp-config-reload",
+    "auth-requirement",
+    "app-route-gate",
+    "profile-dropdown-settings",
+    "browser-window-icon",
+    "windows-tray-icon",
+    "local-model-availability"
+)
 $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 $expectedCandidateRoot = [IO.Path]::GetFullPath((Join-Path $expectedRoot "update-candidate"))
 $resolvedTarget = [IO.Path]::GetFullPath($InstallTarget)
@@ -259,7 +273,8 @@ function Write-HostManifest {
         }
     } | Select-Object -First 1
     $manifest = [ordered]@{
-        schema = "anticodex-host-manifest-v1"
+        schema = "anticodex-host-manifest-v2"
+        patchProfile = "fixed-shell-v1"
         generatedAtUtc = [DateTime]::UtcNow.ToString("o")
         source = [ordered]@{
             packageName = if ($sourcePackage) { [string]$sourcePackage.Name } else { $null }
@@ -268,24 +283,7 @@ function Write-HostManifest {
             codexHost = (Get-FileHash -LiteralPath (Join-Path $SourceRoot $DesktopHostName) -Algorithm SHA256).Hash
             codexCli = (Get-FileHash -LiteralPath (Join-Path $SourceRoot "resources\codex.exe") -Algorithm SHA256).Hash
         }
-        criticalPatches = @(
-            "package-json",
-            "webview-html-title",
-            "app-name",
-            "app-user-model-id",
-            "session-title",
-            "auth-requirement",
-            "app-route-gate",
-            "profile-dropdown-settings",
-            "browser-window-icon",
-            "windows-tray-icon",
-            "computer-use-legacy-notify-opt-out",
-            "local-model-availability",
-            "local-plugin-catalog",
-            "electron-local-plugin-catalog",
-            "webview-local-plugin-catalog",
-            "retry-stream-error-visibility"
-        )
+        criticalPatches = @($fixedShellCriticalPatches)
         files = [ordered]@{
             antiCodexExe = (Get-FileHash -LiteralPath (Join-Path $HostRoot "Anti-Codex.exe") -Algorithm SHA256).Hash
             appAsar = (Get-FileHash -LiteralPath (Join-Path $HostRoot "resources\app.asar") -Algorithm SHA256).Hash
@@ -304,6 +302,82 @@ function Write-HostManifest {
 $runtime = Join-Path $resolvedTarget "runtime"
 $copiedCodex = Join-Path $resolvedTarget "codex-patched-app"
 $copiedCodexStaging = Join-Path $resolvedTarget "codex-host-staging"
+$legacyRuntimeFiles = @(
+    # Older syncs flattened these translator files into the runtime root.
+    "antigravity-failure-circuit.mjs",
+    "antigravity-request-queue.mjs",
+    "antigravity-upstream.mjs",
+    "translator\adaptive-server.mjs",
+    "translator\server.mjs",
+    "translator\antigravity-upstream.mjs",
+    "translator\upstream-provider.mjs",
+    "translator\compat-rules.mjs",
+    "translator\codex-native-harness-turn.mjs",
+    "translator\codex-native-protocol.mjs",
+    "translator\codex-native-sse.mjs",
+    "translator\codex-native-compact.mjs",
+    "translator\response-history.mjs",
+    "translator\tools\registry.mjs",
+    "translator\tools\cache_stability_diff.mjs",
+    "translator\antigravity-native-harness-upstream.mjs",
+    "translator\antigravity-request-registry.mjs",
+    "translator\antigravity-request-queue.mjs",
+    "translator\antigravity-session-lock.mjs",
+    "translator\antigravity-failure-circuit.mjs",
+    "translator\antigravity-readiness.mjs",
+    "translator\antigravity-account-tracker.mjs",
+    "translator\antigravity-model-route-audit.mjs",
+    "translator\probe.mjs",
+    "scripts\install-deepcodex.ps1",
+    "scripts\start-deepcodex.ps1",
+    "scripts\start-adaptive-translator.sh",
+    "scripts\deepcodex-translator-watch.sh",
+    "scripts\start-deepcodex.sh",
+    "scripts\install-deepcodex-app.sh",
+    "scripts\deepcodex-setup-ui.mjs",
+    "scripts\DeepCodexSetup",
+    "scripts\DeepCodexSetup.swift",
+    "scripts\enable-deepcodex-plugin-unlock.ps1",
+    "scripts\apply-deepcodex-brand.ps1",
+    "scripts\deepcodex-plugin-unlock-inject.js",
+    "scripts\build-macos-dmg.sh",
+    "scripts\build-anticodex-fresh-channel-worker-proof-kit.mjs",
+    "scripts\build-anticodex-goal-unblock-package.mjs",
+    "scripts\open-anticodex-windows-user-settings.ps1",
+    "scripts\prepare-anticodex-antigravity-cli-profile.ps1",
+    "scripts\start-anticodex-antigravity-cli-login.ps1",
+    "scripts\start-anticodex-antigravity-cli-login-windows-user.ps1",
+    "scripts\start-anticodex-second-antigravity-account-login.ps1",
+    "scripts\test-anticodex-agentic-capability-matrix.mjs",
+    "scripts\test-anticodex-antigravity-account-isolation-status.ps1",
+    "scripts\test-anticodex-antigravity-cli-dual-account-lanes.ps1",
+    "scripts\test-anticodex-antigravity-cli-isolation.ps1",
+    "scripts\test-anticodex-antigravity-cli-real-smoke.ps1",
+    "scripts\test-anticodex-antigravity-cli-windows-user-readiness.ps1",
+    "scripts\test-anticodex-approved-real-run-sequence.mjs",
+    "scripts\test-anticodex-cli-transport-boundary.mjs",
+    "scripts\test-anticodex-fresh-channel-worker-proof-kit.test.mjs",
+    "scripts\test-anticodex-goal-current-usability.test.mjs",
+    "scripts\test-anticodex-goal-readiness.mjs",
+    "scripts\test-anticodex-goal-real-run-readiness.mjs",
+    "scripts\test-anticodex-goal-unblock-package.test.mjs",
+    "scripts\test-anticodex-long-task-landing-matrix.mjs",
+    "scripts\test-anticodex-native-codex-parity-tasks.mjs",
+    "scripts\test-anticodex-provider-antigravity-return.ps1",
+    "scripts\test-anticodex-real-approval-plan.mjs",
+    "scripts\test-anticodex-real-task-coverage-roadmap.mjs",
+    "scripts\test-anticodex-real-third-party-provider.mjs",
+    "scripts\test-anticodex-required-real-traffic-sequence.ps1",
+    "scripts\test-anticodex-second-account-login-entrypoint.ps1",
+    "scripts\test-anticodex-second-account-post-login-proof.ps1",
+    "scripts\test-anticodex-second-account-readiness-summary.ps1",
+    "scripts\test-anticodex-third-party-provider.mjs",
+    "scripts\test-anticodex-windows-user-account-prepare.ps1",
+    "scripts\test-anticodex-windows-user-setup-guidance.ps1",
+    "scripts\test-anticodex-xiaoqiang-current-channel-live-proof.mjs",
+    "scripts\test-anticodex-xiaoqiang-mcp.mjs",
+    "scripts\test-anticodex-xiaoqiang-usage-ledger.mjs"
+)
 Invoke-AntiCodexSourcePreflight
 $sourceCodex = Find-CodexAppRoot
 $hostMarker = Join-Path $resolvedTarget "codex-patched-app.ok"
@@ -315,17 +389,41 @@ if (-not $HostOnly) {
     foreach ($dir in @("scripts", "translator", "assets", "codex-home-deepseek-app")) {
         Copy-Tree (Join-Path $ROOT $dir) (Join-Path $runtime $dir)
     }
+    foreach ($relative in $legacyRuntimeFiles) {
+        $legacyPath = [IO.Path]::GetFullPath((Join-Path $runtime $relative))
+        if (-not $legacyPath.StartsWith([IO.Path]::GetFullPath($runtime), [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove Anti-Codex legacy runtime file outside $runtime"
+        }
+        if (Test-Path -LiteralPath $legacyPath -PathType Leaf) {
+            Remove-Item -LiteralPath $legacyPath -Force
+        }
+    }
+    $codexPlusPlusInstaller = Join-Path $ROOT "scripts\install-codexplusplus-component.ps1"
+    if (-not (Test-Path -LiteralPath $codexPlusPlusInstaller -PathType Leaf)) {
+        throw "Anti-Codex CodexPlusPlus component installer is missing: $codexPlusPlusInstaller"
+    }
+    & $codexPlusPlusInstaller -InstallRoot $resolvedTarget | Out-Null
     foreach ($requiredRuntimePath in @(
         (Join-Path $runtime "scripts\start-anticodex.ps1"),
+        (Join-Path $runtime "scripts\start-anticodex-fixed-route.mjs"),
+        (Join-Path $runtime "scripts\anticodex-manager-service.mjs"),
+        (Join-Path $runtime "scripts\install-codexplusplus-component.ps1"),
+        (Join-Path $runtime "scripts\lib\anticodex-fixed-route.mjs"),
+        (Join-Path $runtime "scripts\deepcodex-cdp-inject.mjs"),
+        (Join-Path $runtime "scripts\anticodex-manager-bridge.mjs"),
+        (Join-Path $runtime "scripts\anticodex-manager-inject.js"),
+        (Join-Path $runtime "scripts\anticodex-manager-open-inject.js"),
         (Join-Path $runtime "scripts\anticodex-update-status.psm1"),
         (Join-Path $runtime "scripts\sync-anticodex.ps1"),
         (Join-Path $runtime "scripts\rollback-anticodex.ps1"),
         (Join-Path $runtime "scripts\manage-anticodex.ps1"),
-        (Join-Path $runtime "translator\adaptive-server.mjs"),
-        (Join-Path $runtime "translator\antigravity-native-harness-upstream.mjs"),
-        (Join-Path $runtime "translator\codex-native-harness-turn.mjs"),
-        (Join-Path $runtime "translator\codex-native-protocol.mjs"),
-        (Join-Path $runtime "translator\codex-native-sse.mjs"),
+        (Join-Path $runtime "translator\antigravity-model-catalog.mjs"),
+        (Join-Path $runtime "translator\antigravity-native-mcp-bridge.mjs"),
+        (Join-Path $runtime "translator\provider\antigravity-cascade-client.mjs"),
+        (Join-Path $runtime "translator\provider\antigravity-chat-adapter.mjs"),
+        (Join-Path $runtime "translator\provider\antigravity-chat-server.mjs"),
+        (Join-Path $runtime "translator\provider\codexplusplus-upstream-probe.mjs"),
+        (Join-Path $runtime "translator\provider\start-antigravity-chat-provider.mjs"),
         (Join-Path $runtime "codex-home-deepseek-app\config.adaptive-oneapi.toml")
     )) {
         if (-not (Test-Path -LiteralPath $requiredRuntimePath -PathType Leaf)) {
@@ -364,7 +462,7 @@ foreach ($requiredBrandScript in @($brandScript, $brandProfileDropdown)) {
     }
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
-& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") $antiCodexHost
+& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") $antiCodexHost --profile fixed-shell-v1
 if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
 }

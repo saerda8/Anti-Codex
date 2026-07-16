@@ -91,112 +91,21 @@ function Start-AntiCodexGatewayAndWait {
     $health = Get-ManagerHealthSnapshot -BaseUrl $BaseUrl -TimeoutSec 2
     if ($health -and $health.ok -eq $true) { return $health }
 
-    $startDeepCodex = Join-Path $scriptRoot "start-deepcodex.ps1"
-    if (-not (Test-Path -LiteralPath $startDeepCodex -PathType Leaf)) {
-        $script:LastManagerGatewayError = " 缺少 Anti-Codex 网关启动组件：start-deepcodex.ps1"
+    $launcher = Join-Path $scriptRoot "start-anticodex.ps1"
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+        $script:LastManagerGatewayError = " 缺少 Anti-Codex 正式启动组件：start-anticodex.ps1"
         return $null
     }
 
-    $baseUri = [Uri]$BaseUrl
-    $savedEnv = @{}
-    $envNames = @(
-        "DEEPCODEX_STATE_ROOT",
-        "CODEX_HOME_DIR",
-        "CODEX_HOME",
-        "GLOBAL_CODEX_HOME",
-        "DEEPCODEX_SHARED_CODEX_HOME",
-        "DEEPCODEX_PROJECTS_ROOT",
-        "TRANSLATOR_PORT",
-        "TRANSLATOR_HOST",
-        "TRANSLATOR_LISTEN_HOST",
-        "TRANSLATOR_URL",
-        "DEEPCODEX_DISPLAY_NAME",
-        "TRANSLATOR_UPSTREAM_MODE",
-        "UPSTREAM_PROTOCOL",
-        "UPSTREAM_URL",
-        "UPSTREAM_MODEL",
-        "UPSTREAM_API_KEY",
-        "ANTICODEX_ACTIVE_UPSTREAM",
-        "ANTICODEX_NATIVE_TOOL_BRIDGE",
-        "DEEPCODEX_SKIP_PLUGIN_SYNC"
-    )
-    foreach ($name in $envNames) {
-        $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
-    }
-
-    $stdoutPath = [IO.Path]::GetTempFileName()
-    $stderrPath = [IO.Path]::GetTempFileName()
     try {
-        $codexHome = Join-Path $stateRoot "codex-home-deepseek-app"
-        $globalCodexHome = Join-Path $env:USERPROFILE ".codex"
-        $env:DEEPCODEX_STATE_ROOT = $stateRoot
-        $env:CODEX_HOME_DIR = $codexHome
-        $env:CODEX_HOME = $codexHome
-        $env:GLOBAL_CODEX_HOME = $globalCodexHome
-        $env:DEEPCODEX_SHARED_CODEX_HOME = $globalCodexHome
-        $env:DEEPCODEX_PROJECTS_ROOT = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)) "anticodex"
-        $env:TRANSLATOR_PORT = [string]$baseUri.Port
-        $env:TRANSLATOR_HOST = $baseUri.Host
-        $env:TRANSLATOR_LISTEN_HOST = $baseUri.Host
-        $env:TRANSLATOR_URL = $BaseUrl
-        $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
-        $upstreamProfileScript = Join-Path $scriptRoot "anticodex-upstream-profile.ps1"
-        $usesAntigravity = $true
-        if (Test-Path -LiteralPath $upstreamProfileScript -PathType Leaf) {
-            try {
-                $runtimeProfile = & $upstreamProfileScript -Action GetRuntime -StateRoot $stateRoot | ConvertFrom-Json
-                if ($runtimeProfile.mode -eq "third-party" -and $runtimeProfile.baseUrl -and $runtimeProfile.apiKey -and $runtimeProfile.model) {
-                    $usesAntigravity = $false
-                    $env:TRANSLATOR_UPSTREAM_MODE = "chat"
-                    $env:UPSTREAM_PROTOCOL = [string]$runtimeProfile.protocol
-                    $env:UPSTREAM_URL = [string]$runtimeProfile.baseUrl
-                    $env:UPSTREAM_MODEL = [string]$runtimeProfile.model
-                    $env:UPSTREAM_API_KEY = [string]$runtimeProfile.apiKey
-                    $env:ANTICODEX_ACTIVE_UPSTREAM = "third-party"
-                    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
-                }
-            } catch {}
-        }
-        if ($usesAntigravity) {
-            $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
-            Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
-            $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
-        }
-        $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
-
-        $proc = Start-Process -FilePath $powerShell `
-            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $startDeepCodex, "-TranslatorOnly") `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath `
-            -WindowStyle Hidden `
-            -PassThru
-        $launchTimeoutMs = [Math]::Min(30000, [Math]::Max(8000, $TimeoutSeconds * 1000))
-        [void]$proc.Handle
-        if (-not (Wait-AntiCodexManagerChildProcess -Process $proc -TimeoutMs $launchTimeoutMs)) {
-            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
-            Wait-AntiCodexManagerChildProcess -Process $proc -TimeoutMs 3000 -PollMs 100 | Out-Null
-            $script:LastManagerGatewayError = " 已尝试只恢复本地网关，但启动脚本超过 $launchTimeoutMs ms 未返回。"
-        } elseif ($proc.ExitCode -ne 0) {
-            $stderr = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { (Get-Content -LiteralPath $stderrPath -Tail 5) -join " " } else { "" }
-            $stdout = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { (Get-Content -LiteralPath $stdoutPath -Tail 5) -join " " } else { "" }
-            $detail = if ($stderr) { $stderr } else { $stdout }
-            $script:LastManagerGatewayError = " 本地网关恢复失败：$detail"
-        }
+        Start-Process -FilePath $powerShell `
+            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $launcher, "-SkipUpdateCheck") `
+            -WindowStyle Hidden | Out-Null
     } catch {
-        $script:LastManagerGatewayError = " 本地网关恢复失败：$($_.Exception.Message)"
-    } finally {
-        foreach ($name in $envNames) {
-            if ($null -eq $savedEnv[$name]) {
-                [Environment]::SetEnvironmentVariable($name, $null, "Process")
-            } else {
-                [Environment]::SetEnvironmentVariable($name, [string]$savedEnv[$name], "Process")
-            }
-        }
-        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+        $script:LastManagerGatewayError = " 正式启动路线恢复失败：$($_.Exception.Message)"
     }
 
-    return Wait-ManagerHealth -BaseUrl $BaseUrl -TimeoutSeconds ([Math]::Min(10, [Math]::Max(2, $TimeoutSeconds)))
+    return Wait-ManagerHealth -BaseUrl $BaseUrl -TimeoutSeconds ([Math]::Max(2, $TimeoutSeconds))
 }
 
 function Start-AntiCodexAndWait {
@@ -764,7 +673,7 @@ function Open-AntiCodexManagerPanel {
             if ((Test-Path -LiteralPath $injector -PathType Leaf) -and (Test-Path -LiteralPath $managerInject -PathType Leaf) -and (Test-Path -LiteralPath $opener -PathType Leaf)) {
                 $previousManagerApi = $env:ANTICODEX_MANAGER_API
                 $env:ANTICODEX_MANAGER_API = $baseUrl
-                    # Step 1: inject the latest native-panel-v104 manager script
+                    # Step 1: inject the latest native-panel-v105 manager script
                 $installOutput = @(& $node $injector "$port" $managerInject 2>&1)
                 $installExitCode = $LASTEXITCODE
                 if ($installExitCode -eq 0) {

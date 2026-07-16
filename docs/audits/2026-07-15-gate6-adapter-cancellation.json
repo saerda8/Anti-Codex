@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-15T02:21:01.475Z",
+  "gate": "Gate 6 client cancellation evidence",
+  "ok": true,
+  "failedIds": [],
+  "modelTraffic": "one aborted and one bounded recovery Gemini turn",
+  "model": "gemini-3.5-flash-low",
+  "recoveryMarker": "CANCEL_RECOVERY_OK_53628345073D",
+  "counters": {
+    "start": 2,
+    "resume": 0,
+    "cancel": 0
+  },
+  "serviceCalls": [
+    {
+      "method": "GetAvailableModels",
+      "startedAt": "2026-07-15T02:20:51.978Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "StartCascade",
+      "startedAt": "2026-07-15T02:20:51.987Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "SendUserCascadeMessage",
+      "startedAt": "2026-07-15T02:20:52.037Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "WaitForConversationFullyIdle",
+      "startedAt": "2026-07-15T02:20:52.099Z",
+      "status": null,
+      "error": "AbortError"
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:52.100Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "CancelCascadeInvocation",
+      "startedAt": "2026-07-15T02:20:52.108Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetAvailableModels",
+      "startedAt": "2026-07-15T02:20:52.174Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "StartCascade",
+      "startedAt": "2026-07-15T02:20:52.179Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "SendUserCascadeMessage",
+      "startedAt": "2026-07-15T02:20:52.231Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "WaitForConversationFullyIdle",
+      "startedAt": "2026-07-15T02:20:52.298Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:52.299Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:52.807Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:53.319Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:53.823Z",
+      "status": 200,
+      "error": null
+    },
+    {
+      "method": "GetCascadeTrajectory",
+      "startedAt": "2026-07-15T02:20:53.830Z",
+      "status": 200,
+      "error": null
+    }
+  ],
+  "checks": [
+    {
+      "id": "antigravity_read_only_ready",
+      "ok": true,
+      "modelCount": 20,
+      "signedIn": true,
+      "selectedModel": "gemini-3.5-flash-low"
+    },
+    {
+      "id": "real_cancellation_probe_authorized",
+      "model": "gemini-3.5-flash-low",
+      "ok": true
+    },
+    {
+      "id": "client_abort_reached_real_cascade_cancel",
+      "cancelledRequest": {
+        "resolved": false,
+        "name": "AbortError",
+        "message": "Gate 6 client cancellation probe."
+      },
+      "cancelCalls": [
+        {
+          "method": "CancelCascadeInvocation",
+          "startedAt": "2026-07-15T02:20:52.108Z",
+          "status": 200,
+          "error": null
+        }
+      ],
+      "ok": true
+    },
+    {
+      "id": "cancelled_request_left_no_adapter_session",
+      "sessionCount": 0,
+      "ok": true
+    },
+    {
+      "id": "fresh_request_after_cancel_has_no_stale_409",
+      "status": 200,
+      "errorCode": null,
+      "finishReason": "stop",
+      "ok": true
+    },
+    {
+      "id": "fresh_request_after_cancel_completes",
+      "finalText": "CANCEL_RECOVERY_OK_53628345073D",
+      "expected": "CANCEL_RECOVERY_OK_53628345073D",
+      "ok": true
+    },
+    {
+      "id": "cancellation_did_not_enter_tool_session_path",
+      "counters": {
+        "start": 2,
+        "resume": 0,
+        "cancel": 0
+      },
+      "ok": true
+    },
+    {
+      "id": "desktop_roots_unchanged",
+      "before": {
+        "originalCodex": [
+          {
+            "processId": 1480,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 7976,
+            "parentProcessId": 2436,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 15272,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 27396,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 30080,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 35272,
+            "parentProcessId": 15272,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 35952,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 37624,
+            "parentProcessId": 7976,
+            "name": "codex.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+          },
+          {
+            "processId": 39216,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          }
+        ],
+        "antiCodexRoots": [
+          {
+            "processId": 32548,
+            "parentProcessId": 16768,
+            "name": "Anti-Codex.exe",
+            "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+          }
+        ],
+        "candidateProcesses": []
+      },
+      "after": {
+        "originalCodex": [
+          {
+            "processId": 1480,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 7976,
+            "parentProcessId": 2436,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 15272,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 27396,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 30080,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 35272,
+            "parentProcessId": 15272,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 35952,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 37624,
+            "parentProcessId": 7976,
+            "name": "codex.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+          },
+          {
+            "processId": 39216,
+            "parentProcessId": 7976,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          }
+        ],
+        "antiCodexRoots": [
+          {
+            "processId": 32548,
+            "parentProcessId": 16768,
+            "name": "Anti-Codex.exe",
+            "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+          }
+        ],
+        "candidateProcesses": []
+      },
+      "ok": true
+    },
+    {
+      "id": "background_probe_did_not_touch_old_route",
+      "oldRouteBefore": {
+        "count": 200,
+        "entryCount": 200,
+        "latestAt": "2026-07-14T10:58:14.728Z",
+        "latestRequestId": "resp_afc34eb5097144bd87a11fd20966f975",
+        "entriesSha256": "6f4ad59d877c037a18566470c82e489d1b71bd23371dc0fa0a675056f8c7709b",
+        "unavailable": false,
+        "attempt": 1
+      },
+      "oldRouteAfter": {
+        "count": 200,
+        "entryCount": 200,
+        "latestAt": "2026-07-14T10:58:14.728Z",
+        "latestRequestId": "resp_afc34eb5097144bd87a11fd20966f975",
+        "entriesSha256": "6f4ad59d877c037a18566470c82e489d1b71bd23371dc0fa0a675056f8c7709b",
+        "unavailable": false,
+        "attempt": 2
+      },
+      "providerUrl": "http://127.0.0.1:50740/v1",
+      "ok": true
+    }
+  ],
+  "reportName": "cancellation",
+  "requestedRealTraffic": true,
+  "usedRealTraffic": true,
+  "behaviorCovered": true,
+  "formalGateEvidence": true,
+  "coverageKind": "real-traffic",
+  "responseId": "53628345073D",
+  "cancelStatus": "cancelled",
+  "cancelError": null,
+  "hasCancelled": true,
+  "hasCompleted": false,
+  "hasFailed": false,
+  "eventNames": [
+    "client.abort",
+    "cascade.cancelled"
+  ],
+  "providerReady": true,
+  "preHealthReady": true,
+  "postHealthReady": true,
+  "mode": "antigravity"
+}

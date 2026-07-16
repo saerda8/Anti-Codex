@@ -1,0 +1,32 @@
+{
+  "component": "CodexPlusPlus",
+  "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+  "license": "AGPL-3.0-only",
+  "version": "1.2.36",
+  "tag": "v1.2.36",
+  "upstreamCommit": "91a83acd8bdf79a388a106c7c1ea76f9df6bcea9",
+  "isolationPatchCommit": "3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6",
+  "patchCommit": "0c7c4fb156fc1635c9d4da0f930213d33db540fa",
+  "patches": [
+    {
+      "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
+      "sha256": "1d52576bf856e14a16a743b33f7c46d3f416eece1f4a1b8c5d90a33b7ecd0277",
+      "scope": "state, ports, branded executable selection, process paths and global watcher isolation only"
+    },
+    {
+      "file": "patches/0002-abort-cancelled-loopback-model-streams.patch",
+      "sha256": "f2933ef4197724b456cf96fdd5a41c3437700d134d86e26b5c4a3da5527ad9aa",
+      "scope": "abortive close for cancelled plain-HTTP loopback model streams only; remote HTTPS and non-loopback providers retain upstream transport"
+    }
+  ],
+  "verification": {
+    "patchReplay": "both patches replayed; final tree fad5e31d2c4460d86408dc86276bdad85a33475f matches accepted commit",
+    "sourceIsolationAudit": "9/9 passed",
+    "auditRegressionTests": "7/7 passed",
+    "cargoFmt": "passed",
+    "cargoCheck": "passed for core and manager with pinned cargo-xwin Docker image",
+    "windowsNativeTests": "124 core and 20 watcher tests passed",
+    "launcherReleaseBuild": "sha256:aae5e052a03b82b0c0b1f4aa0dff175de2aa51f5a2572c4c757fec9cfcf1b02b",
+    "runtimeIsolation": "20/20 passed against copied Codex 26.707.9981.0 with original Codex unchanged"
+  }
+}

@@ -3,6 +3,7 @@ param(
     [string]$BaseUrl = "",
     [string]$RuntimeRoot = $(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Anti-Codex\runtime"),
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [string]$CodexHome = "",
     [int]$DurationSec = 20,
     [int]$IntervalSec = 5,
     [int]$TimeoutSec = 8,
@@ -14,6 +15,7 @@ $ErrorActionPreference = "Stop"
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+$fixedRouteHealthUrl = "http://127.0.0.1:18487/anticodex/fixed-route/health"
 
 $failures = New-Object System.Collections.Generic.List[string]
 $transientUiFailures = New-Object System.Collections.Generic.List[string]
@@ -39,6 +41,25 @@ function Normalize-Path {
 function Invoke-LocalJson {
     param([string]$Path, [int]$RequestTimeoutSec = $TimeoutSec)
     return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec ([Math]::Max(1, $RequestTimeoutSec))
+}
+
+function Invoke-FixedRouteHealth {
+    param([int]$RequestTimeoutSec = $TimeoutSec)
+    return Invoke-RestMethod -Uri $fixedRouteHealthUrl -Proxy $null -TimeoutSec ([Math]::Max(1, $RequestTimeoutSec))
+}
+
+function Get-NativeRequestSnapshot {
+    param([string]$ScriptPath, [string]$CodexHomePath)
+    $node = (Get-Command "node.exe" -ErrorAction Stop).Source
+    $output = @(& $node --no-warnings $ScriptPath --codex-home $CodexHomePath 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "native request snapshot failed: $($output -join ' ')"
+    }
+    $payload = ($output | Select-Object -Last 1) | ConvertFrom-Json -ErrorAction Stop
+    if ($payload.ok -ne $true -or $payload.databasePresent -ne $true) {
+        throw "native request snapshot did not prove the logs database"
+    }
+    return $payload
 }
 
 function Invoke-UiState {
@@ -164,10 +185,9 @@ function Get-AntiCodexProcesses {
     param([string]$InstallRoot, [string]$RuntimeRootFull)
 
     $activeMainExe = Normalize-Path (Join-Path $InstallRoot "codex-patched-app\Anti-Codex.exe")
-    $translatorScript = Normalize-Path (Join-Path $RuntimeRootFull "translator\adaptive-server.mjs")
-    $translatorExe = Normalize-Path (Join-Path $InstallRoot "bin\deepcodex-translator.exe")
+    $supervisorScript = Normalize-Path (Join-Path $RuntimeRootFull "scripts\start-anticodex-fixed-route.mjs")
     $main = New-Object System.Collections.Generic.List[int]
-    $translator = New-Object System.Collections.Generic.List[int]
+    $supervisor = New-Object System.Collections.Generic.List[int]
     $managerWatcher = New-Object System.Collections.Generic.List[int]
     $legacyManagerWatcher = New-Object System.Collections.Generic.List[int]
 
@@ -177,8 +197,8 @@ function Get-AntiCodexProcesses {
         if ($exe -ieq $activeMainExe -and $commandLine -notmatch "\s--type=") {
             $main.Add([int]$process.ProcessId) | Out-Null
         }
-        if ($exe -ieq $translatorExe -or $commandLine -like "*$translatorScript*") {
-            $translator.Add([int]$process.ProcessId) | Out-Null
+        if ($commandLine -like "*$supervisorScript*") {
+            $supervisor.Add([int]$process.ProcessId) | Out-Null
         }
         $isManagerInjection = (
             $commandLine -match "deepcodex-cdp-inject\.mjs" -and
@@ -194,7 +214,7 @@ function Get-AntiCodexProcesses {
 
     return [pscustomobject]@{
         mainPids = @($main.ToArray())
-        translatorPids = @($translator.ToArray())
+        supervisorPids = @($supervisor.ToArray())
         managerWatcherPids = @($managerWatcher.ToArray())
         legacyManagerWatcherPids = @($legacyManagerWatcher.ToArray())
     }
@@ -220,6 +240,23 @@ function Save-JsonReport {
 
 $runtimeRootFull = Normalize-Path $RuntimeRoot
 $installRoot = Normalize-Path (Split-Path -Parent $runtimeRootFull)
+$stateRoot = Normalize-Path (Split-Path -Parent $ReportRoot)
+$codexHomeFull = Normalize-Path $(if ($CodexHome) { $CodexHome } else { Join-Path $stateRoot "codex-home-deepseek-app" })
+$nativeRequestSnapshotScript = Join-Path $runtimeRootFull "scripts\read-anticodex-native-request-snapshot.mjs"
+if (-not (Test-Path -LiteralPath $nativeRequestSnapshotScript -PathType Leaf)) {
+    $nativeRequestSnapshotScript = Join-Path $PSScriptRoot "read-anticodex-native-request-snapshot.mjs"
+}
+$nativeRequestStart = $null
+$nativeRequestEnd = $null
+$nativeRequestDelta = $null
+try {
+    if (-not (Test-Path -LiteralPath $nativeRequestSnapshotScript -PathType Leaf)) {
+        throw "native request snapshot helper missing"
+    }
+    $nativeRequestStart = Get-NativeRequestSnapshot $nativeRequestSnapshotScript $codexHomeFull
+} catch {
+    Add-Failure "native request baseline failed: $($_.Exception.Message)"
+}
 $uiStateScript = Join-Path $runtimeRootFull "scripts\test-anticodex-ui-state.ps1"
 if (-not (Test-Path -LiteralPath $uiStateScript -PathType Leaf)) {
     $uiStateScript = Join-Path $PSScriptRoot "test-anticodex-ui-state.ps1"
@@ -230,7 +267,7 @@ if (-not (Test-Path -LiteralPath $uiStateScript -PathType Leaf)) {
 
 $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $DurationSec))
 $firstMainPids = $null
-$firstTranslatorPids = $null
+$firstSupervisorPids = $null
 $firstManagerWatcherPids = $null
 $firstLegacyManagerWatcherPids = $null
 $sampleIndex = 0
@@ -245,10 +282,12 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
 
     try {
         $healthTimeoutSec = [Math]::Max(1, $TimeoutSec)
-        $health = Invoke-LocalJson "/health" -RequestTimeoutSec $healthTimeoutSec
-        if ($health.ok -ne $true) { Add-Failure "sample ${sampleIndex}: health ok=false" }
-        if ($health.upstream -ne "antigravity-desktop") { Add-Failure "sample ${sampleIndex}: upstream is $($health.upstream)" }
-        if ($health.accountReady -ne $true -and [int]$health.modelCount -lt 1) { Add-Failure "sample ${sampleIndex}: model catalog is not ready" }
+        $managerHealth = Invoke-LocalJson "/health" -RequestTimeoutSec $healthTimeoutSec
+        $health = Invoke-FixedRouteHealth -RequestTimeoutSec $healthTimeoutSec
+        if ($managerHealth.ok -ne $true -or [string]$managerHealth.schema -ne "anticodex-manager-service-v1") { Add-Failure "sample ${sampleIndex}: Manager health contract failed" }
+        if ($health.ok -ne $true -or [string]$health.state -ne "ready") { Add-Failure "sample ${sampleIndex}: fixed route is not ready" }
+        if (@("antigravity", "third-party") -notcontains [string]$health.provider) { Add-Failure "sample ${sampleIndex}: invalid fixed-route provider $($health.provider)" }
+        if (-not [string]$health.model) { Add-Failure "sample ${sampleIndex}: fixed-route model is empty" }
     } catch {
         Add-Failure "sample ${sampleIndex}: health failed: $($_.Exception.Message)"
     }
@@ -279,8 +318,8 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
     if (@($processes.mainPids).Count -ne 1) {
         Add-Failure "sample ${sampleIndex}: expected one Anti-Codex main process, found $(@($processes.mainPids).Count)"
     }
-    if (@($processes.translatorPids).Count -lt 1) {
-        Add-Failure "sample ${sampleIndex}: translator process missing"
+    if (@($processes.supervisorPids).Count -ne 1) {
+        Add-Failure "sample ${sampleIndex}: expected one fixed-route supervisor, found $(@($processes.supervisorPids).Count)"
     }
     if (@($processes.managerWatcherPids).Count -ne 1) {
         Add-Failure "sample ${sampleIndex}: expected one manager injection watcher, found $(@($processes.managerWatcherPids).Count)"
@@ -294,15 +333,15 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
 
     if ($sampleIndex -eq 1) {
         $firstMainPids = @($processes.mainPids)
-        $firstTranslatorPids = @($processes.translatorPids)
+        $firstSupervisorPids = @($processes.supervisorPids)
         $firstManagerWatcherPids = @($processes.managerWatcherPids)
         $firstLegacyManagerWatcherPids = @($processes.legacyManagerWatcherPids)
     } else {
         if ((@($processes.mainPids) -join ",") -ne ($firstMainPids -join ",")) {
             Add-Failure "sample ${sampleIndex}: Anti-Codex main process changed during idle"
         }
-        if ((@($processes.translatorPids) -join ",") -ne ($firstTranslatorPids -join ",")) {
-            Add-Failure "sample ${sampleIndex}: translator process changed during idle"
+        if ((@($processes.supervisorPids) -join ",") -ne ($firstSupervisorPids -join ",")) {
+            Add-Failure "sample ${sampleIndex}: fixed-route supervisor changed during idle"
         }
         if ((@($processes.managerWatcherPids) -join ",") -ne ($firstManagerWatcherPids -join ",")) {
             Add-Failure "sample ${sampleIndex}: manager injection watcher count changed during idle"
@@ -316,10 +355,10 @@ while ([DateTime]::UtcNow -lt $deadline -or $sampleIndex -eq 0) {
         index = $sampleIndex
         at = $timestamp
         healthOk = if ($health) { $health.ok } else { $false }
-        accountReady = if ($health) { $health.accountReady } else { $false }
-        modelCount = if ($health) { $health.modelCount } else { 0 }
+        provider = if ($health) { $health.provider } else { "" }
+        model = if ($health) { $health.model } else { "" }
         mainPids = @($processes.mainPids)
-        translatorPids = @($processes.translatorPids)
+        supervisorPids = @($processes.supervisorPids)
         managerWatcherPids = @($processes.managerWatcherPids)
         legacyManagerWatcherPids = @($processes.legacyManagerWatcherPids)
         uiOk = if ($ui) { $ui.ok } else { $false }
@@ -342,6 +381,18 @@ if ((Test-Path -LiteralPath $uiStateScript -PathType Leaf) -and $uiSuccessCount 
     Add-Failure "UI state never reached ready during idle window"
 }
 
+try {
+    $nativeRequestEnd = Get-NativeRequestSnapshot $nativeRequestSnapshotScript $codexHomeFull
+    if ($nativeRequestStart) {
+        $nativeRequestDelta = [long]$nativeRequestEnd.requestCount - [long]$nativeRequestStart.requestCount
+        if ($nativeRequestDelta -ne 0) {
+            Add-Failure "native request count changed during idle: delta=$nativeRequestDelta"
+        }
+    }
+} catch {
+    Add-Failure "native request final snapshot failed: $($_.Exception.Message)"
+}
+
 $endedAt = [DateTime]::UtcNow
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
@@ -351,10 +402,17 @@ $result = [pscustomobject]@{
     baseUrl = $BaseUrl
     runtimeRoot = $runtimeRootFull
     installRoot = $installRoot
+    codexHome = $codexHomeFull
     durationSec = $DurationSec
     intervalSec = $IntervalSec
     sampleCount = $samples.Count
     uiSuccessCount = $uiSuccessCount
+    nativeRequests = [pscustomobject]@{
+        start = $nativeRequestStart
+        end = $nativeRequestEnd
+        nativeRequestDelta = $nativeRequestDelta
+        stable = ($null -ne $nativeRequestDelta -and $nativeRequestDelta -eq 0)
+    }
     samples = $samples.ToArray()
 }
 

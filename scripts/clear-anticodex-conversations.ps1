@@ -5,7 +5,9 @@ param(
     [string]$WorkspaceRoot = "G:\Trae-Project\Anti-Codex\deepcodex",
     [string]$BackupRoot = "",
     [int]$StopTimeoutSec = 8,
+    [int]$RestartTimeoutSec = 120,
     [switch]$SkipProcessStop,
+    [switch]$SkipRestart,
     [switch]$IncludeLogs,
     [switch]$AllowNonDefaultStateRoot,
     [switch]$WhatIfOnly
@@ -144,6 +146,18 @@ function Get-AntiCodexProcesses {
     })
 }
 
+function Get-AntiCodexMainProcesses {
+    $localAppDataAntiCodex = Normalize-Path (Join-Path $env:LOCALAPPDATA "Anti-Codex")
+    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        if (-not $_.ExecutablePath) { return $false }
+        $exe = Normalize-Path ([string]$_.ExecutablePath)
+        $commandLine = [string]$_.CommandLine
+        return $_.Name -ieq "Anti-Codex.exe" -and
+            (Test-IsUnderPath -Path $exe -Parent $localAppDataAntiCodex) -and
+            ($commandLine -notmatch "\s--type=")
+    })
+}
+
 function Get-OriginalCodexMainProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         if (-not $_.ExecutablePath) { return $false }
@@ -183,8 +197,10 @@ $stoppedProcesses = @()
 $stopTargets = @()
 $wouldStopProcesses = @()
 $originalCodexBefore = @()
+$antiCodexWasRunning = $false
 
 if (-not $SkipProcessStop) {
+    $antiCodexWasRunning = @(Get-AntiCodexMainProcesses).Count -gt 0
     $originalCodexBefore = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
     $stopTargets = @(Get-AntiCodexProcesses -RuntimeRootFull $runtimeRootFull -StateRootFull $stateRootFull)
     $wouldStopProcesses = @($stopTargets | ForEach-Object {
@@ -334,12 +350,47 @@ if (-not $WhatIfOnly) {
     Copy-Item -LiteralPath $codexGlobalStatePath -Destination $codexGlobalStateBakPath -Force
 }
 
+$restartRequested = $antiCodexWasRunning -and -not $WhatIfOnly -and -not $SkipRestart
+$restartSucceeded = $false
+$restartError = ""
+$restartedProcessIds = @()
+$restartLauncherProcessId = 0
+if ($antiCodexWasRunning -and -not $WhatIfOnly -and -not $SkipRestart) {
+    $installedLauncher = Join-Path $runtimeRootFull "scripts\start-anticodex.ps1"
+    try {
+        if (-not (Test-Path -LiteralPath $installedLauncher -PathType Leaf)) {
+            throw "installed Anti-Codex launcher missing: $installedLauncher"
+        }
+        $powershellExe = Join-Path $PSHOME "powershell.exe"
+        $launcherArgs = @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", ('"{0}"' -f $installedLauncher),
+            "-SkipUpdateCheck"
+        )
+        $launcherProcess = Start-Process -FilePath $powershellExe -ArgumentList $launcherArgs -WindowStyle Hidden -PassThru
+        $restartLauncherProcessId = [int]$launcherProcess.Id
+        $restartSucceeded = Wait-Until -TimeoutSeconds $RestartTimeoutSec -Predicate {
+            @(Get-AntiCodexMainProcesses).Count -gt 0
+        }
+        if (-not $restartSucceeded) {
+            $launcherProcess.Refresh()
+            $launcherStatus = if ($launcherProcess.HasExited) { "launcher exit code $($launcherProcess.ExitCode)" } else { "launcher still running" }
+            throw "Anti-Codex main process did not return within $RestartTimeoutSec seconds ($launcherStatus)"
+        }
+        $restartedProcessIds = @(Get-AntiCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
+    } catch {
+        $restartError = $_.Exception.Message
+        $warnings.Add("Anti-Codex restart failed: $restartError") | Out-Null
+    }
+}
+
 $originalCodexAfter = @()
 if (-not $SkipProcessStop) {
     $originalCodexAfter = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
 }
 $result = [pscustomobject]@{
-    ok = $true
+    ok = -not ($restartRequested -and -not $restartSucceeded)
     whatIfOnly = [bool]$WhatIfOnly
     stateRoot = $stateRootFull
     backupDir = $backupDir
@@ -353,6 +404,13 @@ $result = [pscustomobject]@{
     responseHistoryReset = -not $WhatIfOnly
     originalCodexBefore = @($originalCodexBefore)
     originalCodexAfter = @($originalCodexAfter)
+    antiCodexWasRunning = [bool]$antiCodexWasRunning
+    restartRequested = [bool]$restartRequested
+    restartSucceeded = [bool]$restartSucceeded
+    restartedProcessIds = @($restartedProcessIds)
+    restartLauncherProcessId = $restartLauncherProcessId
+    restartError = $restartError
     warnings = @($warnings.ToArray())
 }
 $result | ConvertTo-Json -Depth 12 -Compress
+if (-not $result.ok) { exit 1 }

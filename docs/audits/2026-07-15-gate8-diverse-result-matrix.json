@@ -1,0 +1,4044 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-16T02:20:31.597Z",
+  "gate": "Gate 8 supporting diverse result matrix",
+  "ok": true,
+  "failedIds": [],
+  "formalGateAdvanced": false,
+  "requestedRealTraffic": false,
+  "usedRealTraffic": false,
+  "antigravityTraffic": false,
+  "adapterInvolved": false,
+  "resultBasedVerification": true,
+  "modelTraffic": "loopback scripted Chat provider only",
+  "model": "gate2-chat-model",
+  "runId": "F2C6222BDD00",
+  "failure": null,
+  "scenarios": {
+    "existingProjectRepair": {
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "userCorrection": true,
+      "nativeCompaction": {
+        "initialize": {
+          "userAgent": "Codex Desktop/0.144.2 (Windows 10.0.19045; x86_64) unknown (anticodex-deterministic-compaction; 1.0.0)",
+          "codexHome": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3\\codex-home",
+          "platformFamily": "windows",
+          "platformOs": "windows"
+        },
+        "resumed": {
+          "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+          "status": {
+            "type": "idle"
+          },
+          "turnCount": 2,
+          "itemTypes": [
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage",
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage"
+          ],
+          "contextCompactionCount": 0
+        },
+        "before": {
+          "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+          "status": {
+            "type": "idle"
+          },
+          "turnCount": 2,
+          "itemTypes": [
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage",
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage"
+          ],
+          "contextCompactionCount": 0
+        },
+        "compactResponse": {},
+        "compaction": {
+          "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+          "turnId": "019f68b9-0911-7983-8e9b-4bd34f70aa40",
+          "item": {
+            "type": "contextCompaction",
+            "id": "019f68b9-0917-7812-a098-a1dde1e1296a"
+          },
+          "turn": {
+            "id": "019f68b9-0911-7983-8e9b-4bd34f70aa40",
+            "items": [],
+            "itemsView": "notLoaded",
+            "status": "completed",
+            "error": null,
+            "startedAt": 1784168384,
+            "completedAt": 1784168384,
+            "durationMs": 21
+          }
+        },
+        "after": {
+          "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+          "status": {
+            "type": "idle"
+          },
+          "turnCount": 3,
+          "itemTypes": [
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage",
+            "userMessage",
+            "agentMessage",
+            "agentMessage",
+            "agentMessage",
+            "contextCompaction"
+          ],
+          "contextCompactionCount": 1
+        },
+        "notificationMethods": [
+          "remoteControl/status/changed",
+          "thread/status/changed",
+          "thread/tokenUsage/updated",
+          "thread/goal/cleared",
+          "thread/status/changed",
+          "turn/started",
+          "item/started",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "thread/tokenUsage/updated",
+          "account/rateLimits/updated",
+          "item/completed",
+          "warning",
+          "thread/status/changed",
+          "turn/completed"
+        ],
+        "warnings": [
+          {
+            "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+            "message": "Heads up: Long threads and multiple compactions can cause the model to be less accurate. Start a new thread when possible to keep threads small and targeted."
+          }
+        ],
+        "malformedOutput": [],
+        "stderrTail": "{\"timestamp\":\"2026-07-16T02:19:44.635269Z\",\"level\":\"WARN\",\"fields\":{\"message\":\"remote installed plugin bundle sync failed\",\"error\":\"chatgpt authentication required for remote plugin catalog; api key auth is not supported\"},\"target\":\"codex_core_plugins::remote::remote_installed_plugin_sync\"}\n{\"timestamp\":\"2026-07-16T02:19:44.645173Z\",\"level\":\"WARN\",\"fields\":{\"message\":\"Unknown model gate2-chat-model is used. This will use fallback model metadata.\"},\"target\":\"codex_models_manager::model_info\"}\n{\"timestamp\":\"2026-07-16T02:19:44.661296Z\",\"level\":\"WARN\",\"fields\":{\"message\":\"Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\"},\"target\":\"codex_core::shell_snapshot\"}\n{\"timestamp\":\"2026-07-16T02:19:44.759866Z\",\"level\":\"WARN\",\"fields\":{\"message\":\"Unknown model gate2-chat-model is used. This will use fallback model metadata.\"},\"target\":\"codex_models_manager::model_info\"}\n{\"timestamp\":\"2026-07-16T02:19:44.785424Z\",\"level\":\"WARN\",\"fields\":{\"message\":\"Unknown model gate2-chat-model is used. This will use fallback model metadata.\"},\"target\":\"codex_models_manager::model_info\"}\n"
+      },
+      "interrupted": {
+        "timedOut": true,
+        "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f"
+      },
+      "resumed": {
+        "exitCode": 0,
+        "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f"
+      }
+    },
+    "alreadyRunningNoRelaunch": true,
+    "failedLaunchDiagnoseWithoutRetry": true
+  },
+  "providerEvidence": {
+    "requestCount": 20,
+    "responseModes": {
+      "NORMAL": 1,
+      "GATE8_MATRIX_INVENTORY_REPAIR": 3,
+      "GATE8_MATRIX_INVENTORY_CORRECT": 3,
+      "GATE8_REHEARSAL_NATIVE_COMPACTION": 1,
+      "GATE8_MATRIX_INVENTORY_REPORT": 3,
+      "GATE8_MATRIX_INVENTORY_RECOVER": 1,
+      "GATE8_MATRIX_INVENTORY_RECOVER_PENDING": 1,
+      "GATE8_MATRIX_INVENTORY_RESUME": 2,
+      "GATE8_MATRIX_ALREADY_RUNNING": 2,
+      "GATE8_MATRIX_FAILED_LAUNCH": 3
+    },
+    "log": [
+      {
+        "timestamp": "2026-07-16T02:19:25.687Z",
+        "path": "/v1/models",
+        "model": null,
+        "stream": false,
+        "roles": [],
+        "latest_user_text": null,
+        "tool_names": [],
+        "tool_shapes": [],
+        "tool_message_contents": [],
+        "response_mode": "NORMAL",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:19:26.288Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPAIR\n这是别人做到一半的现有库存项目。只修 inventory-project/inventory.mjs，让现有测试通过；保护输入、契约、说明和 package.json。命令前先用中文说明动作。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPAIR",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs inventory-repair"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:27.254Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPAIR\n这是别人做到一半的现有库存项目。只修 inventory-project/inventory.mjs，让现有测试通过；保护输入、契约、说明和 package.json。命令前先用中文说明动作。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPAIR",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_REPAIR_TEST_OK"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:28.090Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPAIR\n这是别人做到一半的现有库存项目。只修 inventory-project/inventory.mjs，让现有测试通过；保护输入、契约、说明和 package.json。命令前先用中文说明动作。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n",
+          "Exit code: 0\nWall time: 0.8 seconds\nOutput:\n✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPAIR",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:19:36.460Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_CORRECT\n用户中途改口：补齐拒绝、去重、状态规范化和 CLI 规则。继续当前项目，不要推倒已正确部分；实际跑测试与 CLI，最终指标必须是 5/2/2/1/3/1。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n",
+          "Exit code: 0\nWall time: 0.8 seconds\nOutput:\n✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_CORRECT",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs inventory-correct"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:37.327Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_CORRECT\n用户中途改口：补齐拒绝、去重、状态规范化和 CLI 规则。继续当前项目，不要推倒已正确部分；实际跑测试与 CLI，最终指标必须是 5/2/2/1/3/1。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n",
+          "Exit code: 0\nWall time: 0.8 seconds\nOutput:\n✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n",
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_CORRECT_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_CORRECT",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node inventory-project/inventory.mjs --input inventory-project/data/inventory.json --output inventory-project/summary.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_CORRECT_TEST_OK"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:38.354Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_CORRECT\n用户中途改口：补齐拒绝、去重、状态规范化和 CLI 规则。继续当前项目，不要推倒已正确部分；实际跑测试与 CLI，最终指标必须是 5/2/2/1/3/1。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n",
+          "Exit code: 0\nWall time: 0.8 seconds\nOutput:\n✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n",
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_CORRECT_OK\n",
+          "Exit code: 0\nWall time: 1 seconds\nOutput:\n✔ rejects invalid records (0.7888ms)\n✔ keeps latest duplicate and sorts (8.6221ms)\n✔ summarizes exact business metrics (1.5191ms)\n✔ dry-run prints exact JSON without writing (100.0731ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 231.3934\n{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\nMATRIX_INVENTORY_CORRECT_TEST_OK\r\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_CORRECT",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:19:44.794Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user"
+        ],
+        "latest_user_text": "You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume the task.\r\n\r\nInclude:\r\n- Current progress and key decisions made\r\n- Important context, constraints, or user preferences\r\n- What remains to be done (clear next steps)\r\n- Any critical data, examples, or references needed to continue\r\n\r\nBe concise, structured, and focused on helping the next LLM seamlessly continue the work.\r\n",
+        "tool_names": [],
+        "tool_shapes": [],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPAIR_OK\n",
+          "Exit code: 0\nWall time: 0.8 seconds\nOutput:\n✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n",
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_CORRECT_OK\n",
+          "Exit code: 0\nWall time: 1 seconds\nOutput:\n✔ rejects invalid records (0.7888ms)\n✔ keeps latest duplicate and sorts (8.6221ms)\n✔ summarizes exact business metrics (1.5191ms)\n✔ dry-run prints exact JSON without writing (100.0731ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 231.3934\n{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\nMATRIX_INVENTORY_CORRECT_TEST_OK\r\n"
+        ],
+        "response_mode": "GATE8_REHEARSAL_NATIVE_COMPACTION",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:19:46.497Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPORT\n继续同一任务。根据实际 summary.json 生成中文 README、Markdown 报告和完整离线 HTML；不能根据回复猜数字，必须重新验证测试、CLI、编码和报告内容。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPORT",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs inventory-report"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:47.526Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPORT\n继续同一任务。根据实际 summary.json 生成中文 README、Markdown 报告和完整离线 HTML；不能根据回复猜数字，必须重新验证测试、CLI、编码和报告内容。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPORT",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs verify-inventory"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:48.196Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_REPORT\n继续同一任务。根据实际 summary.json 生成中文 README、Markdown 报告和完整离线 HTML；不能根据回复猜数字，必须重新验证测试、CLI、编码和报告内容。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n",
+          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_VERIFY_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_REPORT",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:19:53.990Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_RECOVER\n刚才客户端中断，目录里有半成品摘要和临时文件。只执行一次恢复，清理临时文件并从保护输入重建结果；不要重复执行已经成功的恢复动作。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n",
+          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_VERIFY_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_RECOVER",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs recover-inventory"
+      },
+      {
+        "timestamp": "2026-07-16T02:19:55.131Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_RECOVER\n刚才客户端中断，目录里有半成品摘要和临时文件。只执行一次恢复，清理临时文件并从保护输入重建结果；不要重复执行已经成功的恢复动作。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n",
+          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_VERIFY_OK\n",
+          "Exit code: 0\nWall time: 0.4 seconds\nOutput:\nMATRIX_INVENTORY_RECOVER_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_RECOVER_PENDING",
+        "disconnected": true,
+        "disconnect_kind": "response_close"
+      },
+      {
+        "timestamp": "2026-07-16T02:20:09.763Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_RESUME\n继续同一个任务。不要重放恢复动作，只核对恢复后的文件、测试和指标，并写一份续跑完成证据。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n",
+          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_VERIFY_OK\n",
+          "Exit code: 0\nWall time: 0.4 seconds\nOutput:\nMATRIX_INVENTORY_RECOVER_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_RESUME",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs audit-inventory-resume"
+      },
+      {
+        "timestamp": "2026-07-16T02:20:11.033Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "user",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool",
+          "assistant",
+          "user",
+          "assistant",
+          "tool",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_INVENTORY_RESUME\n继续同一个任务。不要重放恢复动作，只核对恢复后的文件、测试和指标，并写一份续跑完成证据。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_OK\n",
+          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\nMATRIX_INVENTORY_REPORT_VERIFY_OK\n",
+          "Exit code: 0\nWall time: 0.4 seconds\nOutput:\nMATRIX_INVENTORY_RECOVER_OK\n",
+          "Exit code: 0\nWall time: 0.6 seconds\nOutput:\nMATRIX_INVENTORY_RESUME_OK\n"
+        ],
+        "response_mode": "GATE8_MATRIX_INVENTORY_RESUME",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:20:16.765Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_ALREADY_RUNNING\nprocess-edge 里的服务已经运行，启动计数是 1。请先读状态，只写审计结果；绝对不要再次启动软件。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [],
+        "response_mode": "GATE8_MATRIX_ALREADY_RUNNING",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs audit-already-running"
+      },
+      {
+        "timestamp": "2026-07-16T02:20:17.743Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_ALREADY_RUNNING\nprocess-edge 里的服务已经运行，启动计数是 1。请先读状态，只写审计结果；绝对不要再次启动软件。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_ALREADY_RUNNING_AUDITED\n"
+        ],
+        "response_mode": "GATE8_MATRIX_ALREADY_RUNNING",
+        "disconnected": false,
+        "disconnect_kind": null
+      },
+      {
+        "timestamp": "2026-07-16T02:20:23.054Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user"
+        ],
+        "latest_user_text": "GATE8_MATRIX_FAILED_LAUNCH\n尝试启动 process-edge 服务一次。若明确失败，读取真实错误并写诊断；已经失败后不得反复启动。命令前先用中文说明。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [],
+        "response_mode": "GATE8_MATRIX_FAILED_LAUNCH",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node process-edge/start-service.mjs"
+      },
+      {
+        "timestamp": "2026-07-16T02:20:24.043Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_FAILED_LAUNCH\n尝试启动 process-edge 服务一次。若明确失败，读取真实错误并写诊断；已经失败后不得反复启动。命令前先用中文说明。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 1\nWall time: 0.3 seconds\nOutput:\nMATRIX_CONFIG_MISSING\n"
+        ],
+        "response_mode": "GATE8_MATRIX_FAILED_LAUNCH",
+        "disconnected": false,
+        "disconnect_kind": null,
+        "tool_command": "node .gate8-diverse-actions.mjs diagnose-failed-launch"
+      },
+      {
+        "timestamp": "2026-07-16T02:20:24.318Z",
+        "path": "/v1/chat/completions",
+        "model": "gate2-chat-model",
+        "stream": true,
+        "roles": [
+          "system",
+          "user",
+          "user",
+          "assistant",
+          "tool",
+          "assistant",
+          "tool"
+        ],
+        "latest_user_text": "GATE8_MATRIX_FAILED_LAUNCH\n尝试启动 process-edge 服务一次。若明确失败，读取真实错误并写诊断；已经失败后不得反复启动。命令前先用中文说明。",
+        "tool_names": [
+          "shell_command",
+          "update_plan",
+          "request_user_input",
+          "view_image",
+          "multi_agent_v1__close_agent",
+          "multi_agent_v1__resume_agent",
+          "multi_agent_v1__send_input",
+          "multi_agent_v1__spawn_agent",
+          "multi_agent_v1__wait_agent",
+          "get_goal",
+          "create_goal",
+          "update_goal",
+          "web_search"
+        ],
+        "tool_shapes": [
+          {
+            "type": "function",
+            "name": "shell_command",
+            "parameter_keys": [
+              "command",
+              "justification",
+              "prefix_rule",
+              "sandbox_permissions",
+              "timeout_ms",
+              "workdir"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_plan",
+            "parameter_keys": [
+              "explanation",
+              "plan"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "request_user_input",
+            "parameter_keys": [
+              "autoResolutionMs",
+              "questions"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "view_image",
+            "parameter_keys": [
+              "path"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__close_agent",
+            "parameter_keys": [
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__resume_agent",
+            "parameter_keys": [
+              "id"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__send_input",
+            "parameter_keys": [
+              "interrupt",
+              "items",
+              "message",
+              "target"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__spawn_agent",
+            "parameter_keys": [
+              "agent_type",
+              "fork_context",
+              "items",
+              "message",
+              "model",
+              "reasoning_effort",
+              "service_tier"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "multi_agent_v1__wait_agent",
+            "parameter_keys": [
+              "targets",
+              "timeout_ms"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "get_goal",
+            "parameter_keys": []
+          },
+          {
+            "type": "function",
+            "name": "create_goal",
+            "parameter_keys": [
+              "objective",
+              "token_budget"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "update_goal",
+            "parameter_keys": [
+              "status"
+            ]
+          },
+          {
+            "type": "function",
+            "name": "web_search",
+            "parameter_keys": [
+              "input"
+            ]
+          }
+        ],
+        "tool_message_contents": [
+          "Exit code: 1\nWall time: 0.3 seconds\nOutput:\nMATRIX_CONFIG_MISSING\n",
+          "Exit code: 0\nWall time: 0.3 seconds\nOutput:\nMATRIX_FAILURE_DIAGNOSED\n"
+        ],
+        "response_mode": "GATE8_MATRIX_FAILED_LAUNCH",
+        "disconnected": false,
+        "disconnect_kind": null
+      }
+    ]
+  },
+  "processes": {
+    "before": {
+      "originalCodex": [
+        {
+          "processId": 11952,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 31520,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 39772,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40020,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40444,
+          "parentProcessId": 2436,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 42364,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 43424,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 44700,
+          "parentProcessId": 40444,
+          "name": "codex.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+        }
+      ],
+      "antiCodexRoots": [
+        {
+          "processId": 24308,
+          "parentProcessId": 14996,
+          "name": "Anti-Codex.exe",
+          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+        }
+      ],
+      "candidateProcesses": []
+    },
+    "afterCleanup": {
+      "originalCodex": [
+        {
+          "processId": 11952,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 31520,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 39772,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40020,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40444,
+          "parentProcessId": 2436,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 42364,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 43424,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 44700,
+          "parentProcessId": 40444,
+          "name": "codex.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+        }
+      ],
+      "antiCodexRoots": [
+        {
+          "processId": 24308,
+          "parentProcessId": 14996,
+          "name": "Anti-Codex.exe",
+          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+        }
+      ],
+      "candidateProcesses": []
+    }
+  },
+  "turns": [
+    {
+      "name": "inventory-repair",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-repair'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPAIR_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_REPAIR_TEST_OK'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n"
+        }
+      ],
+      "messages": [
+        "我先修复现有实现，不改保护文件。",
+        "实现已落盘，现在运行现有测试确认结果。",
+        "GATE8_MATRIX_INVENTORY_REPAIR_COMPLETE：现有项目修复并通过测试。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b8-c037-7151-8194-b4fc921aeb9f\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我先修复现有实现，不改保护文件。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-repair'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-repair'\",\"aggregated_output\":\"MATRIX_INVENTORY_REPAIR_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"实现已落盘，现在运行现有测试确认结果。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_REPAIR_TEST_OK'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_REPAIR_TEST_OK'\",\"aggregated_output\":\"✔ normalizes records (1.1029ms)\\n✔ keeps latest duplicate (7.477ms)\\n✔ summarizes baseline (0.2189ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 3\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 125.3697\\nMATRIX_INVENTORY_REPAIR_TEST_OK\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_5\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_INVENTORY_REPAIR_COMPLETE：现有项目修复并通过测试。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":13,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "Reading additional input from stdin...\n2026-07-16T02:19:26.124371Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:26.135566Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:26.135608Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:26.151622Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:26.258780Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:27.250976Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.085534Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.096408Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.902802Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "name": "inventory-correction",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-correct'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_CORRECT_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node inventory-project/inventory.mjs --input inventory-project/data/inventory.json --output inventory-project/summary.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_CORRECT_TEST_OK'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "✔ rejects invalid records (0.7888ms)\n✔ keeps latest duplicate and sorts (8.6221ms)\n✔ summarizes exact business metrics (1.5191ms)\n✔ dry-run prints exact JSON without writing (100.0731ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 231.3934\n{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\nMATRIX_INVENTORY_CORRECT_TEST_OK\r\n"
+        }
+      ],
+      "messages": [
+        "我按新的业务规则修改当前实现和测试。",
+        "业务规则已更新，现在验证测试和真实 CLI 输出。",
+        "GATE8_MATRIX_INVENTORY_CORRECT_COMPLETE：业务纠正和真实 CLI 结果均已通过。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b8-c037-7151-8194-b4fc921aeb9f\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我按新的业务规则修改当前实现和测试。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-correct'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-correct'\",\"aggregated_output\":\"MATRIX_INVENTORY_CORRECT_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"业务规则已更新，现在验证测试和真实 CLI 输出。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node inventory-project/inventory.mjs --input inventory-project/data/inventory.json --output inventory-project/summary.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_CORRECT_TEST_OK'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node inventory-project/inventory.mjs --input inventory-project/data/inventory.json --output inventory-project/summary.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_CORRECT_TEST_OK'\",\"aggregated_output\":\"✔ rejects invalid records (0.7888ms)\\n✔ keeps latest duplicate and sorts (8.6221ms)\\n✔ summarizes exact business metrics (1.5191ms)\\n✔ dry-run prints exact JSON without writing (100.0731ms)\\nℹ tests 4\\nℹ suites 0\\nℹ pass 4\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 231.3934\\n{\\\"inputCount\\\":5,\\\"acceptedCount\\\":2,\\\"rejectedCount\\\":2,\\\"duplicateCount\\\":1,\\\"totalQuantity\\\":3,\\\"backorderCount\\\":1}\\nMATRIX_INVENTORY_CORRECT_TEST_OK\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_5\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_INVENTORY_CORRECT_COMPLETE：业务纠正和真实 CLI 结果均已通过。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":20,\"cached_input_tokens\":0,\"output_tokens\":28,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "2026-07-16T02:19:36.284106Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:36.295166Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.314000Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:36.423413Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.442203Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.449613Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:37.323650Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:38.350313Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:38.362330Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:39.001651Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "name": "inventory-report",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-report'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPORT_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs verify-inventory'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPORT_VERIFY_OK\n"
+        }
+      ],
+      "messages": [
+        "我根据已经跑出的汇总结果生成中文交付文件。",
+        "交付文件已生成，现在只读核对测试、指标和编码。",
+        "GATE8_MATRIX_INVENTORY_REPORT_COMPLETE：中文交付文件已按真实结果生成。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b8-c037-7151-8194-b4fc921aeb9f\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我根据已经跑出的汇总结果生成中文交付文件。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-report'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-report'\",\"aggregated_output\":\"MATRIX_INVENTORY_REPORT_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"交付文件已生成，现在只读核对测试、指标和编码。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs verify-inventory'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs verify-inventory'\",\"aggregated_output\":\"MATRIX_INVENTORY_REPORT_VERIFY_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_5\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_INVENTORY_REPORT_COMPLETE：中文交付文件已按真实结果生成。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":40,\"cached_input_tokens\":0,\"output_tokens\":87,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "2026-07-16T02:19:46.335950Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:46.346095Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.362624Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:46.459594Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.477048Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.485531Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:47.521180Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:48.192279Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:48.202189Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:49.106582Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "name": "inventory-interrupted-recovery",
+      "exitCode": null,
+      "signal": "SIGKILL",
+      "timedOut": true,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs recover-inventory'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_RECOVER_OK\n"
+        }
+      ],
+      "messages": [
+        "我先检查中断现场并只执行一次恢复。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b8-c037-7151-8194-b4fc921aeb9f\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我先检查中断现场并只执行一次恢复。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs recover-inventory'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs recover-inventory'\",\"aggregated_output\":\"MATRIX_INVENTORY_RECOVER_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n",
+      "stderrTail": "2026-07-16T02:19:53.817236Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:53.829967Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:53.847697Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:53.955530Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:53.972705Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:53.980477Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:55.128342Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:59.358244Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n2026-07-16T02:20:03.238077Z  WARN codex_core_plugins::startup_sync: git sync failed for curated plugin sync; falling back to GitHub HTTP error=git reset curated plugins repo failed with status exit code: 128: Updating files:  32% (1695/5266)\rUpdating files:  33% (1738/5266)\rUpdating files:  34% (1791/5266)\rUpdating files:  35% (1844/5266)\rUpdating files:  36% (1896/5266)\rUpdating files:  37% (1949/5266)\rUpdating files:  38% (2002/5266)\rUpdating files:  39% (2054/5266)\rUpdating files:  40% (2107/5266)\rUpdating files:  41% (2160/5266)\rUpdating files:  42% (2212/5266)\rUpdating files:  43% (2265/5266)\rUpdating files:  44% (2318/5266)\rUpdating files:  45% (2370/5266)\rUpdating files:  46% (2423/5266)\rUpdating files:  47% (2476/5266)\rUpdating files:  48% (2528/5266)\rUpdating files:  49% (2581/5266)\rUpdating files:  50% (2633/5266)\rUpdating files:  51% (2686/5266)\rUpdating files:  52% (2739/5266)\rwarning: unable to access 'plugins/nvidia/skills/omniverse-cad-to-simready/references/simready-conform-profile/references/FET_004_SIMULATE_MULTI_BODY_PHYSICS/.gitattributes': Filename too long\nfatal: cannot create directory at 'plugins/nvidia/skills/omniverse-cad-to-simready/references/simready-conform-profile/references/FET_004_SIMULATE_MULTI_BODY_PHYSICS/scripts': Filename too long\n"
+    },
+    {
+      "name": "inventory-resumed",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-inventory-resume'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_RESUME_OK\n"
+        }
+      ],
+      "messages": [
+        "我从同一任务继续，只复核恢复结果，不重放恢复动作。",
+        "GATE8_MATRIX_INVENTORY_RESUME_COMPLETE：同任务恢复后复核完成，没有重放。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b8-c037-7151-8194-b4fc921aeb9f\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我从同一任务继续，只复核恢复结果，不重放恢复动作。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-inventory-resume'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-inventory-resume'\",\"aggregated_output\":\"MATRIX_INVENTORY_RESUME_OK\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_INVENTORY_RESUME_COMPLETE：同任务恢复后复核完成，没有重放。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":50,\"cached_input_tokens\":0,\"output_tokens\":101,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "2026-07-16T02:20:09.593613Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:20:09.604513Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.623421Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:20:09.725061Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.743805Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.751451Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:11.028062Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:11.040107Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:12.486308Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "name": "already-running",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b9-8544-79a3-bc3b-25384f7a9d6a",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-already-running'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_ALREADY_RUNNING_AUDITED\n"
+        }
+      ],
+      "messages": [
+        "我先读取现有运行状态；已经运行时不会再次启动。",
+        "GATE8_MATRIX_ALREADY_RUNNING_COMPLETE：确认服务已运行，没有重复启动。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b9-8544-79a3-bc3b-25384f7a9d6a\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我先读取现有运行状态；已经运行时不会再次启动。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-already-running'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-already-running'\",\"aggregated_output\":\"MATRIX_ALREADY_RUNNING_AUDITED\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_ALREADY_RUNNING_COMPLETE：确认服务已运行，没有重复启动。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":14,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "Reading additional input from stdin...\n2026-07-16T02:20:16.573905Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:20:16.580066Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:16.580120Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:16.597095Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:20:16.738839Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:17.739853Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:17.749754Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:19.243854Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "name": "failed-launch",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "threadId": "019f68b9-9dd1-7c53-a0e4-ef14389991ff",
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node process-edge/start-service.mjs'",
+          "status": "failed",
+          "exitCode": 1,
+          "outputTail": "MATRIX_CONFIG_MISSING\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs diagnose-failed-launch'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_FAILURE_DIAGNOSED\n"
+        }
+      ],
+      "messages": [
+        "我会启动一次并记录真实退出结果。",
+        "启动已经明确失败；我现在记录根因，不会循环重启。",
+        "GATE8_MATRIX_FAILED_LAUNCH_COMPLETE：启动失败已诊断，没有无限重试。"
+      ],
+      "stdoutTail": "{\"type\":\"thread.started\",\"thread_id\":\"019f68b9-9dd1-7c53-a0e4-ef14389991ff\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"我会启动一次并记录真实退出结果。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node process-edge/start-service.mjs'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node process-edge/start-service.mjs'\",\"aggregated_output\":\"MATRIX_CONFIG_MISSING\\n\",\"exit_code\":1,\"status\":\"failed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_3\",\"type\":\"agent_message\",\"text\":\"启动已经明确失败；我现在记录根因，不会循环重启。\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs diagnose-failed-launch'\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_4\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -NoProfile -Command 'node .gate8-diverse-actions.mjs diagnose-failed-launch'\",\"aggregated_output\":\"MATRIX_FAILURE_DIAGNOSED\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_5\",\"type\":\"agent_message\",\"text\":\"GATE8_MATRIX_FAILED_LAUNCH_COMPLETE：启动失败已诊断，没有无限重试。\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":13,\"reasoning_output_tokens\":0}}\n",
+      "stderrTail": "Reading additional input from stdin...\n2026-07-16T02:20:22.859452Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:20:22.865086Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:22.865136Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:22.881615Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:20:23.028248Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:24.036770Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.3 seconds\nOutput:\nMATRIX_CONFIG_MISSING\n\n2026-07-16T02:20:24.039478Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:24.313798Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:24.324007Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:26.220551Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    }
+  ],
+  "finalManifest": [
+    {
+      "path": ".gate8-diverse-actions.mjs",
+      "sha256": "ad7183058e8a8893d3ecb45359169270b8486f4850f30b8765c1df29f019ac0a"
+    },
+    {
+      "path": "inventory-project/.recovery-count",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "inventory-project/.resume-complete",
+      "sha256": "985de1c053864398797e6725e3c423b6b3ae7edf31fa0d0853ccbdc546d67f61"
+    },
+    {
+      "path": "inventory-project/data/inventory.json",
+      "sha256": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec"
+    },
+    {
+      "path": "inventory-project/index.html",
+      "sha256": "e962d08aa741e773cd12448b9194621af5d800a09d11cd57742be824ec287dab"
+    },
+    {
+      "path": "inventory-project/inventory-contract.json",
+      "sha256": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368"
+    },
+    {
+      "path": "inventory-project/inventory.mjs",
+      "sha256": "b902de48abc3be898a8442240da8f001ee2710aca61109405a72a04c02e4a892"
+    },
+    {
+      "path": "inventory-project/inventory.test.mjs",
+      "sha256": "abdc518d0449b7b3d24f50633f142b72e3df800de41ac28e77b489cd8863b227"
+    },
+    {
+      "path": "inventory-project/package.json",
+      "sha256": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed"
+    },
+    {
+      "path": "inventory-project/README.md",
+      "sha256": "935dd2e4c4670ea33a1629dd4b4ebe7fe5c6a87a98f834e01dba4fbcb1589cc2"
+    },
+    {
+      "path": "inventory-project/report.md",
+      "sha256": "8c911cb5a181492d3268a72bb14ce515552290f7ebdc614210acfe2f72280771"
+    },
+    {
+      "path": "inventory-project/summary.json",
+      "sha256": "35f141fb673845a8bf5427ed6c23d6d63be3ba0f1023e3198fd9841f981cc9f2"
+    },
+    {
+      "path": "inventory-project/work-notes.txt",
+      "sha256": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+    },
+    {
+      "path": "process-edge/already-running-status.json",
+      "sha256": "77443b84f3db0314b5a7adf17f319e3d5f8b5b8f1d634f7c2b642025343cb4ae"
+    },
+    {
+      "path": "process-edge/failed-launch-count.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "process-edge/failed-launch-diagnosis.json",
+      "sha256": "16093178cded941a8cb7b0d36cce8164f4734477f8a6b7d3a3d2df1249aa3107"
+    },
+    {
+      "path": "process-edge/last-error.txt",
+      "sha256": "da08124fdaa2937062eab09d92749437d0821e17be6ec71cd3ca77bd741ba929"
+    },
+    {
+      "path": "process-edge/launch-count.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "process-edge/service-state.json",
+      "sha256": "6ec6f1408cf7f428a0e6bd37acb0df84e5f262bee0755ef952a40b2458a73ad6"
+    },
+    {
+      "path": "process-edge/start-service.mjs",
+      "sha256": "3cc3fd484fe6e819ef39e456f0dcc3cdd5107bbb335a271e6ff5bccb0e556246"
+    }
+  ],
+  "artifact": {
+    "ok": true,
+    "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate8-diverse-result-matrix-F2C6222BDD00.zip",
+    "bytes": 10902,
+    "sha256": "faea4e05e9e445ab6349a36b4a161839ec7adcf5de8cade394bad9403f41a63a",
+    "exitCode": 0,
+    "error": null
+  },
+  "checks": [
+    {
+      "id": "isolated_scripted_route_ready",
+      "ok": true,
+      "providerUrl": "http://127.0.0.1:62224/v1",
+      "proxyBase": "http://127.0.0.1:62382/v1",
+      "model": "gate2-chat-model"
+    },
+    {
+      "id": "inventory_fixture_starts_red",
+      "ok": true,
+      "exitCode": 1,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "✖ normalizes records (2.2839ms)\n✖ keeps latest duplicate (0.5192ms)\n✖ summarizes baseline (0.4323ms)\nℹ tests 3\nℹ suites 0\nℹ pass 0\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 130.2314\n\n✖ failing tests:\n\ntest at inventory.test.mjs:9:1\n✖ normalizes records (2.2839ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n    {\n      qty: 1,\n  +   sku: ' a-1 ',\n  +   status: 'ACTIVE',\n  -   sku: 'A-1',\n  -   status: 'active',\n      updatedAt: '2026-07-01T00:00:00Z'\n    }\n  \n      at TestContext.<anonymous> (file:///C:/Users/XD/AppData/Local/Temp/AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3/workspace/inventory-project/inventory.test.mjs:9:41)\n      at Test.runInAsyncScope (node:async_hooks:213:14)\n      at Test.run (node:internal/test_runner/test:1106:25)\n      at Test.start (node:internal/test_runner/test:1003:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { sku: ' a-1 ', qty: 1, status: 'ACTIVE', updatedAt: '2026-07-01T00:00:00Z' },\n    expected: { sku: 'A-1', qty: 1, status: 'active', updatedAt: '2026-07-01T00:00:00Z' },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at inventory.test.mjs:10:1\n✖ keeps latest duplicate (0.5192ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  1 !== 3\n  \n      at TestContext.<anonymous> (file:///C:/Users/XD/AppData/Local/Temp/AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3/workspace/inventory-project/inventory.test.mjs:10:45)\n      at Test.runInAsyncScope (node:async_hooks:213:14)\n      at Test.run (node:internal/test_runner/test:1106:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n      at Test.postRun (node:internal/test_runner/test:1235:19)\n      at Test.run (node:internal/test_runner/test:1163:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 1,\n    expected: 3,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at inventory.test.mjs:11:1\n✖ summarizes baseline (0.4323ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n    {\n  +   acceptedCount: 3,\n  +   totalQuantity: 0\n  -   acceptedCount: 2,\n  -   totalQuantity: 3\n    }\n  \n      at TestContext.<anonymous> (file:///C:/Users/XD/AppData/Local/Temp/AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3/workspace/inventory-project/inventory.test.mjs:11:42)\n      at Test.runInAsyncScope (node:async_hooks:213:14)\n      at Test.run (node:internal/test_runner/test:1106:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n      at Test.postRun (node:internal/test_runner/test:1235:19)\n      at Test.run (node:internal/test_runner/test:1163:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { acceptedCount: 3, totalQuantity: 0 },\n    expected: { acceptedCount: 2, totalQuantity: 3 },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n",
+      "stderr": "",
+      "stdoutTail": " },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at inventory.test.mjs:10:1\n✖ keeps latest duplicate (0.5192ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  1 !== 3\n  \n      at TestContext.<anonymous> (file:///C:/Users/XD/AppData/Local/Temp/AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3/workspace/inventory-project/inventory.test.mjs:10:45)\n      at Test.runInAsyncScope (node:async_hooks:213:14)\n      at Test.run (node:internal/test_runner/test:1106:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n      at Test.postRun (node:internal/test_runner/test:1235:19)\n      at Test.run (node:internal/test_runner/test:1163:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 1,\n    expected: 3,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at inventory.test.mjs:11:1\n✖ summarizes baseline (0.4323ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n    {\n  +   acceptedCount: 3,\n  +   totalQuantity: 0\n  -   acceptedCount: 2,\n  -   totalQuantity: 3\n    }\n  \n      at TestContext.<anonymous> (file:///C:/Users/XD/AppData/Local/Temp/AntiCodex-Gate8-Rehearsal-1784168365298-f3a179d3/workspace/inventory-project/inventory.test.mjs:11:42)\n      at Test.runInAsyncScope (node:async_hooks:213:14)\n      at Test.run (node:internal/test_runner/test:1106:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n      at Test.postRun (node:internal/test_runner/test:1235:19)\n      at Test.run (node:internal/test_runner/test:1163:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: { acceptedCount: 3, totalQuantity: 0 },\n    expected: { acceptedCount: 2, totalQuantity: 3 },\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n",
+      "stderrTail": ""
+    },
+    {
+      "id": "inventory_repair_turn_completed",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "marker": "GATE8_MATRIX_INVENTORY_REPAIR_COMPLETE",
+      "messages": [
+        "我先修复现有实现，不改保护文件。",
+        "实现已落盘，现在运行现有测试确认结果。",
+        "GATE8_MATRIX_INVENTORY_REPAIR_COMPLETE：现有项目修复并通过测试。"
+      ],
+      "stderrTail": "Reading additional input from stdin...\n2026-07-16T02:19:26.124371Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:26.135566Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:26.135608Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:26.151622Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:26.258780Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:27.250976Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.085534Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.096408Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:28.902802Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "id": "inventory_repair_command_results",
+      "ok": true,
+      "expectedCommandCount": 2,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-repair'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPAIR_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_REPAIR_TEST_OK'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "✔ normalizes records (1.1029ms)\n✔ keeps latest duplicate (7.477ms)\n✔ summarizes baseline (0.2189ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 125.3697\nMATRIX_INVENTORY_REPAIR_TEST_OK\r\n"
+        }
+      ]
+    },
+    {
+      "id": "inventory_repair_progress_before_commands",
+      "ok": true,
+      "commandCount": 2,
+      "progressMessageCount": 3,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "inventory_existing_tests_repaired",
+      "ok": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "✔ normalizes records (2.1228ms)\n✔ keeps latest duplicate (8.5581ms)\n✔ summarizes baseline (0.284ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 120.5333\n",
+      "stderr": "",
+      "stdoutTail": "✔ normalizes records (2.1228ms)\n✔ keeps latest duplicate (8.5581ms)\n✔ summarizes baseline (0.284ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 120.5333\n",
+      "stderrTail": ""
+    },
+    {
+      "id": "inventory_first_turn_changed_only_implementation",
+      "ok": true,
+      "changedFiles": [
+        "inventory.mjs"
+      ]
+    },
+    {
+      "id": "inventory_protected_files_unchanged_after_repair",
+      "ok": true,
+      "before": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      },
+      "after": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      }
+    },
+    {
+      "id": "inventory_correction_turn_completed",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "marker": "GATE8_MATRIX_INVENTORY_CORRECT_COMPLETE",
+      "messages": [
+        "我按新的业务规则修改当前实现和测试。",
+        "业务规则已更新，现在验证测试和真实 CLI 输出。",
+        "GATE8_MATRIX_INVENTORY_CORRECT_COMPLETE：业务纠正和真实 CLI 结果均已通过。"
+      ],
+      "stderrTail": "2026-07-16T02:19:36.284106Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:36.295166Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.314000Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:36.423413Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.442203Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:36.449613Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:37.323650Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:38.350313Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:38.362330Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:39.001651Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "id": "inventory_correction_command_results",
+      "ok": true,
+      "expectedCommandCount": 2,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-correct'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_CORRECT_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node --test inventory-project/inventory.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node inventory-project/inventory.mjs --input inventory-project/data/inventory.json --output inventory-project/summary.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Write-Output MATRIX_INVENTORY_CORRECT_TEST_OK'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "✔ rejects invalid records (0.7888ms)\n✔ keeps latest duplicate and sorts (8.6221ms)\n✔ summarizes exact business metrics (1.5191ms)\n✔ dry-run prints exact JSON without writing (100.0731ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 231.3934\n{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\nMATRIX_INVENTORY_CORRECT_TEST_OK\r\n"
+        }
+      ]
+    },
+    {
+      "id": "inventory_correction_progress_before_commands",
+      "ok": true,
+      "commandCount": 2,
+      "progressMessageCount": 3,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "inventory_correction_same_thread",
+      "ok": true,
+      "expected": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "actual": "019f68b8-c037-7151-8194-b4fc921aeb9f"
+    },
+    {
+      "id": "inventory_business_result_exact",
+      "ok": true,
+      "testPassed": true,
+      "dryRunPassed": true,
+      "regularRunPassed": true,
+      "dryRunDidNotWrite": true,
+      "dryRunJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "regularJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "writtenJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "idempotent": true,
+      "reportsReady": false,
+      "chineseReports": false,
+      "utf8NoBom": false,
+      "offlineHtml": false,
+      "diagnostics": {
+        "test": "✔ rejects invalid records (0.6824ms)\n✔ keeps latest duplicate and sorts (8.4959ms)\n✔ summarizes exact business metrics (0.781ms)\n✔ dry-run prints exact JSON without writing (92.405ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 219.1391\n",
+        "dryRun": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n",
+        "regular": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n"
+      }
+    },
+    {
+      "id": "inventory_protected_files_unchanged_after_correction",
+      "ok": true,
+      "before": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      },
+      "after": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      }
+    },
+    {
+      "id": "inventory_native_compaction_same_thread",
+      "ok": true,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "compaction": {
+        "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+        "turnId": "019f68b9-0911-7983-8e9b-4bd34f70aa40",
+        "item": {
+          "type": "contextCompaction",
+          "id": "019f68b9-0917-7812-a098-a1dde1e1296a"
+        },
+        "turn": {
+          "id": "019f68b9-0911-7983-8e9b-4bd34f70aa40",
+          "items": [],
+          "itemsView": "notLoaded",
+          "status": "completed",
+          "error": null,
+          "startedAt": 1784168384,
+          "completedAt": 1784168384,
+          "durationMs": 21
+        }
+      }
+    },
+    {
+      "id": "inventory_native_compaction_persisted",
+      "ok": true,
+      "before": {
+        "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+        "status": {
+          "type": "idle"
+        },
+        "turnCount": 2,
+        "itemTypes": [
+          "userMessage",
+          "agentMessage",
+          "agentMessage",
+          "agentMessage",
+          "userMessage",
+          "agentMessage",
+          "agentMessage",
+          "agentMessage"
+        ],
+        "contextCompactionCount": 0
+      },
+      "after": {
+        "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+        "status": {
+          "type": "idle"
+        },
+        "turnCount": 3,
+        "itemTypes": [
+          "userMessage",
+          "agentMessage",
+          "agentMessage",
+          "agentMessage",
+          "userMessage",
+          "agentMessage",
+          "agentMessage",
+          "agentMessage",
+          "contextCompaction"
+        ],
+        "contextCompactionCount": 1
+      }
+    },
+    {
+      "id": "inventory_report_turn_completed",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "marker": "GATE8_MATRIX_INVENTORY_REPORT_COMPLETE",
+      "messages": [
+        "我根据已经跑出的汇总结果生成中文交付文件。",
+        "交付文件已生成，现在只读核对测试、指标和编码。",
+        "GATE8_MATRIX_INVENTORY_REPORT_COMPLETE：中文交付文件已按真实结果生成。"
+      ],
+      "stderrTail": "2026-07-16T02:19:46.335950Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:19:46.346095Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.362624Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:19:46.459594Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.477048Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:46.485531Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:19:47.521180Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:48.192279Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:48.202189Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:19:49.106582Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "id": "inventory_report_command_results",
+      "ok": true,
+      "expectedCommandCount": 2,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs inventory-report'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPORT_OK\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs verify-inventory'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_REPORT_VERIFY_OK\n"
+        }
+      ]
+    },
+    {
+      "id": "inventory_report_progress_before_commands",
+      "ok": true,
+      "commandCount": 2,
+      "progressMessageCount": 3,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "inventory_report_same_thread_after_compaction",
+      "ok": true,
+      "expected": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "actual": "019f68b8-c037-7151-8194-b4fc921aeb9f"
+    },
+    {
+      "id": "inventory_reports_match_host_results",
+      "ok": true,
+      "testPassed": true,
+      "dryRunPassed": true,
+      "regularRunPassed": true,
+      "dryRunDidNotWrite": true,
+      "dryRunJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "regularJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "writtenJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "idempotent": true,
+      "reportsReady": true,
+      "chineseReports": true,
+      "utf8NoBom": true,
+      "offlineHtml": true,
+      "diagnostics": {
+        "test": "✔ rejects invalid records (0.7191ms)\n✔ keeps latest duplicate and sorts (7.904ms)\n✔ summarizes exact business metrics (1.1364ms)\n✔ dry-run prints exact JSON without writing (92.2809ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 214.0306\n",
+        "dryRun": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n",
+        "regular": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n"
+      }
+    },
+    {
+      "id": "inventory_utf8_and_offline_html",
+      "ok": true,
+      "utf8NoBom": true,
+      "chineseReports": true,
+      "offlineHtml": true
+    },
+    {
+      "id": "inventory_client_interrupted_after_one_recovery",
+      "ok": true,
+      "timedOut": true,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "recoveryCountBeforeResume": 1,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs recover-inventory'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_RECOVER_OK\n"
+        }
+      ]
+    },
+    {
+      "id": "inventory_resume_turn_completed",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "marker": "GATE8_MATRIX_INVENTORY_RESUME_COMPLETE",
+      "messages": [
+        "我从同一任务继续，只复核恢复结果，不重放恢复动作。",
+        "GATE8_MATRIX_INVENTORY_RESUME_COMPLETE：同任务恢复后复核完成，没有重放。"
+      ],
+      "stderrTail": "2026-07-16T02:20:09.593613Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:20:09.604513Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.623421Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:20:09.725061Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.743805Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:09.751451Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:11.028062Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:11.040107Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:12.486308Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "id": "inventory_resume_command_results",
+      "ok": true,
+      "expectedCommandCount": 1,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-inventory-resume'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_INVENTORY_RESUME_OK\n"
+        }
+      ]
+    },
+    {
+      "id": "inventory_resume_progress_before_commands",
+      "ok": true,
+      "commandCount": 1,
+      "progressMessageCount": 2,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "inventory_resume_no_replay",
+      "ok": true,
+      "threadId": "019f68b8-c037-7151-8194-b4fc921aeb9f",
+      "recoveryCountAfterResume": 1,
+      "resumeEvidence": "MATRIX_RESUMED_F2C6222BDD00\n",
+      "staleTempExists": false
+    },
+    {
+      "id": "inventory_final_result_still_exact",
+      "ok": true,
+      "testPassed": true,
+      "dryRunPassed": true,
+      "regularRunPassed": true,
+      "dryRunDidNotWrite": true,
+      "dryRunJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "regularJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "writtenJson": {
+        "inputCount": 5,
+        "acceptedCount": 2,
+        "rejectedCount": 2,
+        "duplicateCount": 1,
+        "totalQuantity": 3,
+        "backorderCount": 1
+      },
+      "idempotent": true,
+      "reportsReady": true,
+      "chineseReports": true,
+      "utf8NoBom": true,
+      "offlineHtml": true,
+      "diagnostics": {
+        "test": "✔ rejects invalid records (0.8402ms)\n✔ keeps latest duplicate and sorts (8.3237ms)\n✔ summarizes exact business metrics (1.0874ms)\n✔ dry-run prints exact JSON without writing (99.6903ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 220.8078\n",
+        "dryRun": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n",
+        "regular": "{\"inputCount\":5,\"acceptedCount\":2,\"rejectedCount\":2,\"duplicateCount\":1,\"totalQuantity\":3,\"backorderCount\":1}\n"
+      }
+    },
+    {
+      "id": "inventory_final_file_set_exact",
+      "ok": true,
+      "files": [
+        ".recovery-count",
+        ".resume-complete",
+        "data/inventory.json",
+        "index.html",
+        "inventory-contract.json",
+        "inventory.mjs",
+        "inventory.test.mjs",
+        "package.json",
+        "README.md",
+        "report.md",
+        "summary.json",
+        "work-notes.txt"
+      ]
+    },
+    {
+      "id": "inventory_all_protected_hashes_preserved",
+      "ok": true,
+      "before": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      },
+      "after": {
+        "package.json": "b2f5dd2c77ceeba87d04a5c4ede95885535d168f7c83b55d790760a547c9afed",
+        "inventory-contract.json": "c3136e213d2da4af7e3f224e83352cd7e7bc913422950c587385216f68cdf368",
+        "data/inventory.json": "8a93cc696000ffb3a5890920661d1ea16f494bfc185b4eca53648df671d6c3ec",
+        "work-notes.txt": "8cf5006c0409f54d889f83a73fbe0e9852de2182d855b470803c6767cb311b9a"
+      }
+    },
+    {
+      "id": "already_running_turn_completed",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "threadId": "019f68b9-8544-79a3-bc3b-25384f7a9d6a",
+      "marker": "GATE8_MATRIX_ALREADY_RUNNING_COMPLETE",
+      "messages": [
+        "我先读取现有运行状态；已经运行时不会再次启动。",
+        "GATE8_MATRIX_ALREADY_RUNNING_COMPLETE：确认服务已运行，没有重复启动。"
+      ],
+      "stderrTail": "Reading additional input from stdin...\n2026-07-16T02:20:16.573905Z  WARN codex_core_plugins::remote::remote_installed_plugin_sync: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog; api key auth is not supported\n2026-07-16T02:20:16.580066Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:16.580120Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:16.597095Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-16T02:20:16.738839Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-16T02:20:17.739853Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:17.749754Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-16T02:20:19.243854Z  WARN codex_core_plugins::manager: failed to warm featured plugin ids cache error=remote featured plugin request to https://chatgpt.com/backend-api/plugins/featured failed with status 401 Unauthorized: {\"detail\":\"Unauthorized\"}\n"
+    },
+    {
+      "id": "already_running_command_results",
+      "ok": true,
+      "expectedCommandCount": 1,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-already-running'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_ALREADY_RUNNING_AUDITED\n"
+        }
+      ]
+    },
+    {
+      "id": "already_running_progress_before_commands",
+      "ok": true,
+      "commandCount": 1,
+      "progressMessageCount": 2,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "already_running_did_not_relaunch",
+      "ok": true,
+      "launchCount": 1,
+      "status": {
+        "state": "already-running",
+        "observedLaunchCount": 1
+      },
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs audit-already-running'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_ALREADY_RUNNING_AUDITED\n"
+        }
+      ]
+    },
+    {
+      "id": "failed_launch_turn_completed_after_diagnosis",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "messages": [
+        "我会启动一次并记录真实退出结果。",
+        "启动已经明确失败；我现在记录根因，不会循环重启。",
+        "GATE8_MATRIX_FAILED_LAUNCH_COMPLETE：启动失败已诊断，没有无限重试。"
+      ]
+    },
+    {
+      "id": "failed_launch_executed_once_then_stopped",
+      "ok": true,
+      "failedLaunchCount": 1,
+      "commands": [
+        {
+          "id": "item_2",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node process-edge/start-service.mjs'",
+          "status": "failed",
+          "exitCode": 1,
+          "outputTail": "MATRIX_CONFIG_MISSING\n"
+        },
+        {
+          "id": "item_4",
+          "command": "\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -NoProfile -Command 'node .gate8-diverse-actions.mjs diagnose-failed-launch'",
+          "status": "completed",
+          "exitCode": 0,
+          "outputTail": "MATRIX_FAILURE_DIAGNOSED\n"
+        }
+      ],
+      "diagnosis": {
+        "state": "failed",
+        "reason": "CONFIG_MISSING",
+        "attempts": 1
+      }
+    },
+    {
+      "id": "failed_launch_reported_progress_before_commands",
+      "ok": true,
+      "commandCount": 2,
+      "progressMessageCount": 3,
+      "missingBeforeCommandIndexes": []
+    },
+    {
+      "id": "all_provider_requests_stayed_loopback",
+      "ok": true,
+      "requestCount": 20,
+      "responseModes": {
+        "NORMAL": 1,
+        "GATE8_MATRIX_INVENTORY_REPAIR": 3,
+        "GATE8_MATRIX_INVENTORY_CORRECT": 3,
+        "GATE8_REHEARSAL_NATIVE_COMPACTION": 1,
+        "GATE8_MATRIX_INVENTORY_REPORT": 3,
+        "GATE8_MATRIX_INVENTORY_RECOVER": 1,
+        "GATE8_MATRIX_INVENTORY_RECOVER_PENDING": 1,
+        "GATE8_MATRIX_INVENTORY_RESUME": 2,
+        "GATE8_MATRIX_ALREADY_RUNNING": 2,
+        "GATE8_MATRIX_FAILED_LAUNCH": 3
+      }
+    },
+    {
+      "id": "diverse_modes_all_observed",
+      "ok": true,
+      "responseModes": {
+        "NORMAL": 1,
+        "GATE8_MATRIX_INVENTORY_REPAIR": 3,
+        "GATE8_MATRIX_INVENTORY_CORRECT": 3,
+        "GATE8_REHEARSAL_NATIVE_COMPACTION": 1,
+        "GATE8_MATRIX_INVENTORY_REPORT": 3,
+        "GATE8_MATRIX_INVENTORY_RECOVER": 1,
+        "GATE8_MATRIX_INVENTORY_RECOVER_PENDING": 1,
+        "GATE8_MATRIX_INVENTORY_RESUME": 2,
+        "GATE8_MATRIX_ALREADY_RUNNING": 2,
+        "GATE8_MATRIX_FAILED_LAUNCH": 3
+      }
+    },
+    {
+      "id": "workspace_archived",
+      "ok": true,
+      "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate8-diverse-result-matrix-F2C6222BDD00.zip",
+      "bytes": 10902,
+      "sha256": "faea4e05e9e445ab6349a36b4a161839ec7adcf5de8cade394bad9403f41a63a",
+      "exitCode": 0,
+      "error": null
+    },
+    {
+      "id": "original_codex_processes_unchanged",
+      "ok": true,
+      "before": [
+        {
+          "processId": 11952,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 31520,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 39772,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40020,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40444,
+          "parentProcessId": 2436,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 42364,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 43424,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 44700,
+          "parentProcessId": 40444,
+          "name": "codex.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+        }
+      ],
+      "after": [
+        {
+          "processId": 11952,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 31520,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 39772,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40020,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 40444,
+          "parentProcessId": 2436,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 42364,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 43424,
+          "parentProcessId": 40444,
+          "name": "ChatGPT.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+        },
+        {
+          "processId": 44700,
+          "parentProcessId": 40444,
+          "name": "codex.exe",
+          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+        }
+      ]
+    },
+    {
+      "id": "visible_anticodex_processes_unchanged",
+      "ok": true,
+      "before": [
+        {
+          "processId": 24308,
+          "parentProcessId": 14996,
+          "name": "Anti-Codex.exe",
+          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+        }
+      ],
+      "after": [
+        {
+          "processId": 24308,
+          "parentProcessId": 14996,
+          "name": "Anti-Codex.exe",
+          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+        }
+      ]
+    }
+  ],
+  "note": "This matrix proves copied-Codex host behavior and CodexPlusPlus translation for distinct result shapes. It uses a loopback scripted provider and therefore supports, but cannot replace, the visible real-Antigravity Gate 8 run."
+}

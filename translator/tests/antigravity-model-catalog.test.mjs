@@ -39,6 +39,22 @@ test("extractAvailableAgentModels handles empty/malformed payload robustly", () 
   assert.deepEqual(extractAvailableAgentModels({ response: { models: {} } }), []);
 });
 
+test("extractAvailableAgentModels falls back to model keys only when no agent sort exists", () => {
+  const payload = {
+    response: {
+      models: {
+        "model-a": { model: "INTERNAL_A", displayName: "Model A" },
+        "model-b": { model: "INTERNAL_B", displayName: "Model B" },
+      },
+    },
+  };
+
+  assert.deepEqual(
+    extractAvailableAgentModels(payload).map((model) => model.id),
+    ["model-a", "model-b"],
+  );
+});
+
 test("buildAntigravityModelCatalog maps model fields correctly", () => {
   const baseCatalog = {
     models: [

@@ -3,7 +3,10 @@ param(
     [string]$BaseUrl = "",
     [string]$Model = $(if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "" }),
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
-    [int]$TimeoutSec = 90
+    [int]$TimeoutSec = 90,
+    [int]$AttachTimeoutSec = 25,
+    [int]$SettleTimeoutSec = 25,
+    [int]$StableZeroMs = 3000
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +24,10 @@ $startedAt = [DateTime]::UtcNow
 
 function Invoke-AntiCodexHealth {
     return Invoke-RestMethod -Uri "$BaseUrl/health" -Proxy $null -TimeoutSec 8
+}
+
+function Invoke-AntiCodexDiagnostics {
+    return Invoke-RestMethod -Uri "$BaseUrl/anticodex/diagnostics?fast=1" -Proxy $null -TimeoutSec 8
 }
 
 function Has-Property {
@@ -127,6 +134,127 @@ function Invoke-AntiCodexCancelResponse {
     }
 }
 
+function Wait-AntiCodexCascadeAttached {
+    param([string]$ResponseId, [int]$WaitSec = 25)
+    $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $WaitSec))
+    $last = $null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $diagnostics = Invoke-AntiCodexDiagnostics
+            $entries = @($diagnostics.activeAntigravityRequests.entries)
+            $entry = @($entries | Where-Object { [string]$_.responseId -eq $ResponseId }) | Select-Object -First 1
+            $last = [pscustomobject]@{
+                active = [int]$diagnostics.activeAntigravityRequests.active
+                cascadeAttached = [int]$diagnostics.activeAntigravityRequests.cascadeAttached
+                cascadePending = [int]$diagnostics.activeAntigravityRequests.cascadePending
+                responseFound = [bool]$entry
+                responseCascadeAttached = [bool]($entry -and $entry.cascadeAttached)
+                cascadeId = if ($entry) { [string]$entry.cascadeId } else { "" }
+            }
+            if ($last.responseCascadeAttached) {
+                return [pscustomobject]@{ attached = $true; observation = $last }
+            }
+        } catch {
+            $last = [pscustomobject]@{ error = $_.Exception.Message }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    return [pscustomobject]@{ attached = $false; observation = $last }
+}
+
+function Wait-AntiCodexCancellationSettled {
+    param([string]$ResponseId, [int]$WaitSec = 25, [int]$RequiredStableMs = 3000)
+    $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $WaitSec))
+    $stableSince = $null
+    $last = $null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $diagnostics = Invoke-AntiCodexDiagnostics
+            $activeEntries = @($diagnostics.activeAntigravityRequests.entries)
+            $responseStillActive = @($activeEntries | Where-Object { [string]$_.responseId -eq $ResponseId }).Count -gt 0
+            $nativeSessionIds = @($diagnostics.toolBridge.nativeSessions.responseSessionIds | ForEach-Object { [string]$_ })
+            $responseSessionRetained = $nativeSessionIds -contains $ResponseId
+            $lockResponseIds = @($diagnostics.antigravitySessionLock.activeResponseIds | ForEach-Object { [string]$_ })
+            $responseLocked = $lockResponseIds -contains $ResponseId
+            $activeCount = [int]$diagnostics.activeAntigravityRequests.active
+            $queueRunning = [bool]$diagnostics.antigravityQueue.running
+            $queueCount = [int]$diagnostics.antigravityQueue.queued
+            $busyCount = [int]$diagnostics.antigravityBusy.active
+            $globalZero = $activeCount -eq 0 -and -not $queueRunning -and $queueCount -eq 0 -and $busyCount -eq 0
+            $responseClear = -not $responseStillActive -and -not $responseSessionRetained -and -not $responseLocked
+            $last = [pscustomobject]@{
+                responseClear = $responseClear
+                globalZero = $globalZero
+                active = $activeCount
+                cascadeAttached = [int]$diagnostics.activeAntigravityRequests.cascadeAttached
+                queueRunning = $queueRunning
+                queued = $queueCount
+                busy = $busyCount
+                responseSessionRetained = $responseSessionRetained
+                responseLocked = $responseLocked
+            }
+            if ($responseClear -and $globalZero) {
+                if (-not $stableSince) { $stableSince = [DateTime]::UtcNow }
+                $stableZeroMs = [int]([DateTime]::UtcNow - $stableSince).TotalMilliseconds
+                if ($stableZeroMs -ge $RequiredStableMs) {
+                    return [pscustomobject]@{ settled = $true; stableZeroMs = $stableZeroMs; observation = $last }
+                }
+            } else {
+                $stableSince = $null
+            }
+        } catch {
+            $stableSince = $null
+            $last = [pscustomobject]@{ error = $_.Exception.Message }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    $observedStableMs = if ($stableSince) { [int]([DateTime]::UtcNow - $stableSince).TotalMilliseconds } else { 0 }
+    return [pscustomobject]@{ settled = $false; stableZeroMs = $observedStableMs; observation = $last }
+}
+
+function Invoke-AntiCodexDelayedRetry {
+    param([string]$ResponseId, [string]$RequestedModel)
+    $retryBody = @{
+        model = $RequestedModel
+        stream = $false
+        previous_response_id = $ResponseId
+        input = New-MessageInput "This delayed retry must not restart the cancelled task."
+    } | ConvertTo-Json -Depth 30 -Compress
+    $retryRequest = [System.Net.WebRequest]::Create("$BaseUrl/v1/responses")
+    $retryRequest.Method = "POST"
+    $retryRequest.Proxy = $null
+    $retryRequest.Timeout = 15000
+    $retryRequest.ReadWriteTimeout = 15000
+    $retryRequest.ContentType = "application/json; charset=utf-8"
+    if ($retryRequest -is [System.Net.HttpWebRequest]) { $retryRequest.KeepAlive = $false }
+    $retryBytes = [Text.Encoding]::UTF8.GetBytes($retryBody)
+    $retryRequest.ContentLength = $retryBytes.Length
+    $retryStream = $retryRequest.GetRequestStream()
+    try { $retryStream.Write($retryBytes, 0, $retryBytes.Length) } finally { $retryStream.Dispose() }
+
+    $retryResponse = $null
+    $retryReader = $null
+    try {
+        try {
+            $retryResponse = $retryRequest.GetResponse()
+        } catch [System.Net.WebException] {
+            $retryResponse = $_.Exception.Response
+            if (-not $retryResponse) { throw }
+        }
+        $retryReader = [IO.StreamReader]::new($retryResponse.GetResponseStream(), [Text.Encoding]::UTF8)
+        $retryText = $retryReader.ReadToEnd()
+        $retryJson = if ($retryText) { $retryText | ConvertFrom-Json } else { $null }
+        return [pscustomobject]@{
+            status = [int]$retryResponse.StatusCode
+            type = if ($retryJson -and $retryJson.error) { [string]$retryJson.error.type } else { "" }
+            payload = $retryJson
+        }
+    } finally {
+        if ($retryReader) { $retryReader.Dispose() }
+        if ($retryResponse) { $retryResponse.Dispose() }
+    }
+}
+
 $failures = New-Object System.Collections.Generic.List[string]
 
 $preHealth = Invoke-AntiCodexHealth
@@ -167,6 +295,9 @@ $response = $null
 $reader = $null
 $responseId = $null
 $cancelResult = $null
+$cascadeObservation = $null
+$settleObservation = $null
+$delayedRetry = $null
 $events = New-Object System.Collections.Generic.List[object]
 
 try {
@@ -194,6 +325,10 @@ try {
                 $evt = $events[$lastIdx]
                 if ($evt.event -eq "response.created" -and $evt.data -and $evt.data.response -and $evt.data.response.id) {
                     $responseId = [string]$evt.data.response.id
+                    $cascadeObservation = Wait-AntiCodexCascadeAttached -ResponseId $responseId -WaitSec $AttachTimeoutSec
+                    if (-not $cascadeObservation.attached) {
+                        $failures.Add("The real Antigravity Cascade was not observed before cancellation")
+                    }
                     $cancelSent = $true
                     try {
                         $cancelResult = Invoke-AntiCodexCancelResponse -Uri "$BaseUrl/v1/responses/$responseId/cancel"
@@ -255,6 +390,21 @@ if ($cancelledEvent -and [string]$cancelledEvent.data.response.status -ne "cance
     $failures.Add("response.cancelled event did not contain cancelled status")
 }
 
+if ($responseId) {
+    $settleObservation = Wait-AntiCodexCancellationSettled -ResponseId $responseId -WaitSec $SettleTimeoutSec -RequiredStableMs $StableZeroMs
+    if (-not $settleObservation.settled) {
+        $failures.Add("Cancellation did not remain fully settled for $StableZeroMs ms")
+    }
+    try {
+        $delayedRetry = Invoke-AntiCodexDelayedRetry -ResponseId $responseId -RequestedModel $Model
+        if ($delayedRetry.status -ne 409 -or $delayedRetry.type -ne "anticodex_session_reset") {
+            $failures.Add("A delayed retry restarted or bypassed the cancelled response instead of returning anticodex_session_reset")
+        }
+    } catch {
+        $failures.Add("Delayed retry probe failed: $($_.Exception.Message)")
+    }
+}
+
 $postHealth = Invoke-AntiCodexHealth
 $postProviderReady = Test-AntiCodexReadyForCancellation $postHealth $upstreamMode
 if (-not $postProviderReady) {
@@ -276,6 +426,14 @@ $result = [pscustomobject]@{
     hasCancelled = $hasCancelled
     hasCompleted = $hasCompleted
     hasFailed = $hasFailed
+    cascadeStarted = [bool]($cascadeObservation -and $cascadeObservation.attached)
+    cascadeId = if ($cascadeObservation -and $cascadeObservation.observation) { [string]$cascadeObservation.observation.cascadeId } else { "" }
+    cancellationSettled = [bool]($settleObservation -and $settleObservation.settled)
+    stableZeroMs = if ($settleObservation) { [int]$settleObservation.stableZeroMs } else { 0 }
+    settleObservation = if ($settleObservation) { $settleObservation.observation } else { $null }
+    delayedRetryBlocked = [bool]($delayedRetry -and $delayedRetry.status -eq 409 -and $delayedRetry.type -eq "anticodex_session_reset")
+    delayedRetryStatus = if ($delayedRetry) { [int]$delayedRetry.status } else { $null }
+    delayedRetryType = if ($delayedRetry) { [string]$delayedRetry.type } else { "" }
     eventNames = $eventNames
     providerReady = [bool]$providerReady
     preHealthReady = [bool]$providerReady

@@ -19,11 +19,25 @@ const SELF_TEST_FLAG = "--self-test";
 const STATUS_FLAG = "--status";
 const ALLOW_ANY_CODEX_HOME_FLAG = "--allow-any-codex-home";
 const BACKUP_FLAG = "--backup";
+const COMPACT_REMOTE_CONTROL_FLAG = "--compact-remote-control-spam";
 const TRIGGER_NAME = "anticodex_drop_trace_logs";
+const REMOTE_CONTROL_TRIGGER_NAME = "anticodex_drop_remote_control_auth_wait_logs";
+const REMOTE_CONTROL_DISABLE_ENV = "CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED";
+const REMOTE_CONTROL_TARGET = "codex_app_server_transport::transport::remote_control::websocket";
+const REMOTE_CONTROL_AUTH_WAIT_PREFIX = "waiting to resolve remote control preference until authentication is available";
 const TRACE_GUARD_SQL = `
 CREATE TRIGGER IF NOT EXISTS ${TRIGGER_NAME}
 BEFORE INSERT ON logs
 WHEN NEW.level = 'TRACE'
+BEGIN
+  SELECT RAISE(IGNORE);
+END`;
+const REMOTE_CONTROL_GUARD_SQL = `
+CREATE TRIGGER IF NOT EXISTS ${REMOTE_CONTROL_TRIGGER_NAME}
+BEFORE INSERT ON logs
+WHEN NEW.level = 'INFO'
+  AND NEW.target = '${REMOTE_CONTROL_TARGET}'
+  AND NEW.feedback_log_body LIKE '${REMOTE_CONTROL_AUTH_WAIT_PREFIX}%'
 BEGIN
   SELECT RAISE(IGNORE);
 END`;
@@ -37,7 +51,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (!arg.startsWith("--")) continue;
     const name = arg.slice(2);
-    if (arg === SELF_TEST_FLAG || arg === STATUS_FLAG || arg === ALLOW_ANY_CODEX_HOME_FLAG || arg === BACKUP_FLAG) {
+    if (arg === SELF_TEST_FLAG || arg === STATUS_FLAG || arg === ALLOW_ANY_CODEX_HOME_FLAG || arg === BACKUP_FLAG || arg === COMPACT_REMOTE_CONTROL_FLAG) {
       parsed.flags.add(name);
       continue;
     }
@@ -72,13 +86,20 @@ function readSnapshot(db, dbPath) {
     SELECT
       COUNT(*) AS count,
       COALESCE(MAX(id), 0) AS maxId,
-      SUM(CASE WHEN level = 'TRACE' THEN 1 ELSE 0 END) AS traceCount
+      SUM(CASE WHEN level = 'TRACE' THEN 1 ELSE 0 END) AS traceCount,
+      SUM(CASE
+        WHEN level = 'INFO'
+          AND target = ?
+          AND feedback_log_body LIKE ?
+        THEN 1 ELSE 0
+      END) AS remoteControlAuthWaitCount
     FROM logs
-  `).get();
+  `).get(REMOTE_CONTROL_TARGET, `${REMOTE_CONTROL_AUTH_WAIT_PREFIX}%`);
   return {
     count: Number(row?.count ?? 0),
     maxId: Number(row?.maxId ?? 0),
     traceCount: Number(row?.traceCount ?? 0),
+    remoteControlAuthWaitCount: Number(row?.remoteControlAuthWaitCount ?? 0),
     walBytes: getWalSize(dbPath),
   };
 }
@@ -93,8 +114,18 @@ function hasLevelColumn(db) {
   return rows.some((row) => row.name === "level");
 }
 
+function hasRemoteControlColumns(db) {
+  const names = new Set(db.prepare("PRAGMA table_info(logs)").all().map((row) => row.name));
+  return names.has("target") && names.has("feedback_log_body");
+}
+
 function hasTraceTrigger(db) {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = ?").get(TRIGGER_NAME);
+  return Boolean(row);
+}
+
+function hasRemoteControlTrigger(db) {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = ?").get(REMOTE_CONTROL_TRIGGER_NAME);
   return Boolean(row);
 }
 
@@ -153,6 +184,9 @@ export function protectAntiCodexLogDb(options = {}) {
   if (!existsSync(dbPath)) {
     return { ok: true, skipped: true, reason: "logs_2.sqlite not present", codexHome, dbPath };
   }
+  if (options.compactRemoteControlSpam && !options.backup) {
+    throw new Error("--compact-remote-control-spam requires --backup");
+  }
 
   let backupPath = null;
   const db = new DatabaseSync(dbPath);
@@ -164,21 +198,46 @@ export function protectAntiCodexLogDb(options = {}) {
     if (!hasLevelColumn(db)) {
       return { ok: false, error: "logs table is missing level column", codexHome, dbPath };
     }
+    if (!hasRemoteControlColumns(db)) {
+      return { ok: false, error: "logs table is missing remote-control guard columns", codexHome, dbPath };
+    }
 
     const before = readSnapshot(db, dbPath);
-    const alreadyProtected = hasTraceTrigger(db);
-    if (options.backup && !alreadyProtected) {
+    const traceTriggerPresent = hasTraceTrigger(db);
+    const remoteControlTriggerPresent = hasRemoteControlTrigger(db);
+    const alreadyProtected = traceTriggerPresent && remoteControlTriggerPresent;
+    if (options.backup && (!alreadyProtected || options.compactRemoteControlSpam)) {
+      db.exec("PRAGMA wal_checkpoint(PASSIVE)");
       backupPath = backupLogDb(dbPath, options.backupRoot ?? join(codexHome, ".anticodex-log-guard-backups"));
     }
     db.exec(TRACE_GUARD_SQL);
+    db.exec(REMOTE_CONTROL_GUARD_SQL);
+    let removedRemoteControlAuthWaitRows = 0;
+    if (options.compactRemoteControlSpam) {
+      const result = db.prepare(`
+        DELETE FROM logs
+        WHERE level = 'INFO'
+          AND target = ?
+          AND feedback_log_body LIKE ?
+      `).run(REMOTE_CONTROL_TARGET, `${REMOTE_CONTROL_AUTH_WAIT_PREFIX}%`);
+      removedRemoteControlAuthWaitRows = Number(result.changes ?? 0);
+    }
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (options.compactRemoteControlSpam) {
+      db.exec("VACUUM");
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    }
     const after = readSnapshot(db, dbPath);
     return {
       ok: true,
       skipped: false,
       protected: true,
       trigger: TRIGGER_NAME,
+      triggers: [TRIGGER_NAME, REMOTE_CONTROL_TRIGGER_NAME],
+      remoteControlDisableEnvironment: REMOTE_CONTROL_DISABLE_ENV,
       alreadyProtected,
+      compactedRemoteControlSpam: options.compactRemoteControlSpam === true,
+      removedRemoteControlAuthWaitRows,
       backupPath,
       codexHome,
       dbPath,
@@ -211,12 +270,17 @@ export function antiCodexLogDbStatus(options = {}) {
     logsTable: false,
     levelColumn: false,
     triggerPresent: false,
+    traceTriggerPresent: false,
+    remoteControlTriggerPresent: false,
     trigger: TRIGGER_NAME,
+    triggers: [TRIGGER_NAME, REMOTE_CONTROL_TRIGGER_NAME],
+    remoteControlDisableEnvironment: REMOTE_CONTROL_DISABLE_ENV,
     protected: false,
     walBytes: getWalSize(dbPath),
     count: null,
     maxId: null,
     traceCount: null,
+    remoteControlAuthWaitCount: null,
   };
   if (!base.exists) {
     return { ...base, ok: false, reason: "logs_2.sqlite not present" };
@@ -228,14 +292,17 @@ export function antiCodexLogDbStatus(options = {}) {
     if (!base.logsTable) return { ...base, ok: false, reason: "logs table not present" };
     base.levelColumn = hasLevelColumn(db);
     if (!base.levelColumn) return { ...base, ok: false, reason: "logs table is missing level column" };
-    base.triggerPresent = hasTraceTrigger(db);
+    base.traceTriggerPresent = hasTraceTrigger(db);
+    base.remoteControlTriggerPresent = hasRemoteControlTrigger(db);
+    base.triggerPresent = base.traceTriggerPresent && base.remoteControlTriggerPresent;
     const snapshot = readSnapshot(db, dbPath);
     base.count = snapshot.count;
     base.maxId = snapshot.maxId;
     base.traceCount = snapshot.traceCount;
+    base.remoteControlAuthWaitCount = snapshot.remoteControlAuthWaitCount;
     base.walBytes = snapshot.walBytes;
     base.protected = base.triggerPresent;
-    return { ...base, ok: base.protected, reason: base.protected ? "" : "TRACE trigger missing" };
+    return { ...base, ok: base.protected, reason: base.protected ? "" : "required log guard trigger missing" };
   } finally {
     db.close();
   }
@@ -265,6 +332,11 @@ function createSelfTestDb(root) {
     `);
     db.prepare("INSERT INTO logs(level, feedback_log_body) VALUES (?, ?)").run("TRACE", "pre-existing trace");
     db.prepare("INSERT INTO logs(level, feedback_log_body) VALUES (?, ?)").run("INFO", "pre-existing info");
+    db.prepare("INSERT INTO logs(level, target, feedback_log_body) VALUES (?, ?, ?)").run(
+      "INFO",
+      REMOTE_CONTROL_TARGET,
+      `${REMOTE_CONTROL_AUTH_WAIT_PREFIX} error=API key auth is not supported`,
+    );
   } finally {
     db.close();
   }
@@ -283,6 +355,11 @@ function runSelfTest() {
       const before = readSnapshot(db, dbPath);
       db.prepare("INSERT INTO logs(level, feedback_log_body) VALUES (?, ?)").run("TRACE", "blocked trace");
       db.prepare("INSERT INTO logs(level, feedback_log_body) VALUES (?, ?)").run("INFO", "kept info");
+      db.prepare("INSERT INTO logs(level, target, feedback_log_body) VALUES (?, ?, ?)").run(
+        "INFO",
+        REMOTE_CONTROL_TARGET,
+        `${REMOTE_CONTROL_AUTH_WAIT_PREFIX} error=blocked duplicate`,
+      );
       db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       const after = readSnapshot(db, dbPath);
 
@@ -291,10 +368,13 @@ function runSelfTest() {
       assert.equal(first.alreadyProtected, false);
       assert.ok(first.backupPath && existsSync(first.backupPath), "missing backup path");
       assert.equal(before.traceCount, 1);
+      assert.equal(before.remoteControlAuthWaitCount, 1);
       assert.equal(after.traceCount, 1);
+      assert.equal(after.remoteControlAuthWaitCount, 1);
       assert.equal(after.count, before.count + 1);
       assert.equal(after.walBytes, 0);
       assert.equal(hasTraceTrigger(db), true);
+      assert.equal(hasRemoteControlTrigger(db), true);
     } finally {
       db.close();
     }
@@ -302,10 +382,23 @@ function runSelfTest() {
     const second = protectAntiCodexLogDb({ codexHome, allowAnyCodexHome: true });
     assert.equal(second.ok, true);
     assert.equal(second.alreadyProtected, true);
+    const compacted = protectAntiCodexLogDb({
+      codexHome,
+      allowAnyCodexHome: true,
+      backup: true,
+      backupRoot: join(tempRoot, "compact-backups"),
+      compactRemoteControlSpam: true,
+    });
+    assert.equal(compacted.removedRemoteControlAuthWaitRows, 1);
+    assert.equal(compacted.after.remoteControlAuthWaitCount, 0);
+    assert.equal(compacted.after.walBytes, 0);
+    assert.ok(compacted.backupPath && existsSync(compacted.backupPath), "missing compaction backup path");
     const status = antiCodexLogDbStatus({ codexHome, allowAnyCodexHome: true });
     assert.equal(status.ok, true);
     assert.equal(status.protected, true);
     assert.equal(status.triggerPresent, true);
+    assert.equal(status.remoteControlTriggerPresent, true);
+    assert.equal(status.remoteControlAuthWaitCount, 0);
     assert.equal(status.walBytes, 0);
     assert.equal(status.usedRealTraffic, false);
     return { ok: true, first, second, status };
@@ -336,6 +429,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           allowAnyCodexHome: parsed.flags.has("allow-any-codex-home"),
           backup: parsed.flags.has("backup"),
           backupRoot: parsed.args.get("backup-root"),
+          compactRemoteControlSpam: parsed.flags.has("compact-remote-control-spam"),
         });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {

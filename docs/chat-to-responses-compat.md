@@ -1,190 +1,55 @@
-# Chat to Responses Compatibility Notes
+# Chat to Responses Compatibility and Responsibility Boundary
 
-Scope: Anti-Codex translates Codex Desktop's Responses-shaped traffic into the
-active upstream provider protocol, then maps the provider response back into the
-Responses shape Codex expects.
+This document defines the responsibility boundary for protocol translation and routing between Codex Desktop, CodexPlusPlus, and the Antigravity Chat Adapter. It supersedes all legacy custom translation designs.
 
-The translator is a compatibility layer. It preserves Codex runtime semantics,
-normalizes provider differences, and exposes diagnostics, but it must not become
-a separate local control plane or pretend unsupported hosted features succeeded.
+## 1. Core Responsibility Boundary
 
-## Supported Provider Shapes
+Anti-Codex operates strictly within a three-layer architecture. No fourth task-control layer is permitted.
 
-- Antigravity entitlement supplies model text.
-- OpenAI-compatible third-party providers use Chat Completions-compatible
-  request and response shapes.
-- Anthropic-compatible third-party providers use Messages-compatible request and
-  response shapes.
-- Legacy compatibility names and internal prefixes may remain in code when they
-  are part of persisted state or test fixtures. User-facing text should still
-  say Anti-Codex.
-
-## Compatibility Rules
-
-### Response Shell
-
-Provider completions should be wrapped into a full Responses-shaped object, not
-just `{ output }`.
-
-Preserve or echo when present:
-
-- `instructions`
-- `model`
-- `parallel_tool_calls`
-- `previous_response_id`
-- `reasoning`
-- `store`
-- `temperature`
-- `text`
-- `tool_choice`
-- `tools`
-- `top_p`
-- `truncation`
-- `usage`
-- `metadata`
-
-Anti-Codex may omit fields only when Codex has been tested to accept the reduced
-shape.
-
-### Message Output
-
-Provider assistant text maps to:
-
-```json
-{
-  "type": "message",
-  "role": "assistant",
-  "status": "completed",
-  "content": [
-    { "type": "output_text", "text": "..." }
-  ]
-}
+```mermaid
+flowchart TD
+    Codex[Layer 1: Official Codex Shell] <--> CPP[Layer 2: CodexPlusPlus Isolation & Translation]
+    CPP <-->|Third-Party Models| ThirdParty[Third-Party Responses or Chat API (Bypasses Antigravity)]
+    CPP <-->|Antigravity Models| Adapter[Layer 3: Thin Antigravity Chat Adapter]
+    Adapter <--> Cascade[Antigravity Desktop Cascade & Entitlement]
 ```
 
-For streaming, emit the normal Responses event progression:
+### Upstream CodexPlusPlus (Layer 2)
+Upstream CodexPlusPlus is the sole layer responsible for the general protocol conversion between Codex Desktop's Responses-shaped protocol and standard Chat Completions.
+* **Direct Connection:** All ordinary third-party Responses or Chat APIs are directly connected and managed by CodexPlusPlus. This traffic completely bypasses the Antigravity Chat Adapter.
+* **Protocol Translation:** CodexPlusPlus handles the translation of Responses objects, SSE event sequences, `tool_call` mapping, `reasoning` mapping, `usage` / `finish_reason` mapping, and the `context_compaction` endpoint.
+* **Anti-Codex Scope:** Anti-Codex does not reimplement these protocol elements or build a custom Responses translator.
 
-- `response.created`
-- `response.in_progress`
-- `response.output_item.added`
-- `response.content_part.added`
-- `response.output_text.delta`
-- `response.output_text.done`
-- `response.content_part.done`
-- `response.output_item.done`
-- `response.completed`
+### Thin Antigravity Chat Adapter (Layer 3)
+The Antigravity Chat Adapter is a thin translation layer active **only** when an Antigravity model is selected.
+* **Standard Interface:** It accepts standard Chat Completions structures (`messages`, `tools`, `tool_choice`) sent by CodexPlusPlus.
+* **Structural Preservation:** It preserves the structural boundaries of messages, tools, tool-calls, and tool-results, mapping them directly to and from the Antigravity Desktop Cascade.
+* **No Legacy Emulation:** It does not reimplement Responses objects, SSE event sequences, tool mapping, reasoning mapping, usage/finish reason mapping, or the compact endpoint.
 
-### Tool Calls
+---
 
-OpenAI-compatible `tool_calls[]` map to Responses `function_call` items.
+## 2. Routing Separation and Fail-Closed Behavior
 
-- Allocate stable response item ids separately from provider call ids.
-- Preserve `call_id` from the provider tool-call id when present.
-- Stream arguments through `response.function_call_arguments.delta`.
-- Finish with `response.function_call_arguments.done` and
-  `response.output_item.done`.
-- Do not execute unknown calls inside the protocol bridge.
+Third-party API routes and Antigravity routes must be explicitly separated at the gateway level.
+* **Routing Separation:** If the selected provider is not Antigravity, the request must follow the standard CodexPlusPlus route to the external provider. It must never enter the Antigravity Chat Adapter or any other local translator.
+* **Fail-Closed Policy:** Any invalid provider selection or routing mismatch must immediately fail-close, terminating the request path and returning appropriate error states.
 
-Anthropic-compatible `tool_use` blocks map to the same Responses tool-call
-surface. On later provider switches, matching tool results must be rehydrated in
-the target protocol:
+---
 
-- OpenAI-compatible history needs `assistant.tool_calls` plus paired
-  `role:"tool"` messages.
-- Anthropic-compatible history needs `tool_use` plus paired `tool_result`
-  blocks.
+## 3. Harness Ownership and Task Control
 
-Anti-Codex-specific routing still applies after protocol mapping:
+The official Codex harness retains exclusive ownership of execution loop decisions.
+* **Harness Autonomy:** Codex Desktop's native harness alone decides planning, tool selection, tool execution, approvals, task retries, history compaction, and task completion.
+* **No Cascade Intrusion:** The Antigravity Chat Adapter and Cascade must not take over these decisions. They are strictly prohibited from:
+  - Executing user tools.
+  - Rewriting, generating, or synthesizing shell commands, file edits, patches, or tests.
+  - Inferring tool calls from prose or determining task completion.
+  - Performing automatic repair turns or semantic retries.
 
-- Internal `web_search` / `web_fetch` may be intercepted only when registered
-  and allowed.
-- Unknown, MCP, plugin, custom, and connector/app-tool calls must be preserved
-  for Codex unless explicitly recognized as internal.
-- Connector/app-tool metadata parity must not be treated as authorization.
+---
 
-### Reasoning
+## 4. Retired Legacy Components
 
-Provider-native reasoning text may be returned as a Responses `reasoning` item
-when the active route supplies it in a supported field.
-
-Anti-Codex must not decode or reinterpret OpenAI private reasoning blobs. If
-reasoning replay is needed, the translator owns an opaque replay blob or local
-cache keyed by session/call id.
-
-The current persisted replay prefix is intentionally legacy-compatible:
-
-```text
-deepcodex.reasoning.hex.v1:<hex>
-```
-
-- Treat that prefix as an internal compatibility token, not user-facing
-  branding.
-- Never treat OpenAI encrypted reasoning as prompt text.
-- Never try to decode OpenAI private blobs.
-- Keep provider-native reasoning separate from assistant text deltas.
-
-Provider-specific handling is allowed when it repairs or preserves what the
-active provider actually returns. Runtime implementation is not allowed inside
-the protocol bridge.
-
-Provider-specific handling examples:
-
-- Reconstruct streamed tool calls by stable index or id, not arrival order
-  alone.
-- Preserve provider-native reasoning fields across tool-call round trips only
-  when the provider requires them for continuity.
-- Map provider cache counters into Responses `usage` diagnostics when known.
-- Classify transient upstream failures separately from protocol translation
-  failures.
-
-Runtime implementation examples that stay out of scope:
-
-- Files, Vector Stores, and hosted `file_search`.
-- Computer-use execution.
-- MCP execution inside the translator.
-- Conversation CRUD or response-store emulation.
-- Fake success for unsupported hosted OpenAI features.
-
-### Finish Status
-
-Map provider finish reasons into Responses status:
-
-- `stop` or absent successful completion -> `completed`
-- length/token limit -> `incomplete` with `incomplete_details`
-- tool calls -> completed response containing function-call output items
-
-This needs tests because Codex uses response status to decide whether to
-continue the turn.
-
-### Streaming
-
-Prefer real upstream streaming when no internal tool loop is active.
-
-- Track text, reasoning, and tool calls independently.
-- Allocate output indices in the order items first appear.
-- Handle tool-call deltas before arguments are complete.
-- Emit final `response.completed` with the same output items that were streamed.
-- Merge partial tool-call chunks only when name and arguments are complete enough
-  for Codex to continue safely.
-
-Synthetic SSE is acceptable only as a bounded fallback.
-
-## Out of Scope
-
-- Browser automation protocol translation.
-- Provider-native multimodal formats other than supported chat-compatible image
-  inputs.
-- Granting connector/app-tool access from cached metadata.
-- Mutating the original Codex installation or account state.
-- Using ChatGPT login as a setup route.
-
-## Current Gaps
-
-- Streaming still needs focused coverage around provider-native reasoning and
-  partial tool-call reconstruction.
-- `context_compaction` as a later input item needs explicit handling in
-  Responses -> provider conversion; this is adjacent to, but not part of,
-  provider -> Responses mapping.
-- Unknown tool calls should stay unresolved and pass back to Codex, not be
-  executed by the bridge.
-- Cross-provider history tests must keep checking structured tool history, not
-  just text markers.
+The following legacy details and translations are retired and out of scope:
+* **No Private Reasoning Replay:** Private reasoning hashes, decryption, or custom reasoning cache/replay prefixes are fully removed.
+* **No Custom Translators:** All legacy details regarding custom DeepSeek, one-api, or mixed translators (`translator/adaptive-server.mjs`) are deleted from the active route.

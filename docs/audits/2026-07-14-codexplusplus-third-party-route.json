@@ -1,0 +1,1078 @@
+{
+    "schemaVersion":  1,
+    "generatedAtUtc":  "2026-07-14T15:47:57.5045028Z",
+    "startedAtUtc":  "2026-07-14T15:47:44.4748681Z",
+    "runId":  "r1784044064475-c1031864",
+    "ok":  true,
+    "gate":  "Gate 2 deterministic third-party provider route",
+    "launchMode":  "headless-helper",
+    "modelTraffic":  "loopback fake provider only",
+    "launcherPath":  "C:\\Users\\XD\\AppData\\Local\\Temp\\CodexPlusPlus-analysis-20260714\\target\\x86_64-pc-windows-msvc\\release\\codex-plus-plus.exe",
+    "candidateExecutable":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+    "candidateCli":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe",
+    "ports":  {
+                  "cdp":  56561,
+                  "helper":  56563,
+                  "protocolProxy":  56564,
+                  "launcherGuard":  56565,
+                  "managerGuard":  56566
+              },
+    "checks":  [
+                   {
+                       "id":  "launcher_exists",
+                       "ok":  true,
+                       "evidence":  "C:\\Users\\XD\\AppData\\Local\\Temp\\CodexPlusPlus-analysis-20260714\\target\\x86_64-pc-windows-msvc\\release\\codex-plus-plus.exe"
+                   },
+                   {
+                       "id":  "candidate_exists",
+                       "ok":  true,
+                       "evidence":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe"
+                   },
+                   {
+                       "id":  "candidate_cli_exists",
+                       "ok":  true,
+                       "evidence":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe"
+                   },
+                   {
+                       "id":  "fixture_exists",
+                       "ok":  true,
+                       "evidence":  "G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\fixtures\\codexplusplus-gate2\\fake-chat-server.mjs"
+                   },
+                   {
+                       "id":  "probe_exists",
+                       "ok":  true,
+                       "evidence":  "G:\\Trae-Project\\Anti-Codex\\deepcodex\\scripts\\lib\\codexplusplus-gate2-probe.mjs"
+                   },
+                   {
+                       "id":  "candidate_not_already_running",
+                       "ok":  true,
+                       "evidence":  [
+
+                                    ]
+                   },
+                   {
+                       "id":  "fake_server_loopback",
+                       "ok":  true,
+                       "evidence":  {
+                                        "host":  "127.0.0.1",
+                                        "port":  56568,
+                                        "baseUrl":  "http://127.0.0.1:56568",
+                                        "pid":  34252
+                                    }
+                   },
+                   {
+                       "id":  "headless_protocol_mode",
+                       "ok":  true,
+                       "evidence":  {
+                                        "helperPort":  56564,
+                                        "visibleClientLaunched":  false
+                                    }
+                   },
+                   {
+                       "id":  "protocol_proxy_model_ready",
+                       "ok":  true,
+                       "evidence":  {
+                                        "port":  56564
+                                    }
+                   },
+                   {
+                       "id":  "direct_protocol_probe_exit",
+                       "ok":  true,
+                       "evidence":  {
+                                        "exitCode":  0,
+                                        "stderr":  ""
+                                    }
+                   },
+                   {
+                       "id":  "direct_protocol_probe_result",
+                       "ok":  true,
+                       "evidence":  {
+                                        "ok":  true,
+                                        "proxyBase":  "http://127.0.0.1:56564/v1",
+                                        "model":  "gate2-chat-model",
+                                        "checks":  {
+                                                       "modelProxy":  true,
+                                                       "textStreaming":  true,
+                                                       "singleTerminalOutcome":  true,
+                                                       "multiTurnHistory":  true,
+                                                       "structuredToolCall":  true,
+                                                       "exactToolResult":  true,
+                                                       "authError":  true,
+                                                       "quotaError":  true,
+                                                       "serverError":  true,
+                                                       "networkError":  true,
+                                                       "cancellation":  true,
+                                                       "cancellationBeforeHeaders":  true
+                                                   },
+                                        "gateReady":  true,
+                                        "fakeChatRequestCount":  11,
+                                        "toolCallId":  "call_8df39299"
+                                    }
+                   },
+                   {
+                       "id":  "protocol_proxy_upstream_cancellation",
+                       "ok":  true,
+                       "evidence":  {
+                                        "observed":  true,
+                                        "note":  "A downstream TCP reset did not close the silent upstream stream within the bounded window."
+                                    }
+                   },
+                   {
+                       "id":  "protocol_proxy_upstream_cancellation_before_headers",
+                       "ok":  true,
+                       "evidence":  {
+                                        "observed":  true,
+                                        "note":  "A downstream TCP reset did not close an upstream request that was still waiting for response headers."
+                                    }
+                   },
+                   {
+                       "id":  "native_codex_cli_exit",
+                       "ok":  true,
+                       "evidence":  {
+                                        "exitCode":  0,
+                                        "stdoutTail":  "{\"type\":\"thread.started\",\"thread_id\":\"019f6150-1fa8-7a40-bf35-53c8646fb5ae\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"GATE2_TOOL_RESULT:Exit code: 0\\nWall time: 0.7 seconds\\nOutput:\\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":37,\"reasoning_output_tokens\":0}}\n",
+                                        "stderrTail":  "Reading additional input from stdin...\n2026-07-14T15:47:48.775036Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:48.776011Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:48.811237Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-14T15:47:48.973963Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:50.519394Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:50.545711Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n"
+                                    }
+                   },
+                   {
+                       "id":  "native_codex_cli_final_result",
+                       "ok":  true,
+                       "evidence":  {
+                                        "exitCode":  0,
+                                        "stdoutTail":  "{\"type\":\"thread.started\",\"thread_id\":\"019f6150-1fa8-7a40-bf35-53c8646fb5ae\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"GATE2_TOOL_RESULT:Exit code: 0\\nWall time: 0.7 seconds\\nOutput:\\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":37,\"reasoning_output_tokens\":0}}\n",
+                                        "stderrTail":  "Reading additional input from stdin...\n2026-07-14T15:47:48.775036Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:48.776011Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:48.811237Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-14T15:47:48.973963Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:50.519394Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:50.545711Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n"
+                                    }
+                   },
+                   {
+                       "id":  "native_codex_cli_no_external_plugin_calls",
+                       "ok":  true,
+                       "evidence":  {
+                                        "exitCode":  0,
+                                        "stdoutTail":  "{\"type\":\"thread.started\",\"thread_id\":\"019f6150-1fa8-7a40-bf35-53c8646fb5ae\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"GATE2_TOOL_RESULT:Exit code: 0\\nWall time: 0.7 seconds\\nOutput:\\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":37,\"reasoning_output_tokens\":0}}\n",
+                                        "stderrTail":  "Reading additional input from stdin...\n2026-07-14T15:47:48.775036Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:48.776011Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:48.811237Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-14T15:47:48.973963Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:50.519394Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:50.545711Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n"
+                                    }
+                   },
+                   {
+                       "id":  "native_codex_cli_two_turn_tool_loop",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "timestamp":  "2026-07-14T15:47:49.045Z",
+                                            "path":  "/v1/chat/completions",
+                                            "model":  "gate2-chat-model",
+                                            "stream":  true,
+                                            "roles":  [
+                                                          "system",
+                                                          "user",
+                                                          "user"
+                                                      ],
+                                            "latest_user_text":  "GATE2_TOOL NATIVE_CLI",
+                                            "tool_names":  [
+                                                               "shell_command",
+                                                               "update_plan",
+                                                               "request_user_input",
+                                                               "view_image",
+                                                               "multi_agent_v1__close_agent",
+                                                               "multi_agent_v1__resume_agent",
+                                                               "multi_agent_v1__send_input",
+                                                               "multi_agent_v1__spawn_agent",
+                                                               "multi_agent_v1__wait_agent",
+                                                               "web_search"
+                                                           ],
+                                            "tool_message_contents":  [
+
+                                                                      ],
+                                            "response_mode":  "GATE2_TOOL",
+                                            "disconnected":  false,
+                                            "disconnect_kind":  null
+                                        },
+                                        {
+                                            "timestamp":  "2026-07-14T15:47:50.540Z",
+                                            "path":  "/v1/chat/completions",
+                                            "model":  "gate2-chat-model",
+                                            "stream":  true,
+                                            "roles":  [
+                                                          "system",
+                                                          "user",
+                                                          "user",
+                                                          "assistant",
+                                                          "tool"
+                                                      ],
+                                            "latest_user_text":  "GATE2_TOOL NATIVE_CLI",
+                                            "tool_names":  [
+                                                               "shell_command",
+                                                               "update_plan",
+                                                               "request_user_input",
+                                                               "view_image",
+                                                               "multi_agent_v1__close_agent",
+                                                               "multi_agent_v1__resume_agent",
+                                                               "multi_agent_v1__send_input",
+                                                               "multi_agent_v1__spawn_agent",
+                                                               "multi_agent_v1__wait_agent",
+                                                               "web_search"
+                                                           ],
+                                            "tool_message_contents":  [
+                                                                          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\nGATE2_TOOL_OUTPUT\r\n"
+                                                                      ],
+                                            "response_mode":  "GATE2_TOOL",
+                                            "disconnected":  false,
+                                            "disconnect_kind":  null
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "native_codex_cli_exact_tool_result_returned",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "timestamp":  "2026-07-14T15:47:49.045Z",
+                                            "path":  "/v1/chat/completions",
+                                            "model":  "gate2-chat-model",
+                                            "stream":  true,
+                                            "roles":  [
+                                                          "system",
+                                                          "user",
+                                                          "user"
+                                                      ],
+                                            "latest_user_text":  "GATE2_TOOL NATIVE_CLI",
+                                            "tool_names":  [
+                                                               "shell_command",
+                                                               "update_plan",
+                                                               "request_user_input",
+                                                               "view_image",
+                                                               "multi_agent_v1__close_agent",
+                                                               "multi_agent_v1__resume_agent",
+                                                               "multi_agent_v1__send_input",
+                                                               "multi_agent_v1__spawn_agent",
+                                                               "multi_agent_v1__wait_agent",
+                                                               "web_search"
+                                                           ],
+                                            "tool_message_contents":  [
+
+                                                                      ],
+                                            "response_mode":  "GATE2_TOOL",
+                                            "disconnected":  false,
+                                            "disconnect_kind":  null
+                                        },
+                                        {
+                                            "timestamp":  "2026-07-14T15:47:50.540Z",
+                                            "path":  "/v1/chat/completions",
+                                            "model":  "gate2-chat-model",
+                                            "stream":  true,
+                                            "roles":  [
+                                                          "system",
+                                                          "user",
+                                                          "user",
+                                                          "assistant",
+                                                          "tool"
+                                                      ],
+                                            "latest_user_text":  "GATE2_TOOL NATIVE_CLI",
+                                            "tool_names":  [
+                                                               "shell_command",
+                                                               "update_plan",
+                                                               "request_user_input",
+                                                               "view_image",
+                                                               "multi_agent_v1__close_agent",
+                                                               "multi_agent_v1__resume_agent",
+                                                               "multi_agent_v1__send_input",
+                                                               "multi_agent_v1__spawn_agent",
+                                                               "multi_agent_v1__wait_agent",
+                                                               "web_search"
+                                                           ],
+                                            "tool_message_contents":  [
+                                                                          "Exit code: 0\nWall time: 0.7 seconds\nOutput:\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\nGATE2_TOOL_OUTPUT\r\n"
+                                                                      ],
+                                            "response_mode":  "GATE2_TOOL",
+                                            "disconnected":  false,
+                                            "disconnect_kind":  null
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "native_cli_workspace_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  {
+                                                       "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Gate2-r1784044064475-c1031864\\workspace",
+                                                       "exists":  true,
+                                                       "files":  [
+
+                                                                 ]
+                                                   },
+                                        "after":  {
+                                                      "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Gate2-r1784044064475-c1031864\\workspace",
+                                                      "exists":  true,
+                                                      "files":  [
+
+                                                                ]
+                                                  }
+                                    }
+                   },
+                   {
+                       "id":  "original_processes_unchanged_during",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+                                                       {
+                                                           "processId":  24636,
+                                                           "parentProcessId":  2436,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:05.9052590Z"
+                                                       },
+                                                       {
+                                                           "processId":  28140,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7924690Z"
+                                                       },
+                                                       {
+                                                           "processId":  33592,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T14:16:44.9407220Z"
+                                                       },
+                                                       {
+                                                           "processId":  37068,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7693190Z"
+                                                       },
+                                                       {
+                                                           "processId":  44232,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.8842770Z"
+                                                       },
+                                                       {
+                                                           "processId":  44688,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.0061640Z"
+                                                       },
+                                                       {
+                                                           "processId":  47908,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7747350Z"
+                                                       },
+                                                       {
+                                                           "processId":  43252,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "codex.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.5079700Z"
+                                                       }
+                                                   ],
+                                        "during":  [
+                                                       {
+                                                           "processId":  24636,
+                                                           "parentProcessId":  2436,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:05.9052590Z"
+                                                       },
+                                                       {
+                                                           "processId":  28140,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7924690Z"
+                                                       },
+                                                       {
+                                                           "processId":  33592,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T14:16:44.9407220Z"
+                                                       },
+                                                       {
+                                                           "processId":  37068,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7693190Z"
+                                                       },
+                                                       {
+                                                           "processId":  44232,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.8842770Z"
+                                                       },
+                                                       {
+                                                           "processId":  44688,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.0061640Z"
+                                                       },
+                                                       {
+                                                           "processId":  47908,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7747350Z"
+                                                       },
+                                                       {
+                                                           "processId":  43252,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "codex.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.5079700Z"
+                                                       }
+                                                   ]
+                                    }
+                   },
+                   {
+                       "id":  "existing_anticodex_unchanged_during",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+                                                       {
+                                                           "processId":  1712,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8959030Z"
+                                                       },
+                                                       {
+                                                           "processId":  11752,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.6015570Z"
+                                                       },
+                                                       {
+                                                           "processId":  18288,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8984500Z"
+                                                       },
+                                                       {
+                                                           "processId":  35624,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.5744140Z"
+                                                       },
+                                                       {
+                                                           "processId":  36268,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8553160Z"
+                                                       },
+                                                       {
+                                                           "processId":  40148,
+                                                           "parentProcessId":  10876,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8443340Z"
+                                                       },
+                                                       {
+                                                           "processId":  49144,
+                                                           "parentProcessId":  36268,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8676410Z"
+                                                       }
+                                                   ],
+                                        "during":  [
+                                                       {
+                                                           "processId":  1712,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8959030Z"
+                                                       },
+                                                       {
+                                                           "processId":  11752,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.6015570Z"
+                                                       },
+                                                       {
+                                                           "processId":  18288,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8984500Z"
+                                                       },
+                                                       {
+                                                           "processId":  35624,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.5744140Z"
+                                                       },
+                                                       {
+                                                           "processId":  36268,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8553160Z"
+                                                       },
+                                                       {
+                                                           "processId":  40148,
+                                                           "parentProcessId":  10876,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8443340Z"
+                                                       },
+                                                       {
+                                                           "processId":  49144,
+                                                           "parentProcessId":  36268,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8676410Z"
+                                                       }
+                                                   ]
+                                    }
+                   },
+                   {
+                       "id":  "cleanup_candidate_processes",
+                       "ok":  true,
+                       "evidence":  [
+
+                                    ]
+                   },
+                   {
+                       "id":  "cleanup_launcher_process",
+                       "ok":  true,
+                       "evidence":  {
+                                        "alive":  false
+                                    }
+                   },
+                   {
+                       "id":  "cleanup_fake_process",
+                       "ok":  true,
+                       "evidence":  {
+                                        "alive":  false
+                                    }
+                   },
+                   {
+                       "id":  "original_processes_unchanged_after",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+                                                       {
+                                                           "processId":  24636,
+                                                           "parentProcessId":  2436,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:05.9052590Z"
+                                                       },
+                                                       {
+                                                           "processId":  28140,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7924690Z"
+                                                       },
+                                                       {
+                                                           "processId":  33592,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T14:16:44.9407220Z"
+                                                       },
+                                                       {
+                                                           "processId":  37068,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7693190Z"
+                                                       },
+                                                       {
+                                                           "processId":  44232,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.8842770Z"
+                                                       },
+                                                       {
+                                                           "processId":  44688,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.0061640Z"
+                                                       },
+                                                       {
+                                                           "processId":  47908,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:06.7747350Z"
+                                                       },
+                                                       {
+                                                           "processId":  43252,
+                                                           "parentProcessId":  24636,
+                                                           "name":  "codex.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                           "createdAtUtc":  "2026-07-14T10:26:15.5079700Z"
+                                                       }
+                                                   ],
+                                        "after":  [
+                                                      {
+                                                          "processId":  24636,
+                                                          "parentProcessId":  2436,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:05.9052590Z"
+                                                      },
+                                                      {
+                                                          "processId":  28140,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:06.7924690Z"
+                                                      },
+                                                      {
+                                                          "processId":  33592,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T14:16:44.9407220Z"
+                                                      },
+                                                      {
+                                                          "processId":  37068,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:06.7693190Z"
+                                                      },
+                                                      {
+                                                          "processId":  44232,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:15.8842770Z"
+                                                      },
+                                                      {
+                                                          "processId":  44688,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:06.0061640Z"
+                                                      },
+                                                      {
+                                                          "processId":  47908,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "ChatGPT.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:06.7747350Z"
+                                                      },
+                                                      {
+                                                          "processId":  43252,
+                                                          "parentProcessId":  24636,
+                                                          "name":  "codex.exe",
+                                                          "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                          "createdAtUtc":  "2026-07-14T10:26:15.5079700Z"
+                                                      }
+                                                  ]
+                                    }
+                   },
+                   {
+                       "id":  "existing_anticodex_unchanged_after",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+                                                       {
+                                                           "processId":  1712,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8959030Z"
+                                                       },
+                                                       {
+                                                           "processId":  11752,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.6015570Z"
+                                                       },
+                                                       {
+                                                           "processId":  18288,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:27.8984500Z"
+                                                       },
+                                                       {
+                                                           "processId":  35624,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:26.5744140Z"
+                                                       },
+                                                       {
+                                                           "processId":  36268,
+                                                           "parentProcessId":  40148,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8553160Z"
+                                                       },
+                                                       {
+                                                           "processId":  40148,
+                                                           "parentProcessId":  10876,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8443340Z"
+                                                       },
+                                                       {
+                                                           "processId":  49144,
+                                                           "parentProcessId":  36268,
+                                                           "name":  "Anti-Codex.exe",
+                                                           "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                           "createdAtUtc":  "2026-07-13T22:25:25.8676410Z"
+                                                       }
+                                                   ],
+                                        "after":  [
+                                                      {
+                                                          "processId":  1712,
+                                                          "parentProcessId":  40148,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:27.8959030Z"
+                                                      },
+                                                      {
+                                                          "processId":  11752,
+                                                          "parentProcessId":  40148,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:26.6015570Z"
+                                                      },
+                                                      {
+                                                          "processId":  18288,
+                                                          "parentProcessId":  40148,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:27.8984500Z"
+                                                      },
+                                                      {
+                                                          "processId":  35624,
+                                                          "parentProcessId":  40148,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:26.5744140Z"
+                                                      },
+                                                      {
+                                                          "processId":  36268,
+                                                          "parentProcessId":  40148,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:25.8553160Z"
+                                                      },
+                                                      {
+                                                          "processId":  40148,
+                                                          "parentProcessId":  10876,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:25.8443340Z"
+                                                      },
+                                                      {
+                                                          "processId":  49144,
+                                                          "parentProcessId":  36268,
+                                                          "name":  "Anti-Codex.exe",
+                                                          "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe",
+                                                          "createdAtUtc":  "2026-07-13T22:25:25.8676410Z"
+                                                      }
+                                                  ]
+                                    }
+                   },
+                   {
+                       "id":  "original_stable_state_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  {
+                                                       "officialFiles":  [
+                                                                             {
+                                                                                 "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                                                 "exists":  true,
+                                                                                 "metadataOnly":  false,
+                                                                                 "length":  4070400,
+                                                                                 "lastWriteTimeUtc":  "2026-07-12T19:32:48.2708346Z",
+                                                                                 "sha256":  "28c3e8b6c55fff39ecb12a5eb27f493abf997804247517aa7a46c277ca5d9e93"
+                                                                             },
+                                                                             {
+                                                                                 "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\Codex.exe",
+                                                                                 "exists":  true,
+                                                                                 "metadataOnly":  false,
+                                                                                 "length":  1089536,
+                                                                                 "lastWriteTimeUtc":  "2026-07-14T10:21:50.6745148Z",
+                                                                                 "sha256":  "5b4a96cac829783200069e825b418e3bff88a4cbe4faf6733473754cacfd0bb5"
+                                                                             },
+                                                                             {
+                                                                                 "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\app.asar",
+                                                                                 "exists":  true,
+                                                                                 "metadataOnly":  false,
+                                                                                 "length":  199368680,
+                                                                                 "lastWriteTimeUtc":  "2026-07-14T10:22:39.9699888Z",
+                                                                                 "sha256":  "e286d538971d7b4648692b244d80b0b1e9d227d29564275ad46f6653280d4094"
+                                                                             },
+                                                                             {
+                                                                                 "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                                                 "exists":  true,
+                                                                                 "metadataOnly":  false,
+                                                                                 "length":  341284656,
+                                                                                 "lastWriteTimeUtc":  "2026-07-13T07:34:41.6476119Z",
+                                                                                 "sha256":  "2caacad1f7b8b3e9b2527b9bff9630cfbb30ec25d8d8c018c9d55a2bec348032"
+                                                                             },
+                                                                             {
+                                                                                 "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\Codex.exe",
+                                                                                 "exists":  true,
+                                                                                 "metadataOnly":  false,
+                                                                                 "length":  341284656,
+                                                                                 "lastWriteTimeUtc":  "2026-07-13T07:34:41.6476119Z",
+                                                                                 "sha256":  "2caacad1f7b8b3e9b2527b9bff9630cfbb30ec25d8d8c018c9d55a2bec348032"
+                                                                             }
+                                                                         ],
+                                                       "stableCodexFiles":  [
+                                                                                {
+                                                                                    "path":  "C:\\Users\\XD\\.codex\\config.toml",
+                                                                                    "exists":  true,
+                                                                                    "metadataOnly":  false,
+                                                                                    "length":  16367,
+                                                                                    "lastWriteTimeUtc":  "2026-07-14T13:14:43.8261638Z",
+                                                                                    "sha256":  "b6538d67309c3ff5bab503aa37a598d9d6ae5022ce804b3fab94ce6b3af180c6"
+                                                                                },
+                                                                                {
+                                                                                    "path":  "C:\\Users\\XD\\.codex\\AGENTS.md",
+                                                                                    "exists":  true,
+                                                                                    "metadataOnly":  false,
+                                                                                    "length":  32920,
+                                                                                    "lastWriteTimeUtc":  "2026-07-07T19:13:32.4624921Z",
+                                                                                    "sha256":  "780b8e22e231a47b2f8ef4da4a49ebac81e73fb9188d86f684ac7efacbfd69d9"
+                                                                                },
+                                                                                {
+                                                                                    "path":  "C:\\Users\\XD\\.codex\\auth.json",
+                                                                                    "exists":  true,
+                                                                                    "metadataOnly":  true,
+                                                                                    "length":  4232,
+                                                                                    "lastWriteTimeUtc":  "2026-07-14T12:41:28.4899717Z",
+                                                                                    "sha256":  null
+                                                                                }
+                                                                            ],
+                                                       "shortcuts":  [
+                                                                         {
+                                                                             "path":  "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Codex.lnk",
+                                                                             "exists":  true,
+                                                                             "metadataOnly":  true,
+                                                                             "length":  1484,
+                                                                             "lastWriteTimeUtc":  "2026-06-11T04:00:24.3863060Z",
+                                                                             "sha256":  null
+                                                                         },
+                                                                         {
+                                                                             "path":  "C:\\Users\\XD\\Desktop\\Codex.lnk",
+                                                                             "exists":  false,
+                                                                             "metadataOnly":  true
+                                                                         }
+                                                                     ],
+                                                       "persistentEnvironment":  [
+                                                                                     {
+                                                                                         "name":  "CODEX_PLUS_STATE_DIR",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "CODEX_PLUS_APP_EXECUTABLE",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "CODEX_PLUS_PROTOCOL_PROXY_PORT",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "CODEX_PLUS_LAUNCHER_GUARD_PORT",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "CODEX_PLUS_MANAGER_GUARD_PORT",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "CODEX_HOME",
+                                                                                         "user":  null,
+                                                                                         "machine":  null
+                                                                                     }
+                                                                                 ],
+                                                       "watcher":  {
+                                                                       "registryValue":  null,
+                                                                       "startupShortcut":  {
+                                                                                               "path":  "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexPlusPlusWatcher.lnk",
+                                                                                               "exists":  false,
+                                                                                               "metadataOnly":  true
+                                                                                           }
+                                                                   }
+                                                   },
+                                        "after":  {
+                                                      "officialFiles":  [
+                                                                            {
+                                                                                "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                                                "exists":  true,
+                                                                                "metadataOnly":  false,
+                                                                                "length":  4070400,
+                                                                                "lastWriteTimeUtc":  "2026-07-12T19:32:48.2708346Z",
+                                                                                "sha256":  "28c3e8b6c55fff39ecb12a5eb27f493abf997804247517aa7a46c277ca5d9e93"
+                                                                            },
+                                                                            {
+                                                                                "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\Codex.exe",
+                                                                                "exists":  true,
+                                                                                "metadataOnly":  false,
+                                                                                "length":  1089536,
+                                                                                "lastWriteTimeUtc":  "2026-07-14T10:21:50.6745148Z",
+                                                                                "sha256":  "5b4a96cac829783200069e825b418e3bff88a4cbe4faf6733473754cacfd0bb5"
+                                                                            },
+                                                                            {
+                                                                                "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\app.asar",
+                                                                                "exists":  true,
+                                                                                "metadataOnly":  false,
+                                                                                "length":  199368680,
+                                                                                "lastWriteTimeUtc":  "2026-07-14T10:22:39.9699888Z",
+                                                                                "sha256":  "e286d538971d7b4648692b244d80b0b1e9d227d29564275ad46f6653280d4094"
+                                                                            },
+                                                                            {
+                                                                                "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                                                "exists":  true,
+                                                                                "metadataOnly":  false,
+                                                                                "length":  341284656,
+                                                                                "lastWriteTimeUtc":  "2026-07-13T07:34:41.6476119Z",
+                                                                                "sha256":  "2caacad1f7b8b3e9b2527b9bff9630cfbb30ec25d8d8c018c9d55a2bec348032"
+                                                                            },
+                                                                            {
+                                                                                "path":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\Codex.exe",
+                                                                                "exists":  true,
+                                                                                "metadataOnly":  false,
+                                                                                "length":  341284656,
+                                                                                "lastWriteTimeUtc":  "2026-07-13T07:34:41.6476119Z",
+                                                                                "sha256":  "2caacad1f7b8b3e9b2527b9bff9630cfbb30ec25d8d8c018c9d55a2bec348032"
+                                                                            }
+                                                                        ],
+                                                      "stableCodexFiles":  [
+                                                                               {
+                                                                                   "path":  "C:\\Users\\XD\\.codex\\config.toml",
+                                                                                   "exists":  true,
+                                                                                   "metadataOnly":  false,
+                                                                                   "length":  16367,
+                                                                                   "lastWriteTimeUtc":  "2026-07-14T13:14:43.8261638Z",
+                                                                                   "sha256":  "b6538d67309c3ff5bab503aa37a598d9d6ae5022ce804b3fab94ce6b3af180c6"
+                                                                               },
+                                                                               {
+                                                                                   "path":  "C:\\Users\\XD\\.codex\\AGENTS.md",
+                                                                                   "exists":  true,
+                                                                                   "metadataOnly":  false,
+                                                                                   "length":  32920,
+                                                                                   "lastWriteTimeUtc":  "2026-07-07T19:13:32.4624921Z",
+                                                                                   "sha256":  "780b8e22e231a47b2f8ef4da4a49ebac81e73fb9188d86f684ac7efacbfd69d9"
+                                                                               },
+                                                                               {
+                                                                                   "path":  "C:\\Users\\XD\\.codex\\auth.json",
+                                                                                   "exists":  true,
+                                                                                   "metadataOnly":  true,
+                                                                                   "length":  4232,
+                                                                                   "lastWriteTimeUtc":  "2026-07-14T12:41:28.4899717Z",
+                                                                                   "sha256":  null
+                                                                               }
+                                                                           ],
+                                                      "shortcuts":  [
+                                                                        {
+                                                                            "path":  "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Codex.lnk",
+                                                                            "exists":  true,
+                                                                            "metadataOnly":  true,
+                                                                            "length":  1484,
+                                                                            "lastWriteTimeUtc":  "2026-06-11T04:00:24.3863060Z",
+                                                                            "sha256":  null
+                                                                        },
+                                                                        {
+                                                                            "path":  "C:\\Users\\XD\\Desktop\\Codex.lnk",
+                                                                            "exists":  false,
+                                                                            "metadataOnly":  true
+                                                                        }
+                                                                    ],
+                                                      "persistentEnvironment":  [
+                                                                                    {
+                                                                                        "name":  "CODEX_PLUS_STATE_DIR",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "CODEX_PLUS_APP_EXECUTABLE",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "CODEX_PLUS_PROTOCOL_PROXY_PORT",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "CODEX_PLUS_LAUNCHER_GUARD_PORT",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "CODEX_PLUS_MANAGER_GUARD_PORT",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "CODEX_HOME",
+                                                                                        "user":  null,
+                                                                                        "machine":  null
+                                                                                    }
+                                                                                ],
+                                                      "watcher":  {
+                                                                      "registryValue":  null,
+                                                                      "startupShortcut":  {
+                                                                                              "path":  "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexPlusPlusWatcher.lnk",
+                                                                                              "exists":  false,
+                                                                                              "metadataOnly":  true
+                                                                                          }
+                                                                  }
+                                                  }
+                                    }
+                   }
+               ],
+    "directProbe":  {
+                        "ok":  true,
+                        "proxyBase":  "http://127.0.0.1:56564/v1",
+                        "model":  "gate2-chat-model",
+                        "checks":  {
+                                       "modelProxy":  true,
+                                       "textStreaming":  true,
+                                       "singleTerminalOutcome":  true,
+                                       "multiTurnHistory":  true,
+                                       "structuredToolCall":  true,
+                                       "exactToolResult":  true,
+                                       "authError":  true,
+                                       "quotaError":  true,
+                                       "serverError":  true,
+                                       "networkError":  true,
+                                       "cancellation":  true,
+                                       "cancellationBeforeHeaders":  true
+                                   },
+                        "gateReady":  true,
+                        "fakeChatRequestCount":  11,
+                        "toolCallId":  "call_8df39299"
+                    },
+    "nativeCli":  {
+                      "exitCode":  0,
+                      "stdoutTail":  "{\"type\":\"thread.started\",\"thread_id\":\"019f6150-1fa8-7a40-bf35-53c8646fb5ae\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Model metadata for `gate2-chat-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.\"}}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"\",\"exit_code\":null,\"status\":\"in_progress\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\Windows\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\v1.0\\\\\\\\powershell.exe\\\" -Command \u0027Write-Output GATE2_TOOL_OUTPUT\u0027\",\"aggregated_output\":\"[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\",\"exit_code\":0,\"status\":\"completed\"}}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_2\",\"type\":\"agent_message\",\"text\":\"GATE2_TOOL_RESULT:Exit code: 0\\nWall time: 0.7 seconds\\nOutput:\\n[dcg] Hook missing from ~/.claude/settings.json - run: dcg install\\nGATE2_TOOL_OUTPUT\\r\\n\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"cached_input_tokens\":0,\"output_tokens\":37,\"reasoning_output_tokens\":0}}\n",
+                      "stderrTail":  "Reading additional input from stdin...\n2026-07-14T15:47:48.775036Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:48.776011Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:48.811237Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n2026-07-14T15:47:48.973963Z  WARN codex_models_manager::model_info: Unknown model gate2-chat-model is used. This will use fallback model metadata.\n2026-07-14T15:47:50.519394Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n2026-07-14T15:47:50.545711Z  WARN codex_protocol::openai_models: Model personality requested but model_messages is missing, falling back to base instructions. model=gate2-chat-model personality=pragmatic\n"
+                  },
+    "failure":  null,
+    "artifactRoot":  null
+}

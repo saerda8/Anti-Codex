@@ -13,7 +13,7 @@ for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], proce
 const explicitPorts = args.get("--ports") || args.get("--port") || "";
 const ports = explicitPorts
   ? String(explicitPorts).split(",").map((value) => Number(value.trim())).filter(Number.isFinite)
-  : [...new Set([...discoverAntiCodexCdpPorts(), 58318, 58317])];
+  : [...new Set([...discoverAntiCodexCdpPorts(), 18318, 58318, 58317])];
 const baseUrl = String(args.get("--base-url") || process.env.ANTICODEX_MANAGER_API || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const simulatePendingReopen = args.has("--verify-pending-reopen");
 const defaultAction = String(args.get("--action") || (simulatePendingReopen ? "refreshFeatures" : "updateCheck"));
@@ -23,6 +23,7 @@ const verificationMode = String(args.get("--verification-mode") || "");
 const uiOnlyMode = verificationMode === "ui-only";
 const closeOnly = args.has("--close-only") && String(args.get("--close-only") ?? "true").toLowerCase() !== "false";
 const profileEntryOnly = args.has("--profile-entry-only") && String(args.get("--profile-entry-only") ?? "true").toLowerCase() !== "false";
+const upstreamConfigOnly = args.has("--upstream-config-only") && String(args.get("--upstream-config-only") ?? "true").toLowerCase() !== "false";
 const defaultTimeoutMs = action === "fastOverallNoTraffic" ? 90000 : 15000;
 const timeoutMs = Number(args.get("--timeout-ms") || defaultTimeoutMs);
 const compact = args.has("--compact");
@@ -159,7 +160,7 @@ function isFailureText(text) {
 }
 
 function isActionFailureText(actionName, text) {
-  if (actionName === "viewLatestReports" || actionName === "workerTransportStatus") {
+  if (actionName === "viewLatestReports") {
     return text.includes(FAILURE_TEXT) || /timed out|bridge failed|Action bridge failed/i.test(text);
   }
   return isFailureText(text);
@@ -218,8 +219,6 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
-  if (actionName === "workerTransportStatus") return text.includes("Worker \u901a\u9053\u72b6\u6001") && text.includes("\u5f53\u524d\u9891\u9053") && text.includes("\u4e0b\u4e00\u6b65");
-  if (actionName === "secondAccountLoginStatus") return text.includes("\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5") && (text.includes("\u901a\u8fc7") || text.includes("\u9700\u8981\u5904\u7406"));
   if (actionName === "refreshFeatures") return text.includes("\u672c\u5730\u529f\u80fd\u5237\u65b0") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1") && text.includes("sourceSnapshot: files=");
   if (actionName === "diagnosticsBundle") return text.includes("\u8bca\u65ad\u5305") && (text.includes("ZIP") || text.includes("\u76ee\u5f55"));
   if (actionName === "viewLatestReports") return text.includes("\u62a5\u544a") && (text.includes("\u5df2\u627e\u5230") || text.includes("\u8fd8\u6ca1\u6709")) && hasLatestReportFieldEvidence(text);
@@ -290,8 +289,52 @@ function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
 
 function realBridgeSource(enabled = !uiOnlyMode) {
   if (!enabled) return "";
+  const restoreDelayMs = Math.max(120000, timeoutMs + 60000);
   return `
+  if (window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__
+      && window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__) {
+    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  }
   delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+  if (!Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__")) {
+    window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_ACTION__;
+  }
+  if (!Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__")) {
+    window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__ = window.__ANTICODEX_MANAGER_BRIDGE_READY__;
+  }
+  clearTimeout(window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__);
+  window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__ = () => {
+    const pending = window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {};
+    for (const entry of Object.values(pending)) {
+      try {
+        entry?.resolve?.({
+          ok: false,
+          action: entry?.action || "",
+          message: "Manager verifier restored the live action bridge before the test action completed",
+        });
+      } catch {}
+    }
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__")) {
+      window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+      if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function") {
+        delete window.__ANTICODEX_RUN_MANAGER_ACTION__;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__")) {
+      window.__ANTICODEX_MANAGER_BRIDGE_READY__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
+      if (typeof window.__ANTICODEX_MANAGER_BRIDGE_READY__ !== "boolean") {
+        delete window.__ANTICODEX_MANAGER_BRIDGE_READY__;
+      }
+    }
+    clearTimeout(window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__);
+    delete window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__;
+    delete window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__;
+    delete window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__;
+  };
   window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ = {};
   window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__ = [];
   window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__ = (id, payload) => {
@@ -300,12 +343,53 @@ function realBridgeSource(enabled = !uiOnlyMode) {
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[id];
     entry.resolve(payload);
   };
-  window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => new Promise((resolve) => {
+  const testActionBridge = (requestedAction) => new Promise((resolve) => {
     const requestId = Date.now() + ":" + Math.random().toString(36).slice(2);
-    window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[requestId] = { resolve };
+    window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[requestId] = { resolve, action: requestedAction };
     window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
   });
+  testActionBridge.__ANTICODEX_MANAGER_BUTTON_TEST_BRIDGE__ = true;
+  window.__ANTICODEX_RUN_MANAGER_ACTION__ = testActionBridge;
   window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
+  window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__ = setTimeout(() => {
+    window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__?.();
+  }, ${restoreDelayMs});
+`;
+}
+
+function cleanupRealBridgeSource(enabled = true) {
+  if (!enabled) return "";
+  return `
+  clearTimeout(window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__);
+  if (typeof window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__ === "function") {
+    window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__();
+  } else {
+    const verifierStatePresent = window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_TEST_BRIDGE__ === true
+      || Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__)
+      || typeof window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__ === "function";
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__")) {
+      window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+      if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function") {
+        delete window.__ANTICODEX_RUN_MANAGER_ACTION__;
+      }
+    } else if (verifierStatePresent) {
+      delete window.__ANTICODEX_RUN_MANAGER_ACTION__;
+      window.__ANTICODEX_MANAGER_BRIDGE_READY__ = false;
+    }
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__")) {
+      window.__ANTICODEX_MANAGER_BRIDGE_READY__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
+      if (typeof window.__ANTICODEX_MANAGER_BRIDGE_READY__ !== "boolean") {
+        delete window.__ANTICODEX_MANAGER_BRIDGE_READY__;
+      }
+    }
+    delete window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__;
+    delete window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__;
+    delete window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__;
+  }
 `;
 }
 
@@ -328,16 +412,6 @@ function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
 `;
 }
 
-function operatorStepDisplayText(step) {
-  const value = String(step || "");
-  if (value === "open_elevated_windows_user_settings_then_rerun_prepare") return "\u6253\u5f00 Windows \u8bbe\u7f6e / \u5176\u4ed6\u7528\u6237\uff0c\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel\uff0c\u7136\u540e\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
-  if (value === "create_target_windows_user") return "\u5148\u5728 Windows \u4e2d\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel \u7528\u6237";
-  if (value === "run_account_isolation_status") return "\u91cd\u65b0\u8fd0\u884c\u8d26\u53f7\u9694\u79bb\u72b6\u6001\u68c0\u67e5";
-  if (value === "run_windows_user_interactive_login_with_user_present") return "\u7b49\u7528\u6237\u660e\u786e\u6279\u51c6\u540e\uff0c\u4f7f\u7528\u72ec\u7acb Windows \u7528\u6237\u542f\u52a8\u7b2c\u4e8c Antigravity \u767b\u5f55";
-  if (value === "verify_windows_user_manually_then_rerun_prepare") return "\u624b\u52a8\u786e\u8ba4 Windows \u7528\u6237\u540e\uff0c\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
-  return value;
-}
-
 function managerSummaryFromActionPayload(actionName, payload) {
   const result = payload?.result || payload || {};
   if (actionName === "refreshStatus") return `\u5237\u65b0\u72b6\u6001\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u5b8c\u6210"}`;
@@ -350,27 +424,6 @@ function managerSummaryFromActionPayload(actionName, payload) {
       `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
       `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1a${realCallPassed ? "node_repl \u901a\u8fc7" : "\u5f85\u590d\u6838"}`,
     ].join("\n");
-  }
-  if (actionName === "secondAccountLoginStatus") {
-    return [
-      `\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u901a\u8fc7"}`,
-      result.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
-      result.readinessBlockingReason ? `\u963b\u788d\uff1a${result.readinessBlockingReason}` : "",
-      result.operatorBlockingStage ? `\u9636\u6bb5\uff1a${result.operatorBlockingStage}` : "",
-      result.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${operatorStepDisplayText(result.operatorNextStep)}` : "",
-    ].filter(Boolean).join("\n");
-  }
-  if (actionName === "workerTransportStatus") {
-    const evidence = result.currentEvidence || {};
-    const triState = result.canDispatchCurrentChannelWorkers === true ? "true" : result.canDispatchCurrentChannelWorkers === false ? "false" : "unknown";
-    return [
-      `Worker \u901a\u9053\u72b6\u6001\uff1a${result.canDispatchCurrentChannelWorkers ? "\u53ef\u6d3e\u5de5" : "\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053"}`,
-      `\u5f53\u524d\u9891\u9053\uff1a${result.status || "unknown"} / \u53ef\u6d3e\u5de5=${triState}`,
-      `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
-      Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
-      Array.isArray(evidence.missingExpectedWorkerPrefixes) && evidence.missingExpectedWorkerPrefixes.length ? `\u672a\u66b4\u9732 worker\uff1a${evidence.missingExpectedWorkerPrefixes.slice(0, 6).join(", ")}` : "",
-      result.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${result.operatorActionCard.userVisibleNextStep}` : "",
-    ].filter(Boolean).join("\n");
   }
   if (actionName === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
@@ -455,10 +508,6 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u9700\u5904\u7406\n  \u516c\u5f00\u6587\u6863\uff1a\u9700\u5904\u7406"), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a2 \u4efd\n\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u5386\u53f2\u8fc7\u671f\u6062\u590d\uff1a\u901a\u8fc7\n  \u6587\u4ef6\uff1aC:\\tmp\\latest-missing-history.json"), true);
   assert.equal(isActionFailureText("viewLatestReports", "\u62a5\u544a\u76ee\u5f55\uff1aC:\\tmp\n\u5df2\u627e\u5230\uff1a1 \u4efd\n\u9a8c\u6536\uff1a\u9700\u8981\u5904\u7406"), false);
-  const workerTransportNeedsReload = "Worker \u901a\u9053\u72b6\u6001\uff1a\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053\n\u5f53\u524d\u9891\u9053\uff1areload_required / \u53ef\u6d3e\u5de5=false\n\u4e0b\u4e00\u6b65\uff1aStop retrying worker tools in this channel; reload Codex or use a fresh channel.";
-  assert.equal(hasActionSpecificResult("workerTransportStatus", workerTransportNeedsReload), true);
-  assert.equal(isActionFailureText("workerTransportStatus", workerTransportNeedsReload), false);
-  assert.equal(hasActionSpecificResult("workerTransportStatus", managerSummaryFromActionPayload("workerTransportStatus", { ok: true, result: { status: "reload_required", canDispatchCurrentChannelWorkers: false, currentEvidence: { directProbeOk: true, directStatusProbeOk: true }, operatorActionCard: { userVisibleNextStep: "Stop retrying worker tools in this channel; reload Codex or use a fresh channel." } } })), true);
   assert.equal(hasActionSpecificResult("viewLatestReports", managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6e90\u7801\u9884\u68c0", exists: true, ok: true, sourcePreflightEvidence: { publicDocumentationOk: true } }] } })), true);
   assert.ok(managerSummaryFromActionPayload("viewLatestReports", { ok: true, result: { reportRoot: "C:\\tmp", existingCount: 1, reports: [{ label: "\u6a21\u578b\u53ef\u7528\u6027", exists: true, ok: true, modelRoutingEvidence: { requestAvailableModels: ["gemini-3.5-flash-low"], availabilityUnavailableModels: ["claude-sonnet-4-6", "gpt-oss-120b-medium"] } }] } }).includes("claude-sonnet-4-6"));
   const deferredLatestReportsSummary = managerSummaryFromActionPayload("viewLatestReports", {
@@ -825,7 +874,7 @@ await ws.call(id++, "Runtime.evaluate", runtimeParams(`(() => {
   delete window.__ANTICODEX_OPEN_MANAGER__;
   delete window.__ANTICODEX_REFRESH_MANAGER_PANEL__;
   delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
-  ${realBridgeSource()}
+  ${realBridgeSource(!uiOnlyMode && !upstreamConfigOnly && !closeOnly)}
 })()`, {
   awaitPromise: false,
   allowUnsafeEvalBlockedByCSP: true,
@@ -873,6 +922,14 @@ async function evaluate(expression, timeout = 8000) {
   return message.result?.result?.value || {};
 }
 
+async function cleanupInjectedBridges() {
+  await evaluate(`(() => {
+    ${cleanupUiOnlyBridgeSource()}
+    ${cleanupRealBridgeSource()}
+    return true;
+  })()`, 2500).catch(() => {});
+}
+
 async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
   const socket = new LocalWebSocket(target.webSocketDebuggerUrl);
   await socket.open();
@@ -897,6 +954,11 @@ async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
     };
 
     await call("Page.bringToFront");
+    await evaluateFresh(`(() => {
+      window.focus();
+      return { focused: document.hasFocus(), visibility: document.visibilityState };
+    })()`);
+    await sleep(150);
     for (const type of ["keyDown", "keyUp"]) {
       await call("Input.dispatchKeyEvent", {
         type,
@@ -906,17 +968,66 @@ async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
         nativeVirtualKeyCode: 27,
       });
     }
+    const existingManagerOverlay = await evaluateFresh(`(() => {
+      const overlay = document.querySelector('#anticodex-manager-overlay');
+      if (!overlay) return { open: false };
+      const close = overlay.querySelector('[data-anticodex-close="true"]');
+      const rect = close?.getBoundingClientRect?.();
+      if (!close || !rect || rect.width <= 0 || rect.height <= 0) return { open: true, closeReady: false };
+      return {
+        open: true,
+        closeReady: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+    })()`);
+    if (existingManagerOverlay.open) {
+      if (!existingManagerOverlay.closeReady) {
+        return { ok: false, phase: "profile-existing-manager", error: "existing Manager overlay close button missing" };
+      }
+      for (const event of [
+        { type: "mouseMoved", button: "none", buttons: 0 },
+        { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+        { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+      ]) {
+        await call("Input.dispatchMouseEvent", {
+          ...event,
+          x: existingManagerOverlay.x,
+          y: existingManagerOverlay.y,
+        }, CDP_INPUT_EVENT_TIMEOUT_MS);
+      }
+      const closeDeadline = Date.now() + 2000;
+      let existingManagerClosed = false;
+      do {
+        existingManagerClosed = (await evaluateFresh(`(() => ({
+          closed: !document.querySelector('#anticodex-manager-overlay'),
+        }))()`)).closed === true;
+        if (!existingManagerClosed) await sleep(50);
+      } while (!existingManagerClosed && Date.now() < closeDeadline);
+      if (!existingManagerClosed) {
+        return { ok: false, phase: "profile-existing-manager", error: "existing Manager overlay did not close" };
+      }
+    }
     const trigger = await evaluateFresh(`(() => {
       const settings = Array.from(document.querySelectorAll('button'))
         .find((node) => node.getAttribute?.("aria-label") === "\\u6253\\u5f00\\u4e2a\\u4eba\\u8d44\\u6599\\u83dc\\u5355");
       const rect = settings?.getBoundingClientRect?.();
       if (!settings || !rect || rect.width <= 0 || rect.height <= 0) return { ok: false };
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
       return {
         ok: true,
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
+        x,
+        y,
         text: String(settings.innerText || settings.textContent || "").trim(),
         aria: settings.getAttribute("aria-label") || "",
+        hitTag: hit?.tagName || "",
+        hitText: String(hit?.innerText || hit?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        hitAria: hit?.getAttribute?.("aria-label") || "",
+        hitMatchesTrigger: hit === settings || hit?.closest?.('button') === settings,
+        pointerEvents: getComputedStyle(hit || settings).pointerEvents,
+        viewport: { width: innerWidth, height: innerHeight },
       };
     })()`);
     if (!trigger.ok) return { ok: false, phase: "profile-trigger", error: "profile menu trigger missing" };
@@ -928,8 +1039,11 @@ async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
     ]) {
       await call("Input.dispatchMouseEvent", { ...event, x: trigger.x, y: trigger.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
     }
-    await sleep(350);
-    const state = await evaluateFresh(`(() => {
+    let state = { items: [] };
+    const menuDeadline = Date.now() + 2000;
+    do {
+      await sleep(100);
+      state = await evaluateFresh(`(() => {
       const items = Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]'))
         .filter((node) => {
           const rect = node.getBoundingClientRect?.();
@@ -944,6 +1058,7 @@ async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
         .filter((item) => item.text);
       return { items };
     })()`);
+    } while ((state.items?.length || 0) === 0 && Date.now() < menuDeadline);
     for (const type of ["keyDown", "keyUp"]) {
       await call("Input.dispatchKeyEvent", {
         type,
@@ -963,6 +1078,12 @@ async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
       forbiddenEnglishVisible,
       triggerText: trigger.text,
       triggerAria: trigger.aria,
+      triggerHitTag: trigger.hitTag,
+      triggerHitText: trigger.hitText,
+      triggerHitAria: trigger.hitAria,
+      triggerHitMatches: trigger.hitMatchesTrigger,
+      triggerPointerEvents: trigger.pointerEvents,
+      triggerViewport: trigger.viewport,
       actualMouseOpened: state.items?.length > 0,
       items: (state.items || []).slice(-40),
     };
@@ -984,7 +1105,8 @@ async function verifyCloseButtonActualMouseClick() {
     { name: "lower-center", yFraction: 0.8 },
   ];
   const probes = [];
-  for (const pointSpec of pointSpecs) {
+  for (let i = 0; i < pointSpecs.length; i++) {
+    const pointSpec = pointSpecs[i];
     const probe = await evaluate(`(async () => {
       if (typeof window.__ANTICODEX_OPEN_MANAGER__ !== "function") return { ok: false, error: "open manager missing" };
       if (!document.querySelector("#anticodex-manager-overlay")) await window.__ANTICODEX_OPEN_MANAGER__();
@@ -1036,13 +1158,172 @@ async function verifyCloseButtonActualMouseClick() {
     if (!result.closed) {
       return { ok: false, phase: "actual-click", probes, failedProbe: result, error: `close button ${pointSpec.name} actual mouse click did not close overlay` };
     }
-    const reopened = await evaluate(`(async () => {
-      await window.__ANTICODEX_OPEN_MANAGER__?.();
-      return { reopened: !!document.querySelector("#anticodex-manager-overlay") };
-    })()`, 3500);
-    if (!reopened.reopened) return { ok: false, phase: "reopen", probes, error: "manager did not reopen after close probe" };
+    if (i < pointSpecs.length - 1) {
+      const reopened = await evaluate(`(async () => {
+        await window.__ANTICODEX_OPEN_MANAGER__?.();
+        return { reopened: !!document.querySelector("#anticodex-manager-overlay") };
+      })()`, 3500);
+      if (!reopened.reopened) return { ok: false, phase: "reopen", probes, error: "manager did not reopen after close probe" };
+    }
   }
-  return { ok: true, phase: "actual-click", probes, reopened: true };
+  return { ok: true, phase: "actual-click", probes, reopened: true, finalOverlayClosed: true };
+}
+
+async function verifyUpstreamConfigActualMouseClick() {
+  const trustedHeaders = {
+    origin: baseUrl,
+    referer: `${baseUrl}/anticodex/manager`,
+  };
+  const publicProfileSignature = (profile) => JSON.stringify({
+    active: profile?.active || "",
+    runtime: profile?.runtime || null,
+    saved: profile?.saved || null,
+  });
+  const beforeProfile = await httpJson(`${baseUrl}/anticodex/upstream-profile`, { headers: trustedHeaders });
+  const beforeSignature = publicProfileSignature(beforeProfile);
+  const dispatchActualClick = async (point) => {
+    for (const event of [
+      { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+      { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+    ]) {
+      await ws.call(id++, "Input.dispatchMouseEvent", { ...event, x: point.x, y: point.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
+    }
+  };
+  const actionPoint = async () => evaluate(`(() => {
+    const button = document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]');
+    const rect = button?.getBoundingClientRect?.();
+    const x = rect ? rect.left + rect.width / 2 : 0;
+    const y = rect ? rect.top + rect.height / 2 : 0;
+    const hit = document.elementFromPoint(x, y);
+    return {
+      ok: !!button && !!rect && (hit === button || hit?.closest?.('button') === button),
+      x,
+      y,
+      label: String(button?.textContent || '').trim(),
+    };
+  })()`, 3500);
+
+  await ws.call(id++, "Page.bringToFront", {}, 5000);
+  const opened = await evaluate(`(async () => {
+    document.querySelector('#anticodex-manager-overlay')?.remove();
+    await window.__ANTICODEX_OPEN_MANAGER__?.();
+    const overlay = document.querySelector('#anticodex-manager-overlay');
+    return {
+      ok: !!overlay,
+      aria: overlay?.getAttribute('aria-label') || '',
+      version: window.__ANTICODEX_MANAGER_VERSION__ || '',
+    };
+  })()`, 5000);
+  if (!opened.ok) return { ok: false, phase: "open", opened, usedRealTraffic: false };
+
+  const first = await actionPoint();
+  if (!first.ok) return { ok: false, phase: "first-hit", opened, first, usedRealTraffic: false };
+  const firstClickStartedAt = Date.now();
+  await dispatchActualClick(first);
+  const firstClickDurationMs = Date.now() - firstClickStartedAt;
+  let confirmation = {};
+  const confirmationDeadline = Date.now() + 3000;
+  do {
+    confirmation = await evaluate(`(() => {
+      const button = document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]');
+      const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
+      const labels = Array.from(result?.querySelectorAll('label > span') || []);
+      return {
+        ok: button?.getAttribute('data-confirming-high-impact') === 'true' && labels.length === 0,
+        label: String(button?.textContent || '').trim(),
+        formOpenedBeforeConfirm: labels.length > 0,
+      };
+    })()`, 2500);
+    if (confirmation.ok) break;
+    await sleep(75);
+  } while (Date.now() < confirmationDeadline);
+  if (!confirmation.ok) return { ok: false, phase: "confirmation", opened, first, confirmation, usedRealTraffic: false };
+
+  const second = await actionPoint();
+  if (!second.ok) return { ok: false, phase: "second-hit", opened, first, confirmation, second, usedRealTraffic: false };
+  const secondClickStartedAt = Date.now();
+  await dispatchActualClick(second);
+  const secondClickDurationMs = Date.now() - secondClickStartedAt;
+  let form = {};
+  const formDeadline = Date.now() + Math.max(8000, timeoutMs);
+  do {
+    form = await evaluate(`(() => {
+      const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
+      const labels = Array.from(result?.querySelectorAll('label > span') || []).map((node) => String(node.textContent || '').trim());
+      const select = result?.querySelector('select');
+      return {
+        ok: labels.includes('API key') && !!select,
+        labels,
+        protocolOptions: Array.from(select?.options || []).map((option) => String(option.textContent || '').trim()),
+        buttons: Array.from(result?.querySelectorAll('button') || []).map((button) => ({
+          label: String(button.textContent || '').trim(),
+          disabled: button.disabled,
+        })),
+        warningMentionsBypass: String(result?.querySelector('.anticodex-warn')?.textContent || '').includes('\u5b8c\u5168\u7ed5\u8fc7 Antigravity'),
+        embedded: !!result?.closest('#anticodex-manager-overlay'),
+        actionLabel: String(document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]')?.textContent || '').trim(),
+        confirming: document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]')?.getAttribute('data-confirming-high-impact') || '',
+        resultText: String(result?.textContent || '').trim().slice(0, 500),
+        snapshotOk: window.__ANTICODEX_MANAGER_SNAPSHOT__?.ok === true,
+        snapshotResponseCount: Object.keys(window.__ANTICODEX_MANAGER_SNAPSHOT__?.responses || {}).length,
+        snapshotInFlight: window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ === true,
+      };
+    })()`, 3500);
+    if (form.ok) break;
+    await sleep(100);
+  } while (Date.now() < formDeadline);
+
+  const closePoint = await evaluate(`(() => {
+    const button = document.querySelector('#anticodex-manager-overlay [data-anticodex-close="true"]');
+    const rect = button?.getBoundingClientRect?.();
+    const x = rect ? rect.left + rect.width / 2 : 0;
+    const y = rect ? rect.top + rect.height / 2 : 0;
+    const hit = document.elementFromPoint(x, y);
+    return {
+      ok: !!button && !!rect && (hit === button || hit?.closest?.('[data-anticodex-close="true"]') === button),
+      x,
+      y,
+      hasTextNode: Array.from(button?.childNodes || []).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()),
+    };
+  })()`, 3500);
+  if (closePoint.ok) await dispatchActualClick(closePoint);
+  await sleep(150);
+  const closed = await evaluate(`(() => ({ closed: !document.querySelector('#anticodex-manager-overlay') }))()`, 2500);
+  const afterProfile = await httpJson(`${baseUrl}/anticodex/upstream-profile`, { headers: trustedHeaders });
+  const profileUnchanged = beforeSignature === publicProfileSignature(afterProfile);
+  const pageTargetsAfter = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
+  const buttonState = Object.fromEntries((form.buttons || []).map((button) => [button.label, button.disabled]));
+  const ok = form.ok === true
+    && form.embedded === true
+    && form.warningMentionsBypass === true
+    && form.protocolOptions?.join("|") === "Chat Completions|Responses"
+    && ["\u534f\u8bae", "\u63a5\u53e3\u5730\u5740\uff08\u53ef\u586b base URL \u6216\u5b8c\u6574\u63a5\u53e3\uff09", "\u6a21\u578b\u540d", "API key"].every((label) => form.labels?.includes(label))
+    && buttonState["\u6d4b\u8bd5\u8fde\u901a"] === false
+    && buttonState["\u4fdd\u5b58\u5e76\u5207\u6362"] === true
+    && buttonState["\u6062\u590d Antigravity"] === false
+    && confirmation.formOpenedBeforeConfirm === false
+    && profileUnchanged
+    && closePoint.ok === true
+    && closePoint.hasTextNode === false
+    && closed.closed === true
+    && pageTargetsAfter.filter((item) => item?.type === "page").length === pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length;
+  return {
+    ok,
+    phase: "upstream-config-actual-mouse",
+    opened,
+    firstClickLabel: first.label,
+    firstClickDurationMs,
+    confirmationLabel: confirmation.label,
+    secondClickLabel: second.label,
+    secondClickDurationMs,
+    form,
+    profileUnchanged,
+    closeActualMouse: closePoint.ok === true && closed.closed === true,
+    closeHasTextNode: closePoint.hasTextNode === true,
+    pageTargetCountBefore: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
+    pageTargetCountAfter: pageTargetsAfter.filter((item) => item?.type === "page").length,
+    usedRealTraffic: false,
+  };
 }
 
 async function drainManagerActionQueue() {
@@ -1141,7 +1422,7 @@ async function runManagerActionBatch(actions) {
   const actionCenterTarget = document.elementFromPoint(actionCenterX, actionCenterY);
   const actionCenterHitsButton = !!actionCenterTarget?.closest?.('button[data-action=' + ${safeActionName} + ']');
   if (!actionCenterHitsButton) return { ok: false, error: "action button center point does not hit the requested button" };
-  ${realBridgeSource()}
+  ${realBridgeSource(!uiOnlyMode && !upstreamConfigOnly && !closeOnly)}
   if (!${JSON.stringify(uiOnlyMode)}) {
     delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
     if (result) result.textContent = ${JSON.stringify(REFRESHED_TEXT)};
@@ -1311,20 +1592,47 @@ async function runManagerActionBatch(actions) {
   };
 }
 
+if (upstreamConfigOnly) {
+  const upstreamConfig = await verifyUpstreamConfigActualMouseClick().catch((error) => ({
+    ok: false,
+    phase: "upstream-config-exception",
+    error: error?.message || String(error),
+    usedRealTraffic: false,
+  }));
+  await cleanupInjectedBridges();
+  ws.close();
+  releaseManagerButtonLock(managerButtonLock);
+  console.log(asciiJson({
+    ok: upstreamConfig.ok === true,
+    port,
+    target: { id: target.id, title: target.title, url: target.url },
+    upstreamConfig,
+  }, compact ? 0 : 2));
+  process.exit(upstreamConfig.ok ? 0 : 1);
+}
+
 if (closeOnly) {
   const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
     ok: false,
     phase: "actual-click-exception",
     error: error?.message || String(error),
   }));
+  await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson({ ok: closeActualMouse.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, closeActualMouse }, compact ? 0 : 2));
+  console.log(asciiJson({
+    ok: closeActualMouse.ok === true,
+    port,
+    target: { id: target.id, title: target.title, url: target.url },
+    closeActualMouse,
+    finalOverlayClosed: closeActualMouse.finalOverlayClosed === true
+  }, compact ? 0 : 2));
   process.exit(closeActualMouse.ok ? 0 : 1);
 }
 
 if (actions.length > 1) {
   const output = await runManagerActionBatch(actions);
+  await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
   console.log(asciiJson(compactManagerButtonOutput(output), compact ? 0 : 2));
@@ -1338,6 +1646,7 @@ const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error)
   error: error?.message || String(error),
 }));
 if (!closeActualMouse.ok) {
+  await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
   console.log(asciiJson({ ok: false, port, target: { id: target.id, title: target.title, url: target.url }, closeActualMouse }, compact ? 0 : 2));
@@ -1443,7 +1752,7 @@ const initial = await evaluate(`
       actionCenterTargetText: actionCenterTarget?.textContent || "",
     };
   }
-  ${realBridgeSource()}
+  ${realBridgeSource(!uiOnlyMode && !upstreamConfigOnly && !closeOnly)}
   ${simulatePendingReopenBridge}
   if (!${JSON.stringify(uiOnlyMode)}) {
     delete window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
@@ -1541,6 +1850,7 @@ if (simulatePendingReopen) {
     };
   })()`, 2500);
   const pendingReopen = { ...pendingAndClose, ...closed, ...reopened, ...late };
+  await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
   const actionStarted = Boolean(initial.ok)
@@ -1680,12 +1990,9 @@ while (initial.ok && Date.now() < deadline) {
     if (actionSettled && visibleFinished) break;
   }
 }
+await cleanupInjectedBridges();
 ws.close();
 releaseManagerButtonLock(managerButtonLock);
-await evaluate(`(() => {
-  ${cleanupUiOnlyBridgeSource()}
-  return true;
-})()`, 2000).catch(() => {});
 
 const drainedPayload = drainedPayloads[action];
 const drainedText = drainedPayload ? managerSummaryFromActionPayload(action, drainedPayload) : "";

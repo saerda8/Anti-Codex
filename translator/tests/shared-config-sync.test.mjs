@@ -106,6 +106,67 @@ test("shared config sync removes stale local MCP server blocks", () => {
   assert.match(next, /\[mcp_servers\.shared_worker\]\ncommand = "node"\nargs = \["shared\.mjs"\]/);
 });
 
+test("shared config sync excludes Anti-Codex development workers by default", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const target = path.join(dir, "anticodex.toml");
+  const includeTarget = path.join(dir, "include-workers.toml");
+  const developmentWorkers = [
+    "deepseek-code-worker",
+    "mimo-claude-coworker",
+    "mimocode-worker",
+    "deveco-code-worker",
+    "opencode-worker",
+    "kilo-worker",
+    "codebuddy-worker",
+    "agnes-worker",
+    "antigravity-code-worker",
+  ];
+
+  const sourceLines = ['model = "gpt"', ""];
+  for (const worker of developmentWorkers) {
+    sourceLines.push(
+      `[mcp_servers.${worker}]`,
+      'command = "node"',
+      `args = ["${worker}.mjs"]`,
+      "",
+      `[mcp_servers.${worker}.env]`,
+      'WORKER_TEST = "1"',
+      "",
+      `[mcp_servers.${worker}.tools.start]`,
+      "enabled = true",
+      "",
+    );
+  }
+  sourceLines.push(
+    "[mcp_servers.node_repl]",
+    'command = "node_repl.exe"',
+    "args = []",
+    "",
+    "[mcp_servers.customer-mcp]",
+    'command = "customer.exe"',
+    "args = []",
+    "",
+  );
+  fs.writeFileSync(source, sourceLines.join("\n"));
+  fs.writeFileSync(target, 'model = "anticodex"\n');
+  fs.writeFileSync(includeTarget, 'model = "anticodex"\n');
+
+  execFileSync(process.execPath, [syncSharedConfig, source, target]);
+  const next = fs.readFileSync(target, "utf8");
+  for (const worker of developmentWorkers) {
+    assert.doesNotMatch(next, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}([.\\]])`));
+  }
+  assert.match(next, /\[mcp_servers\.node_repl\]\ncommand = "node_repl\.exe"/);
+  assert.match(next, /\[mcp_servers\.customer-mcp\]\ncommand = "customer\.exe"/);
+
+  execFileSync(process.execPath, [syncSharedConfig, source, includeTarget, "--include-development-workers"]);
+  const included = fs.readFileSync(includeTarget, "utf8");
+  for (const worker of developmentWorkers) {
+    assert.match(included, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}\\]`));
+  }
+});
+
 test("DeepCodex-only plugin registrations are written back to current and global config", () => {
   const dir = tempDir();
   const current = path.join(dir, "current.toml");

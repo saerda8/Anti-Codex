@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-14T16:16:00.463Z",
+  "gate": "Gate 3 thin Antigravity Chat adapter contract",
+  "ok": true,
+  "failedIds": [],
+  "requestedRealTraffic": true,
+  "usedRealTraffic": true,
+  "behaviorCovered": true,
+  "formalGateEvidence": true,
+  "coverageKind": "real-traffic",
+  "modelTraffic": "one bounded real native tool round trip",
+  "checks": [
+    {
+      "id": "provider_syntax",
+      "ok": true,
+      "files": [
+        {
+          "path": "translator/provider/antigravity-chat-adapter.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "translator/provider/antigravity-chat-server.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "translator/provider/antigravity-cascade-client.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "translator/provider/start-antigravity-chat-provider.mjs",
+          "ok": true,
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "id": "deterministic_contract_tests",
+      "ok": true,
+      "exitCode": 0,
+      "tests": 19,
+      "pass": 19,
+      "fail": 0,
+      "stderr": ""
+    },
+    {
+      "id": "legacy_import_zero_hit",
+      "ok": true,
+      "sources": [
+        {
+          "path": "translator/provider/antigravity-chat-adapter.mjs",
+          "bytes": 19534,
+          "sha256": "5e4cc15e672da7ac689e82cba795c686916133a61a9e53c35aab86ac14e3541b",
+          "forbiddenImport": false,
+          "forbiddenSemantics": false
+        },
+        {
+          "path": "translator/provider/antigravity-chat-server.mjs",
+          "bytes": 5696,
+          "sha256": "cf4f6358af357fe57263972273a702df67865c738007b1e9ab9f55dd5623dbb6",
+          "forbiddenImport": false,
+          "forbiddenSemantics": false
+        },
+        {
+          "path": "translator/provider/antigravity-cascade-client.mjs",
+          "bytes": 25065,
+          "sha256": "16e86dc37312671d5c2ab79184647d1ed761e816079ca43e56034cf4a80324b7",
+          "forbiddenImport": false,
+          "forbiddenSemantics": false
+        },
+        {
+          "path": "translator/provider/start-antigravity-chat-provider.mjs",
+          "bytes": 1712,
+          "sha256": "9b1d46782f25cd56fbb89d85c0d78eefe58ef33f0e76a0cd9e8ea222c929d422",
+          "forbiddenImport": false,
+          "forbiddenSemantics": false
+        }
+      ]
+    },
+    {
+      "id": "task_semantics_zero_hit",
+      "ok": true
+    },
+    {
+      "id": "provider_boundary_small",
+      "ok": true,
+      "totalBytes": 52007
+    },
+    {
+      "id": "real_desktop_read_only_discovery",
+      "ok": true,
+      "modelCount": 20,
+      "modelIds": [
+        "gemini-3.5-flash-low",
+        "gemini-3-flash-agent",
+        "gemini-3.5-flash-extra-low",
+        "gemini-3.1-pro-low",
+        "gemini-pro-agent",
+        "claude-sonnet-4-6",
+        "claude-opus-4-6-thinking",
+        "gpt-oss-120b-medium",
+        "chat_20706",
+        "chat_23310",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-thinking",
+        "gemini-2.5-pro",
+        "gemini-3-flash",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-high",
+        "tab_flash_lite_preview",
+        "tab_jump_flash_lite_preview"
+      ],
+      "signedIn": true,
+      "identityAvailable": true,
+      "planName": "Pro"
+    },
+    {
+      "id": "real_native_tool_round_trip",
+      "ok": true,
+      "requested": true,
+      "used": true,
+      "reason": "passed",
+      "model": "gemini-3.5-flash-low",
+      "inputMarker": "REAL_ADAPTER_TOOL_INPUT_1300C88AE39A",
+      "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+      "firstStatus": 200,
+      "secondStatus": 200,
+      "firstFinishReason": "tool_calls",
+      "secondFinishReason": "stop",
+      "toolName": "echo_probe",
+      "toolCallId": "call_69e4b2beb00645bf93e2ed9bfd2fe697",
+      "exactArguments": true,
+      "exactToolResultObserved": true,
+      "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+      "counters": {
+        "start": 1,
+        "resume": 1,
+        "cancel": 0
+      }
+    }
+  ],
+  "readOnlyProbe": {
+    "ok": true,
+    "modelCount": 20,
+    "modelIds": [
+      "gemini-3.5-flash-low",
+      "gemini-3-flash-agent",
+      "gemini-3.5-flash-extra-low",
+      "gemini-3.1-pro-low",
+      "gemini-pro-agent",
+      "claude-sonnet-4-6",
+      "claude-opus-4-6-thinking",
+      "gpt-oss-120b-medium",
+      "chat_20706",
+      "chat_23310",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash-thinking",
+      "gemini-2.5-pro",
+      "gemini-3-flash",
+      "gemini-3.1-flash-image",
+      "gemini-3.1-flash-lite",
+      "gemini-3.1-pro-high",
+      "tab_flash_lite_preview",
+      "tab_jump_flash_lite_preview"
+    ],
+    "signedIn": true,
+    "identityAvailable": true,
+    "planName": "Pro"
+  },
+  "realTraffic": {
+    "requested": true,
+    "used": true,
+    "ok": true,
+    "reason": "passed",
+    "model": "gemini-3.5-flash-low",
+    "inputMarker": "REAL_ADAPTER_TOOL_INPUT_1300C88AE39A",
+    "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+    "firstStatus": 200,
+    "secondStatus": 200,
+    "firstFinishReason": "tool_calls",
+    "secondFinishReason": "stop",
+    "toolName": "echo_probe",
+    "toolCallId": "call_69e4b2beb00645bf93e2ed9bfd2fe697",
+    "exactArguments": true,
+    "exactToolResultObserved": true,
+    "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+    "counters": {
+      "start": 1,
+      "resume": 1,
+      "cancel": 0
+    }
+  },
+  "providerSources": [
+    {
+      "path": "translator/provider/antigravity-chat-adapter.mjs",
+      "bytes": 19534,
+      "sha256": "5e4cc15e672da7ac689e82cba795c686916133a61a9e53c35aab86ac14e3541b",
+      "forbiddenImport": false,
+      "forbiddenSemantics": false
+    },
+    {
+      "path": "translator/provider/antigravity-chat-server.mjs",
+      "bytes": 5696,
+      "sha256": "cf4f6358af357fe57263972273a702df67865c738007b1e9ab9f55dd5623dbb6",
+      "forbiddenImport": false,
+      "forbiddenSemantics": false
+    },
+    {
+      "path": "translator/provider/antigravity-cascade-client.mjs",
+      "bytes": 25065,
+      "sha256": "16e86dc37312671d5c2ab79184647d1ed761e816079ca43e56034cf4a80324b7",
+      "forbiddenImport": false,
+      "forbiddenSemantics": false
+    },
+    {
+      "path": "translator/provider/start-antigravity-chat-provider.mjs",
+      "bytes": 1712,
+      "sha256": "9b1d46782f25cd56fbb89d85c0d78eefe58ef33f0e76a0cd9e8ea222c929d422",
+      "forbiddenImport": false,
+      "forbiddenSemantics": false
+    }
+  ],
+  "workerReview": {
+    "jobId": "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
+    "accepted": [
+      "standalone loopback Chat server",
+      "structured Cascade mapping",
+      "native MCP exact-result continuation",
+      "connection rediscovery only for read-only discovery"
+    ],
+    "rejected": [
+      "prompt-marker assistant selection",
+      "old response-id request registry",
+      "any task retry or completion policy"
+    ]
+  },
+  "evidenceRecovery": {
+    "recovered": true,
+    "recoveredAtUtc": "2026-07-15T19:36:55.2233329Z",
+    "sourceRollout": "C:/Users/XD/.codex/sessions/2026/07/09/rollout-2026-07-09T02-19-50-019f42f5-22ad-72a2-a847-2b134d2126e6.jsonl",
+    "eventTimestampUtc": "2026-07-14T16:16:00.463Z",
+    "callId": "call_1flxO4ghZoyEP0kyAyxCANw9",
+    "receiptSha256": "a5955995dfa96e011d77a71a0dfbcd39ba5405c20d04605d22949a9a57615155",
+    "receiptLength": 2551,
+    "reason": "A no-traffic readiness run from the legacy script overwrote the formal report. This file restores the exact persisted execution receipt without replaying model traffic."
+  }
+}

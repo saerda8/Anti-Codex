@@ -47,6 +47,7 @@ function Resolve-CdpPort {
             }
         }
     } catch {}
+    $candidatePorts.Add(18318) | Out-Null
     $candidatePorts.Add(58318) | Out-Null
     $candidatePorts.Add(58317) | Out-Null
     foreach ($candidatePort in @($candidatePorts | Select-Object -Unique)) {
@@ -55,7 +56,7 @@ function Resolve-CdpPort {
             return $candidatePort
         } catch {}
     }
-    return 58318
+    return 18318
 }
 
 function New-ReportPaths {

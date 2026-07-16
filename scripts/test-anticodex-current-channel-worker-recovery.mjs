@@ -90,26 +90,6 @@ function recommendedReadOnlyProbesFromStatusProbe(report) {
     }));
 }
 
-function recommendedReadOnlyProbesFromXiaoqiangLedger(report) {
-  const statusJobIds = Array.isArray(report?.fourWorkerProjectProof?.statusJobIds)
-    ? report.fourWorkerProjectProof.statusJobIds
-    : [];
-  return statusJobIds
-    .filter((item) => item?.worker && item?.jobId)
-    .map((item) => {
-      const worker = String(item.worker || "");
-      const exposedWorkerTool = `${worker}_get_job`;
-      return {
-        worker,
-        statusTool: "xiaoqiang_get_job",
-        exposedWorkerTool,
-        jobId: String(item.jobId || ""),
-        expectedStatus: "completed",
-        recordCommand: `node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool ${exposedWorkerTool} --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok`,
-      };
-    });
-}
-
 function recommendedReadOnlyProbesFromCurrentFailures(failedTools, antigravityWorkerDirectReport) {
   const probes = [];
   if (failedTools.includes("antigravity_get_job")
@@ -142,12 +122,10 @@ function dedupeReadOnlyProbes(probes) {
 const transportFile = readReport("latest-current-channel-worker-transport.json");
 const probeFile = readReport("latest-worker-mcp-server-probe.json");
 const statusProbeFile = readReport("latest-worker-mcp-status-probe.json");
-const xiaoqiangLedgerFile = readReport("latest-xiaoqiang-usage-ledger.json");
 const antigravityWorkerDirectFile = readReport("latest-antigravity-worker-direct-smoke.json");
 const transport = transportFile.report || {};
 const directProbe = probeFile.report || {};
 const statusProbe = statusProbeFile.report || {};
-const xiaoqiangLedger = xiaoqiangLedgerFile.report || {};
 const antigravityWorkerDirect = antigravityWorkerDirectFile.report || {};
 const exposedWorkerTools = asStringArray(transport.exposedWorkerTools);
 const exposedWorkerToolSet = new Set(exposedWorkerTools);
@@ -178,17 +156,6 @@ const currentFailedWorkerPrefixes = deriveWorkerPrefixes(currentFailedWorkerTool
 const currentFailureHiddenByHistoricalOk = latestWorkerFailureIsCurrent
   && transport.mergedLatestWorkerObservations === true
   && okTools.length > 0;
-const directProbeServerNames = new Set(
-  (Array.isArray(directProbe.servers) ? directProbe.servers : [])
-    .map((item) => String(item?.name || ""))
-    .filter(Boolean)
-);
-const xiaoqiangConfigured = ["xiaoqiang1", "xiaoqiang2", "xiaoqiang3", "xiaoqiang4"].some((name) =>
-  directProbeServerNames.has(name)
-  || exposedWorkerToolSet.has(`${name}_get_job`)
-  || asStringArray(transport.exposedWorkerPrefixes).includes(name)
-);
-
 const directProbeOk = directProbe.ok === true;
 const directStatusProbeOk = statusProbe.ok === true
   && statusProbe.usedRealTraffic === false
@@ -210,7 +177,6 @@ const recommendedCurrentFailedWorkerReadOnlyProbes = dedupeReadOnlyProbes([
 ]);
 const recommendedReadOnlyProbes = dedupeReadOnlyProbes([
   ...recommendedCurrentFailedWorkerReadOnlyProbes,
-  ...(xiaoqiangConfigured ? recommendedReadOnlyProbesFromXiaoqiangLedger(xiaoqiangLedger) : []),
   ...statusProbeRecommendedReadOnlyProbes,
 ]);
 const exposedRecommendedReadOnlyProbes = recommendedReadOnlyProbes.filter((item) =>
@@ -348,9 +314,6 @@ const payload = {
     antigravityWorkerDirectReportPresent: antigravityWorkerDirectFile.present,
     antigravityWorkerDirectReportParseable: antigravityWorkerDirectFile.parseable,
     antigravityWorkerDirectJobId: String(antigravityWorkerDirect.jobId || ""),
-    xiaoqiangLedgerReportPresent: xiaoqiangLedgerFile.present,
-    xiaoqiangLedgerReportParseable: xiaoqiangLedgerFile.parseable,
-    xiaoqiangLedgerOk: xiaoqiangLedger.ok === true,
   },
   postReloadAcceptanceCriteria: [
     "run a current-channel read-only worker get_job/wait/status call",
@@ -371,7 +334,6 @@ const payload = {
     directWorkerProbe: "node scripts\\probe-anticodex-worker-mcp-servers.mjs",
     directWorkerStatusProbe: "node scripts\\test-anticodex-worker-mcp-status-probe.mjs --timeout-ms 30000",
     recordSuccess: "node scripts\\record-anticodex-current-channel-worker-transport.mjs --worker-tool <worker_read_tool> --worker-status ok --generic-mcp-tool node_repl --generic-mcp-status ok",
-    goalReadiness: "node scripts\\test-anticodex-goal-readiness.mjs",
     recoveryReadiness: "node scripts\\test-anticodex-current-channel-worker-recovery.mjs",
   },
   operatorActionCard: {

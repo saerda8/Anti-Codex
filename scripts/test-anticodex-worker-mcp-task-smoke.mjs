@@ -18,10 +18,6 @@ const WORKERS = {
   "opencode-worker": { start: "opencode_start_implementation", wait: "opencode_wait_for_job", timeoutMs: 240000 },
   "deepseek-code-worker": { start: "deepseek_start_implementation", wait: "deepseek_wait_for_job", timeoutMs: 240000 },
   "deveco-code-worker": { start: "deveco_start_implementation", wait: "deveco_wait_for_job", timeoutMs: 300000 },
-  xiaoqiang1: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
-  xiaoqiang2: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
-  xiaoqiang3: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
-  xiaoqiang4: { start: "xiaoqiang_start_implementation", wait: "xiaoqiang_wait_for_job", timeoutMs: 240000 },
 };
 
 function argValue(name, fallback = "") {
@@ -38,7 +34,7 @@ function printUsage() {
     "Usage: node scripts/test-anticodex-worker-mcp-task-smoke.mjs [options]",
     "",
     "Options:",
-    "  --scenario json|project|complex-project|xiaoqiang-project",
+    "  --scenario json|project|complex-project",
     "                                 Smoke scenario to run (default: json)",
     "  --workers <list>              Comma-separated worker names (default: opencode-worker)",
     "  --worker-checks               Ask workers to run their own validation command",
@@ -145,14 +141,13 @@ function utcStamp() {
 }
 
 function reportFileNameForScenario(scenario) {
-  if (scenario === "xiaoqiang-project") return "xiaoqiang-worker-mcp-project-smoke";
   if (scenario === "project") return "worker-mcp-project-smoke";
   if (scenario === "complex-project") return "worker-mcp-complex-project-smoke";
   return "worker-mcp-task-smoke";
 }
 
 function taskScenarioForScenario(scenario) {
-  return scenario === "xiaoqiang-project" ? "project" : scenario;
+  return scenario;
 }
 
 function writeSignedReport(payload, reportRoot) {
@@ -325,7 +320,7 @@ function buildWorkerArgs(workerName, workspace, marker, timeoutMs, scenario) {
     task: buildTask(workerName, marker, taskScenario),
   };
   if (hasArg("--worker-checks")) args.checks = [validation];
-  if (workerName === "deepseek-code-worker" || workerName.startsWith("xiaoqiang")) {
+  if (workerName === "deepseek-code-worker") {
     args.use_case = "simple_agent_task";
     args.verification_profile = "smoke";
     args.reasoning_effort = "high";
@@ -609,7 +604,7 @@ async function main() {
   const workspaceRoot = resolve(argValue("--workspace-root", `${process.env.APPDATA || os.tmpdir()}/anticodex/worker-task-smoke`));
   const timeoutMs = Number(argValue("--timeout-ms", "0")) || null;
   const scenario = argValue("--scenario", "json");
-  if (!["json", "project", "complex-project", "xiaoqiang-project"].includes(scenario)) throw new Error(`Unsupported scenario: ${scenario}`);
+  if (!["json", "project", "complex-project"].includes(scenario)) throw new Error(`Unsupported scenario: ${scenario}`);
   const workers = argValue("--workers", DEFAULT_WORKER).split(",").map((item) => item.trim()).filter(Boolean);
   const unsupported = workers.filter((worker) => !WORKERS[worker]);
   if (unsupported.length) throw new Error(`Unsupported workers: ${unsupported.join(", ")}`);

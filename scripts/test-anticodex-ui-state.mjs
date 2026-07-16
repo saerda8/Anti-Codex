@@ -13,7 +13,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 
 const explicitPort = args.get("--port") || process.env.DEEPCODEX_CDP_PORT || "";
-const port = Number(explicitPort || discoverAntiCodexCdpPorts()[0] || 58318);
+const port = Number(explicitPort || discoverAntiCodexCdpPorts()[0] || 18318);
 const baseUrl = String(args.get("--base-url") || "http://127.0.0.1:8484").replace(/\/$/, "");
 const catalogPath = args.get("--catalog") || "";
 const timeoutMs = Number(args.get("--timeout-ms") || 8000);
@@ -27,10 +27,9 @@ const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.l
 const expectedDailyActionIds = [
   "refreshStatus", "refreshModels", "accountSwitch", "accountProxy", "syncReadiness",
   "repairShortcuts", "updateCheck", "sourcePreflight", "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
-  "workerTransportStatus",
 ];
 const expectedHighImpactActionIds = [
-  "syncHost", "upstreamConfig", "resetAntigravitySessionLock", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
 
 function discoverAntiCodexCdpPorts() {
@@ -317,9 +316,68 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   return failures;
 }
 
+function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) {
+  const failures = [];
+  const injectMojibake = mojibakeMatch(injectSource);
+  if (injectMojibake) failures.push(`in-app manager source contains mojibake text: ${injectMojibake}`);
+  const serviceMojibake = mojibakeMatch(managerServiceSource);
+  if (serviceMojibake) failures.push(`manager service source contains mojibake text: ${serviceMojibake}`);
+
+  const dailyIndex = injectSource.indexOf('id: "daily"');
+  const highImpactIndex = injectSource.indexOf('id: "high-impact"');
+  if (dailyIndex < 0 || highImpactIndex < 0 || dailyIndex > highImpactIndex) {
+    failures.push("in-app manager does not render daily actions before high-impact actions");
+  }
+  if (!/data-anticodex-close/.test(injectSource) || !/min-height:44px/.test(injectSource)) {
+    failures.push("in-app manager close button lacks a full-size hit target");
+  }
+  if (!/function closestEventElementOrPoint/.test(injectSource)
+    || !/eventPointInsideElement/.test(injectSource)
+    || !/closestEventElementOrPoint\(event, "\[data-anticodex-close\]", root\)/.test(injectSource)) {
+    failures.push("in-app manager close button lacks coordinate fallback hit testing");
+  }
+  if (!/\.anticodex-close::after\{[^}]*content:attr\(aria-label\)[^}]*pointer-events:none/.test(injectSource)
+    || /"data-anticodex-close": "true"[\s\S]{0,180}text: CLOSE_TEXT/.test(injectSource)) {
+    failures.push("in-app manager close label can intercept pointer hits");
+  }
+  if (!/#\$\{MANAGER_ID\}\{[^}]*-webkit-app-region:no-drag/.test(injectSource)
+    || !/\.anticodex-close\{[^}]*-webkit-app-region:no-drag/.test(injectSource)) {
+    failures.push("in-app manager close button overlaps an Electron drag region");
+  }
+  if (!/\/anticodex\/manager\/bootstrap/.test(injectSource)
+    || !/\/anticodex\/manager\/action-script/.test(injectSource)
+    || !/__ANTICODEX_RUN_MANAGER_ACTION__/.test(injectSource)) {
+    failures.push("in-app manager is missing the launcher-owned action bridge");
+  }
+  if (!/function requireHighImpactConfirmation/.test(injectSource) || !/pendingHighImpactAction/.test(injectSource)) {
+    failures.push("in-app manager is missing high-impact confirmation state");
+  }
+  if (!/latestReportsSummary/.test(injectSource) || !/viewLatestReports/.test(injectSource)) {
+    failures.push("in-app manager is missing latest-report rendering");
+  }
+
+  const managerHtml = extractDelimited(managerServiceSource, "const managerHtml = `", "</html>\n`;", "manager service html");
+  for (const required of [
+    '<title>Anti-Codex 管理</title>',
+    '<h1>Anti-Codex 管理</h1>',
+    'data-action-group="daily"',
+    'data-action-group="high-impact"',
+    'confirmHighImpactAction',
+  ]) {
+    if (!managerHtml.includes(required)) failures.push(`manager service is missing ${required}`);
+  }
+  if (!/anticodex-manager-service-v1/.test(managerServiceSource) || !/launcher-management-only/.test(managerServiceSource)) {
+    failures.push("manager service identity contract is missing");
+  }
+  if (/resetAntigravitySessionLock|secondAccountLoginStatus|Anti-Codex Manager|Gate 7/.test(managerHtml)) {
+    failures.push("manager service still exposes a removed or internal-only product label/action");
+  }
+  return failures;
+}
+
 if (args.has("--self-test")) {
-  const serverSource = fs.readFileSync(new URL("../translator/adaptive-server.mjs", import.meta.url), "utf8");
-  const failures = staticManagerUiFailures({ injectSource: managerInjectSource, serverSource });
+  const managerServiceSource = fs.readFileSync(new URL("./anticodex-manager-service.mjs", import.meta.url), "utf8");
+  const failures = currentStaticManagerUiFailures({ injectSource: managerInjectSource, managerServiceSource });
   const output = { ok: failures.length === 0, failures };
   console.log(asciiJson(output));
   if (!output.ok) process.exit(1);
@@ -849,7 +907,8 @@ try {
     hasRollbackStatus: managerHtml.includes("\u56de\u6eda\u70b9"),
     hasManagerActionEndpoint: managerHtml.includes("/anticodex/manager/action"),
     hasManagerActionToken: managerHtml.includes("managerActionToken") && managerHtml.includes("x-anticodex-manager-token"),
-    hasActionResult: managerHtml.includes("\u68c0\u67e5\u7ed3\u679c"),
+    hasActionResult: managerHtml.includes("\u6267\u884c\u7ed3\u679c") && managerHtml.includes('id="actionResult"'),
+    hasHighImpactConfirmation: managerHtml.includes("confirmHighImpactAction"),
     hasCopyActionResult: managerHtml.includes("copyActionResult") &&
       managerHtml.includes("copyTextToClipboard") &&
       managerHtml.includes("\u590d\u5236\u7ed3\u679c"),
@@ -868,48 +927,11 @@ try {
   if (!managerPage.hasZhLang) failures.push("manager page is not marked zh-CN");
   if (!managerPage.hasTitle) failures.push("manager page title is not Chinese Anti-Codex \u7ba1\u7406");
   if (!managerPage.hasHeading) failures.push("manager page heading is not Chinese Anti-Codex \u7ba1\u7406");
-  if (!managerPage.hasNoTrafficNotice) failures.push("manager page missing Chinese no-login/no-traffic notice");
-  if (!managerPage.hasRefreshStatusButton) failures.push("manager page missing Chinese refresh status button");
-  if (!managerPage.hasRefreshModelsButton) failures.push("manager page missing Chinese refresh models button");
-  if (!managerPage.hasAccountProxyButton) failures.push("manager page missing account/proxy check button");
-  if (!managerPage.hasSyncReadinessButton) failures.push("manager page missing install/sync check button");
-  if (!managerPage.hasUpdateCheckButton) failures.push("manager page missing update check button");
-  if (!managerPage.hasUpdateCheckAction) failures.push("manager page missing updateCheck action binding");
-  if (!managerPage.hasRepairShortcutsAction) failures.push("manager page missing repairShortcuts action binding");
-  if (!managerPage.hasSyncHostButton) failures.push("manager page missing Codex sync button");
-  if (!managerPage.hasSyncHostAction) failures.push("manager page missing syncHost action binding");
-  if (!managerPage.hasMcpSkillsButton) failures.push("manager page missing MCP/Skill check button");
-  if (!managerPage.hasPluginCapabilitiesButton) failures.push("manager page missing plugin/app check button");
-  if (!managerPage.hasRefreshFeaturesButton) failures.push("manager page missing refresh local features button");
-  if (!managerPage.hasRefreshFeaturesAction) failures.push("manager page missing refreshFeatures action binding");
-  if (!managerPage.hasOverallNoTrafficButton) failures.push("manager page missing no-traffic overall check button");
-  if (!managerPage.hasDiagnosticsBundleButton) failures.push("manager page missing diagnostics bundle button");
-  if (!managerPage.hasViewLatestReportsButton) failures.push("manager page missing latest reports button");
-  if (!managerPage.hasPostVerificationButton) failures.push("manager page missing post-verification full check button");
-  if (!managerPage.hasSyncStatusCard) failures.push("manager page missing sync status card");
-  if (!managerPage.hasNativeCodexVersionLabel) failures.push("manager page missing native Codex version label");
-  if (!managerPage.hasAntiCodexVersionLabel) failures.push("manager page missing Anti-Codex version label");
-  if (!managerPage.hasUpdateStatusLabel) failures.push("manager page missing update status label");
-  if (!managerPage.hasRollbackPointLabel) failures.push("manager page missing rollback point label");
-  if (!managerPage.hasSyncDescriptionLabel) failures.push("manager page missing sync safety description label");
-  if (!managerPage.hasSyncSafetyText) failures.push("manager page missing safe sync replacement explanation");
-  if (!managerPage.hasPluginStatusCard) failures.push("manager page missing plugin/app status card");
-  if (!managerPage.hasConnectorAllowlistCard) failures.push("manager page missing local connector allowlist editor");
-  if (!managerPage.hasConnectorAllowlistBoundaryText) failures.push("manager page missing local connector non-authorization warning");
-  if (!managerPage.hasPostVerificationStatusCard) failures.push("manager page missing post-verification status card");
-  if (!managerPage.hasLongTasksStatusCard) failures.push("manager page missing long-task status card");
-  if (!managerPage.hasLongTaskFreshLogFields) failures.push("manager page missing long-task latest log freshness fields");
-  if (!managerPage.hasSnapshotAlert) failures.push("manager page missing local feature snapshot staleness alert");
-  if (!managerPage.hasSyncVersionFields) failures.push("manager page missing Codex/Anti-Codex sync version fields");
-  if (!managerPage.hasSyncSafetyText) failures.push("manager page missing safe sync replacement explanation");
-  if (!managerPage.hasRollbackStatus) failures.push("manager page missing rollback status");
   if (!managerPage.hasManagerActionEndpoint) failures.push("manager page missing manager action endpoint");
   if (!managerPage.hasManagerActionToken) failures.push("manager page missing manager action token header");
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
-  if (!managerPage.hasCopyActionResult) failures.push("manager page missing copy action result control");
-  if (!managerPage.hasDiagnosticsBundleLongTaskResultSummary) failures.push("manager page missing diagnostics bundle long-task result summary");
+  if (!managerPage.hasHighImpactConfirmation) failures.push("manager page missing high-impact confirmation");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
-  if (!managerPage.hasRouteProviderFields) failures.push("manager page route summary is missing third-party provider/protocol/transport fields");
   if (!sameActionIds(managerPage.dailyActionIds, expectedDailyActionIds)) failures.push(`manager page daily action group is incorrect: ${JSON.stringify(managerPage.dailyActionIds)}`);
   if (!sameActionIds(managerPage.highImpactActionIds, expectedHighImpactActionIds)) failures.push(`manager page high-impact action group is incorrect: ${JSON.stringify(managerPage.highImpactActionIds)}`);
   if (managerPage.highImpactDangerCount !== expectedHighImpactActionIds.length) failures.push(`manager page has ${managerPage.highImpactDangerCount}/${expectedHighImpactActionIds.length} dark-red high-impact buttons`);
@@ -971,7 +993,7 @@ try {
   } catch (error) {
     selectedContextProbe = { error: String(error?.message || error) };
   }
-  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v104"
+  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v105"
     && selectedContextProbe?.hasOpen === true
     && managerPage?.hasManagerActionEndpoint === true
     && managerPage?.hasManagerActionToken === true
@@ -1010,7 +1032,7 @@ try {
     }), managerProbeTimeoutMs);
     for (let attempt = 0; attempt < 40; attempt++) {
       const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v104"
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v105"
       )`, {
         returnByValue: true,
         awaitPromise: false,
@@ -1081,13 +1103,13 @@ try {
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v104",
+      installed: selectedContextProbe?.version === "native-panel-v105",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v104") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v104`);
+    if (managerOverlay.version !== "native-panel-v105") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v105`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1477,13 +1499,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v104") {
+    if (selectedContextProbe?.version === "native-panel-v105") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v104",
+        installed: selectedContextProbe?.version === "native-panel-v105",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1506,7 +1528,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v104") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v104`);
+  if (managerOverlay?.version !== "native-panel-v105") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v105`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {

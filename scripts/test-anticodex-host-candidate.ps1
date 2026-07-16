@@ -112,30 +112,29 @@ foreach ($path in $required) {
 
 $markerPath = Join-Path $candidate "codex-patched-app.ok"
 $manifest = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-if ($manifest.schema -ne "anticodex-host-manifest-v1") {
+if ($manifest.schema -ne "anticodex-host-manifest-v2") {
     throw "Anti-Codex candidate marker schema is invalid."
 }
-$expectedCriticalPatches = @(
+if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
+    throw "Anti-Codex candidate marker patch profile is invalid."
+}
+$expectedFixedShellCriticalPatches = @(
     "package-json",
     "webview-html-title",
     "app-name",
     "app-user-model-id",
     "session-title",
+    "startup-mcp-config-reload",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",
     "browser-window-icon",
     "windows-tray-icon",
-    "computer-use-legacy-notify-opt-out",
-    "local-model-availability",
-    "local-plugin-catalog",
-    "electron-local-plugin-catalog",
-    "webview-local-plugin-catalog",
-    "retry-stream-error-visibility"
+    "local-model-availability"
 )
 $recordedCriticalPatches = @($manifest.criticalPatches)
-if (($recordedCriticalPatches.Count -ne $expectedCriticalPatches.Count) -or
-    (@($expectedCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
+if (($recordedCriticalPatches.Count -ne $expectedFixedShellCriticalPatches.Count) -or
+    (@($expectedFixedShellCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
     throw "Anti-Codex candidate marker is missing critical compatibility patches."
 }
 
@@ -155,8 +154,22 @@ $alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatg
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
     throw "Anti-Codex candidate still selects a ChatGPT-branded Windows tray icon."
 }
-if ($asarText -notmatch '\?\.length<1\|\|') {
-    throw "Anti-Codex candidate is missing the computer-use legacy notify opt-out."
+foreach ($managerMarker in @("__ANTICODEX_OPEN_MANAGER__", "\u7ba1\u7406")) {
+    if (-not $asarText.Contains($managerMarker)) {
+        throw "Anti-Codex candidate is missing the Chinese Manager entry: $managerMarker"
+    }
+}
+$retiredFeaturePatchPatterns = @(
+    '\?\.length<1\|\|[\w$]+\([\w$]+,[\w$]+\)',
+    'var [\w$]+=async\(\)=>\(\{marketplaces:\[\]\}\);',
+    'async listPlugins\([\w$]+\)\{return\{marketplaces:\[\],marketplaceLoadErrors:\[\]\}\}',
+    '"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)',
+    'case`error`:if\([\w$]+\.willRetry\)\{break\}else if\('
+)
+foreach ($pattern in $retiredFeaturePatchPatterns) {
+    if ($asarText -match $pattern) {
+        throw "Anti-Codex fixed shell candidate contains a retired feature patch: $pattern"
+    }
 }
 if ($hostIconPalette.ok -ne $true) {
     throw "Anti-Codex candidate host icon is not the pink Codex cloud with white command marks."

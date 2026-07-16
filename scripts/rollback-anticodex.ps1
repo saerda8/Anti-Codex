@@ -113,22 +113,34 @@ function Test-AntiCodexIconPalette {
 }
 
 function Test-AntiCodexAsarPatches {
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile
+    )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
     $requiredMarkers = @(
         '.app.name=`Anti-Codex`',
         "AntiCodex",
-        'authMethod:`apikey`',
-        "requiresAuth:!1",
         'icon:`icon.ico`',
-        "marketplaces:[]",
-        "marketplaceLoadErrors:[]",
-        "listPlugins({})"
+        "__ANTICODEX_OPEN_MANAGER__",
+        "\u7ba1\u7406"
     )
     foreach ($marker in $requiredMarkers) {
         if (-not $text.Contains($marker)) {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
+        }
+    }
+    $retiredFeaturePatchPatterns = @(
+        '\?\.length<1\|\|[\w$]+\([\w$]+,[\w$]+\)',
+        'var [\w$]+=async\(\)=>\(\{marketplaces:\[\]\}\);',
+        'async listPlugins\([\w$]+\)\{return\{marketplaces:\[\],marketplaceLoadErrors:\[\]\}\}',
+        '"list-plugins":[\w$]+\(([\w$]+)=>\1\.listPlugins\(\{\}\)\)',
+        'case`error`:if\([\w$]+\.willRetry\)\{break\}else if\('
+    )
+    foreach ($pattern in $retiredFeaturePatchPatterns) {
+        if ($text -match $pattern) {
+            throw "Anti-Codex fixed shell host contains a retired feature patch: $pattern"
         }
     }
     $codexTraySelectorCount = [regex]::Matches($text, 'codex-tray\.ico').Count
@@ -141,26 +153,31 @@ function Test-AntiCodexAsarPatches {
 function Test-AntiCodexHost {
     param([Parameter(Mandatory = $true)][string]$HostRoot, [Parameter(Mandatory = $true)][string]$MarkerPath)
     $hostRootFull = Assert-FixedHostPath $HostRoot
-    $expectedCriticalPatches = @(
+    $fixedShellCriticalPatches = @(
         "package-json",
         "webview-html-title",
         "app-name",
         "app-user-model-id",
         "session-title",
+        "startup-mcp-config-reload",
         "auth-requirement",
         "app-route-gate",
         "profile-dropdown-settings",
         "browser-window-icon",
         "windows-tray-icon",
-        "local-model-availability",
-        "local-plugin-catalog",
-        "electron-local-plugin-catalog",
-        "webview-local-plugin-catalog",
-        "retry-stream-error-visibility"
+        "local-model-availability"
     )
     if (-not (Test-Path -LiteralPath $MarkerPath -PathType Leaf)) { throw "Anti-Codex host marker is missing: $MarkerPath" }
     $manifest = Get-Content -LiteralPath $MarkerPath -Raw | ConvertFrom-Json
-    if ($manifest.schema -ne "anticodex-host-manifest-v1") { throw "Anti-Codex host marker schema is invalid: $MarkerPath" }
+    $manifestSchema = [string]$manifest.schema
+    if ($manifestSchema -ne "anticodex-host-manifest-v2") {
+        throw "Anti-Codex host marker schema is invalid: $MarkerPath"
+    }
+    if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
+        throw "Anti-Codex host marker patch profile is invalid: $MarkerPath"
+    }
+    $patchProfile = "fixed-shell-v1"
+    $expectedCriticalPatches = @($fixedShellCriticalPatches)
 
     $detectedDesktopHost = $null
     foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
@@ -190,7 +207,7 @@ function Test-AntiCodexHost {
         (@($expectedCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
         throw "Anti-Codex host marker is missing critical compatibility patches."
     }
-    Test-AntiCodexAsarPatches -Path $required.appAsar
+    Test-AntiCodexAsarPatches -Path $required.appAsar -PatchProfile $patchProfile
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
         $actual = (Get-FileHash -LiteralPath $required[$name] -Algorithm SHA256).Hash
         if ([string]$manifest.files.$name -ne [string]$actual) { throw "Anti-Codex host marker hash mismatch: $name" }

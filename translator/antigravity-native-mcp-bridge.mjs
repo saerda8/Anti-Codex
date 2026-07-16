@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 
 export async function createAntigravityNativeMcpBridge(options = {}) {
-  const tools = normalizeTools(options.tools);
+  const canonicalTools = normalizeTools(options.tools);
+  const { tools, canonicalNameByNativeName } = withAntigravityToolAliases(canonicalTools);
+  const systemPromptSections = normalizeSystemPromptSections(options.systemPromptSections);
   const calls = [];
   const waiters = [];
   const pending = new Map();
@@ -52,7 +54,8 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     pending.set(callId, { completion, response, rpcId: body.id, timeout });
     enqueue({
       callId,
-      name,
+      name: canonicalNameByNativeName.get(name) ?? name,
+      nativeName: name,
       arguments: body?.params?.arguments ?? {},
     });
     try {
@@ -131,13 +134,13 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
   return {
     url,
     tools,
-    customAgentSpec: {
+    customAgentSpec: withAntigravitySystemPromptSections({
       customizationConfig: {
         customizationServerUrl: url,
         toolNames: tools.map((tool) => tool.name),
       },
       customTools: tools.map((tool) => tool.name),
-    },
+    }, systemPromptSections),
     waitForCall,
     takeCalls,
     completeCall,
@@ -146,6 +149,33 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
       return pending.size;
     },
   };
+}
+
+export function withAntigravitySystemPromptSections(baseSpec = {}, sections = []) {
+  const normalizedSections = normalizeSystemPromptSections(sections);
+  if (normalizedSections.length === 0) return { ...baseSpec };
+  return {
+    ...baseSpec,
+    customAgent: {
+      ...(baseSpec?.customAgent ?? {}),
+      systemPromptSections: normalizedSections,
+    },
+  };
+}
+
+function normalizeSystemPromptSections(sections = []) {
+  return (sections ?? []).flatMap((section) => {
+    const content = String(section?.content ?? "").trim();
+    if (!content) return [];
+    return [{
+      title: String(section?.title ?? "Codex instructions").trim() || "Codex instructions",
+      content,
+      metadata: {
+        ...(section?.metadata ?? {}),
+        isInternal: true,
+      },
+    }];
+  });
 }
 
 export function normalizeTools(tools = []) {
@@ -163,6 +193,22 @@ export function normalizeTools(tools = []) {
         : { type: "object", properties: {}, additionalProperties: true },
     }];
   });
+}
+
+function withAntigravityToolAliases(tools) {
+  const aliases = [...tools];
+  const canonicalNameByNativeName = new Map(tools.map((tool) => [tool.name, tool.name]));
+  const names = new Set(canonicalNameByNativeName.keys());
+  const shellCommand = tools.find((tool) => tool.name === "shell_command");
+  if (shellCommand && !names.has("command")) {
+    aliases.push({
+      name: "command",
+      description: `${shellCommand.description || "Run a shell command"} (Antigravity compatibility alias for shell_command.)`,
+      inputSchema: shellCommand.inputSchema,
+    });
+    canonicalNameByNativeName.set("command", "shell_command");
+  }
+  return { tools: aliases, canonicalNameByNativeName };
 }
 
 function mcpToolResult(output, isError) {

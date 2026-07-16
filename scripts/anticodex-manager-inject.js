@@ -1,9 +1,14 @@
 (() => {
-  const VERSION = "native-panel-v104";
+  const VERSION = "native-panel-v105";
   const SUMMARY_VERSION = "latest-reports-evidence-v4";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
   const TRAFFIC_NOTICE_ID = "anticodex-traffic-notice";
+  const NATIVE_COMPAT_STYLE_ID = "anticodex-native-compat-style";
+  const nativeCompatStyle = document.getElementById(NATIVE_COMPAT_STYLE_ID) || document.createElement("style");
+  nativeCompatStyle.id = NATIVE_COMPAT_STYLE_ID;
+  nativeCompatStyle.textContent = `[data-radix-popper-content-wrapper]:has(> [data-radix-menu-content][data-state="closed"]){pointer-events:none!important}`;
+  if (!nativeCompatStyle.isConnected) (document.head || document.documentElement).append(nativeCompatStyle);
   if (
     window.__ANTICODEX_MANAGER_VERSION__ === VERSION &&
     window.__ANTICODEX_MANAGER_SUMMARY_VERSION__ === SUMMARY_VERSION &&
@@ -38,10 +43,8 @@
     ["updateCheck", "\u68c0\u67e5\u66f4\u65b0"],
     ["sourcePreflight", "\u8fd0\u884c\u6e90\u7801\u9884\u68c0"],
     ["upstreamConfig", "\u914d\u7f6e\u7b2c\u4e09\u65b9 API"],
-    ["resetAntigravitySessionLock", "\u91cd\u7f6e Antigravity \u4f1a\u8bdd\u9501"],
     ["syncHost", "\u540c\u6b65 Codex \u66f4\u65b0"],
     ["mcpSkills", "\u68c0\u67e5 MCP/Skill"],
-    ["workerTransportStatus", "Worker \u901a\u9053\u72b6\u6001\uff08\u4e0d\u6d3e\u5de5\uff09"],
     ["pluginCapabilities", "\u68c0\u67e5\u63d2\u4ef6/\u5e94\u7528"],
     ["refreshFeatures", "\u5237\u65b0\u672c\u5730\u529f\u80fd"],
     ["stabilitySoak", "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
@@ -62,7 +65,6 @@
     "updateCheck",
     "sourcePreflight",
     "mcpSkills",
-    "workerTransportStatus",
     "pluginCapabilities",
     "diagnosticsBundle",
     "viewLatestReports",
@@ -70,7 +72,6 @@
   const HIGH_IMPACT_ACTION_IDS = new Set([
     "syncHost",
     "upstreamConfig",
-    "resetAntigravitySessionLock",
     "refreshFeatures",
     "stabilitySoak",
     "coldRelaunch",
@@ -140,6 +141,11 @@
     if (!HIGH_IMPACT_ACTION_IDS.has(action)) {
       resetHighImpactConfirmation();
       return false;
+    }
+    const result = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
+    if (!result) {
+      resetHighImpactConfirmation();
+      return true;
     }
     const now = Date.now();
     if (pendingHighImpactAction === action && now <= pendingHighImpactUntil) {
@@ -361,6 +367,7 @@
     return Boolean(
       responses["/health"] && responses["/models"] && responses["/anticodex/diagnostics"]
       && responses["/anticodex/upstream-profile"]
+      && responses["/anticodex/model-routes"]
       && responses["/anticodex/local-connectors/allowlist"]
       && responses["/backend-api/ps/plugins/installed"] && responses["/backend-api/aip/connectors"]
       && responses["/backend-api/plugins/list"] && responses["/backend-api/wham/apps"]
@@ -373,7 +380,19 @@
     const snapshotFallback = snapshotResponse(path);
     const allowSnapshotFallback = options.allowSnapshotFallback !== false
       && (!options.method || String(options.method).toUpperCase() === "GET");
+    if (options.preferSnapshot === true && allowSnapshotFallback && snapshotFallback) return snapshotFallback;
     let lastError = null;
+    const method = String(options.method || "GET").toUpperCase();
+    if (location.protocol === "app:" && method === "GET" && typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ === "function") {
+      try {
+        const json = await managerRequestViaBridge(path, { method, timeoutMs: options.timeoutMs });
+        activeApi = browserReachableApiBase(json?.baseUrl || activeApi, activeApi);
+        return json;
+      } catch (error) {
+        lastError = error;
+        if (allowSnapshotFallback && snapshotFallback) return snapshotFallback;
+      }
+    }
     const candidates = options.retryCandidates === false
       ? [activeApi || window.__ANTICODEX_MANAGER_API__ || DEFAULT_API]
       : apiCandidates();
@@ -388,6 +407,46 @@
     }
     if (allowSnapshotFallback && snapshotFallback) return snapshotFallback;
     throw lastError || new Error("Anti-Codex local gateway is unavailable.");
+  }
+
+  async function managerRequestViaBridge(path, options = {}) {
+    if (typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function") {
+      throw new Error("Anti-Codex manager request bridge is unavailable.");
+    }
+    const timeoutMs = Math.min(181000, Math.max(1000, Number(options.timeoutMs) || LOAD_SNAPSHOT_TIMEOUT_MS));
+    let timeout = null;
+    let payload;
+    try {
+      payload = await Promise.race([
+        window.__ANTICODEX_RUN_MANAGER_REQUEST__(path, {
+          method: String(options.method || "GET").toUpperCase(),
+          timeoutMs,
+          ...(options.body === undefined ? {} : { body: options.body }),
+        }),
+        new Promise((resolve) => {
+          timeout = setTimeout(() => resolve({ __timedOut: true }), timeoutMs + 1000);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+    if (payload?.__timedOut) throw new Error("Anti-Codex manager request bridge timed out.");
+    if (payload?.kind !== "manager-request" || payload?.path !== path) {
+      throw new Error("Anti-Codex manager request bridge returned a mismatched response.");
+    }
+    if (payload.ok === false) throw new Error(payload.message || "Anti-Codex manager request failed.");
+    return payload.value;
+  }
+
+  async function managerGetLiveJson(path, options = {}) {
+    if (typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ === "function") {
+      try {
+        return await managerRequestViaBridge(path, { ...options, method: "GET" });
+      } catch (error) {
+        if (location.protocol === "app:") throw error;
+      }
+    }
+    return getJsonFrom(activeApi, path, options);
   }
 
   async function safeJson(path, options = {}) {
@@ -410,6 +469,17 @@
   }
 
   async function managerPostJson(path, body, options = {}) {
+    if (typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ === "function") {
+      try {
+        return await managerRequestViaBridge(path, {
+          method: "POST",
+          timeoutMs: options.timeoutMs,
+          body,
+        });
+      } catch (error) {
+        if (location.protocol === "app:") throw error;
+      }
+    }
     if (!managerToken) await refreshManagerToken();
     const postOnce = () => getJson(path, {
       ...options,
@@ -962,560 +1032,44 @@
 
   function latestReportsSummary(result) {
     const reports = Array.isArray(result?.reports) ? result.reports : [];
-    if (!reports.length) return "\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002\n\u53ef\u5148\u8fd0\u884c\u201c\u5feb\u901f\u603b\u68c0\u201d\u6216\u201c\u7a33\u5b9a\u6027\u5de1\u68c0\u201d\u751f\u6210\u62a5\u544a\u3002";
-    const activeReports = reports.filter((item) => item?.deferred !== true);
-    const deferredReports = reports.filter((item) => item?.deferred === true);
-    const activeExistingCount = activeReports.filter((item) => item.exists).length;
-    const activeStaleCount = activeReports.filter((item) => item.exists && item.stale).length;
-    const activeMissingCount = activeReports.filter((item) => !item.exists).length;
+    if (!reports.length) return "\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u62a5\u544a\u3002";
+
     const lines = [
       `\u62a5\u544a\u76ee\u5f55\uff1a${result.reportRoot || "\u672a\u77e5"}`,
-      `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd`,
+      `\u5df2\u627e\u5230\uff1a${result.existingCount ?? reports.filter((item) => item.exists).length} \u4efd / \u7f3a\u5931\uff1a${result.missingCount ?? reports.filter((item) => !item.exists && item.deferred !== true).length} \u4efd / \u635f\u574f\uff1a${result.invalidCount ?? 0} \u4efd`,
     ];
-    if (activeStaleCount) {
-      lines.push(`\u9700\u91cd\u8dd1\uff1a${activeStaleCount} \u4efd\u62a5\u544a\u5df2\u8fc7\u671f`);
-    }
-    if (activeMissingCount) {
-      lines.push(`\u672a\u751f\u6210\uff1a${activeMissingCount} \u4efd`);
-    }
-    if (deferredReports.length) {
-      lines.push(`\u5df2\u5ef6\u671f/\u53ef\u9009\uff1a${deferredReports.length} \u4efd`);
-    }
-    if (result.invalidCount) {
-      lines.push(`\u635f\u574f\u62a5\u544a\uff1a${result.invalidCount} \u4efd\u65e0\u6cd5\u8bfb\u53d6`);
-    }
-    if (!activeExistingCount && !deferredReports.length) {
-      lines.push("\u63d0\u793a\uff1a\u8bf7\u5148\u8fd0\u884c\u5feb\u901f\u603b\u68c0\u3001\u5b8c\u6574\u603b\u68c0\u6216\u7a33\u5b9a\u6027\u5de1\u68c0\u3002");
-    }
+
     for (const item of reports) {
-      const passed = item.effectiveOk !== null && item.effectiveOk !== undefined ? item.effectiveOk : item.ok;
-      const status = item.exists
-        ? ((item.parseable === false || item.invalid) ? "\u62a5\u544a\u635f\u574f" : (item.deferred === true && (item.stale || !passed) ? "\u5df2\u5ef6\u671f" : (item.stale ? "\u9700\u91cd\u8dd1" : (passed ? "\u901a\u8fc7" : "\u9700\u5904\u7406"))))
-        : (item.deferred === true ? "\u5df2\u5ef6\u671f" : "\u672a\u751f\u6210");
-      const elapsed = item.elapsedMs != null ? ` / ${item.elapsedMs} ms` : "";
-      lines.push(`${item.label}\uff1a${status}${elapsed}`);
+      const passed = item.effectiveOk ?? item.ok;
+      const status = !item.exists
+        ? (item.deferred ? "\u53ef\u9009\u672a\u8fd0\u884c" : "\u672a\u751f\u6210")
+        : (item.invalid
+          ? "\u62a5\u544a\u635f\u574f"
+          : (item.stale && !item.deferred
+            ? "\u9700\u91cd\u8dd1"
+            : (passed ? "\u901a\u8fc7" : (item.deferred ? "\u53ef\u9009\u672a\u901a\u8fc7" : "\u9700\u5904\u7406"))));
       const age = formatReportAge(item.ageMs);
-      if (item.exists && age) lines.push(`  \u66f4\u65b0\uff1a${age}`);
-      if (item.firstFailure) lines.push(`  \u9996\u4e2a\u5931\u8d25\uff1a${item.firstFailure}`);
-      if (item.publicDocumentationOk !== null && item.publicDocumentationOk !== undefined) lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
-      if (item.releaseReady !== null && item.releaseReady !== undefined) {
-        lines.push(`  Release Gate: short=${item.shortReady ? "true" : "false"} / release=${item.releaseReady ? "true" : "false"}`);
-        if (item.releaseBlockedOnlyByRequiredRealTraffic === true) lines.push(`  release blocker: required real-traffic evidence only (${(item.requiredRealTrafficBlockedGates || []).join(", ") || "unknown"}); short/no-traffic gates are clear`);
-        if (item.strictOptionalRealTraffic !== null && item.strictOptionalRealTraffic !== undefined) lines.push(`  optionalRealTraffic: strict=${item.strictOptionalRealTraffic ? "true" : "false"} / ready=${item.optionalRealTrafficReady ? "true" : "false"}`);
-        if (Array.isArray(item.optionalRealTrafficFailures) && item.optionalRealTrafficFailures.length) lines.push(`  optionalRealTrafficFailures: ${item.optionalRealTrafficFailures.slice(0, 6).join(", ")}`);
-        if (Array.isArray(item.missingRequired) && item.missingRequired.length) lines.push(`  missingRequired: ${item.missingRequired.slice(0, 6).join(", ")}`);
-        if (Array.isArray(item.missingShort) && item.missingShort.length) lines.push(`  missingShort: ${item.missingShort.slice(0, 6).join(", ")}`);
-        if (Array.isArray(item.missingOptional) && item.missingOptional.length) lines.push(`  missingOptional: ${item.missingOptional.slice(0, 6).join(", ")}`);
-        if (Array.isArray(item.damagedReports) && item.damagedReports.length) lines.push(`  damagedReports: ${item.damagedReports.slice(0, 6).join(", ")}`);
-        function actionDisplayLabel(action, fallbackGateId = "") {
-          const id = action?.id || "";
-          const gateId = action?.gateId || fallbackGateId || id;
-          const flags = [];
-          if (action?.reportOnly === true) flags.push("reportOnly");
-          if (action?.blockedUntilExplicitUserApproval === true) flags.push("approval");
-          if (action?.requiresGatewayStart === true) flags.push("gateway");
-          if (action?.requiresRealTraffic === true) flags.push("realTraffic");
-          if (action?.highImpact === true) flags.push("highImpact");
-          return `${gateId}:${id}${flags.length ? `[${flags.join(",")}]` : ""}`;
-        }
-        function failureReasonDisplayLabel(gate) {
-          const hiddenReasons = gate?.failureReasonsHiddenCount != null && Number.isFinite(Number(gate.failureReasonsHiddenCount)) ? Math.max(0, Number(gate.failureReasonsHiddenCount)) : 0;
-          const reason = `${gate?.failureReason || (Array.isArray(gate?.failureReasons) ? gate.failureReasons[0] : "unsatisfied")}${hiddenReasons ? `(+${hiddenReasons} reasons)` : ""}`;
-          const details = [];
-          if (gate?.ageHours !== undefined && gate.ageHours !== null && Number.isFinite(Number(gate.ageHours))) details.push(`age=${Number(gate.ageHours).toFixed(1)}h`);
-          if (typeof gate?.fresh === "boolean") details.push(`fresh=${triStateText(gate.fresh)}`);
-          if (typeof gate?.selectedFromHistory === "boolean") details.push(`history=${triStateText(gate.selectedFromHistory)}`);
-          if (typeof gate?.historySourceMismatch === "boolean") details.push(`sourceMismatch=${triStateText(gate.historySourceMismatch)}`);
-          if (typeof gate?.requiredForShort === "boolean" || typeof gate?.requiredForRelease === "boolean") details.push(`required=${triStateText(gate.requiredForShort)}/${triStateText(gate.requiredForRelease)}`);
-          return `${gate?.id || "unknown"}:${reason}${details.length ? `[${details.join("/")}]` : ""}`;
-        }
-        function mergedNextActionObjects() {
-          const seen = new Set();
-          const actions = [];
-          const add = (action, fallbackGateId = "") => {
-            if (!action?.id) return;
-            const key = `${action.gateId || fallbackGateId || action.id}:${action.id}`;
-            if (seen.has(key)) return;
-            seen.add(key);
-            actions.push({ ...action, __fallbackGateId: fallbackGateId });
-          };
-          if (Array.isArray(item.nextActions)) item.nextActions.forEach((action) => add(action, action?.gateId || ""));
-          if (Array.isArray(item.releaseGateFailureReasons)) {
-            item.releaseGateFailureReasons.forEach((gate) => {
-              if (Array.isArray(gate?.orderedActions)) gate.orderedActions.forEach((action) => add(action, gate.id));
-            });
-          }
-          return actions;
-        }
-        if (Array.isArray(item.releaseGateFailureReasons) && item.releaseGateFailureReasons.length) {
-          const failureReasonItems = item.releaseGateFailureReasons.slice(0, 6).map((gate) => failureReasonDisplayLabel(gate));
-          const hiddenFailureReasons = Math.max(0, item.releaseGateFailureReasons.length - failureReasonItems.length);
-          lines.push(`  failureReasons: ${failureReasonItems.join(", ")}${hiddenFailureReasons ? ` (+${hiddenFailureReasons} more)` : ""}`);
-          const reportFailureSource = item.releaseGateFailureReasons
-            .filter((gate) => gate?.selectedFile || (Array.isArray(gate?.reportFailureSamples) && gate.reportFailureSamples.length))
-          const reportFailureDetails = reportFailureSource
-            .slice(0, 4)
-            .map((gate) => {
-              const sample = Array.isArray(gate.reportFailureSamples) && gate.reportFailureSamples.length ? ` / sample ${gate.reportFailureSamples.slice(0, 2).join(" | ")}` : "";
-              const codes = Array.isArray(gate.reportFailureSampleCodes) && gate.reportFailureSampleCodes.length ? ` / codes ${gate.reportFailureSampleCodes.slice(0, 3).join(",")}` : "";
-              return `${gate.id}:${gate.selectedFile || "no-file"}${gate.selectedMtime ? ` @ ${gate.selectedMtime}` : ""}${codes}${sample}`;
-          });
-        const hiddenReportFailures = Math.max(0, reportFailureSource.length - reportFailureDetails.length);
-        if (reportFailureDetails.length) lines.push(`  reportFailures: ${reportFailureDetails.join("; ")}${hiddenReportFailures ? ` (+${hiddenReportFailures} more)` : ""}`);
-        const guidanceSource = item.releaseGateFailureReasons
-          .filter((gate) => gate?.guidance);
-        const guidanceDetails = guidanceSource
-          .slice(0, 4)
-          .map((gate) => `${gate.id}:${gate.guidance}`);
-        const hiddenGuidance = Math.max(0, guidanceSource.length - guidanceDetails.length);
-        if (guidanceDetails.length) lines.push(`  guidance: ${guidanceDetails.join("; ")}${hiddenGuidance ? ` (+${hiddenGuidance} more)` : ""}`);
-        const realTrafficEvidenceGates = item.releaseGateFailureReasons
-          .filter((gate) => gate?.group === "real-traffic" && (["stale_report", "missing_report"].includes(gate.failureReason) || (Array.isArray(gate.failureReasons) && gate.failureReasons.some((reason) => ["stale_report", "missing_report"].includes(reason)))))
-            .map((gate) => gate.id)
-            .filter(Boolean);
-          if (realTrafficEvidenceGates.length) {
-            lines.push(`  真实流量验收证据需更新/未生成：这不是普通功能缺失；请显式运行耗真实流量的验证后再做完整检查（${realTrafficEvidenceGates.slice(0, 6).join(", ")}）`);
-          }
-        }
-        const allNextActionObjects = mergedNextActionObjects();
-        const allNextActions = allNextActionObjects.map((action) => actionDisplayLabel(action, action.__fallbackGateId || ""));
-        const nextActions = allNextActions.slice(0, 8);
-        const reportHiddenNextActions = item.nextActionsHiddenCount != null && Number.isFinite(Number(item.nextActionsHiddenCount)) ? Math.max(0, Number(item.nextActionsHiddenCount)) : null;
-        const reportAvailableNextActions = item.nextActionsAvailableCount != null && Number.isFinite(Number(item.nextActionsAvailableCount)) ? Math.max(0, Number(item.nextActionsAvailableCount)) : null;
-        const hiddenNextActions = Math.max(0, reportHiddenNextActions ?? (allNextActions.length - nextActions.length));
-        const availableNextActions = reportAvailableNextActions ?? allNextActions.length;
-        if (nextActions.length) lines.push(`  nextActions: ${nextActions.join(" -> ")}${hiddenNextActions ? ` (+${hiddenNextActions} hidden of ${availableNextActions})` : ""}`);
-        const actionReasonDetails = allNextActionObjects.filter((action) => action?.reason).slice(0, 6).map((action) => `${actionDisplayLabel(action, action.__fallbackGateId || "")}=${action.reason}`);
-        const hiddenActionReasons = Math.max(0, allNextActionObjects.filter((action) => action?.reason).length - actionReasonDetails.length);
-        if (actionReasonDetails.length) lines.push(`  actionReasons: ${actionReasonDetails.join("; ")}${hiddenActionReasons ? ` (+${hiddenActionReasons} more)` : ""}`);
-        const actionGuidanceDetails = allNextActionObjects.filter((action) => action?.guidance).slice(0, 4).map((action) => `${actionDisplayLabel(action, action.__fallbackGateId || "")}=${action.guidance}`);
-        const hiddenActionGuidance = Math.max(0, allNextActionObjects.filter((action) => action?.guidance).length - actionGuidanceDetails.length);
-        if (actionGuidanceDetails.length) lines.push(`  actionGuidance: ${actionGuidanceDetails.join("; ")}${hiddenActionGuidance ? ` (+${hiddenActionGuidance} more)` : ""}`);
-        if (item.approvalPlan) {
-          const plan = item.approvalPlan;
-          lines.push(`  approvalPlan: actions=${plan.actionCount ?? "unknown"} / reportOnly=${plan.reportOnlyCount ?? "unknown"} / blocked=${plan.blockedCount ?? "unknown"} / gateway=${plan.requiresGatewayStartCount ?? "unknown"} / realTraffic=${plan.requiresRealTrafficCount ?? "unknown"} / highImpact=${plan.highImpactCount ?? "unknown"} / required=${plan.requiredForShortCount ?? "unknown"}/${plan.requiredForReleaseCount ?? "unknown"} / phases=${Array.isArray(plan.phases) ? plan.phases.length : "unknown"} / first=${plan.firstBlockedAction || "none"}`);
-          if (Array.isArray(plan.phases) && plan.phases.length) {
-            const phaseSummary = plan.phases.slice(0, 8).map((phase) => {
-              const flags = [];
-              if (phase.reportOnly === true) flags.push("reportOnly");
-              if (phase.requiresGatewayStart === true) flags.push("gateway");
-              if (phase.requiresRealTraffic === true) flags.push("realTraffic");
-              if (phase.highImpact === true) flags.push("highImpact");
-              if (phase.blockedUntilExplicitUserApproval === true) flags.push("blocked");
-              return `${phase.phase || "unknown"}:${phase.count ?? "?"}${flags.length ? `[${flags.join(",")}]` : ""}`;
-            }).join(" | ");
-            const hiddenPhases = Math.max(0, plan.phases.length - 8);
-            lines.push(`  approvalPhases: ${phaseSummary}${hiddenPhases ? ` (+${hiddenPhases} more)` : ""}`);
-          }
-        }
-        if (Array.isArray(item.releaseGateSelectedReports) && item.releaseGateSelectedReports.length) {
-          const selectedReports = item.releaseGateSelectedReports.slice(0, 6).map((entry) => `${entry.id}:${entry.selectedFile}${entry.historySourceMismatch === true ? "[sourceMismatch]" : ""}`).join(", ");
-          lines.push(`  selectedHistory: ${selectedReports}`);
-        }
-        if (Array.isArray(item.releaseGateGroups) && item.releaseGateGroups.length) {
-          const groupSummary = item.releaseGateGroups.slice(0, 8).map((group) => {
-            const missingRequired = Array.isArray(group.missingRequired) && group.missingRequired.length ? ` missingReq=${group.missingRequired.slice(0, 3).join(",")}` : "";
-            const missingOptional = Array.isArray(group.missingOptional) && group.missingOptional.length ? ` missingOpt=${group.missingOptional.slice(0, 3).join(",")}` : "";
-            return `${group.group} req ${group.requiredSatisfied ?? 0}/${group.required ?? 0} opt ${group.optionalSatisfied ?? 0}/${group.optional ?? 0}${missingRequired}${missingOptional}`;
-          }).join(" | ");
-          lines.push(`  Release groups: ${groupSummary}`);
-        }
-      if (item.installedRuntimeEvidence) {
-          const evidence = item.installedRuntimeEvidence;
-          const fingerprintMatch = evidence.sourceFingerprint && evidence.installedRuntimeFingerprint && evidence.sourceFingerprint === evidence.installedRuntimeFingerprint;
-          lines.push(`  installedRuntime: satisfied=${evidence.satisfied ?? "unknown"} / files=${evidence.sourceFileCount ?? "unknown"}/${evidence.installedRuntimeFileCount ?? "unknown"} / fingerprint=${fingerprintMatch ? "match" : "mismatch"} / mismatches=${Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.length : 0} / sourceMtime=${evidence.sourceMtimeMax || "unknown"} / installedMtime=${evidence.installedRuntimeMtimeMax || "unknown"}`);
-          const runtimeSamples = [
-            ...(Array.isArray(evidence.missingSourceFiles) ? evidence.missingSourceFiles.map((item) => `missingSource:${item}`) : []),
-            ...(Array.isArray(evidence.missingInstalledRuntimeFiles) ? evidence.missingInstalledRuntimeFiles.map((item) => `missingInstalled:${item}`) : []),
-            ...(Array.isArray(evidence.mismatchedRuntimeFiles) ? evidence.mismatchedRuntimeFiles.map((item) => `mismatch:${item}`) : []),
-          ].slice(0, 3);
-          if (runtimeSamples.length) lines.push(`  installedRuntime drift: ${runtimeSamples.join(", ")}`);
+      lines.push("");
+      lines.push(`${item.label || item.fileName || "\u672a\u547d\u540d"}\uff1a${status}${age ? ` / ${age}` : ""}`);
+
+      if (item.fileName === "latest-release-gates.json" && item.exists && !item.invalid) {
+        lines.push(`  \u8fdb\u5ea6\uff1a\u58f3 ${item.shellProgress ?? "?"}% / CodexPlusPlus ${item.codexPlusPlusProgress ?? "?"}% / Antigravity \u8584\u9002\u914d ${item.antigravityAdapterProgress ?? "?"}% / \u6574\u4f53 ${item.overallProgress ?? "?"}%`);
+        lines.push(`  \u95e8\u7981\uff1a\u5df2\u5b8c\u6210 ${Array.isArray(item.completedGates) && item.completedGates.length ? item.completedGates.join(", ") : "\u65e0"} / \u5f53\u524d ${item.currentGate || "\u672a\u77e5"}`);
+        if (Array.isArray(item.missingRequired) && item.missingRequired.length) {
+          lines.push(`  \u5f85\u5b8c\u6210\uff1a${item.missingRequired.join(", ")}`);
         }
       }
-      if (item.workerMcpSourceHygieneEvidence) {
-        const evidence = item.workerMcpSourceHygieneEvidence;
-        lines.push(`  workerMcpSourceHygiene: passed=${evidence.passedWorkerCount ?? "unknown"}/${evidence.workerCount ?? "unknown"} / failed=${Array.isArray(evidence.failedWorkers) ? evidence.failedWorkers.length : "unknown"} / nul=${Array.isArray(evidence.nulByteWorkers) ? evidence.nulByteWorkers.length : "unknown"} / syntaxFailed=${Array.isArray(evidence.syntaxFailedWorkers) ? evidence.syntaxFailedWorkers.length : "unknown"}`);
-        if (Array.isArray(evidence.failedWorkers) && evidence.failedWorkers.length) lines.push(`  workerMcpSourceHygiene failed: ${evidence.failedWorkers.slice(0, 6).join(", ")}`);
+
+      if (item.fileName === "latest-source-preflight.json" && typeof item.publicDocumentationOk === "boolean") {
+        lines.push(`  \u516c\u5f00\u6587\u6863\uff1a${item.publicDocumentationOk ? "\u901a\u8fc7" : "\u9700\u5904\u7406"}`);
       }
-      if (item.goalReadinessEvidence) {
-        const evidence = item.goalReadinessEvidence;
-        const incompleteIds = Array.isArray(evidence.objectiveRequirementIncompleteIds) ? evidence.objectiveRequirementIncompleteIds : [];
-        if (
-          evidence.objectiveRequirementTotal != null ||
-          evidence.objectiveRequirementCompleteCount != null ||
-          evidence.objectiveRequirementIncompleteCount != null ||
-          incompleteIds.length
-        ) {
-          lines.push(`  goalObjectiveAudit: complete=${evidence.objectiveRequirementCompleteCount ?? "unknown"}/${evidence.objectiveRequirementTotal ?? "unknown"} / incomplete=${evidence.objectiveRequirementIncompleteCount ?? "unknown"} / canClaimFullGoal=${triStateText(evidence.objectiveRequirementCanClaimFullGoalNow)} / missing=${incompleteIds.length ? incompleteIds.join(", ") : "none"}`);
-        }
-      }
-      if (item.goalReadinessEvidence?.goalOperatorActionCard) {
-        const card = item.goalReadinessEvidence.goalOperatorActionCard;
-        lines.push(`  goalOperatorActionCard: status=${card.status || "unknown"} / canClaim=${card.canClaimFullGoalNow ? "true" : "false"} / release=${card.releaseReady ? "true" : "false"} / worker=${card.workerStatus || "unknown"} / secondAccount=${card.secondAccountStatus || "unknown"}`);
-        lines.push(`  goalOperatorActionCard missing: ${Array.isArray(card.missingRequirements) && card.missingRequirements.length ? card.missingRequirements.join(", ") : "none"}`);
-        lines.push(`  goalOperatorActionCard next: ${Array.isArray(card.nextOperatorActions) && card.nextOperatorActions.length ? card.nextOperatorActions.join(" -> ") : card.userVisibleNextStep || "unknown"}`);
-      }
-      if (Array.isArray(item.releaseGateFailures) && item.releaseGateFailures.length) {
-        const gateFailures = item.releaseGateFailures.slice(0, 4).map((gate) => {
-          const semanticFailures = Array.isArray(gate.semanticFailures) ? gate.semanticFailures : [];
-          const shownSemanticFailures = semanticFailures.slice(0, 4);
-          const hiddenSemanticFailures = Math.max(0, semanticFailures.length - shownSemanticFailures.length) + (gate.semanticFailuresHiddenCount != null && Number.isFinite(Number(gate.semanticFailuresHiddenCount)) ? Math.max(0, Number(gate.semanticFailuresHiddenCount)) : 0);
-          const details = shownSemanticFailures.length ? `${shownSemanticFailures.join(", ")}${hiddenSemanticFailures ? ` (+${hiddenSemanticFailures} more)` : ""}` : (gate.error || "unsatisfied");
-          return `${gate.id}:${details}`;
-        });
-        const hiddenGateFailures = Math.max(0, item.releaseGateFailures.length - gateFailures.length);
-        lines.push(`  semanticFailures: ${gateFailures.join(" | ")}${hiddenGateFailures ? ` (+${hiddenGateFailures} more)` : ""}`);
-        const sourceSnapshotMismatchGates = item.releaseGateFailures
-          .filter((gate) => Array.isArray(gate.semanticFailures) && gate.semanticFailures.some((failure) => /_source_snapshot_mismatch$/.test(String(failure))))
-          .map((gate) => gate.id)
-          .filter(Boolean);
-        if (sourceSnapshotMismatchGates.length) {
-          lines.push(`  source snapshot mismatch: stale reports for ${sourceSnapshotMismatchGates.join(", ")}; refresh local features, MCP/Skill, and plugin capability reports`);
-          lines.push("  source snapshot refresh: refresh local features first, then run normal MCP/Skill and plugin capability verifiers; do not edit latest report JSON by hand");
-        }
-        const pluginOfflineSnapshot = item.releaseGateFailures.find((gate) => gate.id === "pluginCapabilities" && gate.offlineSnapshotEvidence);
-        if (pluginOfflineSnapshot) {
-          const evidence = pluginOfflineSnapshot.offlineSnapshotEvidence;
-          lines.push(`  plugin offline snapshot: connector=${evidence.connectorContentMatches ? "ok" : "needs-refresh"} / appTool=${evidence.appToolContentMatches ? "ok" : "needs-refresh"} / refreshGate=${evidence.refreshGateSatisfied ? "ok" : "needs-refresh"} / runtimeGateway=required`);
-        }
-      }
-      if (item.sourceSnapshotEvidence) {
-        const evidence = item.sourceSnapshotEvidence;
-        const cache = evidence.cacheHitCount != null || evidence.cacheMissCount != null ? ` / cache=${evidence.cacheHitCount ?? "\u672a\u77e5"}/${evidence.cacheMissCount ?? "\u672a\u77e5"}` : "";
-        const reused = evidence.reusedFromPreviousReport === true ? " / reused=true" : "";
-        const skipped = evidence.refreshSkippedReason ? ` / reason=${evidence.refreshSkippedReason}` : "";
-        lines.push(`  sourceSnapshot: files=${evidence.fileCount ?? "\u672a\u77e5"} / fingerprint=${evidence.fingerprint ? String(evidence.fingerprint).slice(0, 12) : "\u7f3a\u5931"}${cache}${reused}${skipped}`);
-      }
-      if (item.sourcePreflightEvidence) {
-        const evidence = item.sourcePreflightEvidence;
-        lines.push(`  sourcePreflight: js=${evidence.javascriptSyntaxOk ? "true" : "false"} / ps=${evidence.powershellSyntaxOk ? "true" : "false"} / profile=${evidence.upstreamProfileStorageOk ? "true" : "false"} / cliIsolation=${evidence.antigravityCliIsolationProfileOk ? "true" : "false"} / prepare=${evidence.antigravityCliProfilePrepareOk ? "true" : "false"} / rejectDefaultChild=${evidence.antigravityCliProfilePrepareRejectsDefaultChildOk ? "true" : "false"} / winUserLogin=${evidence.antigravityCliWindowsUserLoginDryRunOk ? "true" : "false"} / localConnector=${evidence.localConnectorVerifierOk ? "true" : "false"} / docs=${evidence.publicDocumentationOk ? "true" : "false"} / clientCopyDocs=${evidence.publicDocumentationClientCopySyncContractOk ? "true" : "false"} / managerLabels=${evidence.managerMojibakeContractsOk ? "true" : "false"}`);
-        lines.push(`  sourcePreflight: ui=${evidence.uiStateSelfTestOk ? "true" : "false"} / regression=${evidence.translatorRegressionOk ? "true" : "false"} / diff=${evidence.diffWhitespaceOk ? "true" : "false"} / skipFull=${evidence.skipFullRegression ? "true" : "false"}`);
-        if (evidence.antigravityCliIsolationProfileContract) {
-          const c = evidence.antigravityCliIsolationProfileContract;
-          lines.push(`  sourcePreflight cliIsolation lane: role=${c.accountLaneRole || "unknown"} / mcpManagedHere=${c.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${c.mcpAccountLaneOwner || "unknown"}`);
-        }
-        if (evidence.antigravityCliProfilePrepareContract) {
-          const c = evidence.antigravityCliProfilePrepareContract;
-          lines.push(`  sourcePreflight profilePrepare: traffic=${c.usedRealTraffic ? "true" : "false"} / login=${c.loginVerified ? "true" : "false"} / separateAccount=${c.separateAccountVerified ? "true" : "false"} / coverage=${c.coverageKind || "unknown"} / boundary=${c.accountIsolationBoundary || "unknown"}`);
-          lines.push(`  sourcePreflight profilePrepare lane: role=${c.accountLaneRole || "unknown"} / mcpManagedHere=${c.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${c.mcpAccountLaneOwner || "unknown"}`);
-          if (c.accountIsolationCaveat) lines.push(`  sourcePreflight profilePrepare caveat: ${c.accountIsolationCaveat}`);
-        }
-        if (evidence.antigravityCliWindowsUserLoginDryRunContract) {
-          const c = evidence.antigravityCliWindowsUserLoginDryRunContract;
-          lines.push(`  sourcePreflight windowsUserLogin: traffic=${c.usedRealTraffic ? "true" : "false"} / started=${c.started ? "true" : "false"} / capturesOutput=${c.capturesLoginOutput ? "true" : "false"} / boundary=${c.credentialBoundary || "unknown"} / expectedCredentialStoreIsolation=${c.expectedCredentialStoreIsolation ? "true" : "false"}`);
-          lines.push(`  sourcePreflight windowsUserLogin readiness: checked=${c.readinessChecked ? "true" : "false"} / userExists=${c.targetUserExists === true ? "true" : c.targetUserExists === false ? "false" : "unknown"} / currentUser=${c.targetUserIsCurrentUser ? "true" : "false"} / ready=${c.readyForInteractiveLogin ? "true" : "false"} / reason=${c.readinessBlockingReason || "none"}`);
-          if (c.accountIsolationCaveat) lines.push(`  sourcePreflight windowsUserLogin caveat: ${c.accountIsolationCaveat}`);
-        }
-      }
-      if (item.logDbGuardEvidence) {
-        const evidence = item.logDbGuardEvidence;
-        lines.push(`  logDbGuard: protected=${evidence.protected ? "true" : "false"} / trigger=${evidence.triggerPresent ? "true" : "false"} / noTraffic=${evidence.noTraffic ? "true" : "false"} / wal=${evidence.walBytes ?? "unknown"}`);
-      }
-      if (item.missingHistoryEvidence) {
-        const evidence = item.missingHistoryEvidence;
-        lines.push(`  missingHistory: status=${evidence.status ?? "unknown"} / type=${evidence.errorType || "unknown"} / retryable=${evidence.retryable === false ? "false" : "true"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / routeStable=${evidence.noRouteChange ? "true" : "false"} / noTraffic=${evidence.usedRealTraffic === false ? "true" : "false"}`);
-      }
-      if (item.accountProxyEvidence) {
-        const evidence = item.accountProxyEvidence;
-        const phase = evidence.phaseSummary || {};
-        const signals = evidence.antigravityLogSignals || {};
-        lines.push(`  accountProxy: detail=${evidence.diagnosisDetail || "unknown"} / action=${evidence.suggestedAction || "none"} / localProxyBypassed=${evidence.localProxyBypassed ? "true" : "false"}`);
-        lines.push(`  accountProxy phase: account=${phase.accountOk ? "ok" : "check"} / refresh=${phase.refreshOk ? "ok" : "check"} / models=${phase.modelCount ?? "unknown"} / real=${phase.realRequestAttempted ? (phase.realRequestOk ? "ok" : "check") : "not-attempted"}`);
-        lines.push(`  accountProxy logs: source=${signals.sourcePresent ? "present" : "missing"} / fresh=${signals.sourceFresh ? "true" : "false"} / scanned=${signals.tailLinesScanned ?? "unknown"} / verify=${signals.verificationRequiredCount ?? 0} / network=${signals.generalNetworkFailureCount ?? 0}`);
-      }
-      if (item.antigravityCliRealSmokeEvidence) {
-        const evidence = item.antigravityCliRealSmokeEvidence;
-        lines.push(`  antigravityCliRealSmoke: login=${evidence.loginVerified ? "true" : "false"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / strictAppData=${evidence.strictWindowsAppDataIsolation ? "true" : "false"} / source=${evidence.profileSource || "unknown"}`);
-        lines.push(`  antigravityCliRealSmoke lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
-        if (evidence.accountIdentityComparison) {
-          const comparison = evidence.accountIdentityComparison;
-          lines.push(`  antigravityCliRealSmoke identity: antiCodexId=${comparison.antiCodexAccountIdPresent ? "present" : "missing"} / mcpId=${comparison.mcpAccountIdPresent ? "present" : "missing"} / distinct=${comparison.accountIdsDiffer === true ? "true" : comparison.accountIdsDiffer === false ? "false" : "unknown"}`);
-        }
-        if (evidence.separateAccountVerificationReason) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.separateAccountVerificationReason}`);
-        else if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliRealSmoke caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (item.antigravityCliProfilePrepareEvidence) {
-        const evidence = item.antigravityCliProfilePrepareEvidence;
-        lines.push(`  antigravityCliProfilePrepare: separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / boundary=${evidence.accountIsolationBoundary || "unknown"}`);
-        lines.push(`  antigravityCliProfilePrepare lane: role=${evidence.accountLaneRole || "unknown"} / mcpManagedHere=${evidence.mcpAccountLaneManagedByAntiCodex ? "true" : "false"} / mcpOwner=${evidence.mcpAccountLaneOwner || "unknown"}`);
-        if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliProfilePrepare caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (item.antigravityCliWindowsUserReadinessEvidence) {
-        const evidence = item.antigravityCliWindowsUserReadinessEvidence;
-        lines.push(`  antigravityCliWindowsUserReadiness: ready=${evidence.readyForInteractiveLogin ? "true" : "false"} / userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / currentUser=${evidence.targetUserIsCurrentUser ? "true" : "false"} / action=${evidence.recommendedOperatorAction || "unknown"}`);
-        lines.push(`  antigravityCliWindowsUserReadiness guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / started=${evidence.started ? "true" : "false"} / capturesOutput=${evidence.capturesLoginOutput ? "true" : "false"} / boundary=${evidence.credentialBoundary || "unknown"} / separateAccount=${evidence.separateAccountVerified ? "true" : "false"} / login=${evidence.loginVerified ? "true" : "false"}`);
-        if (evidence.readinessBlockingReason) lines.push(`  antigravityCliWindowsUserReadiness reason: ${evidence.readinessBlockingReason}`);
-        if (evidence.accountIsolationCaveat) lines.push(`  antigravityCliWindowsUserReadiness caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (item.windowsUserAccountPrepareEvidence) {
-        const evidence = item.windowsUserAccountPrepareEvidence;
-        lines.push(`  windowsUserAccountPrepare: elevated=${evidence.currentProcessElevated ? "true" : "false"} / userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / canCreate=${evidence.canCreateTargetWindowsUser ? "true" : "false"} / action=${evidence.recommendedOperatorAction || "unknown"}`);
-        lines.push(`  windowsUserAccountPrepare guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
-        lines.push(`  windowsUserAccountPrepare next: safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / canProceedLogin=${evidence.canProceedToInteractiveLogin ? "true" : "false"} / blockedBeforeLogin=${evidence.blockedBeforeInteractiveLogin ? "true" : "false"} / stage=${evidence.operatorBlockingStage || "unknown"} / next=${evidence.operatorNextStep || "unknown"}`);
-        if (evidence.readinessBlockingReason) lines.push(`  windowsUserAccountPrepare reason: ${evidence.readinessBlockingReason}`);
-      }
-      if (item.windowsUserSetupGuidanceEvidence) {
-        const evidence = item.windowsUserSetupGuidanceEvidence;
-        lines.push(`  windowsUserSetupGuidance: userExists=${evidence.targetUserExists === true ? "true" : evidence.targetUserExists === false ? "false" : "unknown"} / safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / stage=${evidence.operatorBlockingStage || "unknown"} / next=${evidence.operatorNextStep || "unknown"}`);
-        lines.push(`  windowsUserSetupGuidance guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
-        lines.push(`  windowsUserSetupGuidance sequence: ${Array.isArray(evidence.readinessCheckSequence) && evidence.readinessCheckSequence.length ? evidence.readinessCheckSequence.join(" -> ") : "missing"}`);
-        lines.push(`  windowsUserSetupGuidance checklist: stages=${Array.isArray(evidence.operatorChecklistStages) && evidence.operatorChecklistStages.length ? evidence.operatorChecklistStages.join(" -> ") : "missing"} / loginSteps=${evidence.operatorChecklistStartsLoginCount ?? 0} / realTrafficSteps=${evidence.operatorChecklistUsesRealTrafficCount ?? 0}`);
-        if (evidence.operatorSetupPlan) {
-          const plan = evidence.operatorSetupPlan;
-          lines.push(`  windowsUserSetupGuidance setupPlan: target=${plan.targetLocalWindowsUser || "unknown"} / mode=${plan.setupMode || "unknown"} / surface=${plan.preferredSurface || "unknown"} / createsUser=${plan.antiCodexCreatesUser ? "true" : "false"} / opensSettings=${plan.antiCodexOpensSettings ? "true" : "false"} / startsLogin=${plan.antiCodexStartsLogin ? "true" : "false"} / rawCommand=${plan.rawUserManagementCommandProvided ? "true" : "false"}`);
-          lines.push(`  windowsUserSetupGuidance afterManualSetup: checks=${Array.isArray(plan.afterManualSetupChecks) && plan.afterManualSetupChecks.length ? plan.afterManualSetupChecks.join(" -> ") : "missing"} / entrypoint=${plan.finalLoginEntrypoint || "unknown"} / approval=${plan.finalLoginApproval || "unknown"}`);
-        }
-        if (evidence.manualSetupCommandHint) lines.push(`  windowsUserSetupGuidance hint: ${evidence.manualSetupCommandHint}`);
-      }
-      if (item.windowsUserSettingsEntrypointEvidence) {
-        const evidence = item.windowsUserSettingsEntrypointEvidence;
-        lines.push(`  windowsUserSettingsEntrypoint: requestedOpen=${evidence.requestedOpenSettings ? "true" : "false"} / opened=${evidence.openedSettings ? "true" : "false"} / target=${evidence.targetLocalWindowsUser || "unknown"} / uri=${evidence.settingsUri || "unknown"}`);
-        lines.push(`  windowsUserSettingsEntrypoint guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"} / approval=${evidence.requiredOpenSettingsApproval || "unknown"}`);
-        if (evidence.nextNoTrafficStatusCommand) lines.push(`  windowsUserSettingsEntrypoint next: ${evidence.nextNoTrafficStatusCommand}`);
-        if (evidence.accountIsolationCaveat) lines.push(`  windowsUserSettingsEntrypoint caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (item.secondAccountLoginEntrypointEvidence) {
-        const evidence = item.secondAccountLoginEntrypointEvidence;
-        lines.push(`  secondAccountLoginEntrypoint: statusOnly=${evidence.statusOnlyOk ? "true" : "false"} / missingApprovalBlocked=${evidence.missingApprovalBlocked ? "true" : "false"} / approvedBlocked=${evidence.approvedStartBlockedByStatusGate ? "true" : "false"} / sameUserBlocked=${evidence.sameWindowsUserTargetBlocked ? "true" : "false"} / safeToStart=${evidence.safeToStartLogin ? "true" : "false"}`);
-        lines.push(`  secondAccountLoginEntrypoint guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
-        lines.push(`  secondAccountLoginEntrypoint next: stage=${evidence.operatorBlockingStage || "unknown"} / reason=${evidence.readinessBlockingReason || "none"} / approval=${evidence.requiredStartLoginApproval || "unknown"} / canRunPostLoginProof=${evidence.canRunPostLoginProof ? "true" : "false"}`);
-        if (evidence.approvedLoginCommandTemplate) lines.push(`  secondAccountLoginEntrypoint loginCommand: ${evidence.approvedLoginCommandTemplate}`);
-        if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountLoginEntrypoint proofCommand: ${evidence.postLoginProofCommandTemplate}`);
-      }
-      if (item.secondAccountReadinessSummaryEvidence) {
-        const evidence = item.secondAccountReadinessSummaryEvidence;
-        lines.push(`  secondAccountReadinessSummary: userExists=${evidence.targetUserExists ? "true" : "false"} / readyForLogin=${evidence.readyForOperatorLogin ? "true" : "false"} / safeToAskLogin=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / releaseProof=${evidence.releaseAcceptableAccountProof ? "true" : "false"} / goalComplete=${evidence.goalComplete ? "true" : "false"}`);
-        lines.push(`  secondAccountReadinessSummary identity: currentSid=${evidence.currentWindowsUserSidPresent || evidence.currentWindowsUserSid ? "present" : "missing"} / targetSid=${evidence.targetWindowsUserSidPresent || evidence.targetWindowsUserSid ? "present" : "missing"} / targetMatchesCurrent=${evidence.targetUserSidMatchesCurrentUser ? "true" : "false"} / boundaryOk=${evidence.targetUserIdentityBoundaryOk ? "true" : "false"}`);
-        lines.push(`  secondAccountReadinessSummary guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / startedLogin=${evidence.startedLogin ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
-        lines.push(`  secondAccountReadinessSummary next: action=${evidence.nextOperatorAction || "unknown"} / stage=${evidence.operatorBlockingStage || "unknown"} / reason=${evidence.readinessBlockingReason || "none"}`);
-        lines.push(`  secondAccountReadinessSummary checklist: stages=${Array.isArray(evidence.operatorChecklistStages) && evidence.operatorChecklistStages.length ? evidence.operatorChecklistStages.join(" -> ") : "missing"} / loginSteps=${evidence.operatorChecklistStartsLoginCount ?? 0} / realTrafficSteps=${evidence.operatorChecklistUsesRealTrafficCount ?? 0}`);
-        if (evidence.manualSetupCommandHint) lines.push(`  secondAccountReadinessSummary hint: ${evidence.manualSetupCommandHint}`);
-        if (evidence.approvedLoginCommandTemplate) lines.push(`  secondAccountReadinessSummary loginCommand: ${evidence.approvedLoginCommandTemplate}`);
-        if (evidence.postLoginProofCommandTemplate) lines.push(`  secondAccountReadinessSummary proofCommand: ${evidence.postLoginProofCommandTemplate}`);
-        if (evidence.accountIsolationCaveat) lines.push(`  secondAccountReadinessSummary caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (item.secondAccountPostLoginProofEvidence) {
-        const evidence = item.secondAccountPostLoginProofEvidence;
-        const card = evidence.operatorActionCard || {};
-        lines.push(`  secondAccountPostLoginProof: userExists=${evidence.targetUserExists ? "true" : "false"} / canRun=${evidence.canRunAfterInteractiveLogin ? "true" : "false"} / willRunSmoke=${evidence.willRunRealSmoke ? "true" : "false"} / releaseProof=${evidence.releaseAcceptableAccountProof ? "true" : "false"}`);
-        lines.push(`  secondAccountPostLoginProof guard: traffic=${evidence.usedRealTraffic ? "true" : "false"} / changedSystem=${evidence.changedSystem ? "true" : "false"} / createdUser=${evidence.createdUser ? "true" : "false"} / storesPassword=${evidence.storesPassword ? "true" : "false"}`);
-        lines.push(`  secondAccountPostLoginProof card: status=${card.status || "unknown"} / canRunNow=${card.canRunPostLoginProofNow ? "true" : "false"} / missing=${card.missingRequirement || "none"} / next=${card.nextOperatorAction || "unknown"}`);
-        if (card.noTrafficStatusCommand) lines.push(`  secondAccountPostLoginProof statusCommand: ${card.noTrafficStatusCommand}`);
-        if (card.proofCommandPreview) lines.push(`  secondAccountPostLoginProof proofCommand: ${card.proofCommandPreview}`);
-        if (evidence.accountIsolationCaveat) lines.push(`  secondAccountPostLoginProof caveat: ${evidence.accountIsolationCaveat}`);
-      }
-      if (Array.isArray(item.managerButtonResults) && item.managerButtonResults.length) {
-        const actions = item.managerButtonResults.slice(0, 4).map((entry) => `${entry.action || "unknown"}:${entry.ok ? "ok" : "fail"}/bridge=${entry.bridgeReady ? "true" : "false"}/overlay=${entry.overlayPresent ? "true" : "false"}/hit=${entry.actionCenterHitsButton ? "true" : "false"}/close=${entry.closeHitAreaOk ? "true" : "false"}/newPage=${entry.managerOpenedNewPage ? "true" : "false"}/targets=${entry.pageTargetCountBeforeManagerOpen ?? "?"}->${entry.pageTargetCountAfterManagerOpen ?? "?"}`);
-        lines.push(`  managerButtons: ${actions.join(" | ")}`);
-      }
-      if (item.skipped === true) {
-        lines.push(`  skipped: ${item.reason || "no reason"} / requestedRealTraffic=${item.requestedRealTraffic ? "true" : "false"} / coverage=${item.coverageKind || "unknown"}`);
-      }
-      if (item.modelRoutingEvidence) {
-        const evidence = item.modelRoutingEvidence;
-        lines.push(`  modelRouting: mode=${evidence.mode || "unknown"} / skipRequests=${item.skipRequests ? "true" : "false"} / results=${evidence.skippedRequestCount ?? 0}/${evidence.resultCount ?? 0} / failed=${evidence.failedResultCount ?? 0}`);
-        if ((Array.isArray(evidence.requestAvailableModels) && evidence.requestAvailableModels.length)
-          || (Array.isArray(evidence.availabilityUnavailableModels) && evidence.availabilityUnavailableModels.length)
-          || Number(evidence.availabilityUnavailableCount) > 0) {
-          const available = Array.isArray(evidence.requestAvailableModels) && evidence.requestAvailableModels.length ? evidence.requestAvailableModels.join(", ") : "none";
-          const unavailable = Array.isArray(evidence.availabilityUnavailableModels) && evidence.availabilityUnavailableModels.length ? evidence.availabilityUnavailableModels.join(", ") : "none";
-          lines.push(`  modelRouting availability: available=${available} / unavailable=${unavailable}`);
-        }
-        if (evidence.providerProtocol || evidence.providerModel || evidence.toolBridgeMode) lines.push(`  modelRouting route: protocol=${evidence.providerProtocol || "native"} / providerModel=${evidence.providerModel || "none"} / toolBridge=${evidence.toolBridgeMode || "unknown"}`);
-      }
-      if (item.modelThinkingEvidence) {
-        const evidence = item.modelThinkingEvidence;
-        lines.push(`  modelThinking: models=${evidence.actualModelCount ?? "\u672a\u77e5"}/${evidence.expectedModelCount ?? "\u672a\u77e5"} / thinking=${evidence.supportsThinkingCount ?? 0}/${evidence.modelCount ?? 0} / budgetMissing=${evidence.missingBudgetCount ?? 0}`);
-        if (Array.isArray(evidence.reasoningLevels) && evidence.reasoningLevels.length) lines.push(`  modelThinking levels: ${evidence.reasoningLevels.join(", ")}`);
-      }
-      if (item.uiIdleEvidence) {
-        const evidence = item.uiIdleEvidence;
-        lines.push(`  uiIdle: samples=${evidence.healthySampleCount ?? 0}/${evidence.sampleCount ?? 0} / duration=${evidence.durationSec ?? "unknown"}s / reconnectText=${evidence.reconnectTextCount ?? 0} / loginText=${evidence.loginTextCount ?? 0}`);
-      }
-      if (item.syncReadinessEvidence) {
-        const evidence = item.syncReadinessEvidence;
-        lines.push(`  syncReadiness: noTraffic=${evidence.noTrafficReady ? "true" : "check"} / full=${evidence.fullMode ? "true" : "check"} / host=${evidence.activeHostReady && evidence.brandReady ? "ok" : "check"} / icons=${evidence.iconReady ? "ok" : "check"} / update=${evidence.updateReady ? "synced" : "check"} / guardrails=${evidence.guardrailsReady ? "ok" : "check"}`);
-        lines.push(`  syncReadiness versions: codex=${evidence.codexVersion || "unknown"} / source=${evidence.sourcePackageVersion || "unknown"} / active=${evidence.activePackageVersion || "unknown"} / activeSource=${evidence.activeSourcePackageVersion || "unknown"} / versionMatch=${triStateText(evidence.clientSyncVersionMatches)} / drift=${evidence.updateDriftState || "unknown"} / reason=${evidence.updateStatusReason || "unknown"} / updateSource=${evidence.updateStatusSource || "unknown"} / hostChanged=${triStateText(evidence.updateDriftHostChanged)} / cliChanged=${triStateText(evidence.updateDriftCliChanged)}`);
-        lines.push(`  syncReadiness hashes: host=${String(evidence.activeHostHash || "").slice(0, 8) || "unknown"}/${String(evidence.sourceHostHash || "").slice(0, 8) || "unknown"} match=${triStateText(evidence.hostHashMatches)} / cli=${String(evidence.activeCliHash || "").slice(0, 8) || "unknown"}/${String(evidence.sourceCliHash || "").slice(0, 8) || "unknown"} match=${triStateText(evidence.cliHashMatches)}`);
-        lines.push(`  syncReadiness shortcuts: ${evidence.shortcutReadyCount ?? 0}/${evidence.shortcutCount ?? 0} / managerBridge=${evidence.managerBridgeReady ? "ok" : "check"} / processes=${evidence.managerBridgeProcessCount ?? "?"} / stale=${evidence.managerBridgeStaleProcessCount ?? "?"} / clean=${evidence.cleanSyncState ? "true" : "false"}`);
-      }
-      if (item.installedOverallEvidence) {
-        const evidence = item.installedOverallEvidence;
-        lines.push(`  installedOverall: noTraffic=${evidence.noTraffic ? "true" : "false"} / coverage=${evidence.coverageKind || "unknown"} / usedRealTraffic=${evidence.usedRealTraffic ? "true" : "false"} / behaviorCovered=${evidence.behaviorCovered ? "true" : "false"}`);
-        lines.push(`  installedOverall model: transport=${evidence.modelTextTransport || "unknown"} / discovery=${evidence.modelDiscoverySource || "unknown"} / coworkerDefault=${evidence.antigravityCoworkerDefault === false ? "false" : "check"}`);
-        lines.push(`  installedOverall checks: ok=${evidence.okCheckCount ?? 0}/${evidence.checkCount ?? 0} / skipped=${evidence.skippedCheckCount ?? 0} / realSkipped=${Array.isArray(evidence.realTrafficSkippedChecks) ? evidence.realTrafficSkippedChecks.join(",") : ""}`);
-      }
-      if (item.desktopTaskSuiteEvidence) {
-        const evidence = item.desktopTaskSuiteEvidence;
-        const plan = evidence.realTaskEvidenceRefreshPlan || {};
-        lines.push(`  desktopTaskSuite: profile=${evidence.suiteProfile || "unknown"} / tasks=${evidence.selectedTaskCount ?? "unknown"} / complete=${evidence.realTaskEvidenceComplete ? "true" : "false"} / fresh=${evidence.realTaskEvidenceFresh ? "true" : "false"} / stale=${evidence.realTaskEvidenceFreshnessFailureCount ?? "unknown"}`);
-        lines.push(`  desktopTaskSuite refresh: needed=${plan.needed ? "true" : "false"} / approval=${plan.requiresExplicitUserApproval ? "true" : "false"} / reason=${plan.approvalReason || "none"} / tasks=${Array.isArray(plan.refreshTaskModes) && plan.refreshTaskModes.length ? plan.refreshTaskModes.join(",") : "none"}`);
-      }
-      if (item.realTaskCoverageRoadmapEvidence) {
-        const evidence = item.realTaskCoverageRoadmapEvidence;
-        const scenarios = Array.isArray(evidence.pendingRealTaskScenarios) ? evidence.pendingRealTaskScenarios : [];
-        const scenarioText = scenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ");
-        lines.push(`  realTaskCoverage next: profiles=${Array.isArray(evidence.nextProfilesNeedingRealTraffic) && evidence.nextProfilesNeedingRealTraffic.length ? evidence.nextProfilesNeedingRealTraffic.join(",") : "none"} / tasks=${Array.isArray(evidence.uniqueRefreshTasks) && evidence.uniqueRefreshTasks.length ? evidence.uniqueRefreshTasks.join(",") : "none"} / approval=${evidence.approvalRequiredForRefresh ? "true" : "false"}`);
-        if (scenarioText) lines.push(`  realTaskCoverage scenarios: ${scenarioText}`);
-      }
-      if (item.nativeCodexParityTaskMatrixEvidence) {
-        const evidence = item.nativeCodexParityTaskMatrixEvidence;
-        lines.push(`  nativeParity: complete=${evidence.nativeCodexParityComplete ? "true" : "false"} / proven=${evidence.provenTaskCount ?? "unknown"} / pending=${Array.isArray(evidence.pendingRefreshTaskModes) && evidence.pendingRefreshTaskModes.length ? evidence.pendingRefreshTaskModes.join(",") : "none"} / tools=${evidence.codexOwnedTools ? "codex-owned" : "unknown"}`);
-      }
-      if (item.realApprovalPlanEvidence) {
-        const evidence = item.realApprovalPlanEvidence;
-        lines.push(`  realApprovalPlan preLogin: complete=${evidence.preLoginChecklistComplete ? "true" : "false"} / checks=${evidence.preLoginChecklistCount ?? "unknown"} / next=${evidence.nextNoTrafficAction || "unknown"}`);
-        lines.push(`  realApprovalPlan preLogin checks: ${Array.isArray(evidence.preLoginChecklistIds) && evidence.preLoginChecklistIds.length ? evidence.preLoginChecklistIds.join(" -> ") : "missing"}`);
-      }
-      if (item.goalRealRunReadinessEvidence) {
-        const evidence = item.goalRealRunReadinessEvidence;
-        const blockers = Array.isArray(evidence.blockingStages) && evidence.blockingStages.length ? evidence.blockingStages.join(",") : "none";
-        const tasks = Array.isArray(evidence.pendingRealTaskScenarios) && evidence.pendingRealTaskScenarios.length
-          ? evidence.pendingRealTaskScenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ")
-          : "none";
-        lines.push(`  goalRealRun: ready=${evidence.readyForUserApprovedRealRun ? "true" : "false"} / accountSafe=${evidence.safeToAskUserForSecondAccountLogin ? "true" : "false"} / releaseReady=${evidence.releaseReady ? "true" : "false"} / blockers=${blockers}`);
-        lines.push(`  goalRealRun tasks: ${tasks}`);
-      }
-      if (item.approvedRealRunSequenceEvidence) {
-        const evidence = item.approvedRealRunSequenceEvidence;
-        const tasks = Array.isArray(evidence.pendingRealTaskScenarios) && evidence.pendingRealTaskScenarios.length
-          ? evidence.pendingRealTaskScenarios.slice(0, 4).map((scenario) => `${scenario.taskMode || "unknown"}:${scenario.workType || "unknown"}`).join(", ")
-          : "none";
-        lines.push(`  approvedRealRun: blocked=${evidence.executionBlockedBeforeRealTraffic ? "true" : "false"} / readyLogin=${evidence.readyToRequestSecondAccountLoginApproval ? "true" : "false"} / readyProof=${evidence.readyToRequestPostLoginProofApproval ? "true" : "false"} / stages=${evidence.sequenceStageCount ?? "unknown"} / real=${evidence.realTrafficStageCount ?? "unknown"} / login=${evidence.startsLoginStageCount ?? "unknown"} / approvals=${evidence.explicitApprovalStageCount ?? "unknown"}`);
-        lines.push(`  approvedRealRun tasks: ${tasks}`);
-      }
-      if (item.toolBridgeEvidence) {
-        const evidence = item.toolBridgeEvidence;
-        lines.push(`  toolBridge: mode=${evidence.mode || "unknown"} / transport=${evidence.transport || "unknown"} / adapter=${evidence.localAdapter || "unknown"}`);
-        lines.push(`  toolBridge native: events=${evidence.nativeAntigravityToolEvents ? "true" : "false"} / discovery=${evidence.nativeMcpDiscoveryVerified ? "true" : "false"} / approval=${evidence.nativeMcpApprovalProtocolVerified ? "true" : "false"} / resume=${evidence.sameCascadeResumeProbeVerified ? "true" : "false"}`);
-        lines.push(`  toolBridge nativeMcp: envelope=${evidence.requestEnvelope || "unknown"} / field=${evidence.externalToolDefinitionsField || "unknown"} / usable=${evidence.externalToolDefinitionsUsable ? "true" : "false"} / schema=${evidence.schemaLikeRequestAcceptance || "unknown"} / call=${evidence.nativeMcpToolCallStatus || "unknown"}`);
-      }
-      if (item.mcpSkillEvidence) {
-        const evidence = item.mcpSkillEvidence;
-        const realListClean = evidence.mcpRealListCount == null || (evidence.mcpRealListCount >= 2 && evidence.mcpRealListPassed === evidence.mcpRealListCount);
-        const clean = evidence.mcpMissingSharedCount === 0 && evidence.mcpExtraLocalCount === 0 && evidence.mcpChangedSharedCount === 0 && evidence.missingSharedSkillCount === 0 && (evidence.changedSharedSkillCount ?? 0) === 0 && evidence.conflictingDuplicateSkillCount === 0 && evidence.hasNodeRepl === true && evidence.skillSmokeReadable === true && realListClean;
-        const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
-        const realList = evidence.mcpRealListCount != null || evidence.mcpRealListPassed != null ? ` / list ${evidence.mcpRealListPassed ?? "\u672a\u77e5"}/${evidence.mcpRealListCount ?? "\u672a\u77e5"} tools=${evidence.mcpRealListToolCount ?? "\u672a\u77e5"}` : "";
-        lines.push(`  MCP/Skill \u8bc1\u636e\uff1aMCP ${evidence.mcpCount ?? "\u672a\u77e5"}/${evidence.mcpSharedCount ?? "\u672a\u77e5"} / skills ${evidence.skillCount ?? "\u672a\u77e5"}/${evidence.expectedSharedSkillCount ?? "\u672a\u77e5"} / agents ${evidence.agentsSkillCount ?? "\u672a\u77e5"}${hashCache}`);
-        lines.push(`  MCP/Skill parity: ${clean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"} / smoke ${evidence.mcpSmokePassed ? "MCP ok" : "MCP ?"} / real ${evidence.mcpRealCallPassed ? "ok" : "?"}${realList} / skill ${evidence.skillSmokeReadable ? "ok" : "?"}`);
-        if (evidence.appToolRegistryExists !== null && evidence.appToolRegistryExists !== undefined) {
-          const registryClean = evidence.appToolRegistryExists === true && evidence.appToolRegistryContentMatches === true && evidence.appToolRegistryFingerprintMatches === true && evidence.appToolRegistrySharedFileCount != null && evidence.appToolRegistryLocalFileCount != null && evidence.appToolRegistrySharedFileCount === evidence.appToolRegistryLocalFileCount;
-          lines.push(`  app-tool registry: ${registryClean ? "ok" : "\u9700\u5904\u7406"} / files=${evidence.appToolRegistrySharedFileCount ?? "\u672a\u77e5"}/${evidence.appToolRegistryLocalFileCount ?? "\u672a\u77e5"} / content=${evidence.appToolRegistryContentMatches ? "match" : "mismatch"} / fingerprint=${evidence.appToolRegistryFingerprintMatches ? "match" : "mismatch"}`);
-        }
-        if (Array.isArray(evidence.mcpMissingSharedSample) && evidence.mcpMissingSharedSample.length) lines.push(`  MCP missing: ${evidence.mcpMissingSharedSample.join(", ")}`);
-        if (Array.isArray(evidence.mcpExtraLocalSample) && evidence.mcpExtraLocalSample.length) lines.push(`  MCP extra: ${evidence.mcpExtraLocalSample.join(", ")}`);
-        if (Array.isArray(evidence.mcpChangedSharedSample) && evidence.mcpChangedSharedSample.length) lines.push(`  MCP changed: ${evidence.mcpChangedSharedSample.join(", ")}`);
-        if (Array.isArray(evidence.missingSharedSkillSample) && evidence.missingSharedSkillSample.length) lines.push(`  skill missing: ${evidence.missingSharedSkillSample.join(", ")}`);
-        if (Array.isArray(evidence.extraLocalSkillSample) && evidence.extraLocalSkillSample.length) lines.push(`  skill extra: ${evidence.extraLocalSkillSample.join(", ")}`);
-        if (Array.isArray(evidence.changedSharedSkillSample) && evidence.changedSharedSkillSample.length) lines.push(`  skill changed: ${evidence.changedSharedSkillSample.join(", ")}`);
-        if (Array.isArray(evidence.conflictingDuplicateSkillSample) && evidence.conflictingDuplicateSkillSample.length) lines.push(`  skill duplicate conflicts: ${evidence.conflictingDuplicateSkillSample.join(", ")}`);
-      }
-      if (item.refreshFeatureEvidence) {
-        const evidence = item.refreshFeatureEvidence;
-        const connectorOk = evidence.connectorSharedExists !== true || evidence.connectorContentMatches === true;
-        const appToolOk = evidence.appToolSharedExists !== true || evidence.appToolContentMatches === true;
-        const skillChanged = Array.isArray(evidence.changedExpectedSkills) ? evidence.changedExpectedSkills : [];
-        const guidanceChanged = Array.isArray(evidence.guidanceChanged) ? evidence.guidanceChanged : [];
-        const elapsed = evidence.elapsedMs != null ? ` / elapsed=${evidence.elapsedMs} ms` : "";
-        const mode = evidence.verifyOnly === true ? " / verifyOnly=true" : "";
-        const hashCache = evidence.hashCacheHitCount != null || evidence.hashCacheMissCount != null ? ` / hashCache=${evidence.hashCacheHitCount ?? "\u672a\u77e5"}/${evidence.hashCacheMissCount ?? "\u672a\u77e5"}` : "";
-        const refreshSamples = [
-          ...(evidence.connectorMissingSharedSample || []),
-          ...(evidence.connectorExtraLocalSample || []),
-          ...(evidence.connectorChangedSharedSample || []),
-          ...(evidence.appToolMissingSharedSample || []),
-          ...(evidence.appToolExtraLocalSample || []),
-          ...(evidence.appToolChangedSharedSample || []),
-        ].slice(0, 5);
-        const refreshDrift = ` / connectorDrift=${evidence.connectorMissingSharedCount ?? 0}/${evidence.connectorExtraLocalCount ?? 0}/${evidence.connectorChangedSharedCount ?? 0} / appToolDrift=${evidence.appToolMissingSharedCount ?? 0}/${evidence.appToolExtraLocalCount ?? 0}/${evidence.appToolChangedSharedCount ?? 0}${refreshSamples.length ? ` / sample ${refreshSamples.join(", ")}` : ""}`;
-        lines.push(`  refresh parity: connector=${connectorOk ? "ok" : "\u9700\u5904\u7406"} / appTool=${appToolOk ? "ok" : "\u9700\u5904\u7406"}${refreshDrift}${mode}${elapsed}${hashCache}`);
-        if (skillChanged.length || guidanceChanged.length) lines.push(`  refresh drift: skills=${skillChanged.length ? skillChanged.slice(0, 5).join(", ") : "ok"} / guidance=${guidanceChanged.length ? guidanceChanged.slice(0, 5).join(", ") : "ok"}`);
-        const recoveryActions = Array.isArray(evidence.recoveryActions) ? evidence.recoveryActions : [];
-        if (recoveryActions.length) {
-          const recoveryText = recoveryActions.slice(0, 3).map((action) => {
-            const commands = Array.isArray(action.commands) ? action.commands.slice(0, 2).join(" | ") : "";
-            return [action.id, action.guidance, commands].filter(Boolean).join(" / ");
-          }).filter(Boolean).join(" ; ");
-          if (recoveryText) lines.push(`  refresh recovery: ${recoveryText}`);
-        }
-      }
-      if (item.localConnectorEvidence) {
-        const evidence = item.localConnectorEvidence;
-        lines.push(`  \u8fde\u63a5\u5668\u8bc1\u636e\uff1aChatGPT URL ${evidence.chatgptInstallUrlsScrubbed ? "\u5df2\u6e05\u7406" : "\u9700\u5904\u7406"} / \u4e0a\u6e38\u8bf7\u6c42 ${evidence.upstreamRequestsDuringLocalEndpoints ?? "\u672a\u77e5"} / allowlist ${evidence.allowlistedConnectorAccessible ? "\u88ab\u5f53\u6210\u6388\u6743" : "\u4e0d\u7b49\u4e8e\u6388\u6743"}`);
-        const getPostMissing = Array.isArray(evidence.appToolGetPostMissingFromGet) ? evidence.appToolGetPostMissingFromGet : [];
-        const getPostExtra = Array.isArray(evidence.appToolGetPostExtraFromGet) ? evidence.appToolGetPostExtraFromGet : [];
-        const getPostSamples = [...getPostMissing, ...getPostExtra].slice(0, 5);
-        const connectorMissing = Array.isArray(evidence.connectorParityMissingShared) ? evidence.connectorParityMissingShared : [];
-        const connectorExtra = Array.isArray(evidence.connectorParityExtraLocal) ? evidence.connectorParityExtraLocal : [];
-        const connectorChanged = Array.isArray(evidence.connectorParityChangedShared) ? evidence.connectorParityChangedShared : [];
-        const appToolMissing = Array.isArray(evidence.appToolParityMissingShared) ? evidence.appToolParityMissingShared : [];
-        const appToolExtra = Array.isArray(evidence.appToolParityExtraLocal) ? evidence.appToolParityExtraLocal : [];
-        const appToolChanged = Array.isArray(evidence.appToolParityChangedShared) ? evidence.appToolParityChangedShared : [];
-        const driftSamples = [...connectorMissing, ...connectorExtra, ...connectorChanged, ...appToolMissing, ...appToolExtra, ...appToolChanged].slice(0, 5);
-        lines.push(`  local connector upstream: before=${evidence.upstreamRequestsBeforeLocalEndpoints ?? "\u672a\u77e5"} / after=${evidence.upstreamRequestsAfterLocalEndpoints ?? "\u672a\u77e5"} / delta=${evidence.upstreamRequestsDuringLocalEndpoints ?? "\u672a\u77e5"}`);
-        lines.push(`  local connector isolation: sharedHomeUsed=${evidence.tempSharedHomeUsed ? "true" : "false"} / codexHomeUnderState=${evidence.tempCodexHomeUnderStateRoot ? "true" : "false"} / sharedUnderState=${evidence.tempSharedCodexHomeUnderStateRoot ? "true" : "false"} / distinct=${evidence.tempCodexHomeDistinctFromShared ? "true" : "false"}`);
-        lines.push(`  local connector parity: connector=${evidence.connectorParityClean ? "ok" : "\u9700\u5904\u7406"} / appTool=${evidence.appToolParityClean ? "ok" : "\u9700\u5904\u7406"} / getPost=${evidence.appToolGetPostParityClean ? "ok" : "\u9700\u5904\u7406"} / getPostMissing=${getPostMissing.length} / getPostExtra=${getPostExtra.length}${getPostSamples.length ? ` / sample ${getPostSamples.join(", ")}` : ""}`);
-        lines.push(`  local connector drift: connectorMissing=${connectorMissing.length} / connectorExtra=${connectorExtra.length} / connectorChanged=${connectorChanged.length} / appToolMissing=${appToolMissing.length} / appToolExtra=${appToolExtra.length} / appToolChanged=${appToolChanged.length}${driftSamples.length ? ` / sample ${driftSamples.join(", ")}` : ""}`);
-        lines.push(`  local cache fingerprints: connector=${evidence.connectorFingerprintMatches ? "match" : "\u672a\u77e5"} / appTool=${evidence.appToolFingerprintMatches ? "match" : "\u672a\u77e5"} / connectorFiles=${evidence.connectorSharedExists && evidence.connectorLocalExists ? "present" : "\u9700\u5904\u7406"} / appToolFiles=${evidence.appToolSharedExists && evidence.appToolLocalExists ? "present" : "\u9700\u5904\u7406"}`);
-      }
-      if (item.pluginCapabilityEvidence) {
-        const evidence = item.pluginCapabilityEvidence;
-        const parityClean = evidence.connectorParityClean === true && evidence.appToolParityClean === true && evidence.appToolGetPostParityClean === true;
-        lines.push(`  \u5e94\u7528\u5de5\u5177\u8bc1\u636e\uff1a\u672a\u6388\u6743\u5de5\u5177 ${evidence.unauthorizedAppToolCount ?? "\u672a\u77e5"} / \u65e0 connector_id ${evidence.unattributedAppToolCount ?? "\u672a\u77e5"} / parity ${parityClean ? "\u5e72\u51c0" : "\u9700\u5904\u7406"}`);
-        lines.push(`  app capability: state=${evidence.capabilityState || "unknown"} / degraded=${evidence.degraded ? "true" : "false"} / smokeChecked=${evidence.smokeChecked ? "true" : "false"} / endpointReadable=${evidence.endpointProjectionReadable ? "true" : "false"} / connectors=${evidence.accessibleConnectorCount ?? "\u672a\u77e5"}/${evidence.enabledConnectorCount ?? "\u672a\u77e5"}/${evidence.connectorCount ?? "\u672a\u77e5"} / tools=${evidence.appToolCount ?? "\u672a\u77e5"}/${evidence.appToolGetCount ?? "\u672a\u77e5"} / callable=${evidence.callableState || "unknown"} / nativeWriteback=${evidence.nativeCodexWriteback ? "true" : "false"}`);
-        lines.push(`  app cache smoke: connector=${evidence.connectorCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.connectorCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.connectorCacheFileCount ?? "\u672a\u77e5"} / appTools=${evidence.appToolsCacheChecked ? "checked" : "\u672a\u77e5"}/${evidence.appToolsCacheSampleReadable ? "readable" : "\u672a\u77e5"}/${evidence.appToolsCacheFileCount ?? "\u672a\u77e5"} / connectorChecked=${evidence.connectorParityChecked ? "true" : "false"} / appToolChecked=${evidence.appToolParityChecked ? "true" : "false"} / getPostChecked=${evidence.appToolGetPostParityChecked ? "true" : "false"}`);
-        if (evidence.appToolsNote) lines.push(`  app capability note: ${evidence.appToolsNote}`);
-        if (!parityClean) {
-          const samples = [...(evidence.connectorParityMissingSharedSample || []), ...(evidence.connectorParityExtraLocalSample || []), ...(evidence.connectorParityChangedSharedSample || []), ...(evidence.appToolParityMissingSharedSample || []), ...(evidence.appToolParityExtraLocalSample || []), ...(evidence.appToolParityChangedSharedSample || []), ...(evidence.appToolGetPostMissingFromGetSample || []), ...(evidence.appToolGetPostExtraFromGetSample || [])].slice(0, 5);
-          lines.push(`  parity drift: connectorMissing=${evidence.connectorParityMissingSharedCount ?? "\u672a\u77e5"} / connectorExtra=${evidence.connectorParityExtraLocalCount ?? "\u672a\u77e5"} / connectorChanged=${evidence.connectorParityChangedSharedCount ?? "\u672a\u77e5"} / appToolMissing=${evidence.appToolParityMissingSharedCount ?? "\u672a\u77e5"} / appToolExtra=${evidence.appToolParityExtraLocalCount ?? "\u672a\u77e5"} / appToolChanged=${evidence.appToolParityChangedSharedCount ?? "\u672a\u77e5"} / getPostMissing=${evidence.appToolGetPostMissingFromGetCount ?? "\u672a\u77e5"} / getPostExtra=${evidence.appToolGetPostExtraFromGetCount ?? "\u672a\u77e5"}${samples.length ? ` / sample ${samples.join(", ")}` : ""}`);
-        }
-        lines.push(`  \u539f\u751f Codex \u5199\u56de\uff1a${evidence.nativeCodexWriteback ? "\u9700\u5904\u7406" : "\u65e0"}`);
-      }
-      if (item.providerContinuity) {
-        const continuity = item.providerContinuity;
-        const markerCounts = [continuity.sixthMarkerCount, continuity.seventhMarkerCount, continuity.eighthMarkerCount, continuity.ninthMarkerCount].filter((value) => value !== null && value !== undefined).join("/");
-        lines.push(`  providerContinuity: turns=${continuity.turns ?? "unknown"} / markers=${markerCounts || "unknown"}`);
-        lines.push(`  toolPairs: restart=${continuity.restartPreservesOpenAiToolPair ? "true" : "false"} / openai=${continuity.providerSwitchPreservesOpenAiToolPair ? "true" : "false"} / anthropic=${continuity.protocolSwitchPreservesAnthropicToolPair ? "true" : "false"} / reverse=${continuity.reverseProtocolSwitchPreservesOpenAiToolPair ? "true" : "false"} / markerThresholds=${continuity.markerThresholdsOk ? "true" : "false"}`);
-        lines.push(`  providerRoutes: provider=${continuity.providerSwitch?.from || "unknown"}->${continuity.providerSwitch?.to || "unknown"} reached=${continuity.providerSwitch?.requestReachedSecondProvider ? "true" : "false"} / protocol=${continuity.protocolSwitch?.from || "unknown"}->${continuity.protocolSwitch?.to || "unknown"} ${continuity.protocolSwitch?.provider || "unknown"}/${continuity.protocolSwitch?.model || "unknown"} reached=${continuity.protocolSwitch?.requestReachedAnthropicProvider ? "true" : "false"} / reverse=${continuity.reverseProtocolSwitch?.from || "unknown"}->${continuity.reverseProtocolSwitch?.to || "unknown"} ${continuity.reverseProtocolSwitch?.provider || "unknown"}/${continuity.reverseProtocolSwitch?.model || "unknown"} reached=${continuity.reverseProtocolSwitch?.requestReachedOpenAiCompatibleProvider ? "true" : "false"} / structural=${continuity.structuralEvidenceClean ? "true" : "false"} / toolTurns=${continuity.toolHistoryTurns ?? "unknown"}`);
-      if (continuity.previousResponseContinuity) {
-        const ids = continuity.previousResponseContinuity;
-        lines.push(`  previousIds: save=${ids.savePresent ? "true" : "false"} / restart=${ids.restartPresent ? "true" : "false"} / provider=${ids.providerSwitchPresent ? "true" : "false"} / protocol=${ids.protocolSwitchPresent ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchPresent ? "true" : "false"}`);
-        lines.push(`  previousMatches: save=${ids.saveMatched ? "true" : "false"} / restart=${ids.restartMatched ? "true" : "false"} / provider=${ids.providerSwitchMatched ? "true" : "false"} / protocol=${ids.protocolSwitchMatched ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchMatched ? "true" : "false"}`);
-        lines.push(`  nestedMatches: provider=${ids.providerSwitchMatchesNested ? "true" : "false"} / protocol=${ids.protocolSwitchMatchesNested ? "true" : "false"} / reverse=${ids.reverseProtocolSwitchMatchesNested ? "true" : "false"}`);
-      }
-      if (continuity.previousResponseIdChain) {
-        const chain = continuity.previousResponseIdChain;
-        lines.push(`  previousChain: save=${chain.save || "missing"} / restart=${chain.restart || "missing"} / provider=${chain.providerSwitch || "missing"} / protocol=${chain.protocolSwitch || "missing"} / reverse=${chain.reverseProtocolSwitch || "missing"}`);
-      }
-        lines.push(`  orderedHistory: clean=${continuity.orderedHistoryClean ? "true" : "false"} / counts=${[continuity.sixthOrderedHistoryCount, continuity.seventhOrderedHistoryCount, continuity.eighthOrderedHistoryCount, continuity.ninthOrderedHistoryCount].filter((value) => value !== null && value !== undefined).join("/") || "unknown"}`);
-      }
-      if (item.optionalRealProviderEvidence) {
-        const evidence = item.optionalRealProviderEvidence;
-        lines.push(`  realProviderSmoke: first=${evidence.firstMarkerObserved ? "true" : "false"} / second=${evidence.secondMarkerObserved ? "true" : "false"} / history=${evidence.historyContinuationObserved ? "true" : "false"} / turns=${evidence.turns ?? "\u672a\u77e5"}`);
-        lines.push(`  realProviderSmoke route: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.routeProviderProtocol || "\u672a\u77e5"} / requested=${evidence.routeRequestedModel || "\u672a\u77e5"} / resolved=${evidence.routeResolvedModel || "\u672a\u77e5"} / status=${evidence.routeStatus || "\u672a\u77e5"} / redaction=${evidence.secretsRedacted ? "true" : "false"}`);
-      }
-      if (item.realProviderToAntigravityReturnEvidence) {
-        const evidence = item.realProviderToAntigravityReturnEvidence;
-        lines.push(`  realProviderToAntigravityReturn: requested=${evidence.requested ? "true" : "false"} / used=${evidence.realAntigravityTurnUsed ? "true" : "false"} / history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
-        lines.push(`  realProviderToAntigravityRoute: ${evidence.returnUpstream || "\u672a\u77e5"} / ${evidence.routeTransport || "\u672a\u77e5"} / requested=${evidence.requestedModel || "\u672a\u77e5"} / resolved=${evidence.resolvedModel || "\u672a\u77e5"}`);
-      }
-      if (item.antigravityReturnEvidence) {
-        const evidence = item.antigravityReturnEvidence;
-        lines.push(`  fakeProviderToAntigravityReturn: history=${evidence.returnedToAntigravityWithHistory ? "true" : "false"} / previousId=${evidence.previousResponseIdMatched ? "true" : "false"} / markers=${evidence.markerCount ?? "\u672a\u77e5"} missing=${evidence.missingMarkerCount ?? "\u672a\u77e5"}`);
-        lines.push(`  fakeProviderToAntigravityRoute: ${evidence.routeTransport || "\u672a\u77e5"} / ${evidence.resolvedModel || "\u672a\u77e5"}`);
-      }
-      if (item.coldRelaunchEvidence) {
-        const evidence = item.coldRelaunchEvidence;
-        lines.push(`  coldRelaunch: health=${evidence.healthOk ? "true" : "false"} / ready=${evidence.providerReady ? "true" : "false"} / mode=${evidence.mode || "unknown"} / main=${evidence.mainCount ?? "?"} / translator=${evidence.translatorCount ?? "?"} / launcher=${evidence.launcherCount ?? "?"} / originalCodex=${evidence.originalCodexUnchanged ? "unchanged" : "unknown"} / failedStages=${evidence.failedStageCount ?? "?"}`);
-      }
-      if (item.stabilitySoakEvidence) {
-        const evidence = item.stabilitySoakEvidence;
-        lines.push(`  stabilitySoak: ready=${evidence.providerReady && evidence.startReady && evidence.endReady ? "true" : "false"} / model=${evidence.model || "\u672a\u77e5"} / pidStable=${evidence.pidStable ? "true" : "false"} / healthChecks=${evidence.healthChecks ?? "?"} / turns=${evidence.turnCount ?? "?"} failed=${evidence.failedTurnCount ?? "?"}`);
-      }
+      if (item.firstFailure) lines.push(`  \u9996\u4e2a\u95ee\u9898\uff1a${item.firstFailure}`);
+      else if (item.reason) lines.push(`  \u8bf4\u660e\uff1a${item.reason}`);
       if (item.exists && item.latestPath) lines.push(`  \u6587\u4ef6\uff1a${item.latestPath}`);
     }
     return lines.join("\n");
   }
+
 
   function ensureLatestReportsEvidenceLines(summary, payload) {
     const text = String(summary || "");
@@ -1564,29 +1118,11 @@
     return "\u57fa\u7840\u804a\u5929\u3001\u6d41\u5f0f\u548c\u5de5\u5177\u8c03\u7528\u5df2\u9a8c\u8bc1";
   }
 
-  function operatorStepDisplayText(step) {
-    const value = String(step || "");
-    if (value === "open_elevated_windows_user_settings_then_rerun_prepare") return "\u6253\u5f00 Windows \u8bbe\u7f6e / \u5176\u4ed6\u7528\u6237\uff0c\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel\uff0c\u7136\u540e\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
-    if (value === "create_target_windows_user") return "\u5148\u5728 Windows \u4e2d\u521b\u5efa\u6216\u786e\u8ba4 AntiCodexModel \u7528\u6237";
-    if (value === "run_account_isolation_status") return "\u91cd\u65b0\u8fd0\u884c\u8d26\u53f7\u9694\u79bb\u72b6\u6001\u68c0\u67e5";
-    if (value === "run_windows_user_interactive_login_with_user_present") return "\u7b49\u7528\u6237\u660e\u786e\u6279\u51c6\u540e\uff0c\u4f7f\u7528\u72ec\u7acb Windows \u7528\u6237\u542f\u52a8\u7b2c\u4e8c Antigravity \u767b\u5f55";
-    if (value === "verify_windows_user_manually_then_rerun_prepare") return "\u624b\u52a8\u786e\u8ba4 Windows \u7528\u6237\u540e\uff0c\u91cd\u65b0\u8fd0\u884c\u51c6\u5907\u68c0\u67e5";
-    return value;
-  }
-
   function summaryText(action, payload) {
     const r = payload?.result || payload || {};
     const unwrapped = r?.result && typeof r.result === "object" ? r.result : r;
     if (action === "refreshStatus") return `\u72b6\u6001\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`;
     if (action === "refreshModels") return `\u6a21\u578b\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u5931\u8d25"}\n\u6a21\u578b\u6570\uff1a${r.modelCount ?? r.models?.length ?? "\u672a\u77e5"}`;
-    if (action === "resetAntigravitySessionLock") {
-      const reset = r.result || r;
-      return [
-      "Antigravity \u4f1a\u8bdd\u9501\u5df2\u91cd\u7f6e\u3002",
-      `\u5df2\u91ca\u653e\u6b63\u5728\u8fd0\u884c\u7684\u4f1a\u8bdd\uff1a${reset.activeReleased ? "\u662f" : "\u5426"}`,
-      `\u5df2\u53d6\u6d88\u6392\u961f\u4f1a\u8bdd\uff1a${reset.queuedCancelled ?? 0}`,
-    ].join("\n");
-    }
     if (action === "accountSwitch") return [
       "\u5df2\u6253\u5f00 Antigravity \u684c\u9762\u7aef\u3002",
       "\u8bf7\u5728 Antigravity \u4e2d\u5207\u6362\u8d26\u53f7\uff0c\u5b8c\u6210\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002",
@@ -1609,32 +1145,11 @@
       `\u5df2\u4fee\u590d\uff1a${r.repairedCount ?? r.shortcuts?.length ?? "\u672a\u77e5"}`,
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
-    if (action === "secondAccountLoginStatus") return [
-      `\u7b2c\u4e8c Antigravity \u8d26\u53f7\u72b6\u6001\u68c0\u67e5\uff1a${r.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
-      r.safeToStartLogin === true ? "\u767b\u5f55\u51c6\u5907\uff1a\u53ef\u542f\u52a8\uff08\u672c\u6b21\u672a\u542f\u52a8\uff09" : "\u767b\u5f55\u51c6\u5907\uff1a\u672a\u5c31\u7eea",
-      r.targetWindowsUser ? `Windows \u7528\u6237\uff1a${r.targetWindowsUser}` : "",
-      r.readinessBlockingReason ? `\u963b\u788d\uff1a${r.readinessBlockingReason}` : "",
-      r.operatorBlockingStage ? `\u9636\u6bb5\uff1a${r.operatorBlockingStage}` : "",
-      r.operatorNextStep ? `\u4e0b\u4e00\u6b65\uff1a${operatorStepDisplayText(r.operatorNextStep)}` : "",
-      failureSummaryLine(r),
-    ].filter(Boolean).join("\n");
     if (action === "mcpSkills") return [
       `MCP/Skill \u6e05\u5355\u53ef\u89c1\uff1a${r.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
       `MCP ${r.mcp?.count ?? "\u672a\u77e5"} / Skill ${r.skills?.count ?? "\u672a\u77e5"}`,
       `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${r.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${Array.isArray(r.mcp?.smoke?.realList) ? r.mcp.smoke.realList.filter((entry) => entry && entry.passed === true).length : "\u672a\u77e5"}/${Array.isArray(r.mcp?.smoke?.realList) ? r.mcp.smoke.realList.length : "\u672a\u77e5"}\uff0cSkill \u6587\u4ef6 ${r.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
     ].join("\n");
-    if (action === "workerTransportStatus") {
-      const evidence = r.currentEvidence || {};
-      return [
-        `Worker \u901a\u9053\u72b6\u6001\uff1a${r.canDispatchCurrentChannelWorkers ? "\u53ef\u6d3e\u5de5" : "\u9700\u8981\u91cd\u8f7d/\u65b0\u9891\u9053"}`,
-        `\u5f53\u524d\u9891\u9053\uff1a${r.status || "unknown"} / \u53ef\u6d3e\u5de5=${triStateText(r.canDispatchCurrentChannelWorkers)}`,
-        `\u76f4\u63a5 worker \u68c0\u67e5\uff1aserver ${evidence.directProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"} / status ${evidence.directStatusProbeOk ? "\u901a\u8fc7" : "\u672a\u901a\u8fc7"}`,
-        Array.isArray(evidence.workerTransportFailedTools) && evidence.workerTransportFailedTools.length ? `\u5931\u8d25\u5de5\u5177\uff1a${evidence.workerTransportFailedTools.slice(0, 6).join(", ")}` : "",
-        Array.isArray(evidence.missingExpectedWorkerPrefixes) && evidence.missingExpectedWorkerPrefixes.length ? `\u672a\u66b4\u9732 worker\uff1a${evidence.missingExpectedWorkerPrefixes.slice(0, 6).join(", ")}` : "",
-        r.operatorActionCard?.userVisibleNextStep ? `\u4e0b\u4e00\u6b65\uff1a${r.operatorActionCard.userVisibleNextStep}` : "",
-        failureSummaryLine(r),
-      ].filter(Boolean).join("\n");
-    }
     if (action === "pluginCapabilities") {
       const c = r.capabilities || {};
       const appTools = c.appToolCount ?? 0;
@@ -1719,7 +1234,7 @@
     if (action === "accountSwitch") return 65000;
     if (action === "fastOverallNoTraffic") return 90000;
     if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
-    if (action === "pluginCapabilities" || action === "workerTransportStatus") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
+    if (action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
     if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
   }
@@ -2052,17 +1567,18 @@
       const loadGeneration = actionGeneration;
       try {
         await ensureSnapshotForLoad();
+        const snapshotReadOptions = { preferSnapshot: true };
         const [bootstrapResult, healthResult, modelsResult, diagnosticsResult, pluginsResult, connectorsResult, appToolsResult, allowlistResult, upstreamResult, routesResult] = await Promise.all([
-          safeJson("/anticodex/manager/bootstrap"),
-          safeJson("/health"),
-          safeJson("/models"),
-          safeJson("/anticodex/diagnostics", { timeoutMs: DIAGNOSTICS_FETCH_TIMEOUT_MS }),
-          safeJson("/backend-api/ps/plugins/installed"),
-          safeJson("/backend-api/aip/connectors"),
-          safeJson("/backend-api/wham/apps"),
-          safeJson("/anticodex/local-connectors/allowlist"),
-          safeJson("/anticodex/upstream-profile"),
-          safeJson("/anticodex/model-routes"),
+          safeJson("/anticodex/manager/bootstrap", snapshotReadOptions),
+          safeJson("/health", snapshotReadOptions),
+          safeJson("/models", snapshotReadOptions),
+          safeJson("/anticodex/diagnostics", { ...snapshotReadOptions, timeoutMs: DIAGNOSTICS_FETCH_TIMEOUT_MS }),
+          safeJson("/backend-api/ps/plugins/installed", snapshotReadOptions),
+          safeJson("/backend-api/aip/connectors", snapshotReadOptions),
+          safeJson("/backend-api/wham/apps", snapshotReadOptions),
+          safeJson("/anticodex/local-connectors/allowlist", snapshotReadOptions),
+          safeJson("/anticodex/upstream-profile", snapshotReadOptions),
+          safeJson("/anticodex/model-routes", snapshotReadOptions),
         ]);
         const bootstrap = safeValue(bootstrapResult, {});
         const health = safeValue(healthResult, {});
@@ -2208,7 +1724,7 @@
 
     async function showUpstreamConfig() {
       await ensureSnapshotForLoad();
-      let profileResult = await safeJson("/anticodex/upstream-profile");
+      let profileResult = await safeJson("/anticodex/upstream-profile", { preferSnapshot: true });
       if (!profileResult.ok) {
         const snapshot = snapshotResponse("/anticodex/upstream-profile")
           || (await refreshManagerSnapshot())?.responses?.["/anticodex/upstream-profile"];
@@ -2227,8 +1743,6 @@
       }
       const profilePayload = profileResult.value || {};
       const saved = profilePayload.saved || {};
-      const savedAntigravityCli = saved.antigravityCli || {};
-      const runtimeAntigravityCli = profilePayload.runtime?.antigravityCliIsolation || {};
       let lastStages = [];
       let testedFingerprint = "";
       let upstreamConfigOperationInFlight = false;
@@ -2238,34 +1752,19 @@
         node,
       ]);
       const protocol = el("select", { style: fieldStyle }, [
-        el("option", { value: "openai-compatible", text: "OpenAI 兼容" }),
-        el("option", { value: "anthropic", text: "Anthropic 原生" }),
+        el("option", { value: "openai-compatible", text: "Chat Completions" }),
+        el("option", { value: "responses", text: "Responses" }),
       ]);
       protocol.value = saved.protocol || "openai-compatible";
-      const baseUrl = el("input", { style: fieldStyle, value: saved.baseUrl || "", placeholder: "https://api.example.com/v1 或完整 /chat/completions / /v1/messages 地址" });
-      const model = el("input", { style: fieldStyle, value: saved.model || "", placeholder: "模型名，例如 gpt-4o-mini / claude-3-5-sonnet" });
+      const baseUrl = el("input", { style: fieldStyle, value: saved.baseUrl || "", placeholder: "https://api.example.com/v1 或完整 /v1/chat/completions / /v1/responses 地址" });
+      const model = el("input", { style: fieldStyle, value: saved.model || "", placeholder: "模型名，例如 gpt-4o-mini" });
       const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
-      const antigravityCliProfileRoot = el("input", {
-        style: fieldStyle,
-        value: savedAntigravityCli.profileRoot || runtimeAntigravityCli.profileRoot || "",
-        placeholder: "%APPDATA%\\anticodex\\antigravity-cli-profile",
-      });
-      const antigravityCliStrict = el("input", {
-        type: "checkbox",
-        checked: savedAntigravityCli.strictWindowsAppDataIsolation === true || runtimeAntigravityCli.strictWindowsAppDataIsolation === true,
-      });
-      const strictRow = el("label", { style: "display:flex;align-items:center;gap:8px;color:var(--ac-muted);font-size:12px" }, [
-        antigravityCliStrict,
-        el("span", { text: "严格隔离 Antigravity CLI 的 AppData / LocalAppData" }),
-      ]);
       const stageBox = el("pre", { className: "anticodex-result", text: "先点“测试连通”。测试不会保存配置，也不会切换当前会话。" });
       const testButton = el("button", { type: "button", text: "测试连通" });
       const saveButton = el("button", { type: "button", className: "anticodex-action-danger", text: "保存并切换" });
       saveButton.disabled = true;
-      const saveAntigravityCliButton = el("button", { type: "button", className: "anticodex-action-danger", text: "保存 Antigravity CLI 隔离" });
       const restoreButton = el("button", { type: "button", className: "anticodex-action-danger", text: "恢复 Antigravity" });
       const upstreamConfigFields = [protocol, baseUrl, model, apiKey];
-      const antigravityCliFields = [antigravityCliProfileRoot, antigravityCliStrict];
       function upstreamConfigFingerprint() {
         return JSON.stringify([
           protocol.value,
@@ -2276,10 +1775,8 @@
       }
       const refreshUpstreamConfigControls = () => {
         for (const field of upstreamConfigFields) field.disabled = upstreamConfigOperationInFlight;
-        for (const field of antigravityCliFields) field.disabled = upstreamConfigOperationInFlight;
         testButton.disabled = upstreamConfigOperationInFlight;
         restoreButton.disabled = upstreamConfigOperationInFlight;
-        saveAntigravityCliButton.disabled = upstreamConfigOperationInFlight;
         saveButton.disabled = upstreamConfigOperationInFlight
           || !testedFingerprint
           || testedFingerprint !== upstreamConfigFingerprint();
@@ -2289,7 +1786,7 @@
         refreshUpstreamConfigControls();
       };
       const fillDefault = () => {
-        if (!baseUrl.value.trim()) baseUrl.value = protocol.value === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
+        if (!baseUrl.value.trim()) baseUrl.value = "https://api.openai.com/v1";
       };
       const invalidateConnectionTest = () => {
         lastStages = [];
@@ -2329,10 +1826,9 @@
         while (Date.now() < deadline) {
           await wait(500);
           try {
-            const current = await getJsonFrom(activeApi, "/anticodex/upstream-profile");
-            if (current.active === expectedMode) {
-              const bootstrap = await getJsonFrom(activeApi, "/anticodex/manager/bootstrap");
-              managerToken = bootstrap?.token || managerToken;
+            const current = await managerGetLiveJson("/anticodex/upstream-profile", { timeoutMs: LOAD_FETCH_TIMEOUT_MS });
+            if (current.active === expectedMode && current.fixedRoute?.ready === true) {
+              window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
               return true;
             }
           } catch {}
@@ -2423,46 +1919,10 @@
           setUpstreamConfigBusy(false);
         }
       };
-      saveAntigravityCliButton.onclick = async () => {
-        if (upstreamConfigOperationInFlight) return;
-        setUpstreamConfigBusy(true);
-        stageBox.textContent = "正在保存 Antigravity CLI 隔离配置...";
-        try {
-          const payload = await managerPostJson("/anticodex/upstream-profile", {
-            mode: "antigravity",
-            antigravityCli: {
-              profileRoot: antigravityCliProfileRoot.value.trim(),
-              strictWindowsAppDataIsolation: antigravityCliStrict.checked === true,
-            },
-          }, {
-            timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
-            retryCandidates: false,
-          });
-          stageBox.classList.remove("anticodex-error");
-          if (payload.restartRequired) {
-            const applied = await applyAndWait("antigravity");
-            stageBox.textContent = applied
-              ? "已保存并应用 Antigravity CLI 隔离配置。"
-              : "配置已保存，但本地模型通道未在 30 秒内恢复。请关闭并重新打开 Anti-Codex。";
-            stageBox.classList.toggle("anticodex-error", !applied);
-          } else {
-            stageBox.textContent = "已保存 Antigravity CLI 隔离配置。";
-          }
-        } catch (error) {
-          stageBox.classList.add("anticodex-error");
-          stageBox.textContent = "保存失败：" + error.message;
-        } finally {
-          setUpstreamConfigBusy(false);
-        }
-      };
       refreshUpstreamConfigControls();
       result.classList.remove("anticodex-error");
       result.replaceChildren(el("div", { style: "display:grid;gap:10px" }, [
-        el("div", { className: "anticodex-warn", text: "第三方 API 失败时只会报错，不会自动消耗 Antigravity 流量。聊天记录、项目和当前工作区不会被清空。" }),
-        el("div", { className: "anticodex-warn", text: `当前 Antigravity CLI：${runtimeAntigravityCli.strictWindowsAppDataIsolation ? "严格隔离" : "普通独立 profile"} / ${runtimeAntigravityCli.profileRoot || "未设置"}` }),
-        row("Antigravity CLI profile", antigravityCliProfileRoot),
-        strictRow,
-        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveAntigravityCliButton]),
+        el("div", { className: "anticodex-warn", text: "第三方 API 由 CodexPlusPlus 直接连接，完全绕过 Antigravity。接口失败时只会报错，不会自动消耗 Antigravity 流量，也不会清空聊天记录、项目或当前工作区。" }),
         row("协议", protocol),
         row("接口地址（可填 base URL 或完整接口）", baseUrl),
         row("模型名", model),

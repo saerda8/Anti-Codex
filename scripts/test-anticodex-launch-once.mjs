@@ -13,6 +13,7 @@ import {
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { markerScopedHistoryEntries } from "./lib/native-codex-rollout-history.mjs";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -96,12 +97,7 @@ function commandLooksLikeLaunchSideEffect(command = "") {
 }
 
 function markerHistoryEvidence(expectedMarker) {
-  let history = null;
-  try {
-    history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
-  } catch {}
-  const entries = (Array.isArray(history?.entries) ? history.entries : [])
-    .filter((entry) => JSON.stringify(entry).includes(expectedMarker));
+  const entries = markerScopedHistoryEntries(expectedMarker, { responseHistoryPath });
   const orderedItems = [];
   const seen = new Set();
   for (const entry of entries) {

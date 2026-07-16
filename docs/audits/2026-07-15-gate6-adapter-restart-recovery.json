@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-14T18:13:44.352Z",
+  "gate": "Gate 6 adapter restart recovery edge",
+  "ok": true,
+  "failedIds": [],
+  "modelTraffic": "two bounded Gemini turns",
+  "model": "gemini-3.5-flash-low",
+  "markers": {
+    "inputMarker": "RESTART_PROBE_INPUT_DA93684FF5BF",
+    "resultMarker": "RESTART_PROBE_FINAL_OK_DA93684FF5BF"
+  },
+  "artifact": {
+    "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate6-adapter-restart-DA93684FF5BF.txt",
+    "bytes": 53,
+    "sha256": "b83b15c85ac255d246170547d907fc98273790bcbf9c2889ba0ba5bdb3c42df3",
+    "hostExecutionCount": 1
+  },
+  "counters": {
+    "start": 2,
+    "resume": 0,
+    "cancel": 1
+  },
+  "providerUrls": {
+    "beforeRestart": "http://127.0.0.1:62524/v1",
+    "afterRestart": "http://127.0.0.1:62524/v1"
+  },
+  "checks": [
+    {
+      "id": "antigravity_read_only_ready",
+      "ok": true,
+      "modelCount": 20,
+      "modelIds": [
+        "gemini-3.5-flash-low",
+        "gemini-3-flash-agent",
+        "gemini-3.5-flash-extra-low",
+        "gemini-3.1-pro-low",
+        "gemini-pro-agent",
+        "claude-sonnet-4-6",
+        "claude-opus-4-6-thinking",
+        "gpt-oss-120b-medium",
+        "chat_20706",
+        "chat_23310",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-thinking",
+        "gemini-2.5-pro",
+        "gemini-3-flash",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-high",
+        "tab_flash_lite_preview",
+        "tab_jump_flash_lite_preview"
+      ],
+      "signedIn": true,
+      "selectedModel": "gemini-3.5-flash-low"
+    },
+    {
+      "id": "real_restart_probe_authorized",
+      "ok": true,
+      "model": "gemini-3.5-flash-low"
+    },
+    {
+      "id": "first_turn_exact_single_tool_call",
+      "ok": true,
+      "status": 200,
+      "finishReason": "tool_calls",
+      "toolCallCount": 1,
+      "toolName": "restart_probe",
+      "exactArguments": true
+    },
+    {
+      "id": "restart_continuation_avoids_409",
+      "ok": true,
+      "status": 200,
+      "errorCode": null
+    },
+    {
+      "id": "completed_tool_not_replayed",
+      "ok": true,
+      "repeatedToolCalls": 0,
+      "hostExecutionCount": 1
+    },
+    {
+      "id": "restart_returns_exact_final_result",
+      "ok": true,
+      "finishReason": "stop",
+      "finalText": "RESTART_PROBE_FINAL_OK_DA93684FF5BF",
+      "expected": "RESTART_PROBE_FINAL_OK_DA93684FF5BF"
+    },
+    {
+      "id": "host_artifact_written_once_and_unchanged",
+      "ok": true,
+      "hostExecutionCount": 1,
+      "artifactPath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate6-adapter-restart-DA93684FF5BF.txt",
+      "artifactBytes": 53,
+      "sha256BeforeRestart": "b83b15c85ac255d246170547d907fc98273790bcbf9c2889ba0ba5bdb3c42df3",
+      "sha256AfterRestart": "b83b15c85ac255d246170547d907fc98273790bcbf9c2889ba0ba5bdb3c42df3"
+    },
+    {
+      "id": "adapter_restarted_instead_of_resuming_stale_session",
+      "ok": true,
+      "counters": {
+        "start": 2,
+        "resume": 0,
+        "cancel": 1
+      },
+      "requests": [
+        {
+          "label": "before_restart",
+          "operation": "start",
+          "toolCount": 1
+        },
+        {
+          "label": "before_restart",
+          "operation": "cancel"
+        },
+        {
+          "label": "after_restart",
+          "operation": "start",
+          "toolCount": 0
+        }
+      ]
+    },
+    {
+      "id": "desktop_roots_unchanged",
+      "ok": true,
+      "before": {
+        "originalCodex": [
+          {
+            "processId": 24636,
+            "parentProcessId": 2436,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 28140,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 33592,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 37068,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 43252,
+            "parentProcessId": 24636,
+            "name": "codex.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+          },
+          {
+            "processId": 44232,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 44688,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 47908,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          }
+        ],
+        "antiCodexRoots": [
+          {
+            "processId": 40148,
+            "parentProcessId": 10876,
+            "name": "Anti-Codex.exe",
+            "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+          }
+        ],
+        "candidateProcesses": []
+      },
+      "after": {
+        "originalCodex": [
+          {
+            "processId": 24636,
+            "parentProcessId": 2436,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 28140,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 33592,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 37068,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 43252,
+            "parentProcessId": 24636,
+            "name": "codex.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe"
+          },
+          {
+            "processId": 44232,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 44688,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          },
+          {
+            "processId": 47908,
+            "parentProcessId": 24636,
+            "name": "ChatGPT.exe",
+            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.9981.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe"
+          }
+        ],
+        "antiCodexRoots": [
+          {
+            "processId": 40148,
+            "parentProcessId": 10876,
+            "name": "Anti-Codex.exe",
+            "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\codex-patched-app\\Anti-Codex.exe"
+          }
+        ],
+        "candidateProcesses": []
+      }
+    },
+    {
+      "id": "probe_used_background_loopback_only",
+      "ok": true,
+      "firstProviderUrl": "http://127.0.0.1:62524/v1",
+      "secondProviderUrl": "http://127.0.0.1:62524/v1",
+      "oldRouteBefore": {
+        "count": 200,
+        "entryCount": 200,
+        "latestAt": "2026-07-14T10:58:14.728Z",
+        "latestRequestId": "resp_afc34eb5097144bd87a11fd20966f975",
+        "entriesSha256": "6f4ad59d877c037a18566470c82e489d1b71bd23371dc0fa0a675056f8c7709b"
+      },
+      "oldRouteAfter": {
+        "count": 200,
+        "entryCount": 200,
+        "latestAt": "2026-07-14T10:58:14.728Z",
+        "latestRequestId": "resp_afc34eb5097144bd87a11fd20966f975",
+        "entriesSha256": "6f4ad59d877c037a18566470c82e489d1b71bd23371dc0fa0a675056f8c7709b"
+      },
+      "oldRouteFingerprintUnchanged": true
+    }
+  ]
+}

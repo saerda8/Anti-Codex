@@ -1,12 +1,18 @@
 # Anti-Codex Windows
 
-Anti-Codex for Windows installs an isolated patched Codex Desktop host under `%LOCALAPPDATA%\Anti-Codex`. It keeps the official Codex installation untouched and runs through the local Anti-Codex gateway.
+Anti-Codex installs a guarded, isolated copy of the official Codex Desktop host
+under `%LOCALAPPDATA%\Anti-Codex`. It does not modify the official installation.
 
 ## Requirements
 
-- Codex Desktop for Windows
+- Official Codex Desktop for Windows
 - Node.js available as `node.exe`
-- A signed-in Antigravity CLI or Desktop account for model-entitlement text (CLI is the target text transport; Desktop is a compatibility layer, not the default product path)
+- A signed-in Antigravity Desktop account when using Antigravity models
+- Provider endpoint, model, and key when using an ordinary third-party API
+
+Third-party providers are handled directly by CodexPlusPlus and bypass
+Antigravity. The thin Antigravity route uses Desktop Cascade only for model
+inference; native Codex still owns tools and the task loop.
 
 ## Install
 
@@ -16,31 +22,32 @@ From the repository or release package root, double-click:
 install-windows.bat
 ```
 
-The installer copies the Anti-Codex runtime to:
+The installer creates:
 
 ```text
 %LOCALAPPDATA%\Anti-Codex\runtime
+%LOCALAPPDATA%\Anti-Codex\codex-patched-app
+%APPDATA%\anticodex
 ```
 
-It also creates:
+It also creates the `Anti-Codex` desktop shortcut and Start Menu folder. The
+copied executable, state, taskbar/tray icons, and Electron user-data directory
+remain isolated from official Codex.
 
-- Launcher shortcut: `Anti-Codex.lnk`
-- Start Menu folder: `Anti-Codex`
-- Patched Codex host: `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`
-- Isolated state root: `%APPDATA%\anticodex`
+## Run From Source
 
-## Run Without Installing
-
-For development, the shared launcher script is still named for legacy compatibility:
+For development:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\start-deepcodex.ps1
+.\scripts\start-anticodex.ps1
 ```
 
-That script starts Anti-Codex mode when the Anti-Codex environment is active. Do not rename it without a dedicated migration because installed recovery, sync, and tests still use the compatibility entry point.
+The launcher owns a single fixed-route supervisor and reuses the existing
+Anti-Codex window when the provider/model route matches. It must not open
+duplicate visible clients or enter a relaunch loop.
 
-Optional environment variables:
+Optional development overrides:
 
 ```powershell
 $env:CODEX_BIN = "C:\Path\To\Codex.exe"
@@ -48,59 +55,40 @@ $env:NODE_BIN = "C:\Path\To\node.exe"
 $env:DEEPCODEX_WORKSPACE = "C:\Path\To\Project"
 ```
 
-## Runtime Paths
+`DEEPCODEX_*` names that remain are internal compatibility names, not product
+branding or a separate architecture.
+
+## Update And Rollback
+
+After official Codex updates, use:
 
 ```text
-%LOCALAPPDATA%\Anti-Codex\runtime
-%LOCALAPPDATA%\Anti-Codex\codex-patched-app
-%APPDATA%\anticodex\codex-home-deepseek-app
-%APPDATA%\anticodex\reports
+Start Menu > Anti-Codex > Sync Anti-Codex with Codex
 ```
 
-Some internal files and environment variables still contain `deepcodex` or `DEEPCODEX_*` for compatibility with older state, launchers, and recovery scripts. These are internal names, not user-facing branding.
-The `codex-home-deepseek-app` path segment is also legacy compatibility state; it does not mean DeepSeek is the current default provider.
+Sync builds a candidate copy, audits the approved patch delta, validates it,
+and activates it only after the checks pass. A failure leaves the active client
+and rollback point unchanged.
 
-## Notes
+## Runtime Notes
 
-- Anti-Codex does not require a ChatGPT login path.
-- Anti-Codex does not fake connector authorization; connector-backed app tools remain unavailable until the real connector is authorized.
-- Model text transport defaults to Antigravity CLI. Model catalog and account discovery may still use the Antigravity Desktop compatibility layer, but Desktop/coworker must not become the default tool execution path.
-- Third-party API profiles are configured from the Anti-Codex Manager and use the same isolated state root.
 - PowerShell 5.1 is supported.
-- The installed Anti-Codex state is separate from the normal Codex state.
-- Anti-Codex sets `CODEX_ELECTRON_USER_DATA_PATH` so it can run while normal Codex is already open.
-- Skills, MCP config, plugin metadata, connector directory snapshots, and app-tool cache snapshots are copied into the isolated Anti-Codex home.
-- Remote connectors are shown as metadata until truly authorized; local allowlists do not make app tools callable.
-- The official Codex installation is not modified. Anti-Codex copies the Codex app into its own local patched folder.
+- Anti-Codex uses `%APPDATA%\anticodex` and a separate Electron user-data path.
+- Skills, MCP configuration, plugin metadata, and connector metadata are copied
+  into isolated state. Metadata does not authorize connector-backed app tools.
+- The active Antigravity route uses one signed-in Desktop account; no dual-account
+  scheduler is installed.
+- Provider mismatches fail closed instead of silently switching upstreams.
 
-## Windows npm / npx Command Note
+## Windows npm / npx
 
-Anti-Codex creates command shims under its isolated runtime/state paths.
-
-On Windows, plugin or skill commands should call Node package managers through their `.cmd` launchers:
+Use the `.cmd` launchers from Windows processes:
 
 ```powershell
 npx.cmd --version
 npm.cmd --version
-pnpm.cmd --version
-yarn.cmd --version
-```
-
-Avoid this pattern:
-
-```powershell
-$env:Path = "C:\Program Files\nodejs;" + $env:Path
-Start-Process -FilePath "npx" -ArgumentList "remotion","studio"
-```
-
-That can cause Windows to open `C:\Program Files\nodejs\npx.ps1` as a text document. Prefer:
-
-```powershell
 Start-Process -FilePath "npx.cmd" -ArgumentList "remotion","studio"
 ```
 
-or:
-
-```powershell
-cmd.exe /d /s /c "npx.cmd remotion studio"
-```
+Launching bare `npx` can select `npx.ps1` and open it as a document instead of
+running the package command.

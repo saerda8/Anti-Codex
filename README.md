@@ -1,37 +1,43 @@
 # Anti-Codex
 
-Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作流沿用 Codex，模型请求使用当前 Antigravity 权益提供的模型文本，不需要 ChatGPT 登录，也不使用 DeepSeek API Key。
+Anti-Codex 是一份与原版互不干扰的官方 Codex Desktop 隔离副本（isolated official Codex）。它保留
+Codex 原生界面和 harness，只替换模型提供方接入方式，不重写 Codex 的任务控制。
 
-项目的唯一架构基线是 [`docs/PRODUCT_ARCHITECTURE.md`](docs/PRODUCT_ARCHITECTURE.md)，当前代码的完成/改进/删除/未完成台账是 [`docs/CURRENT_IMPLEMENTATION_AUDIT.md`](docs/CURRENT_IMPLEMENTATION_AUDIT.md)。CC Switch 协议移植来源见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。后续实现、测试和完成度判断都必须以这两份项目文档和最新真实任务结果为准。
+项目基石是 [三层架构](docs/THREE_LAYER_ARCHITECTURE.md)，执行进度和剩余门禁见
+[最终迁移计划](docs/FINAL_MIGRATION_PLAN.md)。任何实现都不得在三层之外增加新的
+任务控制层。
 
-客户端维护原则很简单：Codex 更新后，Anti-Codex 通过受保护的客户端同步跟进，再重新套用 Anti-Codex 的品牌、隔离、启动器和模型接入补丁；这不是把 Codex 功能一个一个重做出来。换句话说，这是 client-copy sync，不是 feature-by-feature rebuild。
+## 三层结构
 
-它不会修改原生 Codex。两者有独立的程序、任务栏名称、运行状态和本地数据，可以同时运行。
+1. **官方 Codex 隔离壳**：从当前官方 Codex 安全复制并打最小隔离补丁。Codex
+   原生 harness 独占规划、工具（tools）、命令、文件、审批、重试、续跑、上下文压缩
+   （compaction）和完成判断。
+2. **CodexPlusPlus 通用接入层**：直接使用上游 CodexPlusPlus 处理 Responses/Chat
+   协议和普通第三方 API。third-party traffic bypasses Antigravity，第三方 API 直接连接。
+3. **Antigravity 薄适配层（thin adapter）**：仅在选择 Antigravity 模型时，把标准 Chat
+   Completions 结构映射到本机 Antigravity Desktop Cascade，复用登录、模型和额度。
+   它不执行工具、不改写命令，也不判断任务是否完成。
 
-## 已确认保留的基础
+原版 Codex 的安装、账号、任务和本地数据不会被 Anti-Codex 改写；两者可以同时运行，
+并保留各自的程序名、任务栏图标、托盘图标和状态目录。
 
-- 独立的 `Anti-Codex.exe`、桌面入口、任务栏名称和窗口名称
-- 自动读取当前 Antigravity 权益可用的精确模型名称与推理档位
-- 已有模型目录、切换、取消、历史和上下文压缩基础；新纯协议主路径仍在迁移
-- 可同步 Codex function/custom/MCP/Skills 工具定义；网关级真实简单工具闭环已通过，Codex Desktop 宿主闭环仍待验收
-- 支持中文跟随、网页搜索与网页读取
-- 独立保存 Anti-Codex 状态，不改写原生 Codex 配置
-- 检测原生 Codex 更新，并通过安全候选、兼容检查、回滚点完成同步
-- 提供账号/代理、模型、界面、同步、诊断和整体稳定性检查
+## 功能
 
-当前产品完成度按 **64%** 计算，不能宣称真实项目可用。CC Switch 协议等价移植仍不完整，真正增量流式、历史恢复、Codex Desktop 简单任务和长任务验收仍未完成；更关键的是，当前 normal 主路虽然进入新 handler，随后仍把多角色和工具结构压成一条 Antigravity 普通用户消息。真实 Cascade 已证明模型会把它识别为提示注入，因此这条单文本桥必须退出生产路径，不能再靠提示词修补。准确进度和删除清单以实现审计为准。
-
-当前安装快照已对齐：Gateway 运行时健康，Anti-Codex 桌面壳与本机官方 Codex 都是 `26.707.8168.0`。同步经过候选构建和校验后激活，旧版 `26.707.3748.0` 仍可回滚；中文“管理”、Anti-Codex 图标和关闭按钮全区域均已在新版实机通过。
+- 跟随官方 Codex 更新，通过候选复制、差异审计、验证和回滚点同步原生功能与 UI。
+- 保留 Anti-Codex 名称、图标、中文“管理”入口和独立运行状态。
+- 使用 Antigravity Desktop 当前账号的真实模型目录与额度。
+- 支持普通第三方 Responses 或 Chat API，路由失败时关闭请求，不静默切到错误模型。
+- Codex function/custom 工具、MCP、Skills、插件、历史、取消和压缩仍由原生 harness 管理。
+- connector-backed app tools 的本地元数据不等于授权；未真正授权时不得伪装成可调用。
 
 ## 依赖
 
-1. Windows 版官方 Codex Desktop
-2. Antigravity CLI 或 Desktop，已登录可用账号（用于获取模型权益文本）
-3. Antigravity 访问 Google 服务所需的代理
+1. Windows 版官方 Codex Desktop。
+2. Node.js。
+3. 使用 Antigravity 模型时，需要已登录的 Antigravity Desktop 及其网络环境。
+4. 使用第三方 API 时，需要对应服务的地址、模型名和密钥；该路线不依赖 Antigravity。
 
-当前安装运行时的模型文本传输是 Antigravity Desktop Cascade，模型目录和账号发现也来自本机 Antigravity 登录态。目标不是让 Desktop Agent 接管任务，而是找到复用该登录权益的结构化模型接口；CLI 仍可作为独立 worker 或诊断通路，但不是当前产品默认传输。
-
-## 安装
+## 安装与更新
 
 首次安装双击：
 
@@ -39,44 +45,22 @@ Anti-Codex 是一份独立运行的 Codex Desktop 副本。界面和主要工作
 install-windows.bat
 ```
 
-安装完成后，桌面只保留一个 `Anti-Codex` 快捷方式。维护入口位于开始菜单的 `Anti-Codex` 文件夹。
-
-已安装后不要再次运行完整安装。需要跟随原生 Codex 更新时，使用：
+安装后从桌面或开始菜单打开 `Anti-Codex`。官方 Codex 更新后，使用：
 
 ```text
 开始菜单 > Anti-Codex > Sync Anti-Codex with Codex
 ```
 
-同步会先构建并验证候选版本，保留上一版回滚点，失败时不会替换当前可用版本。
+同步先构建候选副本并检查官方文件差异，只在门禁通过后激活；失败时保留当前版本和回滚点。
 
-## 账号切换
+## 模型与 API
 
-打开：
+- Antigravity 模型：在“管理”中选择当前登录账号实际提供的模型。
+- 第三方 API：在“管理”中测试、保存并应用 provider profile。普通第三方流量由
+  CodexPlusPlus 直接处理，不经过 Antigravity 适配层。
+- 当前产品只使用一个活动 Antigravity 账号，不包含双账号调度机制。
 
-```text
-开始菜单 > Anti-Codex > Manage Anti-Codex > Switch Antigravity Account
-```
-
-在 Antigravity Desktop 中切换账号后，回到切换窗口继续。Anti-Codex 会重新读取账号指纹与模型列表，并执行安装状态检查。第一版允许切换账号时关闭并重新打开 Anti-Codex。
-
-## 模型
-
-模型菜单来自当前 Antigravity 权益实际返回的可用模型。Anti-Codex 不伪造模型，也不会把推理档位冒充成模型名。当前机器已验证八个模型，包括精确数字版本与推理档位。
-
-## Skills、MCP 与插件
-
-- Skills、MCP 配置和插件缓存会复制到 Anti-Codex 的独立状态目录。
-- Codex 工具、MCP、Skills 和本地插件能力由 Anti-Codex/Codex 侧承接；Antigravity 只提供模型文本。
-- 远程 ChatGPT 插件市场和需要 ChatGPT 账号授权的连接器保持关闭。
-
-## 已知边界
-
-- Responses 模型 WebSocket 当前明确回退为 HTTP/SSE；不会伪装成已支持。
-- 需要 ChatGPT 授权的远程连接器不可用。
-- Antigravity Desktop 账号切换和外部代理开关仍需要用户在对应界面操作。
-- 原生 Codex 更新后若内部结构改变，同步会在兼容检查失败时保留当前 Anti-Codex，不会强行激活。
-
-## 本机路径
+## 本机隔离路径
 
 ```text
 安装目录：%LOCALAPPDATA%\Anti-Codex
@@ -84,12 +68,5 @@ install-windows.bat
 维护报告：%APPDATA%\anticodex\reports
 ```
 
-本项目是在 `deepcodex` 基础上改造的，因此源码内仍保留部分历史文件名；默认安装入口和运行产品均为 Anti-Codex。
-
-## 第三方 API 配置
-
-默认路线是 Antigravity 权益提供模型文本、Codex 工具留在 Anti-Codex 侧。需要使用第三方 API 时，正式入口是 Anti-Codex Manager：先测试，再保存并应用 upstream profile；底层脚本只用于受控写入和重启。旧配置读取失败时不会静默切回错误上游，也不需要 ChatGPT 登录。
-
-## Connector 授权边界
-
-Anti-Codex 会把本机 MCP、skills、插件元数据和 connector 元数据同步到自己的独立状态里，但元数据不是授权。未授权的 connector-backed app tools 必须继续显示为不可调用，不能因为本地缓存存在就伪装成已授权。
+源码仍可能保留少量历史兼容命名，但它们不能重新成为运行架构。删除台账见
+[LEGACY_REMOVAL_MANIFEST.md](docs/LEGACY_REMOVAL_MANIFEST.md)。

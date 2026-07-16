@@ -1,26 +1,46 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  advanceStableIdleWindow,
+  assistantMessageIsVisibleProgress,
   autonomousContinuationHasFreshCompletion,
+  classifyReconnectOutcome,
+  codexLikeAgentProcessProven,
+  collectCodexRolloutMarkerEvidence,
   composerHasUnsubmittedMarker,
   countMarkerOccurrences,
   countNewAssistantMarkers,
   countObservedAssistantMarkers,
   countUniqueAssistantMarkerMessages,
   filterAssistantMarkerObservationFailures,
+  freshDesktopTurnConfirmsSubmit,
   hasAssistantFinalMarkerEvidence,
+  latestMarkerTurnCompleted,
+  multiTurnFirstTurnReadyForFollowup,
   parseWordCountCliOutput,
   pendingDesktopTaskConfirmsSubmit,
+  repoMultiTurnCompletionReady,
+  resultDrivenTurnCompletionReady,
   responsesPayloadAdvanceConfirmsSubmit,
   shouldRecoverIdleAutonomousTurn,
+  stableIdleTimeoutForTaskMode,
+  stableIdleWindowReady,
+  taskScopedToolOutputObserved,
+  utf8BytesExactlyMatch,
 } from "./lib/ui-chat-marker-evidence.mjs";
+import {
+  analyzeNativeCodexActivityRows,
+  nativeExpectedRequestObserved,
+  readNativeCodexActivityRows,
+  waitForNativeCodexRequestQuiet,
+} from "./lib/anticodex-native-request-activity.mjs";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -41,6 +61,7 @@ Options:
   --timeout-ms <ms>        Overall verifier timeout.
   --marker <text>          Expected final marker.
   --project-label <text>   Expected project label (default: Anti-Codex).
+  --project-root <path>    Activate this existing directory as the native Codex project before a new task.
   --artifact-dir <path>    Directory for task artifacts.
   --prompt-file <path>     UTF-8 prompt file.
   --followup-prompt-file <path>  UTF-8 second-turn prompt file for multi-turn-project.
@@ -48,9 +69,16 @@ Options:
   --report-name <name>     Isolated report name for a custom scenario.
   --required-file <path>   Require this file to be newly created or updated and non-empty.
   --required-file-contains <a|b>  Require every pipe-separated UTF-8 string in the file.
+  --result-driven-completion      Accept the current native Codex task-complete event; final text markers stay diagnostic.
+  --require-native-single-task    Require native Codex request quiet before submit and reject hidden tool execution.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
   --same-chat-title-contains <text>  Reopen an existing task whose visible title contains this text.
+  --navigate-away-before-history-reopen  Open a blank new task before reopening --same-chat-title-contains.
+  --require-history-responsive       Fail when reopening history exceeds the configured budget.
+  --history-open-budget-ms <ms>      Maximum history click-to-interactive time (default: 3000).
   --force-reset-same-chat  Allow stale recovery to interrupt/reset a reused chat.
+  --workspace-command <command>  No-traffic workspace command (restore only).
+  --workspace-state-file <path>  Workspace snapshot JSON used by --workspace-command restore.
   --help, -h               Show this help message without starting UI work.`);
   process.exit(0);
 }
@@ -61,11 +89,16 @@ let cdpPort = Number(args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT ||
 const baseUrl = String(args.get("--base-url") || process.env.TRANSLATOR_URL || "http://127.0.0.1:8484").replace(/\/$/, "");
 const diagnosticsUrl = `${baseUrl}/anticodex/diagnostics?fast=1`;
 const modelRoutesUrl = `${baseUrl}/anticodex/model-routes`;
+const fixedRouteHealthUrl = String(args.get("--fixed-route-health-url")
+  || process.env.ANTICODEX_FIXED_ROUTE_HEALTH_URL
+  || "http://127.0.0.1:18487/anticodex/fixed-route/health").replace(/\/$/, "");
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const DESKTOP_SUBMIT_REQUEST_GRACE_MS = 70_000;
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
 const taskMode = String(args.get("--task-mode") || "exact-marker");
+const resultDrivenCompletionEnabled = args.has("--result-driven-completion");
+const requireNativeSingleTask = args.has("--require-native-single-task");
 const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
 let requiredModelLabel = String(args.get("--model-label") || args.get("--required-model-label") || "").trim();
 const configModelOverrideEnabled = requiredModel && !args.has("--no-config-model-override");
@@ -73,6 +106,7 @@ const anticodexStateRoot = resolve(process.env.DEEPCODEX_STATE_ROOT || join(proc
 const anticodexCodexHome = resolve(process.env.ANTICODEX_CODEX_HOME || join(anticodexStateRoot, "codex-home-deepseek-app"));
 const anticodexConfigPath = resolve(anticodexCodexHome, "config.toml");
 const anticodexModelCatalogPath = resolve(anticodexCodexHome, "deepseek-model-catalog.json");
+const codexRolloutRoot = resolve(anticodexCodexHome, "sessions");
 if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath)) {
   try {
     const catalog = JSON.parse(readFileSync(anticodexModelCatalogPath, "utf8").replace(/^\uFEFF/, ""));
@@ -85,8 +119,11 @@ if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath
   }
 }
 const sameChatTitleContains = String(args.get("--same-chat-title-contains") || "").trim();
+const navigateAwayBeforeHistoryReopen = args.has("--navigate-away-before-history-reopen");
 const isolateChat = !(args.has("--same-chat") || sameChatTitleContains);
 const preserveSameChatActiveTask = !isolateChat && !args.has("--force-reset-same-chat");
+const requireHistoryResponsive = args.has("--require-history-responsive");
+const historyOpenBudgetMs = Math.max(250, Number(args.get("--history-open-budget-ms") || 3_000));
 const customBaseReportName = String(args.get("--report-name") || "")
   .trim()
   .toLowerCase()
@@ -135,6 +172,11 @@ const projectTaskModes = new Set([
 ]);
 const requiresProjectChat = projectTaskModes.has(taskMode);
 const projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
+const projectChatRoot = args.get("--project-root") ? resolve(String(args.get("--project-root"))) : "";
+const workspaceCommand = String(args.get("--workspace-command") || "").trim().toLowerCase();
+const workspaceStateFile = args.get("--workspace-state-file")
+  ? resolve(String(args.get("--workspace-state-file")))
+  : "";
 const markerPrefix = taskMode === "web-search"
   ? "UI_WEB_SEARCH_SMOKE"
   : taskMode === "coding-project"
@@ -223,9 +265,9 @@ if (!hasCustomPrompt && taskMode === "agentic-step-flow") {
     "",
     "你必须像 Codex 一样分阶段工作：",
     "1. 先在可见回复里单独写一行：阶段1：准备创建文件。",
-    `2. 然后用工具创建 index.html、README.md、done.txt 三个文件。index.html 要包含中文标题“多阶段执行验证”和标记 ${marker}；README.md 要说明三个文件；done.txt 必须只包含 ${marker}。`,
+    `2. 然后用工具创建 index.html、README.md、done.txt 三个文件。index.html 要包含中文标题“多阶段执行验证”和标记 ${marker}；README.md 要说明三个文件；done.txt 的原始 UTF-8 字节必须只包含 ${marker}，不能有 BOM、回车或换行。请用 [System.IO.File]::WriteAllText 和 New-Object System.Text.UTF8Encoding($false) 写 done.txt，不要用 Set-Content、Out-File 或重定向。`,
     "3. 文件创建后，在可见回复里单独写一行：阶段2：准备验证文件。",
-    `4. 然后用工具验证 done.txt 内容完全等于 ${marker}，并检查 index.html 包含“多阶段执行验证”。`,
+    `4. 然后用工具按原始字节验证 done.txt 完全等于 ${marker}，并检查 index.html 包含“多阶段执行验证”。`,
     `5. 验证后，在最后一行只写：${marker}`,
     "",
     "不要查看 Antigravity brain、transcript、history 或 log 目录。不要创建其他文件。",
@@ -235,7 +277,7 @@ if (!hasCustomPrompt && taskMode === "coding-project") {
   promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text) 函数，并且作为 CLI 运行时把命令行参数当作待统计文本，不要把参数当作文件路径；运行 node word-tally.mjs "red blue red" 时必须打印包含 {"red":2,"blue":1} 的 JSON。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}，请用 [System.IO.File]::WriteAllText 写 UTF8Encoding(false)，不能有 BOM 或换行；不要用 Set-Content 写 done.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"。最后必须运行 Get-Content done.txt 并让工具输出显示完整标记 ${marker}，核对后最后回复 ${marker}。`;
 }
 if (!hasCustomPrompt && taskMode === "multi-turn-project") {
-  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 必须只包含 ${marker}_FIRST。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，核对输出后，最后回复 ${marker}_FIRST。`;
+  promptText = `请在 ${artifactDir} 里创建一个很小的 Node.js CLI 项目。这是两轮任务的第 1 轮。只用 PowerShell 文件命令创建这些文件：package.json、word-tally.mjs、word-tally.test.mjs、done.txt，不要多建文件。不要查看 Antigravity brain、transcript、history 或 log 目录。word-tally.mjs 必须导出 tallyWords(text)，并且作为 CLI 运行时打印 JSON 单词计数。word-tally.test.mjs 必须使用 node:test，并断言 "red blue red" 返回 red=2、blue=1。done.txt 的原始字节必须只包含 ${marker}_FIRST，不能有 UTF-8 BOM、回车或换行；用 [System.IO.File]::WriteAllText 和 New-Object System.Text.UTF8Encoding($false) 写入，不能用 Set-Content、Out-File 或重定向写 done.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red"，再按原始字节验证 done.txt，核对输出后，最后回复 ${marker}_FIRST。`;
 }
 if (!hasCustomPrompt && taskMode === "complex-project") {
   const complexProjectCommand = buildComplexProjectRepairCommandSafe(artifactDir, marker);
@@ -566,7 +608,18 @@ function requiredModelNeedles() {
   return [...new Set(values)];
 }
 
-function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
+function turnSubmitModelValues(turns = []) {
+  const values = [];
+  for (const turn of turns.filter(Boolean)) {
+    const submit = turn?.submitEvidence || turn;
+    for (const evidence of [submit?.realSubmit, submit?.retryRealSubmit, submit?.nativeSubmit]) {
+      values.push(...(Array.isArray(evidence?.observedModels) ? evidence.observedModels : []));
+    }
+  }
+  return values.filter(Boolean).map(String);
+}
+
+function collectRequiredModelFailures(modelRouteEvidence, diagnostics, turns = []) {
   const expected = requiredModelNeedles();
   if (expected.length === 0) return [];
   const actualValues = [];
@@ -579,15 +632,21 @@ function collectRequiredModelFailures(modelRouteEvidence, diagnostics) {
   actualValues.push(
     diagnostics?.responsesWebSocket?.lastClientPayload?.model,
     diagnostics?.responsesWebSocket?.lastClientPayload?.metadata?.model,
+    ...turnSubmitModelValues(turns),
   );
   if (actualValues.some((value) => modelValueMatches(value, expected))) return [];
   const compactActual = actualValues.filter(Boolean).map(String).slice(0, 8).join(", ") || "none";
   return [`desktop task did not route through required model ${expected.join(" / ")}; observed ${compactActual}`];
 }
 
-function desktopRealTrafficObserved(modelRouteEvidence) {
+function desktopRealTrafficObserved(modelRouteEvidence, turns = []) {
   if (Number(modelRouteEvidence?.newRouteCount || 0) > 0) return true;
-  return false;
+  return turns.filter(Boolean).some((turn) => {
+    const submit = turn?.submitEvidence || turn;
+    return submit?.realSubmit?.ok === true
+      || submit?.retryRealSubmit?.ok === true
+      || submit?.nativeSubmit?.ok === true;
+  });
 }
 
 function desktopRequestPayloadObserved(diagnostics) {
@@ -607,7 +666,9 @@ function modelRequestPayloadObserved(diagnostics, turns = []) {
   for (const turn of turns.filter(Boolean)) {
     if (desktopRequestPayloadObserved(turn?.inLoopIdleDiagnostics)) return true;
     const submit = turn?.submitEvidence || null;
-    if (submit?.realSubmit?.ok === true || submit?.retryRealSubmit?.ok === true) return true;
+    if (submit?.realSubmit?.ok === true
+      || submit?.retryRealSubmit?.ok === true
+      || submit?.nativeSubmit?.ok === true) return true;
   }
   return false;
 }
@@ -671,12 +732,35 @@ async function waitForRealResponsesSubmitAfter(
   let lastError = null;
   let markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
   while (Date.now() < deadline) {
+    const rolloutBundles = codexRolloutMarkerBundles(expectedMarker);
+    markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
+    const markerScopedRequestObserved = !expectedMarker
+      || markerEntryIds.some((id) => !beforeMarkerEntryIds.includes(id));
+    const rolloutModels = [...new Set(rolloutBundles.flatMap((bundle) => bundle.models || []).map(String).filter(Boolean))];
+    const rolloutModelMatched = requiredModelNeedles().length === 0
+      || rolloutModels.some((value) => modelValueMatches(value, requiredModelNeedles()));
+    if (markerScopedRequestObserved
+      && rolloutBundles.length > 0
+      && (requiredModelNeedles().length === 0 || rolloutModels.length > 0)) {
+      return {
+        ok: true,
+        source: "codex-rollout",
+        diagnostics: latest,
+        lastError: rolloutModelMatched ? null : `native Codex rollout model did not match required model: ${rolloutModels.join(", ") || "none"}`,
+        requiredModelMatched: rolloutModelMatched,
+        observedModels: rolloutModels,
+        markerScopedRequestObserved,
+        markerEntryIds,
+        rolloutEvidence: compactCodexRolloutEvidence(rolloutBundles),
+      };
+    }
     try {
       latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
       markerEntryIds = responseHistoryMarkerEntryIds(expectedMarker);
-      const markerScopedRequestObserved = !expectedMarker
+      const legacyMarkerScopedRequestObserved = !expectedMarker
         || markerEntryIds.some((id) => !beforeMarkerEntryIds.includes(id));
-      if (diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
+      if (legacyMarkerScopedRequestObserved
+        && diagnosticsHasRealResponsesSubmitAfter(latest, beforePayloadCount)) {
         const requiredModelMatched = diagnosticsHasRequiredModelSubmit(latest);
         return {
           ok: true,
@@ -684,12 +768,12 @@ async function waitForRealResponsesSubmitAfter(
           lastError: requiredModelMatched ? null : `raw responses payload model did not match required model: ${responsesSubmitModelValues(latest).join(", ") || "none"}`,
           requiredModelMatched,
           observedModels: responsesSubmitModelValues(latest),
-          markerScopedRequestObserved,
+          markerScopedRequestObserved: legacyMarkerScopedRequestObserved,
           markerEntryIds,
         };
       }
       const activeTaskObserved = diagnosticsShowsActiveTask(latest);
-      if (activeTaskObserved && markerScopedRequestObserved) {
+      if (activeTaskObserved && legacyMarkerScopedRequestObserved) {
         return {
           ok: true,
           diagnostics: latest,
@@ -697,7 +781,7 @@ async function waitForRealResponsesSubmitAfter(
           requiredModelMatched: diagnosticsHasRequiredModelSubmit(latest),
           observedModels: responsesSubmitModelValues(latest),
           activeTaskObserved,
-          markerScopedRequestObserved,
+          markerScopedRequestObserved: legacyMarkerScopedRequestObserved,
           markerEntryIds,
         };
       }
@@ -905,13 +989,145 @@ function writeReport(payload) {
   }
 }
 
+const codexRolloutFileCache = new Map();
+
+function recentCodexRolloutFiles(limit = 120) {
+  if (!existsSync(codexRolloutRoot)) return [];
+  const files = [];
+  const pending = [codexRolloutRoot];
+  while (pending.length > 0) {
+    const dir = pending.pop();
+    let entries = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(path);
+        continue;
+      }
+      if (!entry.isFile() || !/^rollout-.*\.jsonl$/i.test(entry.name)) continue;
+      try {
+        const stat = statSync(path);
+        files.push({ path, mtimeMs: stat.mtimeMs, size: stat.size });
+      } catch {}
+    }
+  }
+  return files.sort((left, right) => right.mtimeMs - left.mtimeMs).slice(0, limit);
+}
+
+function codexRolloutMarkerBundles(text) {
+  const markerText = String(text || "");
+  if (!markerText) return [];
+  const bundles = [];
+  for (const file of recentCodexRolloutFiles()) {
+    const signature = `${file.mtimeMs}:${file.size}:${markerText}`;
+    const cached = codexRolloutFileCache.get(file.path);
+    let evidence = cached?.signature === signature ? cached.evidence : null;
+    if (!evidence) {
+      const records = [];
+      try {
+        const content = readFileSync(file.path, "utf8");
+        if (content.includes(markerText)) {
+          for (const line of content.split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            try { records.push(JSON.parse(line.replace(/^\uFEFF/, ""))); } catch {}
+          }
+        }
+      } catch {}
+      evidence = collectCodexRolloutMarkerEvidence(records, markerText);
+      codexRolloutFileCache.set(file.path, { signature, evidence });
+    }
+    if (evidence.userMarkerSeen !== true) continue;
+    bundles.push({
+      ...evidence,
+      file: file.path,
+      entryId: `rollout:${evidence.sessionId || file.path}`,
+    });
+  }
+  return bundles;
+}
+
+async function beginNativeSingleTaskWindow() {
+  if (!requireNativeSingleTask) return { ok: true, skipped: true, reason: "not_required", baselineId: 0 };
+  const preflight = await waitForNativeCodexRequestQuiet({
+    codexHome: anticodexCodexHome,
+    quietMs: 8_000,
+    timeoutMs: 20_000,
+    pollMs: 500,
+  });
+  if (preflight.ok !== true) {
+    throw new Error(`native Codex single-task preflight failed: ${preflight.reason}`);
+  }
+  return preflight;
+}
+
+async function inspectNativeSingleTaskWindow(preflight, markerText) {
+  if (!requireNativeSingleTask || preflight?.skipped === true) {
+    return { ok: true, skipped: true, reason: "not_required" };
+  }
+  const rows = await readNativeCodexActivityRows({
+    codexHome: anticodexCodexHome,
+    afterId: Number(preflight?.baselineId || 0),
+  });
+  const expectedThreadIds = codexRolloutMarkerBundles(markerText)
+    .map((bundle) => String(bundle?.sessionId || "").trim())
+    .filter(Boolean);
+  const activity = analyzeNativeCodexActivityRows(rows, { marker: markerText, expectedThreadIds });
+  const ok = activity.unexpectedExecutionThreadIds.length === 0
+    && activity.titleThreadsUsedTools !== true
+    && activity.titleThreadsRepeated.length === 0
+    && activity.taskSuggestionThreadsUsedTools !== true
+    && activity.taskSuggestionThreadsRepeated.length === 0;
+  return {
+    ok,
+    skipped: false,
+    preflight,
+    activity,
+    failureReasons: [
+      ...(activity.unexpectedExecutionThreadIds.length > 0
+        ? [`unexpected native execution threads: ${activity.unexpectedExecutionThreadIds.join(", ")}`]
+        : []),
+      ...(activity.titleThreadsUsedTools ? ["native Codex title generation executed a tool"] : []),
+      ...(activity.titleThreadsRepeated.length > 0
+        ? [`native Codex title generation repeated requests: ${activity.titleThreadsRepeated.join(", ")}`]
+        : []),
+      ...(activity.taskSuggestionThreadsUsedTools
+        ? ["native Codex task suggestion generation executed a tool"]
+        : []),
+      ...(activity.taskSuggestionThreadsRepeated.length > 0
+        ? [`native Codex task suggestion generation repeated requests: ${activity.taskSuggestionThreadsRepeated.join(", ")}`]
+        : []),
+    ],
+  };
+}
+
+function compactCodexRolloutEvidence(bundles = []) {
+  return bundles.map((bundle) => ({
+    sessionId: bundle.sessionId || null,
+    file: bundle.file || null,
+    models: Array.isArray(bundle.models) ? bundle.models : [],
+    assistantMarkerCount: Number(bundle.assistantMarkerCount || 0),
+    taskCompleteSeen: bundle.taskCompleteSeen === true,
+    markerTurnIds: Array.isArray(bundle.markerTurnIds) ? bundle.markerTurnIds : [],
+    completedMarkerTurnIds: Array.isArray(bundle.completedMarkerTurnIds) ? bundle.completedMarkerTurnIds : [],
+    latestMarkerTurnId: bundle.latestMarkerTurnId || null,
+    latestMarkerTurnComplete: bundle.latestMarkerTurnComplete === true,
+    contextItemCount: Array.isArray(bundle.contextItems) ? bundle.contextItems.length : 0,
+  }));
+}
+
 function responseHistoryContains(text) {
   if (!text) return false;
   try {
-    return readFileSync(responseHistoryPath, "utf8").includes(text);
+    if (readFileSync(responseHistoryPath, "utf8").includes(text)) return true;
   } catch {
-    return false;
+    // Fixed-route requests are recorded by native Codex rollouts instead.
   }
+  return codexRolloutMarkerBundles(text).length > 0;
 }
 
 function responseHistoryHasToolOutputMarker(text) {
@@ -929,7 +1145,8 @@ function responseHistoryHasToolOutputMarker(text) {
       }
     }
   } catch {}
-  return false;
+  return codexRolloutMarkerBundles(text).some((bundle) => bundle.contextItems.some((item) =>
+    item?.type === "function_call_output" || item?.type === "custom_tool_call_output"));
 }
 
 function diagnosticsAreIdle(diagnostics) {
@@ -941,6 +1158,15 @@ function diagnosticsAreIdle(diagnostics) {
     && Number(sessionLock?.queued || 0) === 0
     && Number(activeRequests?.active || 0) === 0
     && queue?.running !== true;
+}
+
+function diagnosticsActivitySequence(diagnostics) {
+  return [
+    Number(diagnostics?.responsesWebSocket?.clientPayloads || 0),
+    Number(diagnostics?.antigravityQueue?.accepted || 0),
+    Number(diagnostics?.modelRoutes?.count || 0),
+    Number(diagnostics?.toolBridge?.nativeSessions?.registeredResponses || 0),
+  ].join(":");
 }
 
 async function waitForDesktopToolTurnSettled(ws, marker, waitMs = 120_000) {
@@ -1334,18 +1560,29 @@ function repoMultiFileArtifactCompleteForWait(evidence, phase = "full") {
   return failures.length === 0;
 }
 
-function repoMultiArtifactIdleSettle(turn, phase, evidence) {
+function repoMultiArtifactIdleSettle(turn, phase, evidence, stableIdleResult = null) {
   const artifactComplete = repoMultiFileArtifactCompleteForWait(evidence, phase);
   const inLoopIdleObserved = Boolean(turn?.inLoopIdleDiagnostics);
+  const finalMarkerObserved = Number(turn?.answerMarkerCount || 0) >= 1;
+  const taskToolOutputSeen = taskScopedToolOutputObserved(evidence?.responseHistory);
+  const stableIdleObserved = stableIdleResult?.stable === true;
   return {
-    ok: artifactComplete && inLoopIdleObserved,
-    kind: "artifact_idle_without_history_wait",
+    ok: artifactComplete
+      && inLoopIdleObserved
+      && finalMarkerObserved
+      && taskToolOutputSeen
+      && stableIdleObserved,
+    kind: "artifact_final_reply_stable_idle",
     phase,
-    historyToolOutputRequired: false,
-    historyToolOutputSeen: responseHistoryHasToolOutputMarker(marker),
+    historyToolOutputRequired: true,
+    historyToolOutputSeen: taskToolOutputSeen,
+    finalMarkerObserved,
     artifactComplete,
     inLoopIdleObserved,
+    stableIdleObserved,
+    quietMs: stableIdleResult?.quietMs || 0,
     diagnostics: turn?.inLoopIdleDiagnostics || null,
+    stableIdleDiagnostics: stableIdleResult?.diagnostics || null,
   };
 }
 
@@ -1611,6 +1848,7 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     assistantHasFinalMarker: false,
     taskToolCallCount: 0,
     taskToolOutputSeen: false,
+    taskScopedToolOutputSeen: false,
     markerToolCallCount: 0,
     markerToolOutputSeen: false,
     artifactGuardUsed: false,
@@ -1626,12 +1864,12 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
     repeatedPhaseCount: 0,
   };
   if (!expectedMarker) return evidence;
+  const progressMessages = [];
+  const markerScopedCallIds = new Set();
   let history = null;
   try {
     history = JSON.parse(readFileSync(responseHistoryPath, "utf8"));
-  } catch {
-    return evidence;
-  }
+  } catch {}
   const seenHistoryItems = new Set();
   const seenAssistantPhaseKeys = new Set();
   const agenticPhaseKey = (text = "") => {
@@ -1674,7 +1912,9 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
         evidence.firstPersonProgressCount += firstPersonProgressLines.length;
         evidence.firstPersonProgressSamples.push(...firstPersonProgressLines.slice(0, 3));
       }
-      if (text.includes(expectedMarker) || /阶段[12]：/.test(text) || /(?:计划|判断|准备|验证|核对|修正|推进)：/.test(text) || /本轮命令覆盖：/.test(text) || firstPersonProgressLines.length > 0) {
+      const isVisibleProgress = assistantMessageIsVisibleProgress(text, expectedMarker);
+      if (isVisibleProgress) progressMessages.push(text.trim());
+      if (text.includes(expectedMarker) || isVisibleProgress) {
         evidence.assistantText += `${text}\n`;
       }
       if (/阶段1：准备创建文件/.test(text)) evidence.phase1Count += 1;
@@ -1684,48 +1924,57 @@ function collectResponseHistoryAgenticEvidence(expectedMarker) {
       if (markSeenHistoryItem(value)) return;
       evidence.taskToolCallCount += 1;
       const serialized = JSON.stringify(value);
-      if (serialized.includes(expectedMarker)) evidence.markerToolCallCount += 1;
+      if (serialized.includes(expectedMarker)) {
+        evidence.markerToolCallCount += 1;
+        const callId = String(value.call_id || value.id || "");
+        if (callId) markerScopedCallIds.add(callId);
+      }
       if (/Anti-Codex exact artifact marker guard/.test(serialized)) evidence.artifactGuardUsed = true;
     }
     if (value.type === "function_call_output" || value.type === "custom_tool_call_output") {
       if (markSeenHistoryItem(value)) return;
       evidence.taskToolOutputSeen = true;
+      evidence.taskScopedToolOutputSeen = true;
       const serialized = JSON.stringify(value);
-      if (serialized.includes(expectedMarker)) evidence.markerToolOutputSeen = true;
+      if (serialized.includes(expectedMarker)
+          || markerScopedCallIds.has(String(value.call_id || value.id || ""))) {
+        evidence.markerToolOutputSeen = true;
+      }
       if (/Anti-Codex artifact marker verification/.test(serialized)) evidence.artifactGuardUsed = true;
     }
     for (const child of Object.values(value)) visit(child);
   };
-  const entries = Array.isArray(history?.entries) ? history.entries : [history];
+  const legacyEntries = Array.isArray(history?.entries) ? history.entries : history ? [history] : [];
+  const rolloutEntries = codexRolloutMarkerBundles(expectedMarker).map((bundle) => ({
+    id: bundle.entryId,
+    contextItems: bundle.contextItems,
+  }));
+  const entries = [...legacyEntries, ...rolloutEntries];
+  if (entries.length === 0) return evidence;
   for (const entry of entries) {
     const serialized = JSON.stringify(entry);
     if (!serialized.includes(expectedMarker)) continue;
     if (/Generate a concise UI title|provide a short title for a task/i.test(serialized)) continue;
-    visit(entry);
+    const contextItems = Array.isArray(entry?.contextItems) ? entry.contextItems : null;
+    if (!contextItems) {
+      visit(entry);
+      continue;
+    }
+    const markerPromptIndex = contextItems.findIndex((item) => item?.type === "message"
+      && item?.role === "user"
+      && responseItemTextContent(item.content).includes(expectedMarker));
+    visit(markerPromptIndex >= 0 ? contextItems.slice(markerPromptIndex + 1) : contextItems);
   }
   evidence.assistantHasPhase1 = /阶段1：准备创建文件/.test(evidence.assistantText);
   evidence.assistantHasPhase2 = /阶段2：准备验证文件/.test(evidence.assistantText);
   evidence.assistantHasFinalMarker = evidence.assistantText.includes(expectedMarker);
-  const visibleProgressPattern = /阶段[12]：|(?:计划|判断|准备|验证|核对|修正|推进)：|本轮命令覆盖：/g;
-  const visibleProgressLinePattern = new RegExp(visibleProgressPattern.source);
-  evidence.visibleProgressCount = (evidence.assistantText.match(visibleProgressPattern) || []).length;
-  const progressLines = evidence.assistantText
-    .split(/\r?\n+/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.includes(expectedMarker) && visibleProgressLinePattern.test(line));
-  const distinctProgress = new Set(progressLines);
+  evidence.visibleProgressCount = progressMessages.length;
+  const distinctProgress = new Set(progressMessages);
   evidence.distinctVisibleProgressCount = distinctProgress.size;
-  evidence.repeatedVisibleProgressCount = Math.max(0, progressLines.length - distinctProgress.size);
+  evidence.repeatedVisibleProgressCount = Math.max(0, progressMessages.length - distinctProgress.size);
   evidence.repeatedPhaseCount = Math.max(0, evidence.phase1Count - 2) + Math.max(0, evidence.phase2Count - 2);
   evidence.modelLedExecution = evidence.artifactGuardUsed !== true;
-  evidence.codexLikeProcessProof = evidence.assistantHasFinalMarker === true
-    && evidence.markerToolOutputSeen === true
-    && evidence.taskToolCallCount > 0
-    && evidence.taskToolOutputSeen === true
-    && evidence.visibleProgressCount >= 2
-    && evidence.distinctVisibleProgressCount >= 2
-    && evidence.firstPersonProgressCount === 0
-    && evidence.artifactGuardUsed !== true;
+  evidence.codexLikeProcessProof = codexLikeAgentProcessProven(evidence);
   evidence.firstPersonProgressSamples = [...new Set(evidence.firstPersonProgressSamples)].slice(0, 5);
   evidence.assistantText = evidence.assistantText.trim().slice(-2000);
   return evidence;
@@ -1741,6 +1990,7 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     assistantHasFinalMarker: false,
     taskToolCallCount: 0,
     taskToolOutputSeen: false,
+    taskScopedToolOutputSeen: false,
     markerToolCallCount: 0,
     markerToolOutputSeen: false,
     artifactGuardUsed: false,
@@ -1763,6 +2013,7 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     merged.assistantHasFinalMarker ||= evidence.assistantHasFinalMarker === true;
     merged.taskToolCallCount += Number(evidence.taskToolCallCount || 0);
     merged.taskToolOutputSeen ||= evidence.taskToolOutputSeen === true;
+    merged.taskScopedToolOutputSeen ||= evidence.taskScopedToolOutputSeen === true;
     merged.markerToolCallCount += Number(evidence.markerToolCallCount || 0);
     merged.markerToolOutputSeen ||= evidence.markerToolOutputSeen === true;
     merged.artifactGuardUsed ||= evidence.artifactGuardUsed === true;
@@ -1776,14 +2027,7 @@ function collectResponseHistoryAgenticEvidenceForMarkers(...markers) {
     merged.repeatedPhaseCount += Number(evidence.repeatedPhaseCount || 0);
   }
   merged.modelLedExecution = merged.artifactGuardUsed !== true;
-  merged.codexLikeProcessProof = merged.assistantHasFinalMarker === true
-    && merged.markerToolOutputSeen === true
-    && merged.taskToolCallCount > 0
-    && merged.taskToolOutputSeen === true
-    && merged.visibleProgressCount >= 2
-    && merged.distinctVisibleProgressCount >= 2
-    && merged.firstPersonProgressCount === 0
-    && merged.artifactGuardUsed !== true;
+  merged.codexLikeProcessProof = codexLikeAgentProcessProven(merged);
   merged.firstPersonProgressSamples = [...new Set(merged.firstPersonProgressSamples)].slice(0, 5);
   merged.assistantText = merged.assistantText.slice(-2000);
   return merged;
@@ -1909,12 +2153,10 @@ function verifyMultiTurnProjectArtifact(dir, firstMarker, finalMarker) {
   };
   try {
     if (evidence.files.doneTxt) {
-      const text = readFileSync(donePath, "utf8").replace(/^\uFEFF/, "");
-      evidence.firstDoneExact = text === firstMarker;
+      evidence.firstDoneExact = utf8BytesExactlyMatch(readFileSync(donePath), firstMarker);
     }
     if (evidence.files.followupTxt) {
-      const text = readFileSync(followupPath, "utf8").replace(/^\uFEFF/, "");
-      evidence.followupExact = text === finalMarker;
+      evidence.followupExact = utf8BytesExactlyMatch(readFileSync(followupPath), finalMarker);
     }
     if (evidence.files.changelogMd) {
       evidence.changelogHasFinalMarker = readFileSync(changelogPath, "utf8").includes(finalMarker);
@@ -2168,11 +2410,12 @@ function verifyComplexProjectArtifact(dir, expectedMarker) {
   return attachResponseHistoryEvidence(evidence, expectedMarker, dir);
 }
 
-async function waitForArtifactEvidence(check, complete, waitMs = 90_000) {
+async function waitForArtifactEvidence(check, complete, waitMs = 90_000, terminal = null) {
   const deadline = Date.now() + waitMs;
   let evidence = check();
   while (Date.now() < deadline) {
     if (complete(evidence)) return evidence;
+    if (typeof terminal === "function" && terminal(evidence) === true) return evidence;
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
     evidence = check();
   }
@@ -2222,8 +2465,7 @@ function complexProjectArtifactComplete(evidence, { requireModelLed = false } = 
   if (!requireModelLed) return true;
   if (evidence?.responseHistory?.artifactGuardUsed === true) return false;
   if ((Number(evidence?.responseHistory?.taskToolCallCount) || 0) < 1) return false;
-  if (evidence?.responseHistory?.taskToolOutputSeen !== true) return false;
-  if (evidence?.responseHistory?.markerToolOutputSeen !== true) return false;
+  if (!taskScopedToolOutputObserved(evidence?.responseHistory)) return false;
   if (evidence?.responseHistory?.assistantHasFinalMarker !== true) return false;
   if ((Number(evidence?.responseHistory?.visibleProgressCount) || 0) < 1) return false;
   return true;
@@ -2284,8 +2526,7 @@ function filterUiMarkerFailuresWhenHistoryConfirmsCompletion(failures, artifactF
 function filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, artifactEvidence) {
   const history = artifactEvidence?.responseHistory || {};
   const hasCompletedResponse = history.assistantHasFinalMarker === true
-    && history.markerToolOutputSeen === true
-    && history.taskToolOutputSeen === true;
+    && taskScopedToolOutputObserved(history);
   if (!hasCompletedResponse) return failures;
   return failures.filter((failure) => !/assistant reply marker was not observed|send click did not submit/i.test(String(failure || "")));
 }
@@ -2293,8 +2534,7 @@ function filterUiMarkerFailuresWhenResponseHistoryConfirmsCompletion(failures, a
 function filterReportSiteUiCompletionFailures(failures, artifactEvidence, answerMarkerCount = 0) {
   if (collectReportSiteArtifactFailures(artifactEvidence).length > 0) return failures;
   const history = artifactEvidence?.responseHistory || {};
-  const hasToolProof = history.taskToolOutputSeen === true
-    && history.markerToolOutputSeen === true
+  const hasToolProof = taskScopedToolOutputObserved(history)
     && history.artifactGuardUsed !== true;
   const hasUiFinalMarker = Number(answerMarkerCount || 0) >= 1 || history.assistantHasFinalMarker === true;
   const hasVisibleProgress = (Number(history.visibleProgressCount) || 0) >= 1;
@@ -2310,12 +2550,10 @@ function filterComplexProjectUiCompletionFailures(failures, artifactEvidence) {
     && history.modelLedExecution === true
     && history.artifactGuardUsed !== true
     && history.assistantHasFinalMarker === true
-    && history.markerToolOutputSeen === true
-    && history.taskToolOutputSeen === true
+    && taskScopedToolOutputObserved(history)
     && (Number(history.taskToolCallCount) || 0) > 0
     && (Number(history.visibleProgressCount) || 0) >= 2
-    && (Number(history.distinctVisibleProgressCount) || 0) >= 2
-    && (Number(history.firstPersonProgressCount) || 0) === 0;
+    && (Number(history.distinctVisibleProgressCount) || 0) >= 2;
   if (!hasStrongFinalProof) return failures;
   return failures.filter((failure) => !/complex-project required verifier repair before completion|complex-project did not prove a Codex-like visible agent process|complex-project did not show at least two visible progress updates|complex-project did not show at least two distinct visible progress updates|complex-project did not observe marker-scoped tool output|complex-project assistant final marker was not observed in response history/i.test(String(failure || "")));
 }
@@ -2329,11 +2567,9 @@ function collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, repai
   if (responseHistory.artifactGuardUsed === true) failures.push(`${taskMode} used deterministic artifact guard instead of model-led task execution`);
   if ((Number(responseHistory.visibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two visible progress updates`);
   if ((Number(responseHistory.distinctVisibleProgressCount) || 0) < 2) failures.push(`${taskMode} did not show at least two distinct visible progress updates`);
-  if ((Number(responseHistory.firstPersonProgressCount) || 0) > 0) failures.push(`${taskMode} used first-person visible progress updates`);
   if ((Number(responseHistory.repeatedVisibleProgressCount) || 0) > 2) failures.push(`${taskMode} repeated visible progress text too many times`);
   if ((Number(responseHistory.taskToolCallCount) || 0) < 1) failures.push(`${taskMode} did not emit a task tool call`);
-  if (responseHistory.taskToolOutputSeen !== true) failures.push(`${taskMode} did not observe task tool output`);
-  if (responseHistory.markerToolOutputSeen !== true) failures.push(`${taskMode} did not observe marker-scoped tool output`);
+  if (!taskScopedToolOutputObserved(responseHistory)) failures.push(`${taskMode} did not observe task-scoped tool output`);
   if (responseHistory.assistantHasFinalMarker !== true) failures.push(`${taskMode} assistant final marker was not observed in response history`);
   return failures;
 }
@@ -2372,21 +2608,28 @@ function reportSiteArtifactComplete(evidence) {
 
 function responseHistoryMarkerEntryIds(text) {
   if (!text) return [];
+  const entryIds = [];
   try {
     const history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
-    return (Array.isArray(history?.entries) ? history.entries : [])
+    entryIds.push(...(Array.isArray(history?.entries) ? history.entries : [])
       .filter((entry) => JSON.stringify(entry).includes(text))
-      .map((entry, index) => String(entry?.id || `entry-${index}`));
-  } catch {
-    return [];
+      .map((entry, index) => `response-history:${String(entry?.id || `entry-${index}`)}`));
+  } catch {}
+  for (const bundle of codexRolloutMarkerBundles(text)) {
+    const markerTurnIds = Array.isArray(bundle.markerTurnIds) ? bundle.markerTurnIds.filter(Boolean) : [];
+    if (markerTurnIds.length > 0) {
+      entryIds.push(...markerTurnIds.map((turnId) => `${bundle.entryId}:turn:${turnId}`));
+    } else {
+      entryIds.push(bundle.entryId);
+    }
   }
+  return [...new Set(entryIds)];
 }
 
 function reportSiteFinalEvidenceComplete(evidence) {
   const history = evidence?.responseHistory || {};
   return reportSiteArtifactComplete(evidence)
-    && history.taskToolOutputSeen === true
-    && history.markerToolOutputSeen === true
+    && taskScopedToolOutputObserved(history)
     && history.assistantHasFinalMarker === true;
 }
 
@@ -2432,6 +2675,117 @@ async function waitForIdleDiagnostics(url, timeoutMs = 20_000) {
   return { diagnostics: latest, lastError };
 }
 
+async function waitForStableIdleDiagnostics(url, timeoutMs = 20_000, quietMs = 12_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  let lastError = null;
+  let stableState = null;
+  while (Date.now() < deadline) {
+    try {
+      latest = await httpJson(`${url}/anticodex/diagnostics?fast=1`);
+      const nowMs = Date.now();
+      stableState = advanceStableIdleWindow(stableState, {
+        nowMs,
+        idle: diagnosticsAreIdle(latest),
+        activitySequence: diagnosticsActivitySequence(latest),
+      });
+      if (stableIdleWindowReady(stableState, { nowMs, quietMs })) {
+        return { diagnostics: latest, lastError: null, stable: true, quietMs };
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      stableState = null;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
+  }
+  return { diagnostics: latest, lastError, stable: false, quietMs };
+}
+
+function fixedRouteHealthIsReady(health) {
+  return health?.ok === true && health?.state === "ready";
+}
+
+function fixedRouteIdleDiagnostics(health, source = "fixed-route-ready") {
+  return {
+    antigravitySessionLock: { active: false, queued: 0, source },
+    activeAntigravityRequests: { active: 0, statuses: {}, source },
+    antigravityQueue: { running: false, queued: 0, source },
+    fixedRouteHealth: health,
+  };
+}
+
+async function readFixedRouteHealth() {
+  try {
+    return await httpJson(fixedRouteHealthUrl);
+  } catch {
+    return null;
+  }
+}
+
+async function waitForStableDesktopIdle(ws, expectedMarker, url, timeoutMs = 20_000, quietMs = 12_000) {
+  const startedAt = Date.now();
+  const nativeProbeDeadline = startedAt + Math.min(Math.max(5_000, quietMs), 12_000);
+  const nativeOverallDeadline = startedAt + timeoutMs;
+  let latestRollouts = [];
+  let nativeEvidenceSeen = false;
+  let nativeTaskComplete = false;
+  let outcomeComplete = false;
+  let visibleIdle = null;
+  let fixedRouteHealth = null;
+  while (Date.now() < (nativeEvidenceSeen ? nativeOverallDeadline : nativeProbeDeadline)) {
+    latestRollouts = codexRolloutMarkerBundles(expectedMarker);
+    nativeEvidenceSeen ||= latestRollouts.length > 0;
+    const responseHistoryEvidence = collectResponseHistoryAgenticEvidenceForMarkers(expectedMarker);
+    nativeTaskComplete = latestMarkerTurnCompleted(latestRollouts);
+    outcomeComplete = !nativeEvidenceSeen && responseHistoryEvidence.codexLikeProcessProof === true;
+    if (nativeTaskComplete || outcomeComplete) {
+      visibleIdle = await waitForVisibleComposerIdle(ws, 5_000);
+      fixedRouteHealth = await readFixedRouteHealth();
+      if (visibleIdle.ok === true && fixedRouteHealthIsReady(fixedRouteHealth)) {
+        return {
+          stable: true,
+          source: nativeTaskComplete
+            ? "codex-rollout-task-complete"
+            : "response-history-outcome-complete",
+          quietMs: 0,
+          lastError: null,
+          nativeTaskComplete,
+          outcomeComplete,
+          visibleIdle,
+          fixedRouteHealth,
+          responseHistoryEvidence,
+          rolloutEvidence: compactCodexRolloutEvidence(latestRollouts),
+          diagnostics: fixedRouteIdleDiagnostics(
+            fixedRouteHealth,
+            nativeTaskComplete ? "codex-rollout-task-complete" : "response-history-outcome-complete",
+          ),
+        };
+      }
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+  }
+  if (nativeEvidenceSeen) {
+    fixedRouteHealth ||= await readFixedRouteHealth();
+    return {
+      stable: false,
+      source: "codex-rollout-current-turn-timeout",
+      quietMs,
+      lastError: nativeTaskComplete
+        ? "current native Codex turn completed but the visible composer remained busy"
+        : "current native Codex turn did not complete before timeout",
+      nativeTaskComplete,
+      outcomeComplete,
+      visibleIdle,
+      fixedRouteHealth,
+      rolloutEvidence: compactCodexRolloutEvidence(latestRollouts),
+      diagnostics: fixedRouteHealthIsReady(fixedRouteHealth)
+        ? fixedRouteIdleDiagnostics(fixedRouteHealth, "codex-rollout-current-turn-timeout")
+        : null,
+    };
+  }
+  return waitForStableIdleDiagnostics(url, timeoutMs, quietMs);
+}
+
 async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   const ignoreHistoricalForegroundStop = !isolateChat;
@@ -2446,13 +2800,18 @@ async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
           return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
         };
         const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
-        const bodyText = document.body.innerText || '';
         const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
         const labels = buttons.map((button) => String(button.getAttribute('aria-label') || button.textContent || '').trim()).filter(Boolean);
-        const hasStop = labels.some((label) => /^(?:Stop|停止|正在思考|running|thinking)$/i.test(label));
+        const isStopControl = (button) => {
+          const label = String(button.getAttribute('aria-label') || button.textContent || '').trim();
+          const stopPath = button.querySelector('svg path')?.getAttribute('d') || '';
+          return /^(?:Stop|停止|正在思考|running|thinking)$/i.test(label)
+            || /^M4\.5 5\.75C4\.5/.test(stopPath);
+        };
+        const hasStop = buttons.some(isStopControl);
         const hasForegroundStop = buttons.some((button) => /bg-token-foreground/.test(String(button.className || ''))
           && /size-token-button-composer/.test(String(button.className || ''))
-          && /停止|Stop|正在思考|running|thinking/i.test(bodyText));
+          && isStopControl(button));
         return { composerPresent: Boolean(composer), hasStop, hasForegroundStop, labels: labels.slice(-16) };
       })()`,
       returnByValue: true,
@@ -2508,12 +2867,14 @@ function recoverStaleComposerExpression() {
 
 function responseHistoryAssistantMarkerCount(text) {
   if (!text) return 0;
+  let legacyCount = 0;
   try {
     const history = JSON.parse(readFileSync(responseHistoryPath, "utf8").replace(/^\uFEFF/, ""));
-    return countUniqueAssistantMarkerMessages(history, text);
-  } catch {
-    return 0;
-  }
+    legacyCount = countUniqueAssistantMarkerMessages(history, text);
+  } catch {}
+  const rolloutCount = codexRolloutMarkerBundles(text)
+    .reduce((count, bundle) => count + Number(bundle.assistantMarkerCount || 0), 0);
+  return Math.max(legacyCount, rolloutCount);
 }
 
 function recoverIdleBackendStaleComposerExpression() {
@@ -2564,7 +2925,7 @@ async function clickRecoveryControlsWithMouse(ws, recovery) {
   };
 }
 
-function sendButtonProbeExpression(expectedText, { click = false } = {}) {
+function sendButtonProbeExpression(expectedText) {
   const expected = JSON.stringify(expectedText);
   return `(() => {
     const expected = ${expected};
@@ -2621,7 +2982,6 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       && String(selected.button.getAttribute('aria-describedby') || '').split(/\s+/).includes(hitTooltip.id)
     );
     const selectedHit = Boolean(selected && (hitButton === selected.button || tooltipDescribesSelected));
-    if (${click ? "true" : "false"} && selected && selectedHit) selected.button.click();
     const summarize = (item) => item ? {
       index: item.index,
       label: item.label,
@@ -2649,7 +3009,7 @@ function sendButtonProbeExpression(expectedText, { click = false } = {}) {
       composerMatches: composerText.trim() === expected.trim()
         || normalizeInsertedText(composerText) === normalizeInsertedText(expected),
       hasSendButton: Boolean(selected && selectedHit),
-      clicked: Boolean(${click ? "true" : "false"} && selected && selectedHit),
+      clicked: false,
       selected: summarize(selected),
       selectedHit,
       hitElement: summarizeHit(hit),
@@ -2681,6 +3041,62 @@ async function closeManagerOverlayIfOpen(ws) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
   }
   return value;
+}
+
+async function closeOpenModelMenusAndOverlays(ws, { timeoutMs = 6_000 } = {}) {
+  const probeExpression = `(() => {
+    const visible = (el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const selectors = [
+      '.codex-dialog-overlay',
+      '[role="dialog"][aria-modal="true"]',
+      '[data-state="open"][role="menu"]',
+      '[data-state="open"][role="listbox"]',
+      '[data-codex-popover]',
+      '[data-floating-ui-portal]',
+    ];
+    const seen = new Set();
+    const blocking = [];
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (!visible(el)) continue;
+        const key = String(el.tagName) + '|' + (el.getAttribute('role') || '') + '|' + String(el.className || '').slice(0, 80);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        blocking.push({
+          tag: el.tagName,
+          role: el.getAttribute('role') || '',
+          modal: el.getAttribute('aria-modal') || '',
+          state: el.getAttribute('data-state') || '',
+          cls: String(el.className || '').slice(0, 140),
+          w: Math.round(el.getBoundingClientRect().width),
+          h: Math.round(el.getBoundingClientRect().height),
+        });
+      }
+    }
+    return { blocking };
+  })()`;
+  const deadline = Date.now() + timeoutMs;
+  let lastBlocking = [];
+  while (Date.now() < deadline) {
+    const probe = await ws.send("Runtime.evaluate", {
+      expression: probeExpression,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    const blocking = Array.isArray(probe.result?.result?.value?.blocking)
+      ? probe.result.result.value.blocking
+      : [];
+    lastBlocking = blocking;
+    if (blocking.length === 0) return { ok: true, closed: true, remaining: [] };
+    await pressEscapeKey(ws);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+  }
+  return { ok: false, closed: false, remaining: lastBlocking };
 }
 
 async function waitForComposerPromptReady(ws, prompt, timeoutMs = 5_000) {
@@ -3350,8 +3766,34 @@ async function pressComposerEnter(ws) {
   await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
 }
 
+async function confirmDesktopSubmitBeforeReplay(
+  ws,
+  prompt,
+  expectedMarker,
+  beforePayloadCount,
+  beforeMarkerEntryIds,
+  timeoutMs = 15_000,
+) {
+  const [composerCleared, realSubmit] = await Promise.all([
+    waitForComposerSubmitted(ws, prompt, expectedMarker, timeoutMs),
+    waitForRealResponsesSubmitAfter(
+      baseUrl,
+      beforePayloadCount,
+      timeoutMs,
+      expectedMarker,
+      beforeMarkerEntryIds,
+    ),
+  ]);
+  return {
+    ok: composerCleared || realSubmit?.ok === true,
+    composerCleared,
+    realSubmit,
+  };
+}
+
 async function refillComposerPrompt(ws, prompt) {
   await closeManagerOverlayIfOpen(ws);
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 4_000 });
   await ws.send("Runtime.evaluate", {
     expression: `(() => {
       const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
@@ -3442,21 +3884,34 @@ async function retryDesktopSubmitAfterMissingPayload(ws, prompt, expectedMarker,
   await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
   retryEvidence.clicked = true;
   retryEvidence.clickPoint = { x, y };
-  retryEvidence.composerCleared = await waitForComposerSubmitted(ws, prompt, expectedMarker, 15_000);
-  if (!retryEvidence.composerCleared) {
+  const firstConfirmation = await confirmDesktopSubmitBeforeReplay(
+    ws,
+    prompt,
+    expectedMarker,
+    payloadsBefore,
+    markerEntryIdsBefore,
+    15_000,
+  );
+  retryEvidence.firstConfirmation = firstConfirmation;
+  retryEvidence.composerCleared = firstConfirmation.composerCleared;
+  retryEvidence.realSubmit = firstConfirmation.realSubmit;
+  if (!firstConfirmation.ok) {
     await pressComposerEnter(ws);
     retryEvidence.enterFallback = true;
-    retryEvidence.composerCleared = await waitForComposerSubmitted(ws, prompt, expectedMarker, 15_000);
+    const enterConfirmation = await confirmDesktopSubmitBeforeReplay(
+      ws,
+      prompt,
+      expectedMarker,
+      payloadsBefore,
+      markerEntryIdsBefore,
+      15_000,
+    );
+    retryEvidence.enterConfirmation = enterConfirmation;
+    retryEvidence.composerCleared = enterConfirmation.composerCleared;
+    retryEvidence.realSubmit = enterConfirmation.realSubmit;
   }
-  retryEvidence.realSubmit = await waitForRealResponsesSubmitAfter(
-    baseUrl,
-    payloadsBefore,
-    retryEvidence.composerCleared ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
-    expectedMarker,
-    markerEntryIdsBefore,
-  );
-  retryEvidence.ok = retryEvidence.realSubmit?.ok === true
-    && (requiredModelNeedles().length === 0 || retryEvidence.realSubmit?.requiredModelMatched === true);
+  retryEvidence.ok = retryEvidence.composerCleared || (retryEvidence.realSubmit?.ok === true
+    && (requiredModelNeedles().length === 0 || retryEvidence.realSubmit?.requiredModelMatched === true));
   if (!retryEvidence.ok) retryEvidence.reason = retryEvidence.realSubmit?.lastError || "retry_real_submit_not_observed";
   return retryEvidence;
 }
@@ -3466,6 +3921,92 @@ async function pressEscapeKey(ws) {
   await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
 }
 
+function visibleProjectControlsExpression(projectLabel) {
+  const label = JSON.stringify(String(projectLabel || ""));
+  return `(() => {
+    const expected = ${label};
+    const texts = Array.from(document.querySelectorAll('button,[role="button"],a'))
+      .map((el) => String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\\s+/g, ' ').trim())
+      .filter(Boolean);
+    const matches = texts.filter((text) => expected && text.includes(expected)).slice(0, 8);
+    return { matched: matches.length > 0, matches, href: location.href };
+  })()`;
+}
+
+async function waitForVisibleProjectLabel(ws, projectLabel, waitMs = 10_000) {
+  const deadline = Date.now() + waitMs;
+  let evidence = { matched: false, matches: [] };
+  do {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: visibleProjectControlsExpression(projectLabel),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    evidence = result.result?.result?.value || evidence;
+    if (evidence.matched === true) return evidence;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+  } while (Date.now() < deadline);
+  return evidence;
+}
+
+async function activateNativeProjectRoot(ws, root, label) {
+  if (!root || !existsSync(root) || !statSync(root).isDirectory()) {
+    throw new Error(`native project root is not an existing directory: ${root || "<empty>"}`);
+  }
+  const rootJson = JSON.stringify(root);
+  const labelJson = JSON.stringify(label);
+  const result = await ws.send("Runtime.evaluate", {
+    expression: `(async () => {
+      const bridge = window.electronBridge?.sendMessageFromView;
+      if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
+      await bridge({ type: 'electron-add-new-workspace-root-option', root: ${rootJson} });
+      await bridge({ type: 'electron-rename-workspace-root-option', root: ${rootJson}, label: ${labelJson} });
+      return { ok: true };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const bridge = result.result?.result?.value || null;
+  if (bridge?.ok !== true) throw new Error(`native project activation failed: ${bridge?.reason || "unknown"}`);
+  const selector = await waitForVisibleProjectLabel(ws, label);
+  if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
+  return { root, label, bridge, selector };
+}
+
+async function restoreNativeWorkspaceState(ws, snapshot) {
+  const roots = Array.isArray(snapshot?.roots) ? snapshot.roots.map(String) : [];
+  const activeRoots = Array.isArray(snapshot?.activeRoots) ? snapshot.activeRoots.map(String) : [];
+  const labels = snapshot?.labels && typeof snapshot.labels === "object" ? snapshot.labels : {};
+  if (roots.length === 0) throw new Error("workspace snapshot has no saved roots");
+  if (activeRoots.length > 1) throw new Error("workspace snapshot has more than one active root");
+  const messages = [
+    { type: "electron-update-workspace-root-options", roots },
+    ...roots.flatMap((root) => String(labels[root] || "").trim()
+      ? [{ type: "electron-rename-workspace-root-option", root, label: String(labels[root]).trim() }]
+      : []),
+    ...(activeRoots[0]
+      ? [{ type: "electron-set-active-workspace-root", root: activeRoots[0] }]
+      : [{ type: "electron-clear-active-workspace-root" }]),
+  ];
+  const result = await ws.send("Runtime.evaluate", {
+    expression: `(async () => {
+      const bridge = window.electronBridge?.sendMessageFromView;
+      if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
+      const messages = ${JSON.stringify(messages)};
+      for (const message of messages) await bridge(message);
+      return { ok: true, messageCount: messages.length };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const bridge = result.result?.result?.value || null;
+  if (bridge?.ok !== true) throw new Error(`native workspace restore failed: ${bridge?.reason || "unknown"}`);
+  const activeLabel = activeRoots[0] ? String(labels[activeRoots[0]] || "").trim() : "";
+  const selector = activeLabel ? await waitForVisibleProjectLabel(ws, activeLabel) : { matched: true, matches: [] };
+  if (activeLabel && selector.matched !== true) throw new Error(`restored project label did not become visible: ${activeLabel}`);
+  return { roots, activeRoots, labels, bridge, selector };
+}
+
 function newChatClickExpression(projectName = "") {
   const expectedProject = JSON.stringify(projectName || "");
   return `(() => {
@@ -3473,19 +4014,33 @@ function newChatClickExpression(projectName = "") {
     const controls = Array.from(document.querySelectorAll('button,[role="button"],a'));
     const normalizedProjectName = String(expectedProject || '').trim();
     const projectContextActive = normalizedProjectName && controls.some((el) => {
-      const text = String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\s+/g, ' ').trim();
+      const text = [el.innerText, el.getAttribute('aria-label'), el.title]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return text.includes(normalizedProjectName)
         && (/\u5207\u6362\u9879\u76ee|\u9879\u76ee\u64cd\u4f5c|project/i.test(text));
     });
     const candidates = controls.map((el, index) => {
-      const text = String(el.innerText || el.getAttribute('aria-label') || el.title || '').replace(/\\s+/g, ' ').trim();
+      const text = [el.innerText, el.getAttribute('aria-label'), el.title]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\\s+/g, ' ')
+        .trim();
       const aria = String(el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
       const rect = el.getBoundingClientRect();
-      const isNewChat = text.includes('\\u65b0\\u5bf9\\u8bdd') || /Ctrl\\+N|New chat/i.test(text);
+      const isNewChat = text.includes('\\u65b0\\u5bf9\\u8bdd')
+        || text.includes('\\u65b0\\u5efa\\u4efb\\u52a1')
+        || /Ctrl\\+N|New chat/i.test(text);
       const projectText = text + ' ' + aria;
       const isProjectNewChat = expectedProject
         && projectText.includes(expectedProject)
-        && (projectText.includes('\\u5f00\\u59cb\\u65b0\\u5bf9\\u8bdd') || /new chat|new conversation|start/i.test(projectText));
+        && (projectText.includes('\\u5f00\\u59cb\\u65b0\\u5bf9\\u8bdd')
+          || projectText.includes('\\u65b0\\u5efa\\u4efb\\u52a1')
+          || /new chat|new conversation|start/i.test(projectText));
       return { el, index, text, aria, rect, isNewChat, isProjectNewChat };
     }).filter((item) => item.isNewChat && item.rect.width > 0 && item.rect.height > 0);
     const selected = candidates.sort((a, b) => {
@@ -3544,6 +4099,7 @@ function sameChatClickExpression(titleNeedle) {
 }
 
 async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTimeoutMs = 20_000 } = {}) {
+  const openedAt = Date.now();
   const clickedSameChat = await ws.send("Runtime.evaluate", {
     expression: sameChatClickExpression(titleNeedle),
     returnByValue: true,
@@ -3569,6 +4125,7 @@ async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTi
       throw new Error(`same-chat task did not open an idle composer: ${titleNeedle}`);
     }
   }
+  evidence.openLatencyMs = Date.now() - openedAt;
   return evidence;
 }
 
@@ -3597,7 +4154,7 @@ async function resolveCdpTargets() {
   const explicitPort = args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT;
   const candidates = [...new Set(explicitPort
     ? [Number(explicitPort)]
-    : [...discoverAntiCodexCdpPorts(), 58318, 58317])];
+    : [...discoverAntiCodexCdpPorts(), 18318, 58318, 58317])];
   let lastError = null;
   for (const candidate of candidates) {
     if (!Number.isFinite(candidate) || candidate <= 0) continue;
@@ -3667,8 +4224,10 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   let firstReplySeenAt = 0;
   let idleCompletedAt = 0;
   let assistantMarkerHistoryCount = 0;
+  const nativeActivityPreflight = await beginNativeSingleTaskWindow();
 
   await closeManagerOverlayIfOpen(ws);
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 6_000 });
   const markerBaselineText = await readVisibleMainPaneText(ws);
   const markerBaselineCount = countMarkerOccurrences(markerBaselineText, expectedMarker);
   const assistantMarkerHistoryBaselineCount = responseHistoryAssistantMarkerCount(expectedMarker);
@@ -3708,6 +4267,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     awaitPromise: true,
   });
   await ws.send("Input.insertText", { text: prompt });
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 6_000 });
   prep = await waitForComposerPromptReady(ws, prompt, 5_000);
   const projectlessComposer = options.requiresProjectChat === true
     && Array.isArray(prep?.nearbyButtons)
@@ -3721,87 +4281,64 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   } else {
     const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
     const submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
-    const domClick = await ws.send("Runtime.evaluate", {
-      expression: sendButtonProbeExpression(prompt, { click: true }),
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    const domClickValue = domClick.result?.result?.value || {};
-    clicked = domClickValue.clicked === true;
-    submitEvidence = {
-      ...domClickValue,
-      clicked,
-      clickMethod: "dom-click",
-      clickPoint: prep?.selected?.rect
-        ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
-        : null,
-    };
-    submitSucceeded = clicked
-      ? await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000)
-      : false;
-
     const rect = prep?.selected?.rect || null;
     if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
-      if (!submitSucceeded) failures.push("send button coordinates were not available");
-    } else if (!submitSucceeded) {
+      failures.push("send button coordinates were not available");
+    } else {
       const x = rect.x + (rect.w / 2);
       const y = rect.y + (rect.h / 2);
       await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
       await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
       await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
       clicked = true;
-      submitEvidence.mouseFallback = true;
-      submitEvidence.clickMethod = "dom-click-cdp-mouse-fallback";
-      submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
-    }
-    if (!submitSucceeded) {
-      await pressComposerEnter(ws);
-      submitEvidence.enterFallback = true;
-      submitSucceeded = await waitForComposerSubmitted(ws, prompt, expectedMarker, 4_000);
-      if (submitSucceeded) {
-        submitEvidence.clickMethod = `${submitEvidence.clickMethod}-enter-fallback`;
-      }
-    }
-    submitEvidence.composerCleared = submitSucceeded;
-    if (clicked) {
-      const realSubmit = await waitForRealResponsesSubmitAfter(
-        baseUrl,
-        submitPayloadsBefore,
-        submitSucceeded ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
+      const probe = await ws.send("Runtime.evaluate", {
+        expression: sendButtonProbeExpression(prompt),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      submitEvidence = {
+        ...(probe.result?.result?.value || {}),
+        clicked,
+        clickMethod: "cdp-mouse",
+        clickPoint: { x, y },
+      };
+      const firstConfirmation = await confirmDesktopSubmitBeforeReplay(
+        ws,
+        prompt,
         expectedMarker,
+        submitPayloadsBefore,
         requestMarkerEntryIdsBefore,
+        15_000,
       );
+      submitEvidence.firstConfirmation = firstConfirmation;
+      submitSucceeded = firstConfirmation.ok;
+      let finalConfirmation = firstConfirmation;
+      if (!submitSucceeded) {
+        await pressComposerEnter(ws);
+        submitEvidence.enterFallback = true;
+        submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
+        finalConfirmation = await confirmDesktopSubmitBeforeReplay(
+          ws,
+          prompt,
+          expectedMarker,
+          submitPayloadsBefore,
+          requestMarkerEntryIdsBefore,
+          15_000,
+        );
+        submitEvidence.enterConfirmation = finalConfirmation;
+        submitSucceeded = finalConfirmation.ok;
+      }
+      const realSubmit = finalConfirmation.realSubmit;
+      submitEvidence.composerCleared = finalConfirmation.composerCleared;
       submitEvidence.realSubmit = realSubmit;
       if (realSubmit.ok === true) {
-        submitEvidence.submitConfirmedBy = "responses-websocket";
+        submitEvidence.submitConfirmedBy = realSubmit.source === "codex-rollout" ? "codex-rollout" : "responses-websocket";
         submitSucceeded = true;
-      }
-      if (realSubmit.ok !== true) {
+      } else if (finalConfirmation.composerCleared) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
-        const retryEvidence = await retryDesktopSubmitAfterMissingPayload(ws, prompt, expectedMarker, {
-          openNewChat: false,
-          requiresProjectChat: options.requiresProjectChat === true,
-        });
-        submitEvidence.retry = retryEvidence;
-        submitEvidence.retryRealSubmit = retryEvidence.realSubmit;
-        const pendingTaskAccepted = pendingDesktopTaskConfirmsSubmit({
-          composerCleared: submitEvidence.composerCleared,
-          visibleIdleEvidence: retryEvidence.visibleIdleBeforeRetry,
-        });
-        submitEvidence.pendingTaskAccepted = pendingTaskAccepted;
-        submitSucceeded = retryEvidence.ok === true || pendingTaskAccepted;
-        if (retryEvidence.ok === true) {
-          submitEvidence.submitConfirmedBy = "responses-websocket-retry";
-          prep = retryEvidence.prep;
-        } else if (pendingTaskAccepted) {
-          submitEvidence.submitConfirmedBy = "composer-cleared-visible-stop";
-        } else {
-          submitEvidence.submitConfirmedBy = "composer-cleared-no-payload";
-        }
+        submitEvidence.submitConfirmedBy = "composer-cleared-no-replay";
       }
-      const effectiveRealSubmit = submitEvidence.retryRealSubmit?.ok === true
-        ? submitEvidence.retryRealSubmit
-        : realSubmit;
+      const effectiveRealSubmit = realSubmit;
       if (submitSucceeded && Number(options.maxInputItems || 0) > 0 && realSubmitInputItems(effectiveRealSubmit) > Number(options.maxInputItems || 0)) {
         submitEvidence.contextGuard = {
           ok: false,
@@ -3862,15 +4399,37 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
         assistantHistoryBaselineCount: assistantMarkerHistoryBaselineCount,
       });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
+      if (taskMode === "complex-project"
+          && latestMarkerTurnCompleted(codexRolloutMarkerBundles(expectedMarker))
+          && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
+        const fixedRouteHealth = await readFixedRouteHealth();
+        if (fixedRouteHealthIsReady(fixedRouteHealth)) {
+          artifactCompletionObserved = true;
+          inLoopIdleDiagnostics = fixedRouteIdleDiagnostics(fixedRouteHealth, "codex-rollout-current-turn-complete");
+          idleCompletedAt = Date.now();
+          break;
+        }
+      }
       if (taskMode === "repo-multi-file-edit") {
         artifactEvidence = verifyRepoMultiFileEditFixture(expectedMarker);
         const artifactFailures = options.readmeOnly === true
           ? collectRepoMultiFileReadmeFailures(artifactEvidence)
           : collectRepoMultiFileEditFailures(artifactEvidence);
-        if (artifactFailures.length === 0 && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
+        const composerBlocked = composerHasUnsubmittedMarker({
+          composerText: composer,
+          marker: expectedMarker,
+          answerMarkerCount,
+        });
+        if (artifactFailures.length === 0 && !composerBlocked) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
-            if (diagnosticsAreIdle(loopDiagnostics)) {
+            if (repoMultiTurnCompletionReady({
+              artifactFailureCount: artifactFailures.length,
+              answerMarkerCount,
+              composerHasMarker: composerBlocked,
+              diagnosticsIdle: diagnosticsAreIdle(loopDiagnostics),
+              responseHistory: artifactEvidence?.responseHistory,
+            })) {
               artifactCompletionObserved = true;
               inLoopIdleDiagnostics = loopDiagnostics;
               idleCompletedAt = Date.now();
@@ -3918,8 +4477,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           && artifactEvidence?.files?.reportMd === true
           && artifactEvidence?.files?.indexHtml === true
           && artifactEvidence?.files?.doneTxt === true;
-        const hasToolEvidence = artifactEvidence?.responseHistory?.taskToolOutputSeen === true
-          || artifactEvidence?.responseHistory?.markerToolOutputSeen === true;
+        const hasToolEvidence = taskScopedToolOutputObserved(artifactEvidence?.responseHistory);
         if (hasRequiredFiles && hasToolEvidence && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
@@ -3947,7 +4505,7 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           } catch {}
         }
       }
-      if (taskMode !== "agentic-step-flow" && taskMode !== "autonomous-reasoning" && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount }) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
+      if (taskMode !== "agentic-step-flow" && taskMode !== "autonomous-reasoning" && taskMode !== "repo-multi-file-edit" && !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount }) && (answerMarkerCount >= 1 || Date.now() - waitStartedAt >= idleBreakAfterMs)) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -3969,9 +4527,21 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     submitSucceeded = true;
   }
   if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
-  if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
+  const reconnectOutcome = classifyReconnectOutcome({
+    reconnectSeen: activeReconnectSeen,
+    answerText: answerSample,
+    completionObserved: answerMarkerCount >= 1 || artifactCompletionObserved,
+    stableIdleObserved: Boolean(inLoopIdleDiagnostics),
+  });
+  if (reconnectOutcome.terminalProviderError) {
+    failures.push(`provider turn failed: ${reconnectOutcome.terminalProviderError}`);
+  } else if (reconnectOutcome.unresolved) {
+    failures.push("reconnect remained unresolved after the submitted prompt");
+  }
   if (answerMarkerCount < 1 && !artifactCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
   if (composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount })) failures.push("composer still contains the submitted prompt");
+  const nativeSingleTaskEvidence = await inspectNativeSingleTaskWindow(nativeActivityPreflight, expectedMarker);
+  if (nativeSingleTaskEvidence.ok !== true) failures.push(...nativeSingleTaskEvidence.failureReasons);
   return {
     ok: failures.length === 0,
     failures,
@@ -3990,12 +4560,14 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
     artifactEvidence,
     activeReconnectSeen,
     activeReconnectEvidence,
+    reconnectOutcome,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
     inLoopIdleDiagnostics,
     composerCleared: !composerHasUnsubmittedMarker({ composerText: composer, marker: expectedMarker, answerMarkerCount }),
     composer,
     lastSample,
     answerSample,
+    nativeSingleTaskEvidence,
     timing: {
       submitCompletedAt: submitCompletedAt ? new Date(submitCompletedAt).toISOString() : null,
       firstReplySeenAt: firstReplySeenAt ? new Date(firstReplySeenAt).toISOString() : null,
@@ -4005,6 +4577,38 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
       idleWaitMs: idleCompletedAt && firstReplySeenAt ? idleCompletedAt - firstReplySeenAt : null,
     },
   };
+}
+
+async function runWorkspaceCommandOnly() {
+  if (workspaceCommand !== "restore") throw new Error(`unsupported workspace command: ${workspaceCommand || "<empty>"}`);
+  if (!workspaceStateFile || !existsSync(workspaceStateFile)) {
+    throw new Error(`workspace state file is missing: ${workspaceStateFile || "<empty>"}`);
+  }
+  const snapshot = JSON.parse(readFileSync(workspaceStateFile, "utf8").replace(/^\uFEFF/, ""));
+  let releaseUiLock = null;
+  let ws = null;
+  try {
+    releaseUiLock = await acquireUiSmokeLock();
+    const targets = await resolveCdpTargets();
+    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
+    ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    await ws.connect();
+    await ws.send("Runtime.enable");
+    const restore = await restoreNativeWorkspaceState(ws, snapshot);
+    return {
+      ok: true,
+      workspaceCommand,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      restore,
+      cdpPort,
+      target: { id: target.id, title: target.title, url: target.url },
+    };
+  } finally {
+    try { ws?.socket?.destroy(); } catch {}
+    releaseUiLock?.();
+  }
 }
 
 async function main() {
@@ -4028,11 +4632,13 @@ async function main() {
   let initialIdle = null;
   let staleRecovery = null;
   let backendResetBeforeSubmit = null;
+  let failureCleanup = null;
   let newChatEvidence = null;
   let sameChatEvidence = null;
   let preservedActiveTask = null;
   let modelSelectionEvidence = null;
   let preSubmitModelSelectionEvidence = null;
+  let projectRootEvidence = null;
   let submitEvidence = null;
   let submitSucceeded = false;
   let submitPayloadsBefore = 0;
@@ -4045,7 +4651,10 @@ async function main() {
   let assistantMarkerHistoryBaselineCount = 0;
   let assistantMarkerHistoryCount = 0;
   let requestMarkerEntryIdsBefore = [];
+  let nativeActivityPreflight = null;
+  let nativeSingleTaskEvidence = { ok: true, skipped: true, reason: "not_required" };
   let autonomousIdleIncompleteObserved = false;
+  let resultDrivenCompletionObserved = false;
   const complexProjectRequiresModelLed = taskMode === "complex-project" || taskMode === "autonomous-reasoning";
 
   try {
@@ -4062,18 +4671,64 @@ async function main() {
     await ws.send("Input.setIgnoreInputEvents", { ignore: false });
     await ws.send("Runtime.evaluate", { expression: "document.querySelector('.anticodex-close')?.click()", awaitPromise: true });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    if (projectChatRoot && (isolateChat || sameChatTitleContains)) {
+      projectRootEvidence = await activateNativeProjectRoot(ws, projectChatRoot, projectChatLabel);
+    }
     if (preserveSameChatActiveTask && sameChatTitleContains) {
-      sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, { waitForIdle: false });
+      let historyReopenNavigation = null;
+      if (navigateAwayBeforeHistoryReopen) {
+        const clickedNewChat = await ws.send("Runtime.evaluate", {
+          expression: newChatClickExpression(requiresProjectChat ? projectChatLabel : ""),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        historyReopenNavigation = clickedNewChat.result?.result?.value || null;
+        if (historyReopenNavigation?.clicked !== true) {
+          await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+          await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+          await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+          await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+          historyReopenNavigation = { ...(historyReopenNavigation || {}), fallbackShortcut: true };
+        }
+        historyReopenNavigation.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
+        if (historyReopenNavigation.visibleIdleAfterNewChat?.ok !== true) {
+          throw new Error("history reopen precondition did not reach a blank idle task");
+        }
+        historyReopenNavigation.navigatedAwayFirst = true;
+      }
+      sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
+        waitForIdle: requireHistoryResponsive,
+        idleTimeoutMs: Math.max(5_000, historyOpenBudgetMs + 2_000),
+      });
+      if (historyReopenNavigation) {
+        sameChatEvidence.historyReopenNavigation = historyReopenNavigation;
+        sameChatEvidence.navigatedAwayFirst = historyReopenNavigation.navigatedAwayFirst === true;
+      }
+      if (requireHistoryResponsive && sameChatEvidence.openLatencyMs > historyOpenBudgetMs) {
+        failures.push(`history task took ${sameChatEvidence.openLatencyMs} ms to become interactive (budget ${historyOpenBudgetMs} ms)`);
+      }
     }
     if (preserveSameChatActiveTask) {
-      const diagnosticsBeforeWait = await httpJson(diagnosticsUrl).catch(() => null);
-      const activeBeforeWait = diagnosticsShowsActiveTask(diagnosticsBeforeWait);
       staleRecovery = { skipped: true, reason: "preserve_same_chat_active_task" };
       backendResetBeforeSubmit = { skipped: true, reason: "preserve_same_chat_active_task" };
-      initialIdle = await waitForIdleDiagnostics(baseUrl, timeoutMs);
-      let visibleIdleAfterWait = diagnosticsAreIdle(initialIdle.diagnostics)
-        ? await waitForVisibleComposerIdle(ws, Math.min(timeoutMs, 45_000))
-        : null;
+      const fixedRouteHealth = await readFixedRouteHealth();
+      const diagnosticsBeforeWait = fixedRouteHealthIsReady(fixedRouteHealth)
+        ? fixedRouteIdleDiagnostics(fixedRouteHealth)
+        : await httpJson(diagnosticsUrl).catch(() => null);
+      const activeBeforeWait = diagnosticsShowsActiveTask(diagnosticsBeforeWait);
+      initialIdle = fixedRouteHealthIsReady(fixedRouteHealth)
+        ? {
+          diagnostics: fixedRouteIdleDiagnostics(fixedRouteHealth),
+          fixedRouteHealth,
+          source: "fixed-route-ready",
+          lastError: null,
+        }
+        : await waitForIdleDiagnostics(baseUrl, timeoutMs);
+      let visibleIdleAfterWait = sameChatEvidence?.visibleIdleAfterClick?.ok === true
+        ? sameChatEvidence.visibleIdleAfterClick
+        : diagnosticsAreIdle(initialIdle.diagnostics)
+          ? await waitForVisibleComposerIdle(ws, Math.min(timeoutMs, 45_000))
+          : null;
       let idleBackendStaleComposerRecovery = null;
       if (diagnosticsAreIdle(initialIdle.diagnostics) && visibleIdleAfterWait?.ok !== true) {
         const recovered = await ws.send("Runtime.evaluate", {
@@ -4107,26 +4762,42 @@ async function main() {
       if (Array.isArray(staleRecovery?.clicked) && staleRecovery.clicked.length > 0) {
         staleRecovery.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, 20_000);
       }
-      try {
-        backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-      } catch (error) {
-        backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
-      }
-      initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
-      if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
+      const fixedRouteHealth = await readFixedRouteHealth();
+      if (fixedRouteHealthIsReady(fixedRouteHealth)) {
+        const visibleIdle = await waitForVisibleComposerIdle(ws, 20_000);
+        backendResetBeforeSubmit = {
+          skipped: true,
+          reason: "fixed_route_does_not_use_legacy_session_lock",
+        };
+        initialIdle = {
+          diagnostics: fixedRouteIdleDiagnostics(fixedRouteHealth),
+          fixedRouteHealth,
+          visibleIdle,
+          source: "fixed-route-ready",
+          lastError: null,
+        };
+      } else {
         try {
-          backendResetBeforeSubmit = {
-            first: backendResetBeforeSubmit,
-            retry: await resetBackendSessionLock(baseUrl),
-          };
+          backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
           await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-          initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
         } catch (error) {
-          backendResetBeforeSubmit = {
-            first: backendResetBeforeSubmit,
-            retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
-          };
+          backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+        initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
+        if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
+          try {
+            backendResetBeforeSubmit = {
+              first: backendResetBeforeSubmit,
+              retry: await resetBackendSessionLock(baseUrl),
+            };
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
+            initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
+          } catch (error) {
+            backendResetBeforeSubmit = {
+              first: backendResetBeforeSubmit,
+              retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
+            };
+          }
         }
       }
     }
@@ -4135,7 +4806,13 @@ async function main() {
       const recoveryMode = preserveSameChatActiveTask ? "without interrupting the existing task" : "after stale recovery";
       throw new Error(`desktop backend was not idle before submit ${recoveryMode}: ${initialIdle.lastError || "busy"}`);
     }
-    if (preserveSameChatActiveTask && preservedActiveTask?.visibleIdleAfterWait?.ok !== true) {
+    const visibleIdleForSubmit = preserveSameChatActiveTask
+      ? preservedActiveTask?.visibleIdleAfterWait
+      : initialIdle.visibleIdle;
+    if (initialIdle.source === "fixed-route-ready" && visibleIdleForSubmit?.ok !== true) {
+      throw new Error("fixed-route backend was ready but the visible composer still showed an active task");
+    }
+    if (preserveSameChatActiveTask && visibleIdleForSubmit?.ok !== true) {
       throw new Error("same-chat task backend became idle but the visible composer did not");
     }
     if (taskMode === "repo-file-edit") {
@@ -4207,6 +4884,7 @@ async function main() {
           sameChatEvidence,
           preservedActiveTask,
           modelSelectionEvidence,
+          projectRootEvidence,
           initialIdleObserved: Boolean(initialIdle?.diagnostics),
         };
         restoreConfigModelOverride();
@@ -4219,16 +4897,23 @@ async function main() {
 
     if (taskMode === "multi-turn-project") {
       const firstMarker = `${marker}_FIRST`;
-      followupPromptText = customFollowupPromptText || `继续同一个项目：${artifactDir}。不要重建项目，也不要查看 Antigravity brain、transcript、history 或 log 目录。修改 word-tally.mjs，让它额外导出 uniqueWords(text)，返回排序后的唯一单词数组。更新 word-tally.test.mjs：保留原来的 tallyWords 断言，再增加一个 node:test 断言，要求 uniqueWords("red blue red") 返回 ["blue","red"]。创建 CHANGELOG.md，里面要提到这次 uniqueWords 追加任务和准确标记 ${marker}。创建 followup.txt，内容必须只包含 ${marker}。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red green"，确认 red=2、blue=1、green=1 后，最后回复 ${marker}。`;
+      followupPromptText = customFollowupPromptText || `继续同一个项目：${artifactDir}。不要重建项目，也不要查看 Antigravity brain、transcript、history 或 log 目录。修改 word-tally.mjs，让它额外导出 uniqueWords(text)，返回排序后的唯一单词数组。更新 word-tally.test.mjs：保留原来的 tallyWords 断言，再增加一个 node:test 断言，要求 uniqueWords("red blue red") 返回 ["blue","red"]。创建 CHANGELOG.md，里面要提到这次 uniqueWords 追加任务和准确标记 ${marker}。创建 followup.txt，它的原始字节必须只包含 ${marker}，不能有 UTF-8 BOM、回车或换行；用 [System.IO.File]::WriteAllText 和 New-Object System.Text.UTF8Encoding($false) 写入，不能用 Set-Content、Out-File 或重定向写 followup.txt。运行 node --test word-tally.test.mjs 和 node word-tally.mjs "red blue red green"，再按原始字节验证 followup.txt，确认 red=2、blue=1、green=1 后，最后回复 ${marker}。`;
       followupPromptLanguage = /[\u3400-\u9fff]/u.test(followupPromptText) ? "zh" : "en";
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, firstMarker, timeoutMs, { requiresProjectChat });
       failures.push(...turn1.failures.map((failure) => `turn1: ${failure}`));
-      const turn1Settled = await waitForDesktopToolTurnSettled(ws, firstMarker, Math.min(timeoutMs, 120_000));
-      if (turn1Settled.ok !== true) {
+      let firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
+      let turn1Settled = multiTurnFirstTurnReadyForFollowup({ turnOk: turn1.ok, evidence: firstArtifactEvidence })
+        ? { ok: true, source: "host-results-and-tool-history" }
+        : await waitForDesktopToolTurnSettled(ws, firstMarker, Math.min(timeoutMs, 120_000));
+      if (turn1Settled.ok === true && turn1Settled.source !== "host-results-and-tool-history") {
+        firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
+      }
+      const turn1ReadyForFollowup = turn1Settled.ok === true
+        || multiTurnFirstTurnReadyForFollowup({ turnOk: turn1.ok, evidence: firstArtifactEvidence });
+      if (!turn1ReadyForFollowup) {
         failures.push("turn1: desktop tool result did not settle into response history before the follow-up");
       }
-      const firstArtifactEvidence = verifyMultiTurnProjectArtifact(artifactDir, firstMarker, marker);
-      const turn2 = turn1Settled.ok === true
+      const turn2 = turn1ReadyForFollowup
         ? await submitDesktopPromptAndWait(ws, followupPromptText, marker, timeoutMs, { requiresProjectChat })
         : {
           ok: false,
@@ -4285,14 +4970,37 @@ async function main() {
       activeReconnectEvidence.push(...(turn1.activeReconnectEvidence || []), ...(turn2.activeReconnectEvidence || []));
       inLoopIdleDiagnostics = turn2.inLoopIdleDiagnostics || turn1.inLoopIdleDiagnostics || null;
 
-      const idleResult = inLoopIdleDiagnostics
-        ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
-        : await waitForIdleDiagnostics(baseUrl, 60_000);
+      const idleResult = await waitForStableDesktopIdle(ws, marker, baseUrl, 60_000);
       diagnostics = idleResult.diagnostics;
       if (!diagnostics) {
         failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
+      } else if (idleResult.stable !== true) {
+        failures.push(`desktop task did not remain idle for ${idleResult.quietMs} ms after the assistant reply`);
       } else if (!diagnosticsAreIdle(diagnostics)) {
         failures.push("desktop task did not become idle after the assistant reply");
+      }
+      if (failures.length > 0 && submitSucceeded && diagnosticsShowsActiveTask(diagnostics)) {
+        try {
+          const reset = await resetBackendSessionLock(baseUrl);
+          const afterReset = await waitForStableIdleDiagnostics(baseUrl, 20_000, 3_000);
+          failureCleanup = {
+            attempted: true,
+            reset,
+            stableIdleObserved: afterReset.stable === true,
+            diagnostics: afterReset.diagnostics,
+            error: afterReset.lastError || null,
+          };
+          diagnostics = afterReset.diagnostics || diagnostics;
+          if (afterReset.stable !== true) failures.push("desktop task failure cleanup did not stop active requests");
+        } catch (error) {
+          failureCleanup = { attempted: true, error: error instanceof Error ? error.message : String(error) };
+          failures.push(`desktop task failure cleanup failed: ${failureCleanup.error}`);
+        }
+      } else {
+        failureCleanup = {
+          attempted: false,
+          reason: failures.length === 0 ? "task_passed" : "no_active_request",
+        };
       }
       const sessionLock = diagnostics?.antigravitySessionLock || null;
       const activeRequests = diagnostics?.activeAntigravityRequests || null;
@@ -4302,8 +5010,8 @@ async function main() {
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
-      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
-      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
+      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics, [turn1, turn2]));
+      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence, [turn1, turn2]);
       const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
       const observedRealTraffic = observedModelRoute || observedRequestPayload;
       if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
@@ -4354,6 +5062,8 @@ async function main() {
         submitSucceeded,
         staleRecovery,
         backendResetBeforeSubmit,
+        failureCleanup,
+        stableIdleObserved: idleResult.stable === true,
         newChatEvidence,
         modelSelectionEvidence,
         initialIdleObserved: Boolean(initialIdle?.diagnostics),
@@ -4388,19 +5098,25 @@ async function main() {
 
     if (taskMode === "repo-multi-file-edit") {
       const turn1 = await submitDesktopPromptAndWait(ws, promptText, marker, timeoutMs, { requiresProjectChat, readmeOnly: true });
-      const firstArtifactEvidence = await waitForArtifactEvidence(
+      let firstArtifactEvidence = await waitForArtifactEvidence(
         () => verifyRepoMultiFileEditFixture(marker),
         (evidence) => collectRepoMultiFileReadmeFailures(evidence).length === 0,
         Math.min(timeoutMs, 120_000),
       );
-      const firstTurnSettle = repoMultiArtifactIdleSettle(turn1, "readme", firstArtifactEvidence);
+      const firstStableIdle = await waitForStableDesktopIdle(ws, marker, baseUrl, Math.min(timeoutMs, 45_000), 3_000);
+      firstArtifactEvidence = verifyRepoMultiFileEditFixture(marker);
+      const firstTurnSettle = repoMultiArtifactIdleSettle(turn1, "readme", firstArtifactEvidence, firstStableIdle);
       const firstArtifactFailures = collectRepoMultiFileReadmeFailures(firstArtifactEvidence);
       const actionableTurn1Failures = filterRepoMultiReadmeTextOnlyFailures(turn1.failures, firstArtifactFailures);
+      if (firstTurnSettle.ok !== true) {
+        actionableTurn1Failures.push("first turn did not finish with fresh final text, tool output, and stable idle");
+      }
       let implementationPrompt = null;
       let turn2 = null;
       artifactEvidence = firstArtifactEvidence;
       let finalArtifactFailures = firstArtifactFailures;
       let finalTurnSettle = firstTurnSettle;
+      let finalStableIdle = firstStableIdle;
       if (firstArtifactFailures.length === 0 && actionableTurn1Failures.length === 0) {
         implementationPrompt = buildRepoMultiFileImplementationPrompt(collectRepoMultiFileEditFailures(firstArtifactEvidence));
         makeWritable(repoMultiFileSource);
@@ -4410,13 +5126,19 @@ async function main() {
           (evidence) => collectRepoMultiFileEditFailures(evidence).length === 0,
           Math.min(timeoutMs, 120_000),
         );
-        finalTurnSettle = repoMultiArtifactIdleSettle(turn2, "full", artifactEvidence);
+        finalStableIdle = await waitForStableDesktopIdle(ws, marker, baseUrl, Math.min(timeoutMs, 60_000), 10_000);
+        artifactEvidence = verifyRepoMultiFileEditFixture(marker);
+        finalTurnSettle = repoMultiArtifactIdleSettle(turn2, "full", artifactEvidence, finalStableIdle);
         finalArtifactFailures = collectRepoMultiFileEditFailures(artifactEvidence);
+        if (finalTurnSettle.ok !== true) {
+          finalArtifactFailures.push("repo-multi-file-edit did not finish with fresh final text, tool output, and stable idle");
+        }
       }
       const finalTurn = turn2 || turn1;
       failures.push(...actionableTurn1Failures.map((failure) => `readme-step: ${failure}`));
       if (turn2) failures.push(...turn2.failures.map((failure) => `implementation-step: ${failure}`));
       failures.push(...finalArtifactFailures);
+      pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, false));
 
       clicked = turn1.clicked === true && (!turn2 || turn2.clicked === true);
       prep = turn1.prep;
@@ -4431,13 +5153,11 @@ async function main() {
       activeReconnectEvidence.push(...(turn1.activeReconnectEvidence || []), ...(turn2?.activeReconnectEvidence || []));
       inLoopIdleDiagnostics = finalTurn.inLoopIdleDiagnostics || turn1.inLoopIdleDiagnostics || null;
 
-      const idleResult = inLoopIdleDiagnostics
-        ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
-        : await waitForIdleDiagnostics(baseUrl, 60_000);
+      const idleResult = finalStableIdle;
       diagnostics = idleResult.diagnostics;
       if (!diagnostics) {
         failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
-      } else if (!diagnosticsAreIdle(diagnostics)) {
+      } else if (idleResult.stable !== true || !diagnosticsAreIdle(diagnostics)) {
         failures.push("desktop task did not become idle after the assistant reply");
       }
       const sessionLock = diagnostics?.antigravitySessionLock || null;
@@ -4448,8 +5168,8 @@ async function main() {
       if (Number(activeRequests?.active || 0) > 0) failures.push("desktop task left active Antigravity requests");
       if (queue?.running === true) failures.push("desktop task left the Antigravity request queue running");
       modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
-      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
-      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
+      failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics, [turn1, turn2]));
+      const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence, [turn1, turn2]);
       const observedRequestPayload = modelRequestPayloadObserved(diagnostics, [turn1, turn2]);
       const observedRealTraffic = observedModelRoute || observedRequestPayload;
       if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
@@ -4499,6 +5219,7 @@ async function main() {
         submitSucceeded,
         staleRecovery,
         backendResetBeforeSubmit,
+        stableIdleObserved: idleResult.stable === true,
         newChatEvidence,
         modelSelectionEvidence,
         initialIdleObserved: Boolean(initialIdle?.diagnostics),
@@ -4531,6 +5252,7 @@ async function main() {
       process.exit(0);
     }
 
+    nativeActivityPreflight = await beginNativeSingleTaskWindow();
     await closeManagerOverlayIfOpen(ws);
     markerBaselineCount = countMarkerOccurrences(await readVisibleMainPaneText(ws), marker);
     assistantMarkerHistoryBaselineCount = responseHistoryAssistantMarkerCount(marker);
@@ -4570,6 +5292,7 @@ async function main() {
       awaitPromise: true,
     });
     await ws.send("Input.insertText", { text: promptText });
+    await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 6_000 });
     prep = await waitForComposerPromptReady(ws, promptText, 5_000);
     if (prep?.composerMatches !== true) {
       failures.push("composer did not contain exactly the submitted prompt before clicking send");
@@ -4581,23 +5304,36 @@ async function main() {
         if (preSubmitModelSelectionEvidence?.matched !== true) {
           failures.push(`desktop UI did not keep required model selected before submit ${requiredModelNeedles().join(" / ")}`);
         }
-        prep = await waitForComposerPromptReady(ws, promptText, 5_000);
-        if (prep?.composerMatches !== true) {
-          failures.push("composer changed while confirming the required model before submit");
-        }
       }
-      const rect = prep?.selected?.rect || null;
-      if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h)) {
+      // Model selection can leave a dialog mask over the send control. Dismiss it,
+      // then locate the control again before the real CDP mouse click.
+      const overlayClose = await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 6_000 });
+      prep = await waitForComposerPromptReady(ws, promptText, 5_000);
+      if (prep?.composerMatches !== true) {
+        failures.push("composer changed while confirming the required model before submit");
+      }
+      if (prep?.hasSendButton !== true) {
+        const overlayCloseRetry = await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 4_000 });
+        prep = await waitForComposerPromptReady(ws, promptText, 5_000);
+        overlayClose.ok = overlayClose.ok === true || overlayCloseRetry.ok === true;
+      }
+      if (prep?.hasSendButton !== true) {
+        failures.push("send button remained blocked after closing model menus and overlays");
+      }
+      const rect = prep?.hasSendButton === true ? prep?.selected?.rect || null : null;
+      if (prep?.hasSendButton === true && (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h))) {
         failures.push("send button coordinates were not available");
       } else {
-        const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
-        submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
-        const x = rect.x + (rect.w / 2);
-        const y = rect.y + (rect.h / 2);
-        await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
-        await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
-        await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
-        clicked = true;
+        if (rect) {
+          const submitDiagnosticsBefore = await httpJson(diagnosticsUrl).catch(() => null);
+          submitPayloadsBefore = responsesWebSocketPayloadCount(submitDiagnosticsBefore);
+          const x = rect.x + (rect.w / 2);
+          const y = rect.y + (rect.h / 2);
+          await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+          await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+          await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+          clicked = true;
+        }
       }
       const click = await ws.send("Runtime.evaluate", {
         expression: sendButtonProbeExpression(promptText),
@@ -4608,50 +5344,50 @@ async function main() {
         ...(click.result?.result?.value || {}),
         clicked,
         clickMethod: "cdp-mouse",
+        overlayClearedBeforeClick: overlayClose?.ok === true,
         clickPoint: prep?.selected?.rect
           ? { x: prep.selected.rect.x + (prep.selected.rect.w / 2), y: prep.selected.rect.y + (prep.selected.rect.h / 2) }
           : null,
       };
       const submitWaitMs = requiredModelNeedles().length > 0 ? 15_000 : 4_000;
-      submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, submitWaitMs);
-      if (!submitSucceeded) {
+      const firstConfirmation = await confirmDesktopSubmitBeforeReplay(
+        ws,
+        promptText,
+        marker,
+        submitPayloadsBefore,
+        requestMarkerEntryIdsBefore,
+        submitWaitMs,
+      );
+      submitEvidence.firstConfirmation = firstConfirmation;
+      submitSucceeded = firstConfirmation.ok;
+      let finalConfirmation = firstConfirmation;
+      if (!firstConfirmation.ok) {
         await pressComposerEnter(ws);
         submitEvidence.enterFallback = true;
-        submitSucceeded = await waitForComposerSubmitted(ws, promptText, marker, submitWaitMs);
-        if (submitSucceeded) {
-          submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
-        }
-      }
-      let realSubmit = null;
-      if (clicked) {
-        realSubmit = await waitForRealResponsesSubmitAfter(
-          baseUrl,
-          submitPayloadsBefore,
-          submitSucceeded ? DESKTOP_SUBMIT_REQUEST_GRACE_MS : 20_000,
+        submitEvidence.clickMethod = "cdp-mouse-enter-fallback";
+        finalConfirmation = await confirmDesktopSubmitBeforeReplay(
+          ws,
+          promptText,
           marker,
+          submitPayloadsBefore,
           requestMarkerEntryIdsBefore,
+          submitWaitMs,
         );
-        submitEvidence.realSubmit = realSubmit;
-        if (realSubmit.ok === true) {
-          submitEvidence.submitConfirmedBy = "responses-websocket";
-          submitSucceeded = true;
-        }
+        submitEvidence.enterConfirmation = finalConfirmation;
+        submitSucceeded = finalConfirmation.ok;
       }
-      if (clicked && realSubmit?.ok !== true) {
+      const realSubmit = finalConfirmation.realSubmit;
+      submitEvidence.composerCleared = finalConfirmation.composerCleared;
+      submitEvidence.realSubmit = realSubmit;
+      if (realSubmit?.ok === true) {
+        submitEvidence.submitConfirmedBy = realSubmit.source === "codex-rollout" ? "codex-rollout" : "responses-websocket";
+        submitSucceeded = true;
+      } else if (finalConfirmation.composerCleared) {
+        submitEvidence.submitConfirmedBy = "composer-cleared-no-replay";
+      }
+      if (clicked && realSubmit?.ok !== true && !finalConfirmation.composerCleared) {
         submitEvidence.emptyPrewarmRetry = realSubmit;
-        const retryEvidence = await retryDesktopSubmitAfterMissingPayload(ws, promptText, marker, {
-          openNewChat: isolateChat,
-          requiresProjectChat,
-        });
-        submitEvidence.retry = retryEvidence;
-        submitEvidence.retryRealSubmit = retryEvidence.realSubmit;
-        submitSucceeded = retryEvidence.ok === true;
-        if (submitSucceeded) {
-          submitEvidence.submitConfirmedBy = "responses-websocket-retry";
-          prep = retryEvidence.prep;
-        } else {
-          submitEvidence.submitConfirmedBy = "composer-cleared-no-payload";
-        }
+        submitEvidence.submitConfirmedBy = "submit-not-confirmed";
       }
       const maxInputItems = taskMode === "autonomous-reasoning" ? 80 : 0;
       if (submitSucceeded && maxInputItems > 0) {
@@ -4720,6 +5456,22 @@ async function main() {
         assistantHistoryBaselineCount: assistantMarkerHistoryBaselineCount,
       });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
+      if (resultDrivenCompletionEnabled) {
+        const fixedRouteHealth = await readFixedRouteHealth();
+        if (resultDrivenTurnCompletionReady({
+          enabled: true,
+          rolloutBundles: codexRolloutMarkerBundles(marker),
+          composerText: composer,
+          marker,
+          routeReady: fixedRouteHealthIsReady(fixedRouteHealth),
+        })) {
+          resultDrivenCompletionObserved = true;
+          inLoopIdleDiagnostics = fixedRouteIdleDiagnostics(fixedRouteHealth, "codex-rollout-current-turn-complete");
+          firstReplySeenAt ||= Date.now();
+          idleCompletedAt = Date.now();
+          break;
+        }
+      }
       if (taskMode === "autonomous-reasoning") {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
@@ -4740,7 +5492,9 @@ async function main() {
         if (!composer.includes(promptText) && /[\u4e00-\u9fff]/.test(normalizedAnswer) && !/正在思考|已处理|停止了|重新连接/.test(normalizedAnswer)) break;
       } else if (taskMode === "repo-file-edit") {
         artifactEvidence = verifyRepoFileEditFixture();
-        if (!composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }) && artifactEvidence?.testPassed === true) {
+        if (answerMarkerCount >= 1
+          && !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })
+          && artifactEvidence?.testPassed === true) {
           try {
             const loopDiagnostics = await httpJson(diagnosticsUrl);
             if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -4822,8 +5576,7 @@ async function main() {
     }
     }
     if (!clicked) failures.push("send button was not clicked");
-    if (activeReconnectSeen) failures.push("active reconnect text appeared after the submitted prompt");
-    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
+    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1 && !resultDrivenCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
     if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) failures.push("composer still contains the submitted prompt");
     if (taskMode === "free-chat") {
       if (composer.includes(promptText)) failures.push("composer still contains the submitted prompt");
@@ -4849,10 +5602,14 @@ async function main() {
     if (taskMode === "repo-file-edit") {
       const responseHistoryMarkerSeen = responseHistoryContains(marker);
       artifactEvidence = verifyRepoFileEditFixture();
+      artifactEvidence.responseHistory = collectResponseHistoryAgenticEvidence(marker);
       if (!artifactEvidence?.files?.target) failures.push("repo-file-edit target file was not present");
       if (!artifactEvidence?.files?.test) failures.push("repo-file-edit test file was not present");
       if (!responseHistoryMarkerSeen) failures.push("repo-file-edit prompt marker was not observed in response history after desktop submit");
       if (artifactEvidence?.testPassed !== true) failures.push("repo-file-edit node:test did not pass after the desktop task");
+      if ((artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) failures.push("repo-file-edit did not emit a task tool call");
+      if (!taskScopedToolOutputObserved(artifactEvidence?.responseHistory)) failures.push("repo-file-edit did not observe task-scoped tool output");
+      if (artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) failures.push("repo-file-edit assistant final marker was not observed in native task history");
     }
     if (taskMode === "repo-multi-file-edit") {
       artifactEvidence = verifyRepoMultiFileEditFixture(marker);
@@ -4908,7 +5665,7 @@ async function main() {
     }
     if (taskMode === "coding-project") {
       artifactEvidence = verifyCodingProjectArtifact(artifactDir, marker);
-      if (artifactEvidence?.responseHistory?.markerToolOutputSeen !== true
+      if (!taskScopedToolOutputObserved(artifactEvidence?.responseHistory)
           || artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) {
         artifactEvidence = await waitForArtifactEvidence(
           () => verifyCodingProjectArtifact(artifactDir, marker),
@@ -4920,7 +5677,7 @@ async function main() {
             && evidence?.exportsFunction === true
             && evidence?.testPassed === true
             && evidence?.cliPassed === true
-            && evidence?.responseHistory?.markerToolOutputSeen === true
+            && taskScopedToolOutputObserved(evidence?.responseHistory)
             && evidence?.responseHistory?.assistantHasFinalMarker === true,
           Math.min(timeoutMs, 120_000),
         );
@@ -4942,11 +5699,13 @@ async function main() {
         () => verifyComplexProjectArtifact(artifactDir, marker),
         (evidence) => complexProjectArtifactComplete(evidence, { requireModelLed: complexProjectRequiresModelLed }),
         artifactWaitMs,
+        () => taskMode === "complex-project"
+          && latestMarkerTurnCompleted(codexRolloutMarkerBundles(marker)),
       );
       const autonomousStillIncomplete = taskMode === "autonomous-reasoning"
         && autonomousIdleIncompleteObserved
         && !complexProjectArtifactComplete(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
-      if (complexProjectRequiresModelLed && !autonomousStillIncomplete && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
+      if (complexProjectRequiresModelLed && !autonomousStillIncomplete && !taskScopedToolOutputObserved(artifactEvidence?.responseHistory)) {
         await waitForDesktopToolTurnSettled(ws, marker, Math.min(timeoutMs, 120_000));
         artifactEvidence = verifyComplexProjectArtifact(artifactDir, marker);
       }
@@ -4986,11 +5745,8 @@ async function main() {
       if (complexProjectRequiresModelLed && (artifactEvidence?.responseHistory?.taskToolCallCount || 0) < 1) {
         failures.push("complex-project did not emit a task tool call");
       }
-      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.taskToolOutputSeen !== true) {
-        failures.push("complex-project did not observe task tool output");
-      }
-      if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.markerToolOutputSeen !== true) {
-        failures.push("complex-project did not observe marker-scoped tool output");
+      if (complexProjectRequiresModelLed && !taskScopedToolOutputObserved(artifactEvidence?.responseHistory)) {
+        failures.push("complex-project did not observe task-scoped tool output");
       }
       if (complexProjectRequiresModelLed && artifactEvidence?.responseHistory?.assistantHasFinalMarker !== true) {
         failures.push("complex-project assistant final marker was not observed in response history");
@@ -5064,6 +5820,7 @@ async function main() {
         () => verifyComplexProjectArtifact(artifactDir, marker),
         (evidence) => complexProjectArtifactComplete(evidence, { requireModelLed: complexProjectRequiresModelLed }),
         Math.min(timeoutMs, 120_000),
+        () => latestMarkerTurnCompleted(codexRolloutMarkerBundles(marker)),
       );
       finalArtifactFailures = collectComplexProjectArtifactFailures(artifactEvidence, { requireModelLed: complexProjectRequiresModelLed });
     }
@@ -5184,15 +5941,53 @@ async function main() {
     }
   }
 
-  const idleTimeoutMs = taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" || taskMode === "repo-file-edit" || taskMode === "repo-multi-file-edit" ? 60_000 : 20_000;
-  const idleResult = inLoopIdleDiagnostics
-    ? { diagnostics: inLoopIdleDiagnostics, lastError: null }
-    : await waitForIdleDiagnostics(baseUrl, idleTimeoutMs);
+  const idleTimeoutMs = stableIdleTimeoutForTaskMode(taskMode);
+  const idleResult = await waitForStableDesktopIdle(ws, marker, baseUrl, idleTimeoutMs);
+  const reconnectOutcome = classifyReconnectOutcome({
+    reconnectSeen: activeReconnectSeen,
+    answerText: answerSample,
+    completionObserved: answerMarkerCount >= 1 || resultDrivenCompletionObserved || Boolean(artifactEvidence),
+    stableIdleObserved: idleResult.stable === true,
+  });
+  if (reconnectOutcome.terminalProviderError) {
+    failures.push(`provider turn failed: ${reconnectOutcome.terminalProviderError}`);
+  } else if (reconnectOutcome.unresolved) {
+    failures.push("reconnect remained unresolved after the submitted prompt");
+  }
   diagnostics = idleResult.diagnostics;
   if (!diagnostics) {
     failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
+  } else if (idleResult.stable !== true) {
+    failures.push(`desktop task did not remain idle for ${idleResult.quietMs} ms after the assistant reply`);
   } else if (!diagnosticsAreIdle(diagnostics)) {
     failures.push("desktop task did not become idle after the assistant reply");
+  }
+  if (taskMode === "agentic-step-flow") {
+    const finalAgenticStepFlowEvidence = verifyAgenticStepFlowArtifact(artifactDir, marker);
+    artifactEvidence = finalAgenticStepFlowEvidence;
+  }
+  if (failures.length > 0 && submitSucceeded && diagnosticsShowsActiveTask(diagnostics)) {
+    try {
+      const reset = await resetBackendSessionLock(baseUrl);
+      const afterReset = await waitForStableIdleDiagnostics(baseUrl, 20_000, 3_000);
+      failureCleanup = {
+        attempted: true,
+        reset,
+        stableIdleObserved: afterReset.stable === true,
+        diagnostics: afterReset.diagnostics,
+        error: afterReset.lastError || null,
+      };
+      diagnostics = afterReset.diagnostics || diagnostics;
+      if (afterReset.stable !== true) failures.push("desktop task failure cleanup did not stop active requests");
+    } catch (error) {
+      failureCleanup = { attempted: true, error: error instanceof Error ? error.message : String(error) };
+      failures.push(`desktop task failure cleanup failed: ${failureCleanup.error}`);
+    }
+  } else {
+    failureCleanup = {
+      attempted: false,
+      reason: failures.length === 0 ? "task_passed" : "no_active_request",
+    };
   }
   const sessionLock = diagnostics?.antigravitySessionLock || null;
   const activeRequests = diagnostics?.activeAntigravityRequests || null;
@@ -5208,8 +6003,34 @@ async function main() {
       Math.min(timeoutMs, 15_000),
     );
   }
+  nativeSingleTaskEvidence = await inspectNativeSingleTaskWindow(nativeActivityPreflight, marker);
+  if (nativeSingleTaskEvidence.ok !== true) failures.push(...nativeSingleTaskEvidence.failureReasons);
+  const fixedRouteHealthEvidence = await readFixedRouteHealth();
+  const nativeModelRequestObserved = nativeSingleTaskEvidence.ok === true
+    && nativeExpectedRequestObserved(nativeSingleTaskEvidence.activity);
+  const nativeObservedModels = [...new Set([
+    fixedRouteHealthEvidence?.model,
+    fixedRouteHealthEvidence?.route?.model,
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
+  const expectedModelValues = requiredModelNeedles();
+  const nativeRequiredModelMatched = expectedModelValues.length === 0
+    || nativeObservedModels.some((value) => modelValueMatches(value, expectedModelValues));
+  const nativeSubmit = {
+    ok: nativeModelRequestObserved
+      && fixedRouteHealthIsReady(fixedRouteHealthEvidence)
+      && nativeRequiredModelMatched,
+    source: "marker-scoped-native-fixed-route",
+    markerScopedRequestObserved: nativeModelRequestObserved,
+    requiredModelMatched: nativeRequiredModelMatched,
+    observedModels: nativeObservedModels,
+    expectedThreadIds: nativeSingleTaskEvidence?.activity?.expectedThreadIds || [],
+    requestCountsByThread: nativeSingleTaskEvidence?.activity?.requestCountsByThread || {},
+    fixedRouteReady: fixedRouteHealthIsReady(fixedRouteHealthEvidence),
+  };
+  if (submitEvidence && typeof submitEvidence === "object") submitEvidence.nativeSubmit = nativeSubmit;
   modelRouteEvidence = await collectModelRouteEvidence(modelRoutesBefore);
-  failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics));
+  const submitTurns = [{ submitEvidence }];
+  failures.push(...collectRequiredModelFailures(modelRouteEvidence, diagnostics, submitTurns));
   pushUniqueFailures(failures, collectAgenticResponseHistoryFailures(taskMode, artifactEvidence, Boolean(repairPrompt)));
   if (taskMode === "report-site") {
     const reportSiteEffectiveFailures = filterReportSiteUiCompletionFailures(failures, artifactEvidence, answerMarkerCount);
@@ -5221,8 +6042,8 @@ async function main() {
     failures.length = 0;
     failures.push(...complexProjectEffectiveFailures);
   }
-  const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence);
-  const observedRequestPayload = desktopRequestPayloadObserved(diagnostics);
+  const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence, submitTurns);
+  const observedRequestPayload = modelRequestPayloadObserved(diagnostics, submitTurns);
   const observedRealTraffic = observedModelRoute || observedRequestPayload;
   if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
   const requiredFileAfter = requiredFile && existsSync(requiredFile)
@@ -5271,6 +6092,8 @@ async function main() {
     usedRealTraffic: observedRealTraffic,
     modelRouteObserved: observedModelRoute,
     modelRequestPayloadObserved: observedRequestPayload,
+    nativeModelRequestObserved,
+    fixedRouteHealthEvidence,
     behaviorCovered: true,
     coverageKind: observedRealTraffic ? "desktop-ui-real-traffic" : "desktop-ui-submit-without-request",
     taskMode,
@@ -5315,10 +6138,14 @@ async function main() {
     prep,
     submitEvidence,
     submitSucceeded,
+    nativeSingleTaskEvidence,
     staleRecovery,
     backendResetBeforeSubmit,
+    failureCleanup,
+    stableIdleObserved: idleResult.stable === true,
     newChatEvidence,
     sameChatEvidence,
+    projectRootEvidence,
     preservedActiveTask,
     autonomousContinuationNewChatEvidence,
       modelSelectionEvidence,
@@ -5333,9 +6160,12 @@ async function main() {
     responseHistoryMarkerSeen: responseHistoryMarkerSeenFinal,
     responseHistoryAnyMarkerSeen: responseHistoryContains(marker),
     assistantFinalMarkerObserved,
+    resultDrivenCompletionEnabled,
+    resultDrivenCompletionObserved,
     responseHistoryPath,
     activeReconnectSeen,
     activeReconnectEvidence,
+    reconnectOutcome,
     inLoopIdleObserved: Boolean(inLoopIdleDiagnostics),
     composerCleared: !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount }),
     sessionLockClear: sessionLock ? sessionLock.active !== true && Number(sessionLock.queued || 0) === 0 : false,
@@ -5365,34 +6195,51 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((error) => {
-  const payload = {
-    ok: false,
-    reportName,
-    usedRealTraffic: true,
-    behaviorCovered: true,
-    coverageKind: "desktop-ui-real-traffic",
-    taskMode,
-    promptText,
-    promptLanguage,
-    followupPromptText,
-    followupPromptLanguage,
-    requiredModel: requiredModel || null,
-    requiredModelLabel: requiredModelLabel || null,
-    configModelOverrideEvidence,
-    elapsedMs: Date.now() - startedAt,
-    failures: [error instanceof Error ? error.message : String(error)],
-    marker,
-    requiredFile: requiredFile || null,
-    artifactDir: taskMode === "repo-file-edit"
-      ? repoFileEditDir
-      : taskMode === "repo-multi-file-edit"
-        ? repoMultiFileEditDir
-      : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
-    timing: null,
-  };
-  restoreConfigModelOverride();
-  writeReport(payload);
-  console.log(JSON.stringify(payload));
-  process.exit(1);
-});
+if (workspaceCommand) {
+  runWorkspaceCommandOnly().then((payload) => {
+    console.log(JSON.stringify(payload));
+    process.exit(0);
+  }).catch((error) => {
+    console.log(JSON.stringify({
+      ok: false,
+      workspaceCommand,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      failures: [error instanceof Error ? error.message : String(error)],
+    }));
+    process.exit(1);
+  });
+} else {
+  main().catch((error) => {
+    const payload = {
+      ok: false,
+      reportName,
+      usedRealTraffic: true,
+      behaviorCovered: true,
+      coverageKind: "desktop-ui-real-traffic",
+      taskMode,
+      promptText,
+      promptLanguage,
+      followupPromptText,
+      followupPromptLanguage,
+      requiredModel: requiredModel || null,
+      requiredModelLabel: requiredModelLabel || null,
+      configModelOverrideEvidence,
+      elapsedMs: Date.now() - startedAt,
+      failures: [error instanceof Error ? error.message : String(error)],
+      marker,
+      requiredFile: requiredFile || null,
+      projectChatRoot: projectChatRoot || null,
+      artifactDir: taskMode === "repo-file-edit"
+        ? repoFileEditDir
+        : taskMode === "repo-multi-file-edit"
+          ? repoMultiFileEditDir
+        : taskMode === "local-project" || taskMode === "coding-project" || taskMode === "multi-turn-project" || taskMode === "complex-project" || taskMode === "autonomous-reasoning" || taskMode === "report-site" || taskMode === "agentic-step-flow" ? artifactDir : null,
+      timing: null,
+    };
+    restoreConfigModelOverride();
+    writeReport(payload);
+    console.log(JSON.stringify(payload));
+    process.exit(1);
+  });
+}

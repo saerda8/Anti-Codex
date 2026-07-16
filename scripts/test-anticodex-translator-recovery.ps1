@@ -149,7 +149,7 @@ if (-not (Test-Path -LiteralPath $startScript -PathType Leaf)) {
     $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
     $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
     $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "desktop-cascade"
-    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
+    $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "1"
     $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $stateRoot "antigravity-cli-profile"
     $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
 

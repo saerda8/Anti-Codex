@@ -1,52 +1,77 @@
 # Anti-Codex
 
-Anti-Codex is an independently runnable copy of Codex Desktop powered by model text from the current Antigravity entitlement. It does not require ChatGPT login or a DeepSeek API key.
+Anti-Codex is an isolated copy of the official Codex Desktop application. It
+keeps the native Codex UI and harness, changes only provider integration, and
+does not reimplement Codex task control.
 
-The authoritative architecture is [`docs/PRODUCT_ARCHITECTURE.md`](docs/PRODUCT_ARCHITECTURE.md), and the current keep/improve/delete/incomplete ledger is [`docs/CURRENT_IMPLEMENTATION_AUDIT.md`](docs/CURRENT_IMPLEMENTATION_AUDIT.md). Current product completion is **64%**; Anti-Codex must not yet be described as ready for real projects.
+The project cornerstone is the [three-layer architecture](docs/THREE_LAYER_ARCHITECTURE.md).
+The current execution state is tracked in the [final migration plan](docs/FINAL_MIGRATION_PLAN.md).
+No implementation may add a fourth task-control layer.
 
-It preserves the Codex UI and core workflow while keeping its executable, taskbar identity, state, and configuration isolated from the original Codex installation. Both applications can run at the same time.
+## Three Layers
 
-Client maintenance follows one rule: when Codex updates, Anti-Codex tracks it through guarded client sync and then reapplies Anti-Codex branding, isolation, launcher, and model-adapter patches. It is not a feature-by-feature reimplementation of Codex.
+1. **Isolated official Codex shell**: a guarded copy of the current official
+   client with minimal isolation patches. The native Codex harness owns planning,
+   tools, commands, files, approvals, retries, continuation, compaction, and
+   completion judgment.
+2. **CodexPlusPlus provider layer**: upstream CodexPlusPlus owns general
+   Responses/Chat conversion and ordinary third-party API integration. Third-party
+   traffic connects directly and bypasses Antigravity completely.
+3. **Thin Antigravity adapter**: only Antigravity models use the standard Chat
+   Completions-to-Cascade adapter. It reuses the signed-in Antigravity Desktop
+   account, model catalog, and quota without taking over tools or task control.
+
+The original Codex installation, account, tasks, and local data are not mutated.
+Both applications can run together with independent names, taskbar/tray icons,
+processes, and state roots.
 
 ## Capabilities
 
-- Exact Antigravity-entitlement model names and reasoning levels
-- Cancellation and long-context foundations; true incremental streaming and pure-protocol compaction are still being migrated
-- Codex function/custom tool, MCP, Skill, and plugin definitions can be discovered, but the Codex Desktop tool loop is not yet accepted on the new architecture
-- Independent state with no writes to the original Codex configuration
-- Guarded synchronization after Codex updates, with candidate validation and rollback
-- Installed checks for models, UI, account/proxy readiness, sync, diagnostics, and stability
+- Guarded synchronization with official Codex updates, including candidate
+  copies, file-delta audit, verification, and rollback.
+- Preserved Anti-Codex identity, icons, Chinese `管理` entry, and isolated runtime.
+- Real Antigravity Desktop model catalog and account quota.
+- Ordinary third-party Responses or Chat APIs with fail-closed routing.
+- Native Codex function/custom tools, MCP, Skills, plugins, history,
+  cancellation, and compaction.
+- Connector-backed app tools remain unavailable until genuinely authorized;
+  copied metadata never grants authorization.
 
 ## Requirements
 
-1. Official Codex Desktop for Windows
-2. Antigravity CLI or Desktop with a signed-in account (for model-entitlement text)
-3. Any proxy Antigravity needs to reach Google services
-
-The installed runtime currently uses Antigravity Desktop Cascade for model text, catalog, and account discovery. The production target is a structured model interface that reuses the signed-in entitlement without letting the Antigravity agent control the task. The current single-text role/tool bridge is a deletion target because a real Cascade classified it as prompt injection.
+1. Official Codex Desktop for Windows.
+2. Node.js.
+3. A signed-in Antigravity Desktop account and working network path when using
+   Antigravity models.
+4. The endpoint, model, and key for any ordinary third-party provider. This route
+   does not depend on Antigravity.
 
 ## Install And Update
 
-Run `install-windows.bat` for the first installation. Afterwards, use the Start Menu entry `Anti-Codex > Sync Anti-Codex with Codex` when the official Codex app updates.
+Run `install-windows.bat` for the first installation. Launch `Anti-Codex` from
+the desktop or Start Menu. After official Codex updates, use:
 
-The sync flow builds and validates a candidate first, retains a rollback host, and does not replace the active host when compatibility checks fail.
+```text
+Start Menu > Anti-Codex > Sync Anti-Codex with Codex
+```
 
-## Account Switching
+Sync validates a candidate copy and its official-file delta before activation.
+Failure keeps the current version and rollback point intact.
 
-Use `Anti-Codex > Manage Anti-Codex > Switch Antigravity Account`. Switch the account in Antigravity Desktop, then continue the guided check. Anti-Codex refreshes the anonymized account fingerprint and model catalog and verifies the installation.
+## Models And APIs
 
-## Third-Party API Configuration
+- Choose an available Antigravity model from `管理`.
+- Test, save, and apply ordinary provider profiles from `管理`; CodexPlusPlus
+  sends this traffic directly without entering the Antigravity adapter.
+- The product uses one active Antigravity account and has no dual-account scheduler.
 
-The default route uses Antigravity entitlement for model text while Codex-owned tools stay in Anti-Codex. When a third-party API is needed, the supported entry point is Anti-Codex Manager: test the connection, then save and apply the upstream profile. Lower-level scripts are controlled write and restart helpers only. If a saved profile cannot be read, Anti-Codex refuses a silent wrong-upstream fallback.
+## Isolated Paths
 
-## Connector Authorization Boundary
+```text
+Install: %LOCALAPPDATA%\Anti-Codex
+State:   %APPDATA%\anticodex
+Reports: %APPDATA%\anticodex\reports
+```
 
-Anti-Codex syncs local MCP, Skills, plugin metadata, and connector metadata into its own isolated state, but metadata is not authorization. Connector-backed app tools remain unavailable until the real connector is authorized; Anti-Codex must not fake callable app tools from a cache snapshot.
-
-## Explicit Boundaries
-
-- Model Responses WebSocket currently uses an explicit HTTP/SSE fallback.
-- Remote connectors requiring ChatGPT authorization remain disabled.
-- Account changes and external proxy toggles require user interaction in their respective applications.
-
-This project was adapted from `deepcodex`, so some historical source filenames remain. The default installer and runtime product are Anti-Codex.
+Some source files may retain historical compatibility names, but they cannot
+return to the active architecture. See [LEGACY_REMOVAL_MANIFEST.md](docs/LEGACY_REMOVAL_MANIFEST.md).

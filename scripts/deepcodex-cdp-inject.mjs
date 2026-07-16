@@ -4,9 +4,10 @@ import crypto from "node:crypto";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
+import { ownerProcessIsAlive } from "./lib/anticodex-owner-process.mjs";
 
 const port = Number(process.argv[2] || process.env.DEEPCODEX_CDP_PORT || 58317);
-const scriptPath = process.argv[3] || new URL("./deepcodex-plugin-unlock-inject.js", import.meta.url).pathname;
+const scriptPath = process.argv[3] || new URL("./anticodex-manager-inject.js", import.meta.url).pathname;
 const isManagerScript = scriptPath.toLowerCase().endsWith("anticodex-manager-inject.js");
 const managerWatchMode = isManagerScript && (
   process.env.DEEPCODEX_CDP_MANAGER_WATCH === "1" || process.argv.includes("--watch")
@@ -18,6 +19,13 @@ const stablePasses = Number(process.env.DEEPCODEX_CDP_STABLE_PASSES || 1);
 const stableDelayMs = Number(process.env.DEEPCODEX_CDP_STABLE_DELAY_MS || 3000);
 const managerHeartbeatMs = Number(process.env.DEEPCODEX_CDP_MANAGER_HEARTBEAT_MS || 1000);
 const managerDisconnectMs = Number(process.env.DEEPCODEX_CDP_MANAGER_DISCONNECT_MS || 30000);
+const supervisorPid = Number(process.env.ANTICODEX_SUPERVISOR_PID || 0);
+
+function ownerIsAlive() {
+  return ownerProcessIsAlive(supervisorPid);
+}
+
+if (managerWatchMode && !ownerIsAlive()) process.exit(0);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -74,12 +82,13 @@ function localManagerUrlCandidates(portNumber = 8484) {
   return scored.sort((a, b) => a.score - b.score).map((entry) => entry.url);
 }
 
-async function fetchManagerJson(baseUrl, path) {
+async function fetchManagerJson(baseUrl, path, options = {}) {
+  const { timeoutMs = MANAGER_FETCH_TIMEOUT_MS, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MANAGER_FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
-    response = await fetch(`${baseUrl}${path}`, { cache: "no-store", signal: controller.signal });
+    response = await fetch(`${baseUrl}${path}`, { cache: "no-store", ...fetchOptions, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
@@ -344,21 +353,42 @@ async function injectOnce() {
     for (const baseUrl of [...new Set(candidates)]) {
       const candidateResponses = {};
       const candidateErrors = {};
+      const trustedHeaders = {
+        origin: baseUrl,
+        referer: `${baseUrl}/anticodex/manager`,
+      };
       try {
         for (const path of [
           "/anticodex/manager/bootstrap",
           "/health",
           "/models",
           "/anticodex/diagnostics",
+          "/anticodex/upstream-profile",
+          "/anticodex/model-routes",
+          "/anticodex/local-connectors/allowlist",
           "/backend-api/ps/plugins/installed",
           "/backend-api/aip/connectors",
+          "/backend-api/plugins/list",
         ]) {
           try {
-            candidateResponses[path] = await fetchManagerJson(baseUrl, path);
+            candidateResponses[path] = await fetchManagerJson(baseUrl, path, { headers: trustedHeaders });
           } catch (err) {
             candidateErrors[path] = String(err?.message || err);
           }
         }
+        try {
+          candidateResponses["/backend-api/wham/apps"] = await fetchManagerJson(baseUrl, "/backend-api/wham/apps", {
+            method: "POST",
+            headers: { ...trustedHeaders, "content-type": "application/json" },
+            body: "{}",
+          });
+        } catch (err) {
+          candidateErrors["/backend-api/wham/apps"] = String(err?.message || err);
+        }
+        candidateResponses["/backend-api/ps/plugins/installed"] ||= { plugins: [] };
+        candidateResponses["/backend-api/aip/connectors"] ||= { connectors: [] };
+        candidateResponses["/backend-api/plugins/list"] ||= { plugins: [] };
+        candidateResponses["/backend-api/wham/apps"] ||= { tools: [] };
         snapshot.ok = candidateResponses["/health"]?.ok === true;
         if (snapshot.ok) {
           snapshot.baseUrl = baseUrl;
@@ -441,6 +471,7 @@ async function injectOnce() {
       let consecutiveFailures = 0;
       while (!ws.closed) {
         await sleep(Math.max(250, managerHeartbeatMs));
+        if (!ownerIsAlive()) process.exit(0);
         if (ws.closed) break;
         try {
           const heartbeat = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
@@ -479,6 +510,7 @@ let successfulPasses = 0;
 let watcherAnnounced = false;
 let managerDisconnectedSince = 0;
 for (let i = 0; i < attempts; i++) {
+  if (managerWatchMode && !ownerIsAlive()) process.exit(0);
   try {
     const injected = await injectOnce();
     managerDisconnectedSince = 0;
@@ -512,6 +544,7 @@ for (let i = 0; i < attempts; i++) {
     }
     await sleep(Math.max(0, stableDelayMs));
   } catch (err) {
+    if (managerWatchMode && !ownerIsAlive()) process.exit(0);
     lastError = err;
     successfulPasses = 0;
     if (managerWatchMode) {

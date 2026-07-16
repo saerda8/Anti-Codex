@@ -1,0 +1,1027 @@
+From 3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Tue, 14 Jul 2026 20:11:29 +0800
+Subject: [PATCH] isolation: scope Anti-Codex companion runtime
+
+---
+ apps/codex-plus-launcher/src/main.rs          |  56 +++++-
+ .../src-tauri/src/commands.rs                 |  65 ++++++-
+ apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 ++++
+ crates/codex-plus-core/src/app_paths.rs       |  77 +++++++-
+ crates/codex-plus-core/src/launcher.rs        |  12 +-
+ crates/codex-plus-core/src/paths.rs           |  29 +++
+ crates/codex-plus-core/src/protocol_proxy.rs  |  34 ++++
+ crates/codex-plus-core/src/relay_config.rs    |  10 +-
+ crates/codex-plus-core/src/watcher.rs         | 167 +++++++++++++++---
+ crates/codex-plus-core/tests/watcher.rs       | 131 +++++++++++++-
+ 10 files changed, 568 insertions(+), 46 deletions(-)
+
+diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
+index 81b9bb1..57e5ea0 100644
+--- a/apps/codex-plus-launcher/src/main.rs
++++ b/apps/codex-plus-launcher/src/main.rs
+@@ -43,7 +43,11 @@ async fn main() -> Result<()> {
+         hooks.shutdown_helper(options.helper_port).await;
+         return Ok(());
+     }
+-    let Some(_guard) = acquire_single_instance_guard(options.debug_port)? else {
++    validate_isolated_app_path(
++        codex_plus_core::paths::isolated_instance_mode(),
++        options.app_dir.as_deref(),
++    )?;
++    let Some(_guard) = acquire_single_instance_guard(&options)? else {
+         activate_existing_codex_app(&options).await?;
+         return Ok(());
+     };
+@@ -56,14 +60,31 @@ async fn main() -> Result<()> {
+     Ok(())
+ }
+ 
++fn validate_isolated_app_path(
++    isolated_instance: bool,
++    app_path: Option<&Path>,
++) -> anyhow::Result<()> {
++    if !isolated_instance {
++        return Ok(());
++    }
++    let Some(app_path) = app_path else {
++        anyhow::bail!("isolated CodexPlusPlus requires an explicit --app-path");
++    };
++    if app_path.as_os_str().is_empty() || !app_path.is_absolute() {
++        anyhow::bail!("isolated CodexPlusPlus requires an absolute non-empty --app-path");
++    }
++    Ok(())
++}
++
+ fn acquire_single_instance_guard(
+-    debug_port: u16,
++    options: &LaunchOptions,
+ ) -> anyhow::Result<Option<codex_plus_core::ports::LoopbackPortGuard>> {
+-    acquire_single_instance_guard_with_retry(debug_port, true)
++    acquire_single_instance_guard_with_retry(options.debug_port, options.app_dir.as_deref(), true)
+ }
+ 
+ fn acquire_single_instance_guard_with_retry(
+     debug_port: u16,
++    target_app_path: Option<&Path>,
+     allow_stale_recovery: bool,
+ ) -> anyhow::Result<Option<codex_plus_core::ports::LoopbackPortGuard>> {
+     match try_acquire_single_instance_guard() {
+@@ -79,10 +100,14 @@ fn acquire_single_instance_guard_with_retry(
+         }
+         Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+             log_launcher_already_running(debug_port);
+-            if allow_stale_recovery && should_recover_stale_launcher(debug_port) {
++            if allow_stale_recovery && should_recover_stale_launcher(debug_port, target_app_path) {
+                 codex_plus_core::watcher::stop_launcher_processes();
+                 std::thread::sleep(std::time::Duration::from_millis(250));
+-                return acquire_single_instance_guard_with_retry(debug_port, false);
++                return acquire_single_instance_guard_with_retry(
++                    debug_port,
++                    target_app_path,
++                    false,
++                );
+             }
+             Ok(None)
+         }
+@@ -114,8 +139,11 @@ fn log_launcher_guard_fallback(fallback_lock_path: &Path) {
+     );
+ }
+ 
+-fn should_recover_stale_launcher(debug_port: u16) -> bool {
+-    let has_codex_process = !codex_plus_core::watcher::find_codex_processes().is_empty();
++fn should_recover_stale_launcher(debug_port: u16, target_app_path: Option<&Path>) -> bool {
++    let has_codex_process = target_app_path.map_or_else(
++        || !codex_plus_core::watcher::find_codex_processes().is_empty(),
++        |path| !codex_plus_core::watcher::find_codex_processes_for_app_path(path).is_empty(),
++    );
+     let cdp_listening = codex_plus_core::watcher::cdp_listening(debug_port);
+     let recover =
+         codex_plus_core::watcher::should_recover_stale_launcher(has_codex_process, cdp_listening);
+@@ -146,7 +174,7 @@ async fn activate_existing_codex_app(options: &LaunchOptions) -> anyhow::Result<
+     if settings.enhancements_enabled {
+         hooks.start_helper(options.helper_port).await?;
+     }
+-    let process_ids = codex_plus_core::watcher::find_codex_processes();
++    let process_ids = codex_plus_core::watcher::find_codex_processes_for_app_path(&app_dir);
+     let mut activated = false;
+     #[cfg(windows)]
+     {
+@@ -790,11 +818,21 @@ mod tests {
+         assert_eq!(options.helper_port, LaunchOptions::default().helper_port);
+     }
+ 
++    #[test]
++    fn isolated_launch_requires_an_absolute_explicit_app_path() {
++        let absolute_app_path = std::env::current_dir().unwrap().join("copied-codex");
++
++        assert!(validate_isolated_app_path(true, Some(&absolute_app_path)).is_ok());
++        assert!(validate_isolated_app_path(true, None).is_err());
++        assert!(validate_isolated_app_path(true, Some(Path::new("relative"))).is_err());
++        assert!(validate_isolated_app_path(false, None).is_ok());
++    }
++
+     #[test]
+     fn launcher_uses_single_instance_guard_before_launching() {
+         let source = include_str!("main.rs");
+ 
+-        assert!(source.contains("acquire_single_instance_guard(options.debug_port)?"));
++        assert!(source.contains("acquire_single_instance_guard(&options)?"));
+         assert!(source.contains("launcher_guard_port"));
+         assert!(source.contains("launcher.already_running"));
+     }
+diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
+index 260162e..234ec2f 100644
+--- a/apps/codex-plus-manager/src-tauri/src/commands.rs
++++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
+@@ -435,11 +435,42 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+ 
+ #[tauri::command]
+ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+-    codex_plus_core::watcher::stop_launcher_processes_and_wait();
+-    codex_plus_core::watcher::stop_codex_processes_and_wait();
++    if let Err(error) = validate_isolated_launch_app_path(
++        codex_plus_core::paths::isolated_instance_mode(),
++        request.app_path.trim(),
++    ) {
++        return failed(
++            &format!("拒绝重启隔离实例：{error}"),
++            json!({
++                "debugPort": request.debug_port,
++                "helperPort": request.helper_port
++            }),
++        );
++    }
++    let launcher_path = codex_plus_core::install::companion_binary_path(SILENT_BINARY);
++    codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(&launcher_path);
++    if !request.app_path.trim().is_empty() {
++        codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path(Path::new(
++            request.app_path.trim(),
++        ));
++    }
+     spawn_codex_plus_launch(request, "Codex 已请求重启，启动任务正在后台运行。")
+ }
+ 
++fn validate_isolated_launch_app_path(
++    isolated_instance: bool,
++    app_path: &str,
++) -> anyhow::Result<()> {
++    if !isolated_instance {
++        return Ok(());
++    }
++    let app_path = Path::new(app_path);
++    if app_path.as_os_str().is_empty() || !app_path.is_absolute() {
++        anyhow::bail!("必须提供复制版 Codex 的绝对 appPath");
++    }
++    Ok(())
++}
++
+ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> CommandResult<Value> {
+     let debug_port = request.debug_port;
+     let helper_port = request.helper_port;
+@@ -471,6 +502,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+ }
+ 
+ fn spawn_silent_launcher(request: &LaunchRequest) -> anyhow::Result<()> {
++    validate_isolated_launch_app_path(
++        codex_plus_core::paths::isolated_instance_mode(),
++        request.app_path.trim(),
++    )?;
+     let mut args = Vec::new();
+     if !request.app_path.trim().is_empty() {
+         args.push("--app-path".to_string());
+@@ -2579,7 +2614,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
+         &relay.base_url,
+         &relay.api_key,
+         relay.protocol,
+-        codex_plus_core::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        codex_plus_core::protocol_proxy::protocol_proxy_port(),
+     ) {
+         Ok(result) => {
+             let status = codex_plus_core::relay_config::relay_status_from_home(&home);
+@@ -2616,11 +2651,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
+     match codex_plus_core::relay_config::apply_relay_config_to_home_with_protocol(
+         home,
+         &codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
+-            codex_plus_core::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++            codex_plus_core::protocol_proxy::protocol_proxy_port(),
+         ),
+         "codex-plus-aggregate",
+         codex_plus_core::settings::RelayProtocol::Responses,
+-        codex_plus_core::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        codex_plus_core::protocol_proxy::protocol_proxy_port(),
+     ) {
+         Ok(result) => {
+             let status = codex_plus_core::relay_config::relay_status_from_home(home);
+@@ -2701,7 +2736,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
+         &relay.base_url,
+         &relay.api_key,
+         relay.protocol,
+-        codex_plus_core::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        codex_plus_core::protocol_proxy::protocol_proxy_port(),
+     ) {
+         Ok(result) => {
+             let status = codex_plus_core::relay_config::relay_status_from_home(&home);
+@@ -2797,6 +2832,10 @@ fn log_relay_apply_request(
+     settings: &BackendSettings,
+     relay: &codex_plus_core::settings::RelayProfile,
+ ) {
++    let proxy_authority = format!(
++        "127.0.0.1:{}",
++        codex_plus_core::protocol_proxy::protocol_proxy_port()
++    );
+     let _ = codex_plus_core::diagnostic_log::append_diagnostic_log(
+         event,
+         json!({
+@@ -2808,7 +2847,7 @@ fn log_relay_apply_request(
+             "baseUrl": relay.base_url,
+             "hasConfigContents": !relay.config_contents.trim().is_empty(),
+             "hasAuthContents": !relay.auth_contents.trim().is_empty(),
+-            "configContainsProxy": relay.config_contents.contains("127.0.0.1:57321")
++            "configContainsProxy": relay.config_contents.contains(&proxy_authority)
+         }),
+     );
+ }
+@@ -3270,6 +3309,18 @@ fn default_log_lines() -> usize {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn isolated_manager_launch_requires_an_absolute_explicit_app_path() {
++        let absolute_app_path = std::env::current_dir().unwrap().join("copied-codex");
++
++        assert!(
++            validate_isolated_launch_app_path(true, absolute_app_path.to_str().unwrap()).is_ok()
++        );
++        assert!(validate_isolated_launch_app_path(true, "").is_err());
++        assert!(validate_isolated_launch_app_path(true, "relative").is_err());
++        assert!(validate_isolated_launch_app_path(false, "").is_ok());
++    }
++
+     #[test]
+     fn backend_version_returns_structured_payload() {
+         let result = backend_version();
+diff --git a/apps/codex-plus-manager/src-tauri/src/lib.rs b/apps/codex-plus-manager/src-tauri/src/lib.rs
+index ded6c7c..9c343d5 100644
+--- a/apps/codex-plus-manager/src-tauri/src/lib.rs
++++ b/apps/codex-plus-manager/src-tauri/src/lib.rs
+@@ -231,6 +231,16 @@ fn show_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
+     }
+ }
+ 
++fn same_windows_executable_path(left: &std::path::Path, right: &std::path::Path) -> bool {
++    let normalize = |path: &std::path::Path| {
++        path.to_string_lossy()
++            .replace('/', "\\")
++            .trim_end_matches('\\')
++            .to_ascii_lowercase()
++    };
++    normalize(left) == normalize(right)
++}
++
+ /// Restores and focuses an existing manager window on Windows.
+ ///
+ /// This is a no-op on other platforms.
+@@ -238,6 +248,9 @@ pub fn focus_existing_manager_window() {
+     #[cfg(windows)]
+     {
+         let current_process_id = std::process::id();
++        let Ok(current_executable_path) = std::env::current_exe() else {
++            return;
++        };
+         for process in codex_plus_core::windows_enumerate_processes() {
+             if process.process_id == current_process_id {
+                 continue;
+@@ -245,6 +258,9 @@ pub fn focus_existing_manager_window() {
+             if process
+                 .exe_file
+                 .eq_ignore_ascii_case("codex-plus-plus-manager.exe")
++                && process.executable_path.as_deref().is_some_and(|path| {
++                    same_windows_executable_path(path, &current_executable_path)
++                })
+             {
+                 let _ = codex_plus_core::windows_activate_process_window(process.process_id);
+                 break;
+@@ -334,3 +350,20 @@ fn acquire_single_instance_guard() -> Option<codex_plus_core::ports::LoopbackPor
+         }
+     }
+ }
++
++#[cfg(test)]
++mod isolation_tests {
++    use super::same_windows_executable_path;
++
++    #[test]
++    fn manager_process_scope_uses_the_exact_executable_path() {
++        assert!(same_windows_executable_path(
++            std::path::Path::new(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus-manager.exe"),
++            std::path::Path::new(r"g:/anti-codex/codexplusplus/codex-plus-plus-manager.exe"),
++        ));
++        assert!(!same_windows_executable_path(
++            std::path::Path::new(r"C:\Tools\CodexPlusPlus\codex-plus-plus-manager.exe"),
++            std::path::Path::new(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus-manager.exe"),
++        ));
++    }
++}
+diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
+index 334754a..3674546 100644
+--- a/crates/codex-plus-core/src/app_paths.rs
++++ b/crates/codex-plus-core/src/app_paths.rs
+@@ -1,4 +1,4 @@
+-use std::ffi::OsStr;
++use std::ffi::{OsStr, OsString};
+ use std::path::{Path, PathBuf};
+ #[cfg(windows)]
+ use std::process::Command;
+@@ -13,6 +13,7 @@ struct AppPackageSpec {
+ 
+ const CODEX_PACKAGE_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
+ const STANDALONE_CODEX_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
++const APP_EXECUTABLE_ENV: &str = "CODEX_PLUS_APP_EXECUTABLE";
+ 
+ const APP_PACKAGE_SPECS: &[AppPackageSpec] = &[
+     AppPackageSpec {
+@@ -257,6 +258,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+         }
+         return macos_dir.join("Codex");
+     }
++    if let Some(executable) = configured_codex_executable(app_dir) {
++        return executable;
++    }
+     if let Some(executable) = executable_in_dir(app_dir) {
+         return executable;
+     }
+@@ -266,6 +270,35 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+     app_dir.join("Codex.exe")
+ }
+ 
++fn explicit_codex_executable(app_dir: &Path, value: OsString) -> Option<PathBuf> {
++    let executable = PathBuf::from(value);
++    if executable.as_os_str().is_empty()
++        || !executable.is_absolute()
++        || !executable
++            .extension()
++            .and_then(OsStr::to_str)
++            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
++        || !executable.is_file()
++    {
++        return None;
++    }
++    let canonical_app_dir = std::fs::canonicalize(app_dir).ok()?;
++    let canonical_executable = std::fs::canonicalize(&executable).ok()?;
++    (canonical_executable.parent() == Some(canonical_app_dir.as_path())).then_some(executable)
++}
++
++fn configured_codex_executable_from_value(
++    app_dir: &Path,
++    value: Option<OsString>,
++) -> Option<PathBuf> {
++    let value = value?;
++    Some(explicit_codex_executable(app_dir, value).unwrap_or_default())
++}
++
++pub fn configured_codex_executable(app_dir: &Path) -> Option<PathBuf> {
++    configured_codex_executable_from_value(app_dir, std::env::var_os(APP_EXECUTABLE_ENV))
++}
++
+ pub fn codex_app_version(app_dir: &Path) -> Option<String> {
+     if app_dir.extension() == Some(OsStr::new("app")) {
+         return macos_app_version(app_dir);
+@@ -483,6 +516,48 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
+     None
+ }
+ 
++#[cfg(test)]
++mod isolation_tests {
++    use super::{configured_codex_executable_from_value, explicit_codex_executable};
++
++    #[test]
++    fn explicit_copied_executable_must_be_an_exe_inside_the_selected_app_directory() {
++        let temp = tempfile::tempdir().unwrap();
++        let app_dir = temp.path().join("copied-app");
++        let outside_dir = temp.path().join("outside");
++        std::fs::create_dir_all(&app_dir).unwrap();
++        std::fs::create_dir_all(&outside_dir).unwrap();
++        let branded = app_dir.join("Anti-Codex.exe");
++        let outside = outside_dir.join("Anti-Codex.exe");
++        let not_executable = app_dir.join("Anti-Codex.txt");
++        std::fs::write(&branded, "").unwrap();
++        std::fs::write(&outside, "").unwrap();
++        std::fs::write(&not_executable, "").unwrap();
++
++        assert_eq!(
++            explicit_codex_executable(&app_dir, branded.clone().into_os_string()),
++            Some(branded)
++        );
++        assert_eq!(
++            explicit_codex_executable(&app_dir, outside.into_os_string()),
++            None
++        );
++        assert_eq!(
++            explicit_codex_executable(&app_dir, not_executable.into_os_string()),
++            None
++        );
++        assert_eq!(
++            explicit_codex_executable(&app_dir, "relative.exe".into()),
++            None
++        );
++        assert_eq!(configured_codex_executable_from_value(&app_dir, None), None);
++        assert_eq!(
++            configured_codex_executable_from_value(&app_dir, Some("relative.exe".into())),
++            Some(std::path::PathBuf::new())
++        );
++    }
++}
++
+ fn codex_package_parts(package_name: &str) -> Option<(AppPackageSpec, &str, &str)> {
+     for spec in APP_PACKAGE_SPECS {
+         let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index 1ba3656..ebad60e 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -295,7 +295,7 @@ where
+         }
+         let protocol_proxy_enabled = relay_protocol_proxy_enabled(&settings);
+         if protocol_proxy_enabled {
+-            helper_port = crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT;
++            helper_port = crate::protocol_proxy::protocol_proxy_port();
+         }
+         if settings.enhancements_enabled || protocol_proxy_enabled {
+             hooks.start_helper(helper_port).await?;
+@@ -862,6 +862,10 @@ impl LaunchHooks for DefaultLaunchHooks {
+     async fn write_status(&self, _status: &str) {}
+ 
+     async fn wait_for_codex_exit(&self, launch: &CodexLaunch) -> anyhow::Result<()> {
++        let target_app_path = match launch {
++            CodexLaunch::Process { command, .. } => command.first().map(PathBuf::from),
++            CodexLaunch::PackagedActivation { .. } => None,
++        };
+         match launch {
+             CodexLaunch::Process { .. } => {
+                 if let Some(mut child) = self.child.lock().await.take() {
+@@ -876,7 +880,11 @@ impl LaunchHooks for DefaultLaunchHooks {
+         }
+         let mut empty_streak = 0u32;
+         loop {
+-            if crate::watcher::find_codex_processes().is_empty() {
++            let no_target_processes = target_app_path.as_deref().map_or_else(
++                || crate::watcher::find_codex_processes().is_empty(),
++                |path| crate::watcher::find_codex_processes_for_app_path(path).is_empty(),
++            );
++            if no_target_processes {
+                 empty_streak = empty_streak.saturating_add(1);
+                 if empty_streak >= 3 {
+                     break;
+diff --git a/crates/codex-plus-core/src/paths.rs b/crates/codex-plus-core/src/paths.rs
+index 5bffb4a..1a993c3 100644
+--- a/crates/codex-plus-core/src/paths.rs
++++ b/crates/codex-plus-core/src/paths.rs
+@@ -6,8 +6,25 @@ const SETTINGS_FILE: &str = "settings.json";
+ const LATEST_STATUS_FILE: &str = "latest-status.json";
+ const DIAGNOSTIC_LOG_FILE: &str = "codex-plus.log";
+ const PENDING_PROVIDER_IMPORT_FILE: &str = "pending-provider-import.json";
++const APP_STATE_DIR_ENV: &str = "CODEX_PLUS_STATE_DIR";
++
++fn explicit_app_state_dir(value: Option<std::ffi::OsString>) -> Option<PathBuf> {
++    let path = PathBuf::from(value?);
++    (!path.as_os_str().is_empty() && path.is_absolute()).then_some(path)
++}
++
++pub fn configured_app_state_dir() -> Option<PathBuf> {
++    explicit_app_state_dir(std::env::var_os(APP_STATE_DIR_ENV))
++}
++
++pub fn isolated_instance_mode() -> bool {
++    configured_app_state_dir().is_some()
++}
+ 
+ pub fn default_app_state_dir() -> PathBuf {
++    if let Some(path) = configured_app_state_dir() {
++        return path;
++    }
+     if let Some(home_dir) = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()) {
+         return home_dir.join(APP_STATE_DIR);
+     }
+@@ -83,4 +100,16 @@ mod tests {
+ 
+         assert!(path.ends_with(".codex-session-delete/pending-provider-import.json"));
+     }
++
++    #[cfg(windows)]
++    #[test]
++    fn explicit_app_state_dir_accepts_only_absolute_non_empty_paths() {
++        assert_eq!(
++            explicit_app_state_dir(Some(r"C:\AntiCodex\CodexPlusPlus".into())),
++            Some(PathBuf::from(r"C:\AntiCodex\CodexPlusPlus"))
++        );
++        assert_eq!(explicit_app_state_dir(Some("relative".into())), None);
++        assert_eq!(explicit_app_state_dir(Some("".into())), None);
++        assert_eq!(explicit_app_state_dir(None), None);
++    }
+ }
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index aed1085..6890f32 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -13,6 +13,7 @@ use crate::relay_rotation::{RotationContext, RotationEvent};
+ use crate::settings::{RelayProtocol, SettingsStore};
+ 
+ pub const DEFAULT_PROTOCOL_PROXY_PORT: u16 = 57321;
++const PROTOCOL_PROXY_PORT_ENV: &str = "CODEX_PLUS_PROTOCOL_PROXY_PORT";
+ const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+ const UPSTREAM_HEADER_TIMEOUT: Duration = Duration::from_secs(30);
+ const UPSTREAM_STREAM_HEADER_TIMEOUT: Duration = Duration::from_secs(120);
+@@ -35,6 +36,39 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
+ ];
+ const ERROR_BODY_PREVIEW_LIMIT: usize = 1024;
+ 
++pub fn protocol_proxy_port() -> u16 {
++    protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
++}
++
++fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
++    value
++        .and_then(|value| value.parse::<u16>().ok())
++        .filter(|port| *port != 0)
++        .unwrap_or(DEFAULT_PROTOCOL_PROXY_PORT)
++}
++
++#[cfg(test)]
++mod isolation_port_tests {
++    use super::{DEFAULT_PROTOCOL_PROXY_PORT, protocol_proxy_port_from_value};
++
++    #[test]
++    fn protocol_proxy_port_accepts_only_nonzero_u16_values() {
++        assert_eq!(protocol_proxy_port_from_value(Some("58421")), 58421);
++        assert_eq!(
++            protocol_proxy_port_from_value(Some("0")),
++            DEFAULT_PROTOCOL_PROXY_PORT
++        );
++        assert_eq!(
++            protocol_proxy_port_from_value(Some("invalid")),
++            DEFAULT_PROTOCOL_PROXY_PORT
++        );
++        assert_eq!(
++            protocol_proxy_port_from_value(None),
++            DEFAULT_PROTOCOL_PROXY_PORT
++        );
++    }
++}
++
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ enum ChatReasoningStyle {
+     Default,
+diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
+index 21076b5..ef25276 100644
+--- a/crates/codex-plus-core/src/relay_config.rs
++++ b/crates/codex-plus-core/src/relay_config.rs
+@@ -236,7 +236,7 @@ pub fn apply_relay_config_to_home(
+         base_url,
+         bearer_token,
+         RelayProtocol::Responses,
+-        crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        crate::protocol_proxy::protocol_proxy_port(),
+     )
+ }
+ 
+@@ -280,7 +280,7 @@ pub fn apply_pure_api_config_to_home(
+         base_url,
+         bearer_token,
+         RelayProtocol::Responses,
+-        crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        crate::protocol_proxy::protocol_proxy_port(),
+     )
+ }
+ 
+@@ -1885,7 +1885,7 @@ pub fn relay_profile_model(profile: &RelayProfile) -> String {
+ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
+     if profile.relay_mode == crate::settings::RelayMode::Aggregate {
+         return crate::protocol_proxy::local_responses_proxy_base_url(
+-            crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++            crate::protocol_proxy::protocol_proxy_port(),
+         );
+     }
+     if profile.protocol == RelayProtocol::ChatCompletions {
+@@ -1907,7 +1907,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
+     if profile.protocol == RelayProtocol::ChatCompletions
+         && provider_base_url
+             == crate::protocol_proxy::local_responses_proxy_base_url(
+-                crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++                crate::protocol_proxy::protocol_proxy_port(),
+             )
+     {
+         String::new()
+@@ -2000,7 +2000,7 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
+     let provider_base_url = codex_base_url_for_protocol(
+         base_url.trim(),
+         profile.protocol,
+-        crate::protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT,
++        crate::protocol_proxy::protocol_proxy_port(),
+     );
+     if !provider_base_url.trim().is_empty() {
+         provider["base_url"] = toml_edit::value(provider_base_url.trim());
+diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
+index df08126..9943757 100644
+--- a/crates/codex-plus-core/src/watcher.rs
++++ b/crates/codex-plus-core/src/watcher.rs
+@@ -16,7 +16,6 @@ const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
+ pub const WATCHER_RUN_NAME: &str = "CodexPlusPlusWatcher";
+ pub const WATCHER_RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+ pub const WATCHER_STARTUP_SHORTCUT_NAME: &str = "CodexPlusPlusWatcher.lnk";
+-
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct WatcherInstallPlan {
+     pub run_value_name: String,
+@@ -34,6 +33,10 @@ pub fn default_watcher_disabled_flag() -> PathBuf {
+     watcher_disabled_flag(&crate::paths::default_app_state_dir())
+ }
+ 
++pub fn isolated_instance_watcher_disabled() -> bool {
++    crate::paths::isolated_instance_mode()
++}
++
+ pub fn enable_watcher_at(root: &Path) -> std::io::Result<()> {
+     let flag = watcher_disabled_flag(root);
+     if flag.exists() {
+@@ -138,6 +141,37 @@ pub fn filter_killable_launcher_processes<'a>(
+         .collect()
+ }
+ 
++#[cfg(windows)]
++pub fn filter_killable_launcher_processes_for_path(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    current_process_id: u32,
++    target_launcher_path: &Path,
++) -> Vec<u32> {
++    let in_scope = processes
++        .iter()
++        .filter(|process| {
++            process
++                .executable_path
++                .as_deref()
++                .is_some_and(|path| process_path_is_in_app(path, target_launcher_path))
++        })
++        .map(|process| process.process_id)
++        .collect::<HashSet<_>>();
++    filter_killable_launcher_processes(
++        processes.iter().map(|process| {
++            (
++                process.process_id,
++                process.parent_process_id,
++                process.exe_file.as_str(),
++            )
++        }),
++        current_process_id,
++    )
++    .into_iter()
++    .filter(|process_id| in_scope.contains(process_id))
++    .collect()
++}
++
+ pub fn should_recover_stale_launcher(has_codex_process: bool, cdp_listening: bool) -> bool {
+     !has_codex_process && !cdp_listening
+ }
+@@ -155,6 +189,9 @@ pub fn process_ids_still_running(
+ 
+ #[cfg(windows)]
+ pub fn install_watcher(launcher_path: &Path, debug_port: u16) -> anyhow::Result<()> {
++    if isolated_instance_watcher_disabled() {
++        anyhow::bail!("global logon watcher is disabled for an isolated CodexPlusPlus instance");
++    }
+     let plan = build_watcher_install_plan(launcher_path.to_path_buf(), debug_port);
+     crate::windows_integration::set_current_user_string_value(
+         WATCHER_RUN_KEY,
+@@ -173,12 +210,16 @@ pub fn install_watcher(_launcher_path: &Path, _debug_port: u16) -> anyhow::Resul
+ 
+ #[cfg(windows)]
+ pub fn uninstall_watcher() -> anyhow::Result<()> {
++    if isolated_instance_watcher_disabled() {
++        anyhow::bail!("global logon watcher is disabled for an isolated CodexPlusPlus instance");
++    }
+     let _ =
+         crate::windows_integration::delete_current_user_value(WATCHER_RUN_KEY, WATCHER_RUN_NAME);
+     if let Some(shortcut) = startup_shortcut_path() {
+         let _ = std::fs::remove_file(shortcut);
+     }
+-    stop_launcher_processes();
++    let launcher_path = crate::install::companion_binary_path(crate::install::SILENT_BINARY);
++    stop_launcher_processes_for_path(&launcher_path);
+     Ok(())
+ }
+ 
+@@ -231,6 +272,68 @@ pub fn find_codex_processes_from_snapshot(
+     ids
+ }
+ 
++#[cfg(windows)]
++fn normalized_windows_path(path: &Path) -> String {
++    path.to_string_lossy()
++        .replace('/', "\\")
++        .trim_end_matches('\\')
++        .to_ascii_lowercase()
++}
++
++#[cfg(windows)]
++fn process_path_is_in_app(process_path: &Path, target_app_path: &Path) -> bool {
++    let process_path = normalized_windows_path(process_path);
++    let target_path = normalized_windows_path(target_app_path);
++    if target_path.ends_with(".exe") {
++        return process_path == target_path;
++    }
++    process_path == target_path || process_path.starts_with(&format!("{target_path}\\"))
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_from_snapshot_for_executable(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    target_executable: &Path,
++) -> Vec<u32> {
++    let mut ids = processes
++        .iter()
++        .filter(|process| {
++            process
++                .executable_path
++                .as_deref()
++                .is_some_and(|path| process_path_is_in_app(path, target_executable))
++        })
++        .map(|process| process.process_id)
++        .collect::<Vec<_>>();
++    ids.sort_unstable();
++    ids.dedup();
++    ids
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_from_snapshot_for_app_path(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    target_app_path: &Path,
++) -> Vec<u32> {
++    let target_executable = if target_app_path.extension() == Some(std::ffi::OsStr::new("exe")) {
++        target_app_path.to_path_buf()
++    } else {
++        crate::app_paths::build_codex_executable(target_app_path)
++    };
++    find_codex_processes_from_snapshot_for_executable(processes, &target_executable)
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_for_app_path(target_app_path: &Path) -> Vec<u32> {
++    let processes = crate::windows_integration::enumerate_processes();
++    find_codex_processes_from_snapshot_for_app_path(&processes, target_app_path)
++}
++
++#[cfg(not(windows))]
++pub fn find_codex_processes_for_app_path(_target_app_path: &Path) -> Vec<u32> {
++    Vec::new()
++}
++
+ #[cfg(not(windows))]
+ pub fn find_codex_processes() -> Vec<u32> {
+     Vec::new()
+@@ -238,16 +341,31 @@ pub fn find_codex_processes() -> Vec<u32> {
+ 
+ #[cfg(windows)]
+ pub fn stop_launcher_processes() {
++    if let Ok(target_launcher_path) = std::env::current_exe() {
++        stop_launcher_processes_for_path(&target_launcher_path);
++    }
++}
++
++#[cfg(not(windows))]
++pub fn stop_launcher_processes() {}
++
++#[cfg(windows)]
++pub fn stop_launcher_processes_and_wait() {
++    if let Ok(target_launcher_path) = std::env::current_exe() {
++        stop_launcher_processes_and_wait_for_path(&target_launcher_path);
++    }
++}
++
++#[cfg(not(windows))]
++pub fn stop_launcher_processes_and_wait() {}
++
++#[cfg(windows)]
++pub fn stop_launcher_processes_for_path(target_launcher_path: &Path) {
+     let processes = crate::windows_integration::enumerate_processes();
+-    let killable = filter_killable_launcher_processes(
+-        processes.iter().map(|process| {
+-            (
+-                process.process_id,
+-                process.parent_process_id,
+-                process.exe_file.as_str(),
+-            )
+-        }),
++    let killable = filter_killable_launcher_processes_for_path(
++        &processes,
+         std::process::id(),
++        target_launcher_path,
+     );
+     for process_id in killable {
+         let _ = crate::windows_integration::terminate_process(process_id);
+@@ -255,20 +373,15 @@ pub fn stop_launcher_processes() {
+ }
+ 
+ #[cfg(not(windows))]
+-pub fn stop_launcher_processes() {}
++pub fn stop_launcher_processes_for_path(_target_launcher_path: &Path) {}
+ 
+ #[cfg(windows)]
+-pub fn stop_launcher_processes_and_wait() {
++pub fn stop_launcher_processes_and_wait_for_path(target_launcher_path: &Path) {
+     let processes = crate::windows_integration::enumerate_processes();
+-    let killable = filter_killable_launcher_processes(
+-        processes.iter().map(|process| {
+-            (
+-                process.process_id,
+-                process.parent_process_id,
+-                process.exe_file.as_str(),
+-            )
+-        }),
++    let killable = filter_killable_launcher_processes_for_path(
++        &processes,
+         std::process::id(),
++        target_launcher_path,
+     );
+     terminate_and_wait_for_exit(
+         killable,
+@@ -278,7 +391,7 @@ pub fn stop_launcher_processes_and_wait() {
+ }
+ 
+ #[cfg(not(windows))]
+-pub fn stop_launcher_processes_and_wait() {}
++pub fn stop_launcher_processes_and_wait_for_path(_target_launcher_path: &Path) {}
+ 
+ #[cfg(windows)]
+ pub fn stop_codex_processes() {
+@@ -302,6 +415,18 @@ pub fn stop_codex_processes_and_wait() {
+ #[cfg(not(windows))]
+ pub fn stop_codex_processes_and_wait() {}
+ 
++#[cfg(windows)]
++pub fn stop_codex_processes_and_wait_for_app_path(target_app_path: &Path) {
++    terminate_and_wait_for_exit(
++        find_codex_processes_for_app_path(target_app_path),
++        RESTART_STOP_WAIT_TIMEOUT_MS,
++        RESTART_STOP_WAIT_INTERVAL_MS,
++    );
++}
++
++#[cfg(not(windows))]
++pub fn stop_codex_processes_and_wait_for_app_path(_target_app_path: &Path) {}
++
+ #[cfg(windows)]
+ fn terminate_and_wait_for_exit(process_ids: Vec<u32>, timeout_ms: u64, interval_ms: u64) {
+     if process_ids.is_empty() {
+diff --git a/crates/codex-plus-core/tests/watcher.rs b/crates/codex-plus-core/tests/watcher.rs
+index c2ad8f5..b5c6078 100644
+--- a/crates/codex-plus-core/tests/watcher.rs
++++ b/crates/codex-plus-core/tests/watcher.rs
+@@ -5,7 +5,11 @@ use codex_plus_core::watcher::{
+ };
+ 
+ #[cfg(windows)]
+-use codex_plus_core::watcher::{WindowsProcessInfo, find_codex_processes_from_snapshot};
++use codex_plus_core::watcher::{
++    WindowsProcessInfo, filter_killable_launcher_processes_for_path,
++    find_codex_processes_from_snapshot, find_codex_processes_from_snapshot_for_app_path,
++    find_codex_processes_from_snapshot_for_executable,
++};
+ 
+ #[test]
+ fn cdp_listening_returns_true_for_bound_loopback_port() {
+@@ -154,6 +158,131 @@ fn find_codex_processes_finds_local_install_with_capitial_c() {
+     assert_eq!(find_codex_processes_from_snapshot(&processes), vec![42]);
+ }
+ 
++#[cfg(windows)]
++#[test]
++fn scoped_launcher_filter_does_not_select_another_installation() {
++    let processes = [
++        WindowsProcessInfo {
++            process_id: 10,
++            parent_process_id: 0,
++            exe_file: "codex-plus-plus.exe".to_string(),
++            executable_path: Some(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus.exe".into()),
++        },
++        WindowsProcessInfo {
++            process_id: 30,
++            parent_process_id: 10,
++            exe_file: "codex-plus-plus.exe".to_string(),
++            executable_path: Some(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus.exe".into()),
++        },
++        WindowsProcessInfo {
++            process_id: 40,
++            parent_process_id: 10,
++            exe_file: "codex-plus-plus.exe".to_string(),
++            executable_path: Some(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus.exe".into()),
++        },
++        WindowsProcessInfo {
++            process_id: 60,
++            parent_process_id: 0,
++            exe_file: "codex-plus-plus.exe".to_string(),
++            executable_path: Some(r"C:\Tools\CodexPlusPlus\codex-plus-plus.exe".into()),
++        },
++    ];
++
++    assert_eq!(
++        filter_killable_launcher_processes_for_path(
++            &processes,
++            30,
++            std::path::Path::new(r"G:\Anti-Codex\CodexPlusPlus\codex-plus-plus.exe"),
++        ),
++        vec![40]
++    );
++}
++
++#[cfg(windows)]
++#[test]
++fn scoped_process_filter_keeps_only_the_selected_copied_application() {
++    let processes = [
++        WindowsProcessInfo {
++            process_id: 51,
++            parent_process_id: 0,
++            exe_file: "Codex.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"G:\Anti-Codex\client\app\Codex.exe",
++            )),
++        },
++        WindowsProcessInfo {
++            process_id: 52,
++            parent_process_id: 0,
++            exe_file: "Codex.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"C:\Program Files\WindowsApps\OpenAI.Codex_1.0.0.0_x64__abc\app\Codex.exe",
++            )),
++        },
++        WindowsProcessInfo {
++            process_id: 53,
++            parent_process_id: 51,
++            exe_file: "Codex.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"G:\Anti-Codex\client\app\Codex.exe",
++            )),
++        },
++    ];
++
++    assert_eq!(
++        find_codex_processes_from_snapshot_for_app_path(
++            &processes,
++            std::path::Path::new(r"G:\Anti-Codex\client\app"),
++        ),
++        vec![51, 53]
++    );
++    assert_eq!(
++        find_codex_processes_from_snapshot_for_app_path(
++            &processes,
++            std::path::Path::new(r"G:\Anti-Codex\client\app\Codex.exe"),
++        ),
++        vec![51, 53]
++    );
++}
++
++#[cfg(windows)]
++#[test]
++fn scoped_process_filter_keeps_only_the_selected_branded_executable() {
++    let processes = [
++        WindowsProcessInfo {
++            process_id: 61,
++            parent_process_id: 0,
++            exe_file: "Anti-Codex.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"G:\Anti-Codex\client\app\Anti-Codex.exe",
++            )),
++        },
++        WindowsProcessInfo {
++            process_id: 62,
++            parent_process_id: 0,
++            exe_file: "ChatGPT.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"G:\Anti-Codex\client\app\ChatGPT.exe",
++            )),
++        },
++        WindowsProcessInfo {
++            process_id: 63,
++            parent_process_id: 0,
++            exe_file: "Anti-Codex.exe".to_string(),
++            executable_path: Some(std::path::PathBuf::from(
++                r"C:\Program Files\Anti-Codex\Anti-Codex.exe",
++            )),
++        },
++    ];
++
++    assert_eq!(
++        find_codex_processes_from_snapshot_for_executable(
++            &processes,
++            std::path::Path::new(r"G:\Anti-Codex\client\app\Anti-Codex.exe"),
++        ),
++        vec![61]
++    );
++}
++
+ #[cfg(windows)]
+ #[test]
+ fn find_codex_processes_ignores_lowercase_local_cli_binary() {
+-- 
+2.55.0.windows.1
+

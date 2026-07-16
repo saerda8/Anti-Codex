@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-16T15:31:37.342Z",
+  "gate": "Gate 6 edge and recovery matrix",
+  "ok": true,
+  "failedIds": [],
+  "modelTraffic": "none; consumes existing accepted real reports",
+  "formalGateAdvanced": true,
+  "blockedBy": null,
+  "checks": [
+    {
+      "id": "gate5_visible_integration_signed",
+      "ok": true,
+      "path": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate5-visible-integration.json",
+      "sha256": "ec1117acb0807e408188413085c3c08687500491c68de8ce48c4e870a15c91e6",
+      "signed": true,
+      "checkCount": 13,
+      "failedIds": []
+    },
+    {
+      "id": "changed_boundary_syntax",
+      "ok": true,
+      "files": [
+        {
+          "path": "translator/provider/antigravity-chat-adapter.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "scripts/lib/codexplusplus-antigravity-harness.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "scripts/test-antigravity-chat-adapter-restart-recovery.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "scripts/test-antigravity-chat-adapter-cancellation.mjs",
+          "ok": true,
+          "stderr": ""
+        },
+        {
+          "path": "scripts/test-codexplusplus-antigravity-client-restart.mjs",
+          "ok": true,
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "id": "provider_edge_regression_suite",
+      "ok": true,
+      "exitCode": 0,
+      "missingTestPaths": [],
+      "tests": 47,
+      "pass": 47,
+      "fail": 0,
+      "stderr": ""
+    },
+    {
+      "id": "deterministic_quota_no_retry",
+      "ok": true,
+      "testName": "maps authentication, quota, network and timeout failures without retrying"
+    },
+    {
+      "id": "deterministic_abort_propagation",
+      "ok": true,
+      "testName": "aborted requests reach the Cascade client and emit no terminal chunk"
+    },
+    {
+      "id": "deterministic_parallel_results_complete",
+      "ok": true,
+      "testName": "parallel tool continuation requires every result from one pending Cascade"
+    },
+    {
+      "id": "deterministic_malformed_arguments_cancel",
+      "ok": true,
+      "testName": "malformed Cascade tool arguments fail closed and cancel the opaque continuation"
+    },
+    {
+      "id": "deterministic_malformed_http_shape",
+      "ok": true,
+      "testName": "malformed native tool arguments return a structured 502 and cancel the continuation"
+    },
+    {
+      "id": "deterministic_tool_failure_exact_result",
+      "ok": true,
+      "testName": "failed host tool output is preserved exactly for the same Cascade recovery"
+    },
+    {
+      "id": "deterministic_restart_no_replay",
+      "ok": true,
+      "testName": "adapter restart continues from complete Chat tool history without replaying the tool"
+    },
+    {
+      "id": "deterministic_visible_launch_guard",
+      "ok": true,
+      "testName": "visible candidate launch requires approval and no active Anti-Codex root"
+    },
+    {
+      "id": "real_adapter_restart_no_duplicate",
+      "ok": true,
+      "generatedAtUtc": "2026-07-14T18:13:44.352Z",
+      "counters": {
+        "start": 2,
+        "resume": 0,
+        "cancel": 1
+      },
+      "artifact": {
+        "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate6-adapter-restart-DA93684FF5BF.txt",
+        "bytes": 53,
+        "sha256": "b83b15c85ac255d246170547d907fc98273790bcbf9c2889ba0ba5bdb3c42df3",
+        "hostExecutionCount": 1
+      },
+      "failedIds": []
+    },
+    {
+      "id": "real_client_abort_cancel_and_recover",
+      "ok": true,
+      "generatedAtUtc": "2026-07-15T02:21:01.475Z",
+      "realCancelCallCount": 1,
+      "counters": {
+        "start": 2,
+        "resume": 0,
+        "cancel": 0
+      },
+      "failedIds": []
+    },
+    {
+      "id": "real_copied_client_crash_same_task_resume",
+      "ok": true,
+      "generatedAtUtc": "2026-07-14T18:28:03.811Z",
+      "thread": {
+        "initialId": "019f61e1-aa19-7fb0-9a55-331f46b4b479",
+        "resumedId": "019f61e1-aa19-7fb0-9a55-331f46b4b479",
+        "initialTimedOut": true,
+        "resumeExitCode": 0
+      },
+      "exactlyOnce": {
+        "countBeforeResume": 1,
+        "countAfterResume": 1,
+        "markerHashBeforeResume": "2ef35ce760bba2a4a017ec506de22fb5e6314ae541ddec792f6ed879a1d0c4a8",
+        "markerHashAfterResume": "2ef35ce760bba2a4a017ec506de22fb5e6314ae541ddec792f6ed879a1d0c4a8"
+      },
+      "artifact": {
+        "ok": true,
+        "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\validation-artifacts\\gate6-client-restart-3C6EF911EE7A.zip",
+        "bytes": 1234,
+        "sha256": "5cc267e587a5c419f6f2f328103dab733b2531f31fde01582368da6bba8cc76e"
+      },
+      "failedIds": []
+    }
+  ],
+  "report": {
+    "audit": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate6-edge-matrix.json",
+    "latest": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate6-edge-matrix.json",
+    "history": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\20260716-153137-gate6-edge-matrix.json"
+  }
+}

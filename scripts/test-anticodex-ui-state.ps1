@@ -34,7 +34,10 @@ if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
     throw "UI state verifier missing: $scriptPath"
 }
 
-$catalogPath = Join-Path $env:APPDATA "anticodex\antigravity-model-catalog.json"
+$catalogPath = Join-Path $env:APPDATA "anticodex\codex-home-deepseek-app\antigravity-model-catalog.json"
+if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
+    $catalogPath = Join-Path $env:APPDATA "anticodex\antigravity-model-catalog.json"
+}
 if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
     $catalogPath = Join-Path $runtimeRootFull "codex-home-deepseek-app\deepseek-model-catalog.json"
 }
@@ -71,7 +74,7 @@ if ($CdpPort -le 0) {
     $candidatePorts = @()
     if ($env:DEEPCODEX_CDP_PORT) { $candidatePorts += [int]$env:DEEPCODEX_CDP_PORT }
     $candidatePorts += @(Get-AntiCodexProcessCdpPorts)
-    $candidatePorts += @(58318, 58317)
+    $candidatePorts += @(18318, 58318, 58317)
     foreach ($candidatePort in @($candidatePorts | Select-Object -Unique)) {
         if (Test-CdpPort -Port $candidatePort) {
             $CdpPort = $candidatePort

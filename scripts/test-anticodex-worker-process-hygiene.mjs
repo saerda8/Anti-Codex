@@ -142,8 +142,13 @@ function summarize() {
   const codexGroups = parentGroups.filter((item) => item.parentKind === "codex-app-server");
   const anticodexGroups = parentGroups.filter((item) => item.parentKind === "anticodex-app-server");
   const duplicateWorkerProcessCount = parentGroups.reduce((sum, item) => sum + item.duplicateWorkerProcessCount, 0);
+  const codexDuplicateWorkerProcessCount = codexGroups.reduce((sum, item) => sum + item.duplicateWorkerProcessCount, 0);
+  const anticodexDuplicateWorkerProcessCount = anticodexGroups.reduce((sum, item) => sum + item.duplicateWorkerProcessCount, 0);
   const codexWorkerProcessCount = codexGroups.reduce((sum, item) => sum + item.workerProcessCount, 0);
   const anticodexWorkerProcessCount = anticodexGroups.reduce((sum, item) => sum + item.workerProcessCount, 0);
+  const duplicateWorkerServers = parentGroups.flatMap((group) =>
+    group.duplicateServers.map((item) => ({ ...item, parentPid: group.parentPid, parentKind: group.parentKind }))
+  );
 
   return {
     appServers,
@@ -153,9 +158,10 @@ function summarize() {
     codexWorkerProcessCount,
     anticodexWorkerProcessCount,
     duplicateWorkerProcessCount,
-    duplicateWorkerServers: parentGroups.flatMap((group) =>
-      group.duplicateServers.map((item) => ({ ...item, parentPid: group.parentPid, parentKind: group.parentKind }))
-    ),
+    codexDuplicateWorkerProcessCount,
+    anticodexDuplicateWorkerProcessCount,
+    duplicateWorkerServers,
+    anticodexDuplicateWorkerServers: duplicateWorkerServers.filter((item) => item.parentKind === "anticodex-app-server"),
   };
 }
 
@@ -173,7 +179,10 @@ try {
     codexWorkerProcessCount: 0,
     anticodexWorkerProcessCount: 0,
     duplicateWorkerProcessCount: 0,
+    codexDuplicateWorkerProcessCount: 0,
+    anticodexDuplicateWorkerProcessCount: 0,
     duplicateWorkerServers: [],
+    anticodexDuplicateWorkerServers: [],
   };
 }
 
@@ -188,8 +197,12 @@ const payload = {
   checkedAt: new Date().toISOString(),
   processQueryOk,
   processQueryError: snapshotError,
-  workerProcessHygieneOk: processQueryOk && snapshot.duplicateWorkerProcessCount === 0,
+  workerProcessHygieneOk: processQueryOk && snapshot.anticodexDuplicateWorkerProcessCount === 0,
+  anticodexWorkerProcessHygieneOk: processQueryOk && snapshot.anticodexDuplicateWorkerProcessCount === 0,
+  allCodexProcessHygieneOk: processQueryOk && snapshot.duplicateWorkerProcessCount === 0,
   duplicateWorkerProcessCount: snapshot.duplicateWorkerProcessCount,
+  codexDuplicateWorkerProcessCount: snapshot.codexDuplicateWorkerProcessCount,
+  anticodexDuplicateWorkerProcessCount: snapshot.anticodexDuplicateWorkerProcessCount,
   workerProcessCount: snapshot.workerProcessCount,
   codexWorkerProcessCount: snapshot.codexWorkerProcessCount,
   anticodexWorkerProcessCount: snapshot.anticodexWorkerProcessCount,
@@ -201,14 +214,17 @@ const payload = {
   })),
   parentGroups: snapshot.parentGroups,
   duplicateWorkerServers: snapshot.duplicateWorkerServers,
+  anticodexDuplicateWorkerServers: snapshot.anticodexDuplicateWorkerServers,
   interpretation: processQueryOk
-    ? snapshot.duplicateWorkerProcessCount > 0
-      ? "duplicate worker MCP child processes are present; this can indicate stale app-server tool handles or repeated MCP startup attempts"
-      : "no duplicate worker MCP child processes were observed under Codex app-server parents"
+    ? snapshot.anticodexDuplicateWorkerProcessCount > 0
+      ? "duplicate development-worker MCP child processes are present under Anti-Codex; repeated task activation can make history progressively slower"
+      : snapshot.codexDuplicateWorkerProcessCount > 0
+        ? "Anti-Codex has no duplicate development workers; duplicate workers under original Codex are informational and remain untouched"
+        : "no duplicate development-worker MCP child processes were observed under Anti-Codex or original Codex app-server parents"
     : "worker process hygiene could not inspect local process state",
-  operatorAction: snapshot.duplicateWorkerProcessCount > 0
-    ? "close Codex completely, run backup-first thread maintenance, then restart Codex; opening another channel can start another worker set"
-    : "process hygiene does not explain current worker transport state; rely on current-channel read-only worker probes",
+  operatorAction: snapshot.anticodexDuplicateWorkerProcessCount > 0
+    ? "close only Anti-Codex, run backup-first Anti-Codex thread maintenance, and restart it after filtering development workers from the isolated config"
+    : "Anti-Codex process hygiene is clean; do not stop or alter original Codex processes",
 };
 const report = writeSignedReport(payload);
 const output = { ...payload, report };
@@ -219,9 +235,11 @@ if (compact) {
     workerProcessHygieneOk: output.workerProcessHygieneOk,
     workerProcessCount: output.workerProcessCount,
     duplicateWorkerProcessCount: output.duplicateWorkerProcessCount,
+    codexDuplicateWorkerProcessCount: output.codexDuplicateWorkerProcessCount,
+    anticodexDuplicateWorkerProcessCount: output.anticodexDuplicateWorkerProcessCount,
     codexWorkerProcessCount: output.codexWorkerProcessCount,
     anticodexWorkerProcessCount: output.anticodexWorkerProcessCount,
-    duplicateWorkerServers: output.duplicateWorkerServers,
+    duplicateWorkerServers: output.anticodexDuplicateWorkerServers,
     report: output.report,
   }));
 } else {

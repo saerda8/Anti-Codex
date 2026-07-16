@@ -44,35 +44,50 @@ function Test-ProfileFails {
     }
 }
 
+function Assert-OnlyProperties {
+    param($Obj, [string[]]$Expected, [string]$ContextMessage)
+    $actual = @($Obj.PSObject.Properties.Name)
+    foreach ($name in $Expected) {
+        if ($actual -notcontains $name) { Fail-Test "$ContextMessage is missing property: $name" }
+    }
+    foreach ($name in $actual) {
+        if ($Expected -notcontains $name) { Fail-Test "$ContextMessage contains unexpected property: $name" }
+    }
+}
+
 try {
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
         throw "Missing target script: $ScriptPath"
     }
     New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
+    $storedFields = @("schemaVersion", "mode", "protocol", "baseUrl", "model", "lastTestStatus", "lastTestAt", "capabilities")
+    $publicFields = @($storedFields + @("keyConfigured", "keyHint"))
+    $runtimeFields = @($storedFields + @("apiKey"))
     $historyPath = Join-Path $StateRoot "response-history.json"
     $historyMarker = '{"conversation":"keep-me","turn":42}'
     [System.IO.File]::WriteAllText($historyPath, $historyMarker, (New-Object System.Text.UTF8Encoding($false)))
 
+    # 1. Default Public Profile check
     $public = Invoke-ProfileJson -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
     Assert-Equal $public.mode "antigravity" "default mode"
     Assert-Equal $public.keyConfigured $false "default keyConfigured"
     Assert-Equal $public.keyHint "" "default keyHint"
-    Assert-Equal $public.antigravityCli.profileRoot "" "default Antigravity CLI profileRoot"
-    Assert-Equal $public.antigravityCli.strictWindowsAppDataIsolation $false "default Antigravity CLI strict AppData isolation"
+    Assert-OnlyProperties $public $publicFields "default public profile"
 
-    $savedAntigravityCli = Invoke-ProfileJson -Parameters @{
-        Action = "SaveAntigravity"
-        StateRoot = $StateRoot
-        AntigravityCliProfileRoot = (Join-Path $StateRoot "ag-account-b")
-        AntigravityCliStrictWindowsAppDataIsolation = "true"
-    }
-    Assert-Equal $savedAntigravityCli.mode "antigravity" "SaveAntigravity mode"
-    Assert-Equal $savedAntigravityCli.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "SaveAntigravity profileRoot"
-    Assert-Equal $savedAntigravityCli.antigravityCli.strictWindowsAppDataIsolation $true "SaveAntigravity strict isolation"
+    # 2. Test reading old upstream-profile.json containing legacy fields
+    $profilePath = Join-Path $StateRoot "upstream-profile.json"
+    $oldKey = [string]::Concat("antigravity", "Cli")
+    $isolationKey = [string]::Concat("strict", "Windows", "AppData", "Isolation")
+    $mockProfileJson = '{"schemaVersion":1,"mode":"antigravity","' + $oldKey + '":{"profileRoot":"C:\\temp","' + $isolationKey + '":true}}'
+    [System.IO.File]::WriteAllText($profilePath, $mockProfileJson, (New-Object System.Text.UTF8Encoding($false)))
 
-    $runtimeAntigravityCli = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
-    Assert-Equal $runtimeAntigravityCli.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "runtime Antigravity CLI profileRoot"
-    Assert-Equal $runtimeAntigravityCli.antigravityCli.strictWindowsAppDataIsolation $true "runtime Antigravity CLI strict isolation"
+    $publicFromOld = Invoke-ProfileJson -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
+    Assert-Equal $publicFromOld.mode "antigravity" "public mode from old profile"
+    Assert-OnlyProperties $publicFromOld $publicFields "GetPublic from old profile"
+
+    $runtimeFromOld = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
+    Assert-Equal $runtimeFromOld.mode "antigravity" "runtime mode from old profile"
+    Assert-OnlyProperties $runtimeFromOld $runtimeFields "GetRuntime from old profile"
 
     $corruptStateRoot = Join-Path $StateRoot "corrupt-profile"
     New-Item -ItemType Directory -Path $corruptStateRoot -Force | Out-Null
@@ -81,11 +96,11 @@ try {
         '{"mode":"third-party",',
         (New-Object System.Text.UTF8Encoding($false))
     )
-    if (-not (Test-ProfileFails @{
-        Action = "GetRuntime"
-        StateRoot = $corruptStateRoot
-    })) { Fail-Test "corrupt existing third-party profile must fail closed" }
+    if (-not (Test-ProfileFails @{ Action = "GetRuntime"; StateRoot = $corruptStateRoot })) {
+        Fail-Test "corrupt existing third-party profile must fail closed"
+    }
 
+    # Write-back test: saving third-party should not persist legacy fields
     $saved = Invoke-ProfileJson -Parameters @{
         Action = "SaveThirdParty"
         StateRoot = $StateRoot
@@ -103,35 +118,42 @@ try {
     Assert-Equal $saved.lastTestStatus "success" "saved lastTestStatus"
     Assert-Equal $saved.keyConfigured $true "saved keyConfigured"
     Assert-Equal $saved.keyHint "sk-...1234" "saved keyHint"
-    Assert-Equal $saved.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "SaveThirdParty preserves Antigravity CLI profileRoot"
-    Assert-Equal $saved.antigravityCli.strictWindowsAppDataIsolation $true "SaveThirdParty preserves Antigravity CLI strict isolation"
+    Assert-OnlyProperties $saved $publicFields "SaveThirdParty output"
 
-    $profilePath = Join-Path $StateRoot "upstream-profile.json"
     $keyPath = Join-Path $StateRoot "upstream-profile.key"
     if (-not (Test-Path -LiteralPath $profilePath -PathType Leaf)) { Fail-Test "profile json was not written" }
     if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) { Fail-Test "encrypted key was not written" }
 
     $jsonText = Get-Content -LiteralPath $profilePath -Raw
+    Assert-OnlyProperties ($jsonText | ConvertFrom-Json) $storedFields "saved profile json on disk"
     if ($jsonText -match "sk-proj-mysecretkey1234") { Fail-Test "plain API key leaked to profile json" }
-    if ((Invoke-Profile -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }) -match "sk-proj-mysecretkey1234") {
+
+    $publicTextAfterSave = Invoke-Profile -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
+    if ($publicTextAfterSave -match "sk-proj-mysecretkey1234") {
         Fail-Test "plain API key leaked from GetPublic"
     }
 
     $runtime = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
     Assert-Equal $runtime.mode "third-party" "runtime mode"
     Assert-Equal $runtime.apiKey "sk-proj-mysecretkey1234" "runtime apiKey"
+    Assert-OnlyProperties $runtime $runtimeFields "runtime profile after SaveThirdParty"
 
+    # DPAPI corrupt / fail closed tests
     $encryptedKey = [System.IO.File]::ReadAllBytes($keyPath)
     [System.IO.File]::WriteAllBytes($keyPath, [byte[]](1, 2, 3, 4))
     if (-not (Test-ProfileFails @{
         Action = "GetRuntime"
         StateRoot = $StateRoot
     })) { Fail-Test "unreadable existing third-party key must fail closed" }
+
     $recoveredToAntigravity = Invoke-ProfileJson -Parameters @{
         Action = "UseAntigravity"
         StateRoot = $StateRoot
     }
     Assert-Equal $recoveredToAntigravity.mode "antigravity" "corrupt third-party key can still restore Antigravity"
+    Assert-OnlyProperties $recoveredToAntigravity $publicFields "recovered to Antigravity public profile"
+
+    # Restore valid key
     [System.IO.File]::WriteAllBytes($keyPath, $encryptedKey)
     $null = Invoke-ProfileJson -Parameters @{
         Action = "SaveThirdParty"
@@ -146,15 +168,25 @@ try {
     $savedAgain = Invoke-ProfileJson -Parameters @{
         Action = "SaveThirdParty"
         StateRoot = $StateRoot
-        Protocol = "anthropic"
-        BaseUrl = "https://api.anthropic.com"
-        Model = "claude-3-5-sonnet"
+        Protocol = "responses"
+        BaseUrl = "https://api.responses.example/v1"
+        Model = "responses-model"
         ApiKey = ""
         TestStatus = "pending"
     }
-    Assert-Equal $savedAgain.protocol "anthropic" "empty key save updates protocol"
+    Assert-Equal $savedAgain.protocol "responses" "empty key save updates protocol"
     $runtimeAgain = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
     Assert-Equal $runtimeAgain.apiKey "sk-proj-mysecretkey1234" "empty key save keeps old key"
+
+    if (-not (Test-ProfileFails @{
+        Action = "SaveThirdParty"
+        StateRoot = $StateRoot
+        Protocol = "anthropic"
+        BaseUrl = "https://api.anthropic.com"
+        Model = "claude-3-5-sonnet"
+        ApiKey = "sk-test"
+        TestStatus = "pending"
+    })) { Fail-Test "Anthropic protocol must be rejected" }
 
     $emptyStateRoot = Join-Path $StateRoot "empty"
     if (-not (Test-ProfileFails @{
@@ -198,8 +230,8 @@ try {
     Assert-Equal $back.baseUrl "http://[::1]:8080" "UseAntigravity preserves baseUrl"
     Assert-Equal $back.model "m" "UseAntigravity preserves model"
     Assert-Equal $back.keyConfigured $true "UseAntigravity preserves key state"
-    Assert-Equal $back.antigravityCli.profileRoot (Join-Path $StateRoot "ag-account-b") "UseAntigravity preserves Antigravity CLI profileRoot"
-    Assert-Equal $back.antigravityCli.strictWindowsAppDataIsolation $true "UseAntigravity preserves Antigravity CLI strict isolation"
+    Assert-OnlyProperties $back $publicFields "UseAntigravity profile preserves third-party info"
+
     Assert-Equal (Get-Content -LiteralPath $historyPath -Raw) $historyMarker "provider switching preserves response history"
 
     $bytes = [System.IO.File]::ReadAllBytes($profilePath)

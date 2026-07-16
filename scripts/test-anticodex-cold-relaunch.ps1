@@ -32,6 +32,7 @@ if (-not $ConfirmRelaunch) {
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+$fixedRouteHealthUrl = "http://127.0.0.1:18487/anticodex/fixed-route/health"
 
 $failures = New-Object System.Collections.Generic.List[string]
 $stages = New-Object System.Collections.Generic.List[object]
@@ -62,29 +63,20 @@ function Invoke-LocalJson {
     return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec 2
 }
 
-function Resolve-AntiCodexMode {
-    param($Health)
-    if ((Has-Property $Health "upstreamProfile") -and $Health.upstreamProfile -and (Has-Property $Health.upstreamProfile "mode")) {
-        return [string]$Health.upstreamProfile.mode
-    }
-    if (Has-Property $Health "mode") { return [string]$Health.mode }
-    if ($Health.upstream -eq "antigravity-desktop") { return "antigravity" }
-    return "unknown"
+function Invoke-FixedRouteHealth {
+    return Invoke-RestMethod -Uri $fixedRouteHealthUrl -Proxy $null -TimeoutSec 2
 }
 
 function Test-AntiCodexRelaunchHealthReady {
     param($Health)
-    if (-not $Health -or $Health.ok -ne $true) { return $false }
-    $mode = Resolve-AntiCodexMode $Health
-    if ($mode -eq "third-party") {
-        return [bool](
-            (Has-Property $Health "upstreamProfile") -and
-            $Health.upstreamProfile -and
-            $Health.upstreamProfile.protocol -and
-            $Health.upstreamProfile.model
-        )
-    }
-    return [bool]($Health.upstream -eq "antigravity-desktop" -and [int]$Health.modelCount -gt 0)
+    return [bool](
+        $Health -and
+        $Health.ok -eq $true -and
+        [string]$Health.schema -eq "anticodex-fixed-route-status-v1" -and
+        [string]$Health.state -eq "ready" -and
+        @("antigravity", "third-party") -contains [string]$Health.provider -and
+        -not [string]::IsNullOrWhiteSpace([string]$Health.model)
+    )
 }
 
 function New-Stage {
@@ -144,11 +136,10 @@ $installRoot = Normalize-Path (Split-Path -Parent $runtimeRootFull)
 $activeHost = Normalize-Path (Join-Path $installRoot "codex-patched-app")
 $activeMainExe = Normalize-Path (Join-Path $activeHost "Anti-Codex.exe")
 $startAntiCodex = Join-Path $runtimeRootFull "scripts\start-anticodex.ps1"
-$translatorScript = Normalize-Path (Join-Path $runtimeRootFull "translator\adaptive-server.mjs")
-$translatorExe = Normalize-Path (Join-Path $installRoot "bin\deepcodex-translator.exe")
+$supervisorScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex-fixed-route.mjs")
 $lastSnapshot = [pscustomobject]@{
     main = @()
-    translator = @()
+    supervisor = @()
     launcher = @()
 }
 $originalCodexBefore = @()
@@ -161,7 +152,7 @@ $launcherMode = ""
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
-    $translator = New-Object System.Collections.Generic.List[object]
+    $supervisor = New-Object System.Collections.Generic.List[object]
     $launcher = New-Object System.Collections.Generic.List[object]
     $installRootEscaped = [regex]::Escape($installRoot)
     foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
@@ -170,16 +161,16 @@ function Get-AntiCodexProcessSnapshot {
         if (($exe -ieq $activeMainExe) -and $commandLine -notmatch "\s--type=") {
             $main.Add($process) | Out-Null
         }
-        if (($exe -ieq $translatorExe) -or ($commandLine -like "*$translatorScript*")) {
-            $translator.Add($process) | Out-Null
+        if ($commandLine -like "*$supervisorScript*") {
+            $supervisor.Add($process) | Out-Null
         }
-        if ($process.ProcessId -ne $PID -and $commandLine -match $installRootEscaped -and $commandLine -match "start-(anti|deep)codex\.ps1") {
+        if ($process.ProcessId -ne $PID -and $commandLine -match $installRootEscaped -and $commandLine -match "start-anticodex\.ps1") {
             $launcher.Add($process) | Out-Null
         }
     }
     return [pscustomobject]@{
         main = @($main.ToArray())
-        translator = @($translator.ToArray())
+        supervisor = @($supervisor.ToArray())
         launcher = @($launcher.ToArray())
     }
 }
@@ -201,11 +192,10 @@ function Get-AntiCodexMainProcesses {
     })
 }
 
-function Get-AntiCodexTranslatorProcesses {
+function Get-AntiCodexSupervisorProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         $commandLine = [string]$_.CommandLine
-        $exe = Normalize-Path ([string]$_.ExecutablePath)
-        ($exe -ieq $translatorExe) -or ($commandLine -like "*$translatorScript*")
+        $commandLine -like "*$supervisorScript*"
     })
 }
 
@@ -214,7 +204,7 @@ function Get-AntiCodexLauncherProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         $_.ProcessId -ne $PID -and
         ([string]$_.CommandLine) -match $installRootEscaped -and
-        ([string]$_.CommandLine) -match "start-(anti|deep)codex\.ps1"
+        ([string]$_.CommandLine) -match "start-anticodex\.ps1"
     })
 }
 
@@ -233,6 +223,14 @@ function Stop-ProcessList {
     param($Processes)
     foreach ($process in @($Processes)) {
         try { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+    }
+}
+
+function Stop-ProcessTreeList {
+    param($Processes)
+    foreach ($process in @($Processes)) {
+        if ([int]$process.ProcessId -le 0) { continue }
+        try { & taskkill.exe /PID $process.ProcessId /T /F 2>$null | Out-Null } catch {}
     }
 }
 
@@ -256,22 +254,22 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
     Save-Progress "stop-existing-processes"
     $launcherStopTargets = @(Get-AntiCodexLauncherProcesses)
     $hostStopTargets = @(Get-AntiCodexHostProcesses)
-    $translatorStopTargets = @(Get-AntiCodexTranslatorProcesses)
-    $stopTargetPids = @($launcherStopTargets + $hostStopTargets + $translatorStopTargets | ForEach-Object { [int]$_.ProcessId })
+    $supervisorStopTargets = @(Get-AntiCodexSupervisorProcesses)
+    $stopTargetPids = @($launcherStopTargets + $hostStopTargets + $supervisorStopTargets | ForEach-Object { [int]$_.ProcessId })
     $originalCodexStopTargetIntersection = @($originalCodexBefore | Where-Object { $stopTargetPids -contains $_ })
     if ($originalCodexStopTargetIntersection.Count -gt 0) {
         Add-Failure "original Codex process was selected as an Anti-Codex stop target"
     }
     Stop-ProcessList $launcherStopTargets
+    Stop-ProcessTreeList $supervisorStopTargets
     Stop-ProcessList $hostStopTargets
-    Stop-ProcessList $translatorStopTargets
 
     $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
         @(Get-AntiCodexLauncherProcesses).Count -eq 0 -and
         @(Get-AntiCodexHostProcesses).Count -eq 0 -and
-        @(Get-AntiCodexTranslatorProcesses).Count -eq 0
+        @(Get-AntiCodexSupervisorProcesses).Count -eq 0
     }
-    $stages.Add((New-Stage "stop-existing-processes" $stageStarted $stopped "launcher, host, and translator stopped")) | Out-Null
+    $stages.Add((New-Stage "stop-existing-processes" $stageStarted $stopped "launcher, copied client, and fixed-route supervisor stopped")) | Out-Null
     Save-Progress "stopped-existing-processes"
     if (-not $stopped) {
         Add-Failure "Anti-Codex old processes did not stop within $StopTimeoutSec seconds"
@@ -310,6 +308,7 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
     Save-Progress "launched-anticodex"
 
     $health = $null
+    $managerHealth = $null
     $mainProcesses = @()
     $stageStarted = [DateTime]::UtcNow
     Save-Progress "wait-health-ready"
@@ -317,9 +316,11 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
         $script:lastSnapshot = Get-AntiCodexProcessSnapshot
         $script:mainProcesses = @($script:lastSnapshot.main)
         try {
-            $script:health = Invoke-LocalJson "/health"
+            $script:managerHealth = Invoke-LocalJson "/health"
+            $script:health = Invoke-FixedRouteHealth
             $healthReady = Test-AntiCodexRelaunchHealthReady $script:health
-            return $healthReady -and $script:mainProcesses.Count -ge 1
+            $managerReady = $script:managerHealth.ok -eq $true -and [string]$script:managerHealth.schema -eq "anticodex-manager-service-v1"
+            return $healthReady -and $managerReady -and $script:mainProcesses.Count -ge 1
         } catch {
             return $false
         }
@@ -329,7 +330,8 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
 
     if (-not $ready) {
         try {
-            $health = Invoke-LocalJson "/health"
+            $managerHealth = Invoke-LocalJson "/health"
+            $health = Invoke-FixedRouteHealth
         } catch {}
         $mainProcesses = @(Get-AntiCodexMainProcesses)
         $ready = (Test-AntiCodexRelaunchHealthReady $health) -and $mainProcesses.Count -ge 1
@@ -360,13 +362,13 @@ Save-Progress "final-snapshot"
 $endedAt = [DateTime]::UtcNow
 $healthSnapshot = $health
 if (-not $healthSnapshot) {
-    try { $healthSnapshot = Invoke-LocalJson "/health" } catch {}
+    try { $healthSnapshot = Invoke-FixedRouteHealth } catch {}
 }
-$healthMode = if ($healthSnapshot) { Resolve-AntiCodexMode $healthSnapshot } else { "unknown" }
-$healthProfile = if ($healthSnapshot -and (Has-Property $healthSnapshot "upstreamProfile")) { $healthSnapshot.upstreamProfile } else { $null }
+$managerHealthSnapshot = $managerHealth
+if (-not $managerHealthSnapshot) { try { $managerHealthSnapshot = Invoke-LocalJson "/health" } catch {} }
 $finalSnapshot = Get-AntiCodexProcessSnapshot
 $mainSnapshot = @($finalSnapshot.main)
-$translatorSnapshot = @($finalSnapshot.translator)
+$supervisorSnapshot = @($finalSnapshot.supervisor)
 $reportPaths = New-ReportPaths "cold-relaunch"
 $launcherExitCode = $null
 $launcherHasExited = $null
@@ -391,20 +393,18 @@ $result = [pscustomobject]@{
     installRoot = $installRoot
     health = [pscustomobject]@{
         ok = if ($healthSnapshot) { $healthSnapshot.ok } else { $false }
-        upstream = if ($healthSnapshot) { $healthSnapshot.upstream } else { $null }
-        mode = $healthMode
-        protocol = if ($healthProfile -and (Has-Property $healthProfile "protocol")) { $healthProfile.protocol } else { $null }
-        model = if ($healthProfile -and (Has-Property $healthProfile "model")) { $healthProfile.model } else { $null }
+        schema = if ($healthSnapshot) { $healthSnapshot.schema } else { $null }
+        state = if ($healthSnapshot) { $healthSnapshot.state } else { $null }
+        provider = if ($healthSnapshot) { $healthSnapshot.provider } else { $null }
+        model = if ($healthSnapshot) { $healthSnapshot.model } else { $null }
         providerReady = [bool](Test-AntiCodexRelaunchHealthReady $healthSnapshot)
-        accountReady = if ($healthSnapshot) { $healthSnapshot.accountReady } else { $false }
-        accountState = if ($healthSnapshot) { $healthSnapshot.accountState } else { $null }
-        modelCount = if ($healthSnapshot) { $healthSnapshot.modelCount } else { 0 }
+        managerReady = [bool]($managerHealthSnapshot -and $managerHealthSnapshot.ok -eq $true -and [string]$managerHealthSnapshot.schema -eq "anticodex-manager-service-v1")
     }
     processes = [pscustomobject]@{
         mainCount = $mainSnapshot.Count
         mainPids = @($mainSnapshot | ForEach-Object { [int]$_.ProcessId })
-        translatorCount = $translatorSnapshot.Count
-        translatorPids = @($translatorSnapshot | ForEach-Object { [int]$_.ProcessId })
+        supervisorCount = $supervisorSnapshot.Count
+        supervisorPids = @($supervisorSnapshot | ForEach-Object { [int]$_.ProcessId })
         launcherCount = @($finalSnapshot.launcher).Count
     }
     launcher = [pscustomobject]@{
@@ -437,5 +437,4 @@ Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPa
 Remove-Item -LiteralPath $launcherOutPath, $launcherErrPath -Force -ErrorAction SilentlyContinue
 $json
 if ($failures.Count -gt 0) { exit 1 }
-
 

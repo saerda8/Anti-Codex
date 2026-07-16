@@ -7,78 +7,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS = if ($env:ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS) { [Math]::Max(1000, [int]$env:ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS) } else { 8000 }
-
-function Find-AntiCodexLocalAddress {
-    if ($env:ANTICODEX_LOCAL_ADDRESS) { return $env:ANTICODEX_LOCAL_ADDRESS }
-    return "127.0.0.1"
-}
-
-function Get-AntiCodexTranslatorHealth {
-    param([string]$Url)
-    $response = $null
-    $reader = $null
-    try {
-        $request = [System.Net.WebRequest]::Create("$Url/health")
-        $request.Proxy = $null
-        $request.Timeout = $ANTICODEX_TRANSLATOR_HEALTH_TIMEOUT_MS
-        $response = $request.GetResponse()
-        if ([int]$response.StatusCode -ne 200) { return $null }
-        $reader = New-Object IO.StreamReader($response.GetResponseStream())
-        return ($reader.ReadToEnd() | ConvertFrom-Json)
-    } catch {
-        return $null
-    } finally {
-        if ($reader) { $reader.Dispose() }
-        if ($response) { $response.Dispose() }
-    }
-}
-
-function Test-AntiCodexTranslatorHealth {
-    param([string]$Url)
-    $health = Get-AntiCodexTranslatorHealth $Url
-    return [bool]($health -and $health.ok)
-}
-
-function Test-AntiCodexTranslatorMatchesConfiguredUpstream {
-    param([string]$Url, [bool]$UsesAntigravity)
-    $health = Get-AntiCodexTranslatorHealth $Url
-    if (-not $health -or -not $health.ok) { return $false }
-    $profile = $health.upstreamProfile
-    if ($UsesAntigravity) {
-        $expectedTransport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "desktop-cascade" }
-        $actualTransport = if ($profile -and ($profile.PSObject.Properties.Name -contains "transport")) { [string]$profile.transport } else { "" }
-        return ([string]$profile.mode -eq "antigravity") -and ($actualTransport -eq $expectedTransport)
-    }
-    if ([string]$profile.mode -ne "third-party") { return $false }
-    if ([string]$profile.protocol -ne [string]$env:UPSTREAM_PROTOCOL) { return $false }
-    if ([string]$profile.model -ne [string]$env:UPSTREAM_MODEL) { return $false }
-    return ([string]$profile.baseUrl).TrimEnd("/") -eq ([string]$env:UPSTREAM_URL).TrimEnd("/")
-}
-
-function Test-AntiCodexRequiresAntigravityDesktop {
-    param([bool]$UsesAntigravity)
-    if (-not $UsesAntigravity) { return $false }
-    $transport = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "desktop-cascade" }
-    return $transport.ToLowerInvariant() -ne "cli"
-}
-
-function Normalize-AntiCodexAntigravityTransport {
-    param([bool]$UsesAntigravity)
-    if (-not $UsesAntigravity) { return }
-    $current = if ($env:ANTICODEX_ANTIGRAVITY_TRANSPORT) { [string]$env:ANTICODEX_ANTIGRAVITY_TRANSPORT } else { "" }
-    $allowCli = $env:ANTICODEX_ALLOW_CLI_MODEL_TRANSPORT -eq "1"
-    if (-not $current -or ($current.ToLowerInvariant() -eq "cli" -and -not $allowCli)) {
-        $env:ANTICODEX_ANTIGRAVITY_TRANSPORT = "desktop-cascade"
-    }
-}
-
-function Activate-AntiCodexWindow {
-    param($Process)
-    try {
-        $shell = New-Object -ComObject WScript.Shell
-        [void]$shell.AppActivate([int]$Process.ProcessId)
-    } catch {}
+$FIXED_ROUTE_HEALTH_PORT = 18487
+$FIXED_ROUTE_HEALTH_URL = "http://127.0.0.1:$FIXED_ROUTE_HEALTH_PORT/anticodex/fixed-route/health"
+$FIXED_ROUTE_HEALTH_TIMEOUT_MS = if ($env:ANTICODEX_FIXED_ROUTE_HEALTH_TIMEOUT_MS) {
+    [Math]::Max(1000, [int]$env:ANTICODEX_FIXED_ROUTE_HEALTH_TIMEOUT_MS)
+} else {
+    5000
 }
 
 function Resolve-AntiCodexPath {
@@ -95,9 +29,7 @@ function Invoke-InstalledAntiCodexLauncherIfAvailable {
     if ($currentLauncher.Equals($installedLauncher, [StringComparison]::OrdinalIgnoreCase)) { return }
 
     $forwardArgs = @{}
-    if ($SkipUpdateCheck) {
-        $forwardArgs.SkipUpdateCheck = $true
-    }
+    if ($SkipUpdateCheck) { $forwardArgs.SkipUpdateCheck = $true }
     & $installedLauncher @forwardArgs
     $exitCode = if ($null -ne $global:LASTEXITCODE) { [int]$global:LASTEXITCODE } else { 0 }
     exit $exitCode
@@ -108,235 +40,308 @@ function Resolve-AntiCodexInstallRoot {
     return [IO.Path]::GetFullPath((Split-Path -Parent $scriptParent))
 }
 
-Invoke-InstalledAntiCodexLauncherIfAvailable
-
 function Get-RunningAntiCodexMain {
     param([Parameter(Mandatory = $true)][string]$MainExecutable)
     $mainPath = [IO.Path]::GetFullPath($MainExecutable)
-    return Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    return Get-CimInstance Win32_Process -Filter "Name='Anti-Codex.exe'" -ErrorAction SilentlyContinue | Where-Object {
         $_.ExecutablePath -and
-        ([IO.Path]::GetFullPath([string]$_.ExecutablePath)) -eq $mainPath -and
-        ([string]$_.CommandLine) -notmatch "\s--type="
+        ([IO.Path]::GetFullPath([string]$_.ExecutablePath)).Equals($mainPath, [StringComparison]::OrdinalIgnoreCase) -and
+        ([string]$_.CommandLine) -notmatch "(^|\s)--type="
     } | Select-Object -First 1
 }
 
-$installRoot = Resolve-AntiCodexInstallRoot
-$mainExecutable = [IO.Path]::GetFullPath((Join-Path $installRoot "codex-patched-app\Anti-Codex.exe"))
+function Get-RunningFixedRouteSupervisor {
+    param([Parameter(Mandatory = $true)][string]$SupervisorScript)
+    $scriptName = [regex]::Escape((Split-Path -Leaf $SupervisorScript))
+    return Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object {
+        [string]$_.CommandLine -match $scriptName
+    } | Select-Object -First 1
+}
 
-# Set independent state directory for Anti-Codex
-$env:DEEPCODEX_STATE_ROOT = Join-Path $env:APPDATA "anticodex"
-$env:CODEX_HOME_DIR = Join-Path $env:DEEPCODEX_STATE_ROOT "codex-home-deepseek-app"
+function Activate-AntiCodexWindow {
+    param($Process)
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void]$shell.AppActivate([int]$Process.ProcessId)
+    } catch {}
+}
+
+function Get-AntiCodexJson {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [int]$TimeoutMs = 5000
+    )
+    $response = $null
+    $reader = $null
+    try {
+        $request = [System.Net.WebRequest]::Create($Url)
+        $request.Proxy = $null
+        $request.Timeout = $TimeoutMs
+        $response = $request.GetResponse()
+        if ([int]$response.StatusCode -lt 200 -or [int]$response.StatusCode -ge 300) { return $null }
+        $reader = New-Object IO.StreamReader($response.GetResponseStream())
+        return ($reader.ReadToEnd() | ConvertFrom-Json)
+    } catch {
+        return $null
+    } finally {
+        if ($reader) { $reader.Dispose() }
+        if ($response) { $response.Dispose() }
+    }
+}
+
+function Get-AntiCodexFixedRouteHealth {
+    return Get-AntiCodexJson -Url $FIXED_ROUTE_HEALTH_URL -TimeoutMs $FIXED_ROUTE_HEALTH_TIMEOUT_MS
+}
+
+function Test-AntiCodexFixedRouteMatches {
+    param(
+        $Health,
+        [Parameter(Mandatory = $true)][string]$Provider,
+        [Parameter(Mandatory = $true)][string]$Model
+    )
+    if (-not $Health -or -not $Health.ok -or [string]$Health.state -ne "ready") { return $false }
+    return ([string]$Health.provider -eq $Provider) -and ([string]$Health.model -eq $Model)
+}
+
+function Ensure-AntigravityDesktop {
+    $desktopHelper = Join-Path $PSScriptRoot "antigravity-desktop.ps1"
+    if (-not (Test-Path -LiteralPath $desktopHelper -PathType Leaf)) {
+        throw "Anti-Codex could not find its Antigravity Desktop helper."
+    }
+    . $desktopHelper
+
+    $antigravityProcess = Get-AntigravityMainProcess
+    if ($antigravityProcess) {
+        $env:ANTIGRAVITY_DESKTOP_PATH = [string]$antigravityProcess.ExecutablePath
+        return
+    }
+    $antigravityPath = Resolve-AntigravityDesktopPath
+    if (-not $antigravityPath) {
+        throw "Antigravity Desktop is not running and no installed executable was found."
+    }
+    $env:ANTIGRAVITY_DESKTOP_PATH = $antigravityPath
+    Start-Process -FilePath $antigravityPath | Out-Null
+    $startup = Wait-AntigravityDesktopStable -ExecutablePath $antigravityPath -TimeoutSeconds 30 -StableSeconds 8
+    if (-not $startup.Stable) {
+        throw "Antigravity Desktop did not remain running long enough for Anti-Codex."
+    }
+}
+
+function Read-AntiCodexRuntimeProfile {
+    param([Parameter(Mandatory = $true)][string]$StateRoot)
+    $profileScript = Join-Path $PSScriptRoot "anticodex-upstream-profile.ps1"
+    if (-not (Test-Path -LiteralPath $profileScript -PathType Leaf)) { return $null }
+    try {
+        return (& $profileScript -Action GetRuntime -StateRoot $StateRoot | ConvertFrom-Json)
+    } catch {
+        throw "Anti-Codex upstream profile could not be read; refusing a silent provider fallback. $($_.Exception.Message)"
+    }
+}
+
+function Set-AntiCodexProviderEnvironment {
+    param($RuntimeProfile)
+    $provider = "antigravity"
+    $model = if ($env:ANTICODEX_MODEL) { [string]$env:ANTICODEX_MODEL } else { "gemini-3-flash-agent" }
+
+    if ($RuntimeProfile -and [string]$RuntimeProfile.mode -eq "third-party") {
+        $protocol = [string]$RuntimeProfile.protocol
+        $supportedProtocols = @("openai-compatible", "chat", "chat-completions", "responses")
+        if ($supportedProtocols -notcontains $protocol) {
+            throw "The saved third-party protocol '$protocol' is not supported by CodexPlusPlus. Use Chat Completions or Responses."
+        }
+        if (-not $RuntimeProfile.baseUrl -or -not $RuntimeProfile.apiKey -or -not $RuntimeProfile.model) {
+            throw "The saved third-party profile is incomplete."
+        }
+        $provider = "third-party"
+        $model = [string]$RuntimeProfile.model
+        $env:UPSTREAM_PROTOCOL = $protocol
+        $env:UPSTREAM_URL = [string]$RuntimeProfile.baseUrl
+        $env:UPSTREAM_MODEL = $model
+        $env:UPSTREAM_API_KEY = [string]$RuntimeProfile.apiKey
+    } else {
+        Remove-Item Env:UPSTREAM_PROTOCOL -ErrorAction SilentlyContinue
+        Remove-Item Env:UPSTREAM_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:UPSTREAM_MODEL -ErrorAction SilentlyContinue
+        Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
+    }
+
+    $env:ANTICODEX_PROVIDER = $provider
+    $env:ANTICODEX_MODEL = $model
+    return [pscustomobject]@{ provider = $provider; model = $model }
+}
+
+function Wait-AntiCodexFixedRouteReady {
+    param(
+        [Parameter(Mandatory = $true)]$SupervisorProcess,
+        [Parameter(Mandatory = $true)][string]$MainExecutable,
+        [Parameter(Mandatory = $true)][string]$Provider,
+        [Parameter(Mandatory = $true)][string]$Model,
+        [int]$TimeoutSeconds = 120
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $health = Get-AntiCodexFixedRouteHealth
+        if (Test-AntiCodexFixedRouteMatches -Health $health -Provider $Provider -Model $Model) {
+            $main = Get-RunningAntiCodexMain -MainExecutable $MainExecutable
+            if ($main) { return [pscustomobject]@{ health = $health; main = $main } }
+        }
+        if ($SupervisorProcess -is [Diagnostics.Process]) {
+            try { $SupervisorProcess.Refresh() } catch {}
+            if ($SupervisorProcess.HasExited) { return $null }
+        }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $null
+}
+
+Invoke-InstalledAntiCodexLauncherIfAvailable
+
+$installRoot = Resolve-AntiCodexInstallRoot
+$stateRoot = Join-Path $env:APPDATA "anticodex"
+$mainExecutable = [IO.Path]::GetFullPath((Join-Path $installRoot "codex-patched-app\Anti-Codex.exe"))
+$supervisorScript = Join-Path $PSScriptRoot "start-anticodex-fixed-route.mjs"
+$componentManifest = Join-Path $installRoot "components\codexplusplus\component-manifest.json"
+
+$env:DEEPCODEX_STATE_ROOT = $stateRoot
+$env:CODEX_HOME_DIR = Join-Path $stateRoot "codex-home-deepseek-app"
 $env:CODEX_HOME = $env:CODEX_HOME_DIR
 $env:GLOBAL_CODEX_HOME = Join-Path $env:USERPROFILE ".codex"
 $env:DEEPCODEX_SHARED_CODEX_HOME = $env:GLOBAL_CODEX_HOME
-$env:TRANSLATOR_PORT = "8484"
-$env:TRANSLATOR_LISTEN_HOST = "127.0.0.1"
-$env:DEEPCODEX_CDP_PORT = "58318"
+$env:DEEPCODEX_CDP_PORT = "18318"
 $env:DEEPCODEX_DISABLE_GPU = "1"
+$env:ANTICODEX_DISABLE_GPU = "1"
 $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
 $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
-$upstreamProfileScript = Join-Path $PSScriptRoot "anticodex-upstream-profile.ps1"
-$antiCodexUsesAntigravity = $true
-$runtimeProfile = $null
-if (Test-Path -LiteralPath $upstreamProfileScript -PathType Leaf) {
-    try {
-        $runtimeProfile = & $upstreamProfileScript -Action GetRuntime -StateRoot $env:DEEPCODEX_STATE_ROOT | ConvertFrom-Json
-        if ($runtimeProfile.mode -eq "third-party" -and $runtimeProfile.baseUrl -and $runtimeProfile.apiKey -and $runtimeProfile.model) {
-            $antiCodexUsesAntigravity = $false
-            $env:TRANSLATOR_UPSTREAM_MODE = "chat"
-            $env:UPSTREAM_PROTOCOL = [string]$runtimeProfile.protocol
-            $env:UPSTREAM_URL = [string]$runtimeProfile.baseUrl
-            $env:UPSTREAM_MODEL = [string]$runtimeProfile.model
-            $env:UPSTREAM_API_KEY = [string]$runtimeProfile.apiKey
-            $env:ANTICODEX_ACTIVE_UPSTREAM = "third-party"
-            $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
-        }
-    } catch {
-        Write-Error "Anti-Codex upstream profile could not be read; refusing to fall back to Antigravity. Repair the third-party API configuration or explicitly restore Antigravity. $($_.Exception.Message)"
-        exit 1
-    }
-}
-function Set-AntiCodexAntigravityCliEnvironment {
-    param($Profile)
-    $cli = $null
-    if ($Profile -and ($Profile.PSObject.Properties.Name -contains "antigravityCli")) {
-        $cli = $Profile.antigravityCli
-    }
-    if ($cli -and ($cli.PSObject.Properties.Name -contains "profileRoot") -and [string]$cli.profileRoot -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = [string]$cli.profileRoot
-    }
-    if (-not $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT) {
-        $env:ANTICODEX_ANTIGRAVITY_CLI_PROFILE_ROOT = Join-Path $env:DEEPCODEX_STATE_ROOT "antigravity-cli-profile"
-    }
-    if ($cli -and ($cli.PSObject.Properties.Name -contains "strictWindowsAppDataIsolation") -and $cli.strictWindowsAppDataIsolation -eq $true -and -not $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA) {
-        $env:ANTICODEX_ANTIGRAVITY_CLI_ISOLATE_WINDOWS_APPDATA = "1"
-    }
-}
-if ($antiCodexUsesAntigravity) {
-    $env:TRANSLATOR_UPSTREAM_MODE = "antigravity"
-    Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
-    $env:ANTICODEX_ACTIVE_UPSTREAM = "antigravity"
-    Normalize-AntiCodexAntigravityTransport $antiCodexUsesAntigravity
-    Set-AntiCodexAntigravityCliEnvironment -Profile $runtimeProfile
-    if (-not $env:ANTICODEX_NATIVE_TOOL_BRIDGE) {
-        $env:ANTICODEX_NATIVE_TOOL_BRIDGE = "0"
-    }
-}
-$translatorLoopbackUrl = "http://127.0.0.1:$($env:TRANSLATOR_PORT)"
+$env:ANTICODEX_MANAGER_API = "http://127.0.0.1:8484"
+$env:DEEPCODEX_PROJECTS_ROOT = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "anticodex"
+if ($env:DEEPCODEX_WORKSPACE) { $env:ANTICODEX_WORKSPACE = $env:DEEPCODEX_WORKSPACE }
+
+$runtimeProfile = Read-AntiCodexRuntimeProfile -StateRoot $stateRoot
+$selection = Set-AntiCodexProviderEnvironment -RuntimeProfile $runtimeProfile
 
 $runningMain = Get-RunningAntiCodexMain -MainExecutable $mainExecutable
-if ($runningMain -and (Test-AntiCodexTranslatorMatchesConfiguredUpstream $translatorLoopbackUrl $antiCodexUsesAntigravity)) {
-    Activate-AntiCodexWindow $runningMain
-    exit 0
+if ($runningMain) {
+    $fixedHealth = Get-AntiCodexFixedRouteHealth
+    if (Test-AntiCodexFixedRouteMatches -Health $fixedHealth -Provider $selection.provider -Model $selection.model) {
+        Activate-AntiCodexWindow $runningMain
+        exit 0
+    }
+    Write-Error "Anti-Codex is already open without the requested fixed route. Refusing to launch a second Anti-Codex window; close the current window before switching routes."
+    exit 1
 }
 
 $updateChecker = Join-Path $PSScriptRoot "check-anticodex-update.ps1"
 if ((-not $SkipUpdateCheck) -and (Test-Path -LiteralPath $updateChecker -PathType Leaf)) {
     try {
-        $updateStatus = & $updateChecker -InstallRoot $installRoot -StateRoot $env:DEEPCODEX_STATE_ROOT -Prompt | ConvertFrom-Json
-        if ($updateStatus.sync.launched -eq $true) {
-            exit 0
-        }
+        $updateStatus = & $updateChecker -InstallRoot $installRoot -StateRoot $stateRoot -Prompt | ConvertFrom-Json
+        if ($updateStatus.sync.launched -eq $true) { exit 0 }
     } catch {
         Write-Warning "Anti-Codex update check failed: $($_.Exception.Message)"
     }
 }
 
-# Set independent projects directory for Anti-Codex
-$env:DEEPCODEX_PROJECTS_ROOT = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "anticodex"
-
-# Set the local URL after the fast already-running path.
-$env:TRANSLATOR_HOST = "127.0.0.1"
-$env:TRANSLATOR_URL = "http://$($env:TRANSLATOR_HOST):$($env:TRANSLATOR_PORT)"
-
-if ($env:DEEPCODEX_WORKSPACE) {
-    $env:ANTICODEX_WORKSPACE = $env:DEEPCODEX_WORKSPACE
+if (-not (Test-Path -LiteralPath $supervisorScript -PathType Leaf)) {
+    Write-Error "Fixed-route supervisor is missing: $supervisorScript"
+    exit 1
+}
+if (-not (Test-Path -LiteralPath $componentManifest -PathType Leaf)) {
+    Write-Error "CodexPlusPlus component is not installed: $componentManifest"
+    exit 1
+}
+if (-not (Test-Path -LiteralPath $mainExecutable -PathType Leaf)) {
+    Write-Error "Copied Anti-Codex client is missing: $mainExecutable"
+    exit 1
 }
 
-if (Test-AntiCodexRequiresAntigravityDesktop $antiCodexUsesAntigravity) {
-    $antigravityDesktopHelper = Join-Path $PSScriptRoot "antigravity-desktop.ps1"
-    if (-not (Test-Path -LiteralPath $antigravityDesktopHelper)) {
-        Write-Error "Anti-Codex could not find its Antigravity Desktop helper."
-        exit 1
-    }
-    . $antigravityDesktopHelper
-
-    Write-Host "Checking if Antigravity Desktop is running..."
-    $antigravityProcess = Get-AntigravityMainProcess
-    if ($antigravityProcess) {
-        $env:ANTIGRAVITY_DESKTOP_PATH = [string]$antigravityProcess.ExecutablePath
-        Write-Host "Antigravity Desktop is already running."
-    } else {
-        Write-Host "Antigravity Desktop is not running."
-        $antigravityPath = Resolve-AntigravityDesktopPath
-        if (-not $antigravityPath) {
-            Write-Error "Antigravity Desktop is not running, and no installed desktop executable was found. Please start Antigravity Desktop manually."
-            exit 1
-        }
-        $env:ANTIGRAVITY_DESKTOP_PATH = $antigravityPath
-        Write-Host "Starting Antigravity Desktop from $antigravityPath..."
-        try {
-            Start-Process -FilePath $antigravityPath | Out-Null
-        } catch {
-            Write-Error "Antigravity Desktop could not be started: $($_.Exception.Message)"
-            exit 1
-        }
-        Write-Host "Waiting for Antigravity Desktop to become stable..."
-        $startup = Wait-AntigravityDesktopStable -ExecutablePath $antigravityPath -TimeoutSeconds 30 -StableSeconds 8
-        if (-not $startup.Stable) {
-            Write-Error "Antigravity Desktop did not remain running long enough to start Anti-Codex."
-            exit 1
-        }
-    }
-} elseif ($antiCodexUsesAntigravity) {
-    Write-Host "Anti-Codex is using Antigravity CLI model text transport; Antigravity Desktop is not required for this launch."
-} else {
-    Write-Host "Anti-Codex is using a third-party API profile; Antigravity Desktop is not required for this launch."
-}
-
-if ($runningMain) {
-    $startDeepCodex = Join-Path $PSScriptRoot "start-deepcodex.ps1"
-    if (-not (Test-Path -LiteralPath $startDeepCodex)) {
-        Write-Error "Could not find start-deepcodex.ps1 at $startDeepCodex"
-        exit 1
-    }
-    if (-not (Test-AntiCodexTranslatorMatchesConfiguredUpstream $translatorLoopbackUrl $antiCodexUsesAntigravity)) {
-        Write-Host "Anti-Codex is already open; restarting its local translator only..."
-        & $startDeepCodex -TranslatorOnly
-        for ($i = 0; $i -lt 20; $i++) {
-            if (Test-AntiCodexTranslatorHealth $translatorLoopbackUrl) { break }
-            Start-Sleep -Milliseconds 500
-        }
-    }
-    if (Test-AntiCodexTranslatorMatchesConfiguredUpstream $translatorLoopbackUrl $antiCodexUsesAntigravity) {
-        Activate-AntiCodexWindow $runningMain
+$existingSupervisor = Get-RunningFixedRouteSupervisor -SupervisorScript $supervisorScript
+if ($existingSupervisor) {
+    $existingReady = Wait-AntiCodexFixedRouteReady `
+        -SupervisorProcess $existingSupervisor `
+        -MainExecutable $mainExecutable `
+        -Provider $selection.provider `
+        -Model $selection.model `
+        -TimeoutSeconds 30
+    if ($existingReady) {
+        Activate-AntiCodexWindow $existingReady.main
         exit 0
     }
-    Write-Error "Anti-Codex is open, but its local translator could not be restored. Please close Anti-Codex and launch it again."
+    Write-Error "A fixed-route supervisor is already running but did not become ready. Refusing to launch a duplicate."
     exit 1
 }
 
-# Invoke the underlying DeepCodex launcher
-$startDeepCodex = Join-Path $PSScriptRoot "start-deepcodex.ps1"
-if (-not (Test-Path -LiteralPath $startDeepCodex)) {
-    Write-Error "Could not find start-deepcodex.ps1 at $startDeepCodex"
+if ($selection.provider -eq "antigravity") {
+    Ensure-AntigravityDesktop
+}
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+if (-not $nodeCommand) {
+    Write-Error "Node.js is required to start the fixed Anti-Codex route."
     exit 1
 }
+$nodeExecutable = [string]$nodeCommand.Source
 
-Write-Host "Starting Anti-Codex monitor in the background..."
-$launcherOutLog = Join-Path $env:DEEPCODEX_STATE_ROOT "anticodex-launcher.out.log"
-$launcherErrLog = Join-Path $env:DEEPCODEX_STATE_ROOT "anticodex-launcher.err.log"
-New-Item -ItemType Directory -Path $env:DEEPCODEX_STATE_ROOT -Force | Out-Null
-Remove-Item -LiteralPath $launcherOutLog, $launcherErrLog -Force -ErrorAction SilentlyContinue
-$startArgs = @(
-    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-    "-File", "`"$startDeepCodex`""
-)
-$watchProc = $null
+New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
+$logDbGuardScript = Join-Path $PSScriptRoot "protect-anticodex-log-db.mjs"
 try {
-    $watchProc = Start-Process -FilePath powershell.exe `
-        -ArgumentList $startArgs `
-        -RedirectStandardOutput $launcherOutLog `
-        -RedirectStandardError $launcherErrLog `
-        -WindowStyle Hidden -PassThru
-} catch {
-    Write-Warning "Background PowerShell launch was denied: $($_.Exception.Message)"
-    Write-Warning "Retrying Anti-Codex launch through cmd.exe start fallback."
-    $cmdArgs = @(
-        "/d", "/c", "start", '""', "/min",
-        "powershell.exe",
-        "-NoProfile", "-ExecutionPolicy", "Bypass",
-        "-File", "`"$startDeepCodex`""
-    )
-    & cmd.exe @cmdArgs
+    if (-not (Test-Path -LiteralPath $logDbGuardScript -PathType Leaf)) {
+        throw "log database guard script is missing"
+    }
+    $guardOutput = @(& $nodeExecutable $logDbGuardScript "--codex-home" $env:CODEX_HOME_DIR "--backup")
     if ($LASTEXITCODE -ne 0) {
-        throw "cmd fallback could not start the Anti-Codex monitor (exit code $LASTEXITCODE)."
+        throw (($guardOutput | ForEach-Object { [string]$_ }) -join " ")
     }
-    Start-Sleep -Milliseconds 250
-    $watchProc = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -eq "powershell.exe" -and
-        [string]$_.CommandLine -like "*start-deepcodex.ps1*"
-    } | Select-Object -First 1
-    if (-not $watchProc) {
-        throw "cmd fallback did not start the Anti-Codex monitor."
+    $guardStatus = (($guardOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine) | ConvertFrom-Json
+    if (-not $guardStatus.ok) {
+        throw ([string]$guardStatus.error)
     }
+} catch {
+    Write-Error "Anti-Codex log database guard failed; refusing to continue startup. $($_.Exception.Message)"
+    exit 1
 }
-Write-Host ""
-Write-Host "=================================================="
-Write-Host "  Anti-Codex launched successfully!"
-if ($watchProc) {
-    $watchPid = if ($watchProc -is [Diagnostics.Process]) {
-        [int]$watchProc.Id
+
+$launcherOutLog = Join-Path $stateRoot "anticodex-fixed-route.out.log"
+$launcherErrLog = Join-Path $stateRoot "anticodex-fixed-route.err.log"
+Remove-Item -LiteralPath $launcherOutLog, $launcherErrLog -Force -ErrorAction SilentlyContinue
+$supervisorArgs = @(
+    "`"$supervisorScript`"",
+    "--install-root", "`"$installRoot`"",
+    "--state-root", "`"$stateRoot`"",
+    "--provider", $selection.provider,
+    "--model", $selection.model,
+    "--manager-base-url", $env:ANTICODEX_MANAGER_API,
+    "--disable-gpu"
+)
+
+$supervisorProcess = Start-Process -FilePath $nodeExecutable `
+    -ArgumentList $supervisorArgs `
+    -RedirectStandardOutput $launcherOutLog `
+    -RedirectStandardError $launcherErrLog `
+    -WindowStyle Hidden `
+    -PassThru
+
+$ready = Wait-AntiCodexFixedRouteReady `
+    -SupervisorProcess $supervisorProcess `
+    -MainExecutable $mainExecutable `
+    -Provider $selection.provider `
+    -Model $selection.model `
+    -TimeoutSeconds 120
+
+if (-not $ready) {
+    if (-not $supervisorProcess.HasExited) {
+        & taskkill.exe /PID $supervisorProcess.Id /T /F 2>$null | Out-Null
+    }
+    $errorTail = if (Test-Path -LiteralPath $launcherErrLog) {
+        (Get-Content -LiteralPath $launcherErrLog -Tail 20 -ErrorAction SilentlyContinue) -join " "
     } else {
-        [int]$watchProc.ProcessId
+        ""
     }
-    Write-Host "  Background watcher PID: $watchPid"
+    Write-Error "Anti-Codex fixed route did not become ready. $errorTail"
+    exit 1
 }
-Write-Host "=================================================="
-Write-Host ""
-Write-Host "You may close this window. Anti-Codex will continue"
-Write-Host "running in the background. It will keep the"
-Write-Host "translator alive and restore Antigravity Desktop if"
-Write-Host "needed."
-Write-Host ""
+
+Activate-AntiCodexWindow $ready.main
+Write-Host "Anti-Codex fixed route is ready."
+Write-Host "  Provider: $($selection.provider)"
+Write-Host "  Model:    $($selection.model)"
+Write-Host "  Monitor:  $($supervisorProcess.Id)"
 exit 0

@@ -1,0 +1,801 @@
+From 0c7c4fb156fc1635c9d4da0f930213d33db540fa Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Tue, 14 Jul 2026 23:46:32 +0800
+Subject: [PATCH] fix: abort cancelled loopback model streams
+
+---
+ Cargo.lock                                   |   5 +
+ Cargo.toml                                   |   5 +
+ crates/codex-plus-core/Cargo.toml            |   5 +
+ crates/codex-plus-core/src/abortive_http.rs  | 132 +++++++++
+ crates/codex-plus-core/src/launcher.rs       | 284 +++++++++++++++++++
+ crates/codex-plus-core/src/lib.rs            |   1 +
+ crates/codex-plus-core/src/protocol_proxy.rs | 209 ++++++++++++++
+ 7 files changed, 641 insertions(+)
+ create mode 100644 crates/codex-plus-core/src/abortive_http.rs
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 31688d7..16341d6 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -412,9 +412,13 @@ dependencies = [
+  "anyhow",
+  "async-trait",
+  "base64 0.22.1",
++ "bytes",
+  "directories",
+  "fs2",
+  "futures-util",
++ "http-body-util",
++ "hyper",
++ "hyper-util",
+  "reqwest 0.12.28",
+  "rusqlite",
+  "serde",
+@@ -426,6 +430,7 @@ dependencies = [
+  "tokio-tungstenite",
+  "toml 0.8.2",
+  "toml_edit 0.22.27",
++ "tower-service",
+  "uuid",
+  "windows 0.58.0",
+  "zip",
+diff --git a/Cargo.toml b/Cargo.toml
+index 9e618fe..b04112c 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -17,9 +17,13 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
+ aes-gcm = "0.10"
+ anyhow = "1"
+ base64 = "0.22"
++bytes = "1"
+ directories = "6"
+ fs2 = "0.4"
+ futures-util = "0.3"
++http-body-util = "0.1"
++hyper = { version = "1", features = ["client", "http1"] }
++hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "system-proxy"], default-features = false }
+ rusqlite = { version = "0.32", features = ["bundled"] }
+ serde = { version = "1", features = ["derive"] }
+@@ -31,6 +35,7 @@ tokio = { version = "1", features = ["macros", "process", "rt-multi-thread", "ti
+ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+ toml = "0.8"
+ toml_edit = "0.22"
++tower-service = "0.3"
+ url = "2"
+ uuid = { version = "1", features = ["v4"] }
+ winresource = "0.1"
+diff --git a/crates/codex-plus-core/Cargo.toml b/crates/codex-plus-core/Cargo.toml
+index 7ef996c..5058ef9 100644
+--- a/crates/codex-plus-core/Cargo.toml
++++ b/crates/codex-plus-core/Cargo.toml
+@@ -10,9 +10,13 @@ aes-gcm.workspace = true
+ anyhow.workspace = true
+ async-trait = "0.1"
+ base64.workspace = true
++bytes.workspace = true
+ directories.workspace = true
+ futures-util = "0.3"
+ fs2.workspace = true
++http-body-util.workspace = true
++hyper.workspace = true
++hyper-util.workspace = true
+ reqwest.workspace = true
+ rusqlite.workspace = true
+ serde.workspace = true
+@@ -23,6 +27,7 @@ tokio = { workspace = true, features = ["net"] }
+ tokio-tungstenite.workspace = true
+ toml.workspace = true
+ toml_edit.workspace = true
++tower-service.workspace = true
+ uuid.workspace = true
+ zip.workspace = true
+ 
+diff --git a/crates/codex-plus-core/src/abortive_http.rs b/crates/codex-plus-core/src/abortive_http.rs
+new file mode 100644
+index 0000000..1de0caf
+--- /dev/null
++++ b/crates/codex-plus-core/src/abortive_http.rs
+@@ -0,0 +1,132 @@
++use std::error::Error;
++use std::future::Future;
++use std::net::IpAddr;
++use std::pin::Pin;
++use std::task::{Context, Poll};
++use std::time::Duration;
++
++use anyhow::Context as _;
++use bytes::Bytes;
++use http_body_util::Full;
++use hyper::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, USER_AGENT};
++use hyper::{Method, Request, Uri};
++use hyper_util::client::legacy::Client;
++use hyper_util::client::legacy::connect::HttpConnector;
++use hyper_util::rt::{TokioExecutor, TokioIo};
++use tokio::net::TcpStream;
++use tower_service::Service;
++
++type BoxError = Box<dyn Error + Send + Sync>;
++
++#[derive(Clone, Debug)]
++struct AbortiveLoopbackConnector {
++    inner: HttpConnector,
++}
++
++impl AbortiveLoopbackConnector {
++    fn new() -> Self {
++        let mut inner = HttpConnector::new();
++        inner.enforce_http(true);
++        Self { inner }
++    }
++}
++
++impl Service<Uri> for AbortiveLoopbackConnector {
++    type Response = TokioIo<TcpStream>;
++    type Error = BoxError;
++    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
++
++    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
++        self.inner
++            .poll_ready(cx)
++            .map_err(|error| Box::new(error) as BoxError)
++    }
++
++    fn call(&mut self, uri: Uri) -> Self::Future {
++        let future = self.inner.call(uri);
++        Box::pin(async move {
++            let stream = future.await.map_err(|error| Box::new(error) as BoxError)?;
++            stream
++                .inner()
++                .set_zero_linger()
++                .context("failed to enable abortive close on loopback model connection")?;
++            Ok(stream)
++        })
++    }
++}
++
++pub fn supports(endpoint: &str) -> bool {
++    let Ok(uri) = endpoint.parse::<Uri>() else {
++        return false;
++    };
++    if uri.scheme_str() != Some("http") {
++        return false;
++    }
++    let Some(host) = uri.host() else {
++        return false;
++    };
++    let host = host
++        .strip_prefix('[')
++        .and_then(|host| host.strip_suffix(']'))
++        .unwrap_or(host);
++    host.eq_ignore_ascii_case("localhost")
++        || host
++            .parse::<IpAddr>()
++            .is_ok_and(|address| address.is_loopback())
++}
++
++pub async fn post_json(
++    endpoint: &str,
++    api_key: &str,
++    user_agent: &str,
++    body: &serde_json::Value,
++    timeout: Duration,
++) -> anyhow::Result<hyper::Response<hyper::body::Incoming>> {
++    anyhow::ensure!(
++        supports(endpoint),
++        "abortive model transport only supports HTTP loopback endpoints"
++    );
++    let uri = endpoint
++        .parse::<Uri>()
++        .context("invalid loopback model endpoint")?;
++    let mut request = Request::builder()
++        .method(Method::POST)
++        .uri(uri)
++        .header(AUTHORIZATION, format!("Bearer {}", api_key.trim()))
++        .header(CONTENT_TYPE, "application/json")
++        .header(ACCEPT, "text/event-stream")
++        .header(CACHE_CONTROL, "no-cache");
++    if !user_agent.trim().is_empty() {
++        request = request.header(USER_AGENT, user_agent.trim());
++    }
++    let request = request
++        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))
++        .context("failed to build loopback model request")?;
++    let client = Client::builder(TokioExecutor::new())
++        .pool_max_idle_per_host(0)
++        .build(AbortiveLoopbackConnector::new());
++    tokio::time::timeout(timeout, client.request(request))
++        .await
++        .with_context(|| {
++            format!(
++                "loopback model request exceeded {} seconds before response headers",
++                timeout.as_secs()
++            )
++        })?
++        .context("loopback model request failed")
++}
++
++#[cfg(test)]
++mod tests {
++    use super::supports;
++
++    #[test]
++    fn only_plain_http_loopback_endpoints_are_supported() {
++        assert!(supports("http://127.0.0.1:57321/v1/chat/completions"));
++        assert!(supports("http://[::1]:57321/v1/chat/completions"));
++        assert!(supports("http://localhost:57321/v1/chat/completions"));
++        assert!(!supports("https://127.0.0.1/v1/chat/completions"));
++        assert!(!supports("http://example.com/v1/chat/completions"));
++        assert!(!supports("not a URL"));
++    }
++}
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index ebad60e..f2f9b7a 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
+ use anyhow::Context;
+ use async_trait::async_trait;
+ use futures_util::StreamExt;
++use http_body_util::BodyExt;
+ use serde_json::Value;
+ use tokio::io::{AsyncReadExt, AsyncWriteExt};
+ use tokio::process::{Child, Command};
+@@ -1233,6 +1234,261 @@ async fn handle_models_proxy_connection(
+     stream.shutdown().await?;
+     Ok(())
+ }
++async fn wait_for_downstream_disconnect<R>(reader: &mut R)
++where
++    R: tokio::io::AsyncRead + Unpin,
++{
++    let mut byte = [0_u8; 1];
++    loop {
++        match reader.read(&mut byte).await {
++            Ok(0) | Err(_) => return,
++            Ok(_) => {}
++        }
++    }
++}
++
++fn request_wants_stream(request_json: Option<&serde_json::Value>) -> bool {
++    request_json
++        .and_then(|request| request.get("stream"))
++        .and_then(serde_json::Value::as_bool)
++        .unwrap_or(false)
++}
++
++async fn collect_abortive_body(
++    response: hyper::Response<hyper::body::Incoming>,
++) -> anyhow::Result<Vec<u8>> {
++    Ok(response.into_body().collect().await?.to_bytes().to_vec())
++}
++
++async fn try_handle_abortive_protocol_proxy_stream(
++    stream: &mut tokio::net::TcpStream,
++    request_body: &str,
++    request_user_agent: Option<&str>,
++    request_json: Option<&serde_json::Value>,
++    method: &str,
++    path: &str,
++    remote_addr_text: Option<String>,
++) -> anyhow::Result<bool> {
++    let open_upstream = crate::protocol_proxy::open_abortive_loopback_responses_proxy_request(
++        request_body,
++        request_user_agent,
++    );
++    let open_result = tokio::select! {
++        result = open_upstream => result,
++        _ = wait_for_downstream_disconnect(stream) => return Ok(true),
++    };
++    let upstream = match open_result {
++        Ok(Some(upstream)) => upstream,
++        Ok(None) => return Ok(false),
++        Err(error) => {
++            let body = serde_json::to_vec(
++                &serde_json::json!({ "status": "failed", "message": error.to_string() }),
++            )?;
++            write_http_response(
++                stream,
++                "502 Bad Gateway",
++                "application/json; charset=utf-8",
++                &body,
++            )
++            .await?;
++            log_helper_response(
++                "helper.protocol_proxy_failed",
++                method,
++                path,
++                "502 Bad Gateway",
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(true);
++        }
++    };
++    let status = upstream.status();
++    if !upstream.is_success() {
++        let status_code = upstream.status_code;
++        let content_type = upstream.content_type.clone();
++        let upstream_body = collect_abortive_body(upstream.response).await?;
++        let error = crate::protocol_proxy::responses_error_from_upstream(
++            status_code,
++            &content_type,
++            &upstream_body,
++        );
++        let body = serde_json::to_vec(&error)?;
++        write_http_response(stream, &status, "application/json; charset=utf-8", &body).await?;
++        log_helper_response(
++            "helper.protocol_proxy_upstream_error",
++            method,
++            path,
++            &status,
++            remote_addr_text,
++        );
++        stream.shutdown().await?;
++        return Ok(true);
++    }
++
++    write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
++    let wire_api = upstream.wire_api;
++    let mut upstream_body = upstream.response.into_body();
++    let (mut downstream_reader, mut downstream_writer) = stream.split();
++    if wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
++        loop {
++            tokio::select! {
++                frame = upstream_body.frame() => match frame {
++                    Some(Ok(frame)) => {
++                        if let Ok(bytes) = frame.into_data() {
++                            downstream_writer.write_all(&bytes).await?;
++                        }
++                    }
++                    Some(Err(error)) => return Err(error.into()),
++                    None => break,
++                },
++                _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
++            }
++        }
++    } else {
++        let mut converter = request_json
++            .map(crate::protocol_proxy::ChatSseToResponsesConverter::with_request)
++            .unwrap_or_default();
++        let mut stream_failed = false;
++        loop {
++            tokio::select! {
++                frame = upstream_body.frame() => match frame {
++                    Some(Ok(frame)) => {
++                        if let Ok(bytes) = frame.into_data() {
++                            let converted = converter.push_bytes(&bytes);
++                            if !converted.is_empty() {
++                                downstream_writer.write_all(&converted).await?;
++                            }
++                        }
++                    }
++                    Some(Err(error)) => {
++                        let failed = converter.fail(
++                            format!("Stream error: {error}"),
++                            Some("stream_error".to_string()),
++                        );
++                        if !failed.is_empty() {
++                            downstream_writer.write_all(&failed).await?;
++                        }
++                        stream_failed = true;
++                        break;
++                    }
++                    None => break,
++                },
++                _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
++            }
++        }
++        if !stream_failed {
++            let tail = converter.finish();
++            if !tail.is_empty() {
++                downstream_writer.write_all(&tail).await?;
++            }
++        }
++    }
++    log_helper_response(
++        "helper.protocol_proxy_stream_ok",
++        method,
++        path,
++        "200 OK",
++        remote_addr_text,
++    );
++    downstream_writer.shutdown().await?;
++    Ok(true)
++}
++
++async fn try_handle_abortive_chat_completions_proxy_stream(
++    stream: &mut tokio::net::TcpStream,
++    request_body: &str,
++    request_user_agent: Option<&str>,
++    method: &str,
++    path: &str,
++    remote_addr_text: Option<String>,
++) -> anyhow::Result<bool> {
++    let open_upstream =
++        crate::protocol_proxy::open_abortive_loopback_chat_completions_proxy_request(
++            request_body,
++            request_user_agent,
++        );
++    let open_result = tokio::select! {
++        result = open_upstream => result,
++        _ = wait_for_downstream_disconnect(stream) => return Ok(true),
++    };
++    let upstream = match open_result {
++        Ok(Some(upstream)) => upstream,
++        Ok(None) => return Ok(false),
++        Err(error) => {
++            let body = serde_json::to_vec(
++                &serde_json::json!({ "status": "failed", "message": error.to_string() }),
++            )?;
++            write_http_response(
++                stream,
++                "502 Bad Gateway",
++                "application/json; charset=utf-8",
++                &body,
++            )
++            .await?;
++            log_helper_response(
++                "helper.chat_completions_proxy_failed",
++                method,
++                path,
++                "502 Bad Gateway",
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(true);
++        }
++    };
++    let status = upstream.status();
++    let content_type = if upstream.content_type.is_empty() {
++        "application/json; charset=utf-8".to_string()
++    } else {
++        upstream.content_type.clone()
++    };
++    if !upstream.is_stream || !upstream.is_success() {
++        let is_success = upstream.is_success();
++        let body = collect_abortive_body(upstream.response).await?;
++        write_http_response(stream, &status, &content_type, &body).await?;
++        log_helper_response(
++            if is_success {
++                "helper.chat_completions_proxy_ok"
++            } else {
++                "helper.chat_completions_proxy_upstream_error"
++            },
++            method,
++            path,
++            &status,
++            remote_addr_text,
++        );
++        stream.shutdown().await?;
++        return Ok(true);
++    }
++
++    write_http_stream_headers(stream, &status, &content_type).await?;
++    let mut upstream_body = upstream.response.into_body();
++    let (mut downstream_reader, mut downstream_writer) = stream.split();
++    loop {
++        tokio::select! {
++            frame = upstream_body.frame() => match frame {
++                Some(Ok(frame)) => {
++                    if let Ok(bytes) = frame.into_data() {
++                        downstream_writer.write_all(&bytes).await?;
++                    }
++                }
++                Some(Err(error)) => return Err(error.into()),
++                None => break,
++            },
++            _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
++        }
++    }
++    log_helper_response(
++        "helper.chat_completions_proxy_stream_ok",
++        method,
++        path,
++        &status,
++        remote_addr_text,
++    );
++    downstream_writer.shutdown().await?;
++    Ok(true)
++}
++
+ async fn handle_protocol_proxy_connection(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+@@ -1242,6 +1498,20 @@ async fn handle_protocol_proxy_connection(
+     remote_addr_text: Option<String>,
+ ) -> anyhow::Result<()> {
+     let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
++    if request_wants_stream(request_json.as_ref())
++        && try_handle_abortive_protocol_proxy_stream(
++            stream,
++            request_body,
++            request_user_agent,
++            request_json.as_ref(),
++            method,
++            path,
++            remote_addr_text.clone(),
++        )
++        .await?
++    {
++        return Ok(());
++    }
+     let upstream = match crate::protocol_proxy::open_responses_proxy_request(
+         request_body,
+         request_user_agent,
+@@ -1405,6 +1675,20 @@ async fn handle_chat_completions_proxy_connection(
+     path: &str,
+     remote_addr_text: Option<String>,
+ ) -> anyhow::Result<()> {
++    let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
++    if request_wants_stream(request_json.as_ref())
++        && try_handle_abortive_chat_completions_proxy_stream(
++            stream,
++            request_body,
++            request_user_agent,
++            method,
++            path,
++            remote_addr_text.clone(),
++        )
++        .await?
++    {
++        return Ok(());
++    }
+     let upstream = match crate::protocol_proxy::open_chat_completions_proxy_request(
+         request_body,
+         request_user_agent,
+diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
+index 6f1c625..ea069c9 100644
+--- a/crates/codex-plus-core/src/lib.rs
++++ b/crates/codex-plus-core/src/lib.rs
+@@ -1,3 +1,4 @@
++mod abortive_http;
+ pub mod ads;
+ pub mod app_paths;
+ pub mod assets;
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 6890f32..bc6ff02 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -324,6 +324,14 @@ pub struct UpstreamProxyResponse {
+     pub response: reqwest::Response,
+ }
+ 
++pub struct AbortiveUpstreamProxyResponse {
++    pub status_code: u16,
++    pub content_type: String,
++    pub is_stream: bool,
++    pub wire_api: UpstreamWireApi,
++    pub response: hyper::Response<hyper::body::Incoming>,
++}
++
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+ pub enum UpstreamWireApi {
+     Responses,
+@@ -340,6 +348,16 @@ impl UpstreamProxyResponse {
+     }
+ }
+ 
++impl AbortiveUpstreamProxyResponse {
++    pub fn status(&self) -> String {
++        http_status_line(self.status_code)
++    }
++
++    pub fn is_success(&self) -> bool {
++        (200..300).contains(&self.status_code)
++    }
++}
++
+ pub fn upstream_header_timeout() -> Duration {
+     UPSTREAM_HEADER_TIMEOUT
+ }
+@@ -665,6 +683,150 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+     anyhow::bail!("未找到可用的聚合供应商成员")
+ }
+ 
++pub async fn open_abortive_loopback_responses_proxy_request(
++    body: &str,
++    original_user_agent: Option<&str>,
++) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
++    let request_json: Value = serde_json::from_str(body)?;
++    let is_stream = request_json
++        .get("stream")
++        .and_then(Value::as_bool)
++        .unwrap_or(false);
++    if !is_stream {
++        return Ok(None);
++    }
++
++    let settings = SettingsStore::default().load().unwrap_or_default();
++    let context = RotationContext {
++        conversation_id: conversation_id_from_responses_request(&request_json),
++    };
++    let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
++    let mut relays = vec![relay.clone()];
++    relays.extend(crate::relay_rotation::fallback_relays_after(
++        &settings, &relay.id,
++    )?);
++    let candidate_count = relays.len();
++    for (attempt, relay) in relays.into_iter().enumerate() {
++        validate_upstream(&relay)?;
++        let (endpoint, upstream_body, wire_api) =
++            upstream_request_parts(&relay, request_json.clone())?;
++        if !crate::abortive_http::supports(&endpoint) {
++            return Ok(None);
++        }
++        let has_more_candidates = attempt + 1 < candidate_count;
++        let user_agent = effective_user_agent(&relay.user_agent, original_user_agent);
++        let _ = crate::diagnostic_log::append_diagnostic_log(
++            "protocol_proxy.upstream_request",
++            json!({
++                "relayId": relay.id,
++                "relayName": relay.name,
++                "endpoint": endpoint,
++                "wireApi": wire_api,
++                "stream": true,
++                "transport": "abortive_loopback",
++                "attempt": attempt + 1,
++                "candidateCount": candidate_count,
++                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
++            }),
++        );
++        let upstream = match crate::abortive_http::post_json(
++            &endpoint,
++            relay.api_key.trim(),
++            &user_agent,
++            &upstream_body,
++            UPSTREAM_STREAM_HEADER_TIMEOUT,
++        )
++        .await
++        {
++            Ok(upstream) => upstream,
++            Err(error) => {
++                let _ = crate::diagnostic_log::append_diagnostic_log(
++                    "protocol_proxy.upstream_request_failed",
++                    json!({
++                        "relayId": relay.id,
++                        "relayName": relay.name,
++                        "endpoint": endpoint,
++                        "wireApi": wire_api,
++                        "stream": true,
++                        "transport": "abortive_loopback",
++                        "attempt": attempt + 1,
++                        "candidateCount": candidate_count,
++                        "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs(),
++                        "willFailover": has_more_candidates,
++                        "error": error.to_string()
++                    }),
++                );
++                crate::relay_rotation::record_relay_request_failure(&settings);
++                if has_more_candidates {
++                    continue;
++                }
++                return Err(error).with_context(|| {
++                    format!(
++                        "provider '{}' loopback request failed, endpoint: {}",
++                        relay.name, endpoint
++                    )
++                });
++            }
++        };
++        let status_code = upstream.status().as_u16();
++        let content_type = upstream
++            .headers()
++            .get(hyper::header::CONTENT_TYPE)
++            .and_then(|value| value.to_str().ok())
++            .unwrap_or("")
++            .to_string();
++        let _ = crate::diagnostic_log::append_diagnostic_log(
++            "protocol_proxy.upstream_response",
++            json!({
++                "relayId": relay.id,
++                "relayName": relay.name,
++                "endpoint": endpoint,
++                "wireApi": wire_api,
++                "stream": true,
++                "transport": "abortive_loopback",
++                "statusCode": status_code,
++                "attempt": attempt + 1,
++                "candidateCount": candidate_count,
++                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs(),
++                "willFailover": has_more_candidates && !(200..300).contains(&status_code)
++            }),
++        );
++        crate::relay_rotation::record_relay_request_event(
++            &settings,
++            if (200..300).contains(&status_code) {
++                RotationEvent::Success
++            } else {
++                RotationEvent::Failure
++            },
++        );
++        if (200..300).contains(&status_code) || !has_more_candidates {
++            return Ok(Some(AbortiveUpstreamProxyResponse {
++                status_code,
++                content_type,
++                is_stream: true,
++                wire_api,
++                response: upstream,
++            }));
++        }
++        let _ = crate::diagnostic_log::append_diagnostic_log(
++            "protocol_proxy.upstream_failover",
++            json!({
++                "relayId": relay.id,
++                "relayName": relay.name,
++                "endpoint": endpoint,
++                "wireApi": wire_api,
++                "stream": true,
++                "transport": "abortive_loopback",
++                "statusCode": status_code,
++                "attempt": attempt + 1,
++                "candidateCount": candidate_count,
++                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
++            }),
++        );
++    }
++    anyhow::bail!("no usable loopback provider candidate")
++}
++
+ pub async fn open_models_proxy_request(
+     original_user_agent: Option<&str>,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+@@ -708,6 +870,53 @@ pub async fn open_models_proxy_request(
+     })
+ }
+ 
++pub async fn open_abortive_loopback_chat_completions_proxy_request(
++    body: &str,
++    original_user_agent: Option<&str>,
++) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
++    let settings = SettingsStore::default().load().unwrap_or_default();
++    let relay = settings.active_relay_profile();
++    if relay.protocol != RelayProtocol::ChatCompletions {
++        anyhow::bail!("current relay does not use Chat Completions");
++    }
++    validate_upstream(&relay)?;
++    let request_json: Value = serde_json::from_str(body)?;
++    let is_stream = request_json
++        .get("stream")
++        .and_then(Value::as_bool)
++        .unwrap_or(false);
++    if !is_stream {
++        return Ok(None);
++    }
++    let endpoint = chat_completions_url(&relay.base_url);
++    if !crate::abortive_http::supports(&endpoint) {
++        return Ok(None);
++    }
++    let user_agent = effective_user_agent(&relay.user_agent, original_user_agent);
++    let upstream = crate::abortive_http::post_json(
++        &endpoint,
++        relay.api_key.trim(),
++        &user_agent,
++        &request_json,
++        UPSTREAM_STREAM_HEADER_TIMEOUT,
++    )
++    .await?;
++    let status_code = upstream.status().as_u16();
++    let content_type = upstream
++        .headers()
++        .get(hyper::header::CONTENT_TYPE)
++        .and_then(|value| value.to_str().ok())
++        .unwrap_or("")
++        .to_string();
++    Ok(Some(AbortiveUpstreamProxyResponse {
++        status_code,
++        content_type,
++        is_stream: true,
++        wire_api: UpstreamWireApi::ChatCompletions,
++        response: upstream,
++    }))
++}
++
+ pub async fn open_chat_completions_proxy_request(
+     body: &str,
+     original_user_agent: Option<&str>,
+-- 
+2.55.0.windows.1
+

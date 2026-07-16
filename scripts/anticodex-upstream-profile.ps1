@@ -2,19 +2,17 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty", "UseAntigravity", "SaveAntigravity")]
+    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty", "UseAntigravity")]
     [string]$Action,
 
     [string]$StateRoot,
-    [ValidateSet("", "openai-compatible", "anthropic")]
+    [ValidateSet("", "openai-compatible", "responses")]
     [string]$Protocol = "",
     [string]$BaseUrl = "",
     [string]$Model = "",
     [string]$ApiKey = "",
     [string]$TestStatus = "pending",
-    [string]$CapabilitiesJson = "{}",
-    [string]$AntigravityCliProfileRoot = "",
-    [string]$AntigravityCliStrictWindowsAppDataIsolation = ""
+    [string]$CapabilitiesJson = "{}"
 )
 
 Set-StrictMode -Version Latest
@@ -51,47 +49,15 @@ function New-DefaultProfile {
         lastTestStatus = ""
         lastTestAt = ""
         capabilities = @{}
-        antigravityCli = New-DefaultAntigravityCliProfile
     }
 }
 
-function Convert-ToBool {
-    param([string]$Value, [bool]$Default = $false)
-    if ([string]::IsNullOrWhiteSpace($Value)) { return $Default }
-    return $Value -match '^(1|true|yes|on)$'
-}
-
-function New-DefaultAntigravityCliProfile {
-    [Ordered]@{
-        profileRoot = ""
-        strictWindowsAppDataIsolation = $false
-        accountLaneRole = "anticodex-model-text"
-        mcpAccountLaneManagedByAntiCodex = $false
-        mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
-    }
-}
-
-function Normalize-AntigravityCliProfile {
-    param($Value)
-    $default = New-DefaultAntigravityCliProfile
-    if (-not $Value) { return $default }
-    if ($Value -is [System.Collections.IDictionary]) {
-        return [Ordered]@{
-            profileRoot = if ($Value.Contains("profileRoot")) { [string]$Value["profileRoot"] } else { "" }
-            strictWindowsAppDataIsolation = if ($Value.Contains("strictWindowsAppDataIsolation")) { [bool]$Value["strictWindowsAppDataIsolation"] } else { $false }
-            accountLaneRole = if ($Value.Contains("accountLaneRole")) { [string]$Value["accountLaneRole"] } else { "anticodex-model-text" }
-            mcpAccountLaneManagedByAntiCodex = if ($Value.Contains("mcpAccountLaneManagedByAntiCodex")) { [bool]$Value["mcpAccountLaneManagedByAntiCodex"] } else { $false }
-            mcpAccountLaneOwner = if ($Value.Contains("mcpAccountLaneOwner")) { [string]$Value["mcpAccountLaneOwner"] } else { "external-antigravity-account-not-managed-here" }
-        }
-    }
-    $names = @($Value.PSObject.Properties.Name)
-    return [Ordered]@{
-        profileRoot = if ($names -contains "profileRoot") { [string]$Value.profileRoot } else { "" }
-        strictWindowsAppDataIsolation = if ($names -contains "strictWindowsAppDataIsolation") { [bool]$Value.strictWindowsAppDataIsolation } else { $false }
-        accountLaneRole = if ($names -contains "accountLaneRole") { [string]$Value.accountLaneRole } else { "anticodex-model-text" }
-        mcpAccountLaneManagedByAntiCodex = if ($names -contains "mcpAccountLaneManagedByAntiCodex") { [bool]$Value.mcpAccountLaneManagedByAntiCodex } else { $false }
-        mcpAccountLaneOwner = if ($names -contains "mcpAccountLaneOwner") { [string]$Value.mcpAccountLaneOwner } else { "external-antigravity-account-not-managed-here" }
-    }
+function Get-SafeProperty {
+    param($Obj, [string]$Name, $Default)
+    if ($null -eq $Obj) { return $Default }
+    $prop = $Obj.PSObject.Properties[$Name]
+    if ($null -eq $prop -or $null -eq $prop.Value) { return $Default }
+    return $prop.Value
 }
 
 function Read-Profile {
@@ -102,15 +68,14 @@ function Read-Profile {
         $json = Get-Content -LiteralPath $ProfilePath -Raw -Encoding UTF8
         $parsed = $json | ConvertFrom-Json
         return [Ordered]@{
-            schemaVersion = if ($parsed.schemaVersion) { [int]$parsed.schemaVersion } else { 1 }
-            mode = if ($parsed.mode) { [string]$parsed.mode } else { "antigravity" }
-            protocol = if ($parsed.protocol) { [string]$parsed.protocol } else { "" }
-            baseUrl = if ($parsed.baseUrl) { [string]$parsed.baseUrl } else { "" }
-            model = if ($parsed.model) { [string]$parsed.model } else { "" }
-            lastTestStatus = if ($parsed.lastTestStatus) { [string]$parsed.lastTestStatus } else { "" }
-            lastTestAt = if ($parsed.lastTestAt) { [string]$parsed.lastTestAt } else { "" }
-            capabilities = if ($parsed.capabilities) { $parsed.capabilities } else { @{} }
-            antigravityCli = Normalize-AntigravityCliProfile $parsed.antigravityCli
+            schemaVersion = [int](Get-SafeProperty $parsed "schemaVersion" 1)
+            mode = [string](Get-SafeProperty $parsed "mode" "antigravity")
+            protocol = [string](Get-SafeProperty $parsed "protocol" "")
+            baseUrl = [string](Get-SafeProperty $parsed "baseUrl" "")
+            model = [string](Get-SafeProperty $parsed "model" "")
+            lastTestStatus = [string](Get-SafeProperty $parsed "lastTestStatus" "")
+            lastTestAt = [string](Get-SafeProperty $parsed "lastTestAt" "")
+            capabilities = Get-SafeProperty $parsed "capabilities" @{}
         }
     } catch {
         throw "Existing upstream profile is unreadable: $($_.Exception.Message)"
@@ -200,7 +165,6 @@ function Public-Profile {
         lastTestStatus = $Profile.lastTestStatus
         lastTestAt = $Profile.lastTestAt
         capabilities = $Profile.capabilities
-        antigravityCli = Normalize-AntigravityCliProfile $Profile.antigravityCli
         keyConfigured = -not [string]::IsNullOrEmpty($apiKey)
         keyHint = Get-KeyHint $apiKey
     }
@@ -227,14 +191,13 @@ try {
                 lastTestStatus = $profile.lastTestStatus
                 lastTestAt = $profile.lastTestAt
                 capabilities = $profile.capabilities
-                antigravityCli = Normalize-AntigravityCliProfile $profile.antigravityCli
                 apiKey = $runtimeApiKey
             }
             $runtime | ConvertTo-Json -Depth 20
         }
         "SaveThirdParty" {
-            if ($Protocol -ne "openai-compatible" -and $Protocol -ne "anthropic") {
-                throw "Protocol must be openai-compatible or anthropic."
+            if ($Protocol -ne "openai-compatible" -and $Protocol -ne "responses") {
+                throw "Protocol must be openai-compatible or responses."
             }
             if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw "BaseUrl is required." }
             if ([string]::IsNullOrWhiteSpace($Model)) { throw "Model is required." }
@@ -249,7 +212,6 @@ try {
                 Protect-ApiKey $ApiKey
             }
 
-            $existingProfile = Read-Profile
             $profile = [Ordered]@{
                 schemaVersion = 1
                 mode = "third-party"
@@ -259,7 +221,6 @@ try {
                 lastTestStatus = $TestStatus
                 lastTestAt = [DateTime]::UtcNow.ToString("o")
                 capabilities = Read-Capabilities
-                antigravityCli = Normalize-AntigravityCliProfile $existingProfile.antigravityCli
             }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
@@ -267,19 +228,6 @@ try {
         "UseAntigravity" {
             $profile = Read-Profile
             $profile["mode"] = "antigravity"
-            Write-Profile $profile
-            Public-Profile $profile | ConvertTo-Json -Depth 20
-        }
-        "SaveAntigravity" {
-            $profile = Read-Profile
-            $profile["mode"] = "antigravity"
-            $profile["antigravityCli"] = [Ordered]@{
-                profileRoot = [string]$AntigravityCliProfileRoot
-                strictWindowsAppDataIsolation = Convert-ToBool $AntigravityCliStrictWindowsAppDataIsolation
-                accountLaneRole = "anticodex-model-text"
-                mcpAccountLaneManagedByAntiCodex = $false
-                mcpAccountLaneOwner = "external-antigravity-account-not-managed-here"
-            }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
         }

@@ -10,6 +10,12 @@ $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC = if ($env:ANTICODEX_POST_SYNC_HEALTH_TI
     8
 }
 
+$ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC = if ($env:ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC) {
+    [Math]::Max(30, [int]$env:ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC)
+} else {
+    180
+}
+
 $installRoot = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
 $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 if ($installRoot -ne $expectedRoot) {
@@ -215,8 +221,9 @@ function Invoke-AntiCodexPostSyncAcceptance {
         try {
             $marker = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
             $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
+            $models = Invoke-RestMethod -Uri "$baseUrl/models" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
             $sourceVersion = [string]$marker.source.packageVersion
-            $modelCount = [int]$health.modelCount
+            $modelCount = @($models.data).Count
             $upstreamReady = [string]$health.upstream -eq "antigravity-desktop"
             if ($health.ok -eq $true -and $modelCount -gt 0 -and $upstreamReady -and $sourceVersion) {
                 return [pscustomobject]@{
@@ -254,7 +261,7 @@ function Repair-RollbackHostIconManifest {
     Copy-Item -LiteralPath $iconSource -Destination $rollbackAppRootIcon -Force
 
     $manifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
-    if ($manifest.schema -ne "anticodex-host-manifest-v1") {
+    if ([string]$manifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
         throw "Anti-Codex rollback host marker schema is invalid."
     }
     if (-not $manifest.files) {
@@ -404,7 +411,7 @@ if ($restartAfterSync -and (Test-Path -LiteralPath $startAntiCodex)) {
 if ($syncCompleted) {
     $updateStage = "acceptance"
     Set-AntiCodexUpdateOperation -State "running" -Stage "acceptance" -Message "Running post-sync readiness and compatibility checks." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
-    $postSyncReady = Wait-AntiCodexPostSyncReady -TimeoutSeconds 60
+    $postSyncReady = Wait-AntiCodexPostSyncReady -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC
     $postSyncAcceptance = if ($postSyncReady) {
         Invoke-AntiCodexPostSyncAcceptance -TimeoutSeconds 35
     } else {

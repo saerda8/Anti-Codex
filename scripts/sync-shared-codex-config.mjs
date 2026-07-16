@@ -2,14 +2,26 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [, , sourcePath, targetPath] = process.argv;
+const [, , sourcePath, targetPath, ...options] = process.argv;
 
 if (!sourcePath || !targetPath) {
-  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config>");
+  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config> [--include-development-workers]");
   process.exit(2);
 }
 
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
+const developmentWorkerServers = new Set([
+  "deepseek-code-worker",
+  "mimo-claude-coworker",
+  "mimocode-worker",
+  "deveco-code-worker",
+  "opencode-worker",
+  "kilo-worker",
+  "codebuddy-worker",
+  "agnes-worker",
+  "antigravity-code-worker",
+]);
+const includeDevelopmentWorkers = options.includes("--include-development-workers");
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
 
@@ -37,6 +49,15 @@ function isShared(block) {
 
 function isMcpBlock(block) {
   return Boolean(block.header?.startsWith("[mcp_servers."));
+}
+
+function mcpServerName(block) {
+  const match = block.header?.match(/^\[mcp_servers\.(?:"([^"]+)"|'([^']+)'|([^\.\]]+))(?:\.|\])/);
+  return String(match?.[1] || match?.[2] || match?.[3] || "");
+}
+
+function isDevelopmentWorkerBlock(block) {
+  return isMcpBlock(block) && developmentWorkerServers.has(mcpServerName(block));
 }
 
 function parseTomlStringArray(value) {
@@ -143,12 +164,14 @@ function render(blocks) {
 function mergeSharedBlocks(targetBlocks, sourceBlocks) {
   const sourceShared = sourceBlocks
     .filter(isShared)
+    .filter((block) => includeDevelopmentWorkers || !isDevelopmentWorkerBlock(block))
     .map(normalizeWindowsMcpShim)
     .map(normalizeMissingWindowsMcpCommand);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
   const keptTargetBlocks = targetBlocks.filter(
-    (block) => !isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block)))
+    (block) => (includeDevelopmentWorkers || !isDevelopmentWorkerBlock(block))
+      && (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
   );
   return [...keptTargetBlocks, ...sourceShared];
 }

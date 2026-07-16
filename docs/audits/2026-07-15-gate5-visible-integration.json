@@ -1,0 +1,321 @@
+{
+  "schema": "anticodex-gate5-visible-integration-v1",
+  "reportName": "gate5-visible-integration",
+  "gate": 5,
+  "ok": true,
+  "gateComplete": true,
+  "checkedAt": "2026-07-15T02:14:13.958Z",
+  "requestedRealTraffic": false,
+  "usedRealTraffic": false,
+  "sourceEvidenceUsedRealTraffic": true,
+  "coverageKind": "visible-desktop-integration-aggregate",
+  "expectedModel": "gemini-3-flash-agent",
+  "expectedModelLabel": "Gemini 3.5 Flash (High)",
+  "sourceReports": {
+    "visible_text": {
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-text-b-model-gemini-3-flash-agent.json",
+      "sidecarPath": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-text-b-model-gemini-3-flash-agent.json.sha256",
+      "sha256": "3274a2c082ac6f80fbf3712bde9f4d4c7a92585e4db6908288f26c693f35162a",
+      "signed": true,
+      "modifiedAt": "2026-07-15T01:56:32.376Z",
+      "ageMs": 1032587.3090820312,
+      "summary": {
+        "ok": true,
+        "reportName": "gate5-visible-text-b-model-gemini-3-flash-agent",
+        "taskMode": "exact-marker",
+        "marker": "GATE5_VISIBLE_TEXT_20260715_B",
+        "requiredModel": "gemini-3-flash-agent",
+        "elapsedMs": 25674,
+        "submitSucceeded": true,
+        "repairAttempted": false
+      }
+    },
+    "visible_tool": {
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-tool-b-model-gemini-3-flash-agent.json",
+      "sidecarPath": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-tool-b-model-gemini-3-flash-agent.json.sha256",
+      "sha256": "6147fb043135cf20b368d9916a82e488ff26907203d7be7e86f5a892f7cae191",
+      "signed": true,
+      "modifiedAt": "2026-07-15T01:58:31.367Z",
+      "ageMs": 913598.3259277344,
+      "summary": {
+        "ok": true,
+        "reportName": "gate5-visible-tool-b-model-gemini-3-flash-agent",
+        "taskMode": "local-project",
+        "marker": "GATE5_VISIBLE_TOOL_20260715_B",
+        "requiredModel": "gemini-3-flash-agent",
+        "elapsedMs": 103663,
+        "submitSucceeded": true,
+        "repairAttempted": false
+      }
+    },
+    "history_continuation": {
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-history-b-model-gemini-3-flash-agent.json",
+      "sidecarPath": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-history-b-model-gemini-3-flash-agent.json.sha256",
+      "sha256": "53572f026f48de114648b2a03ff76072b618a27a470719358abc53a3911467fd",
+      "signed": true,
+      "modifiedAt": "2026-07-15T01:59:16.663Z",
+      "ageMs": 868303.2380371094,
+      "summary": {
+        "ok": true,
+        "reportName": "gate5-visible-history-b-model-gemini-3-flash-agent",
+        "taskMode": "exact-marker",
+        "marker": "GATE5_VISIBLE_TEXT_CONTINUE_20260715_B",
+        "requiredModel": "gemini-3-flash-agent",
+        "elapsedMs": 27122,
+        "submitSucceeded": true,
+        "repairAttempted": false
+      }
+    }
+  },
+  "artifactEvidence": [
+    {
+      "name": "done.txt",
+      "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\done.txt",
+      "exists": true,
+      "bytes": 29,
+      "expectedHash": "c3fd546b148c8614ec25e9dffc61287971386dda08dc215a9cd9b55e62f82052",
+      "actualHash": "c3fd546b148c8614ec25e9dffc61287971386dda08dc215a9cd9b55e62f82052",
+      "ok": true
+    },
+    {
+      "name": "index.html",
+      "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\index.html",
+      "exists": true,
+      "bytes": 214,
+      "expectedHash": "9b60ae55440e55646f2a5597b656ab7b1306ae0ba110e721de649cc146e4bdbd",
+      "actualHash": "9b60ae55440e55646f2a5597b656ab7b1306ae0ba110e721de649cc146e4bdbd",
+      "ok": true
+    },
+    {
+      "name": "README.md",
+      "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\README.md",
+      "exists": true,
+      "bytes": 277,
+      "expectedHash": "05c1f6ba87ee56341a25af63af7b029968bd88b42176af04187a7914c5756e69",
+      "actualHash": "05c1f6ba87ee56341a25af63af7b029968bd88b42176af04187a7914c5756e69",
+      "ok": true
+    }
+  ],
+  "route": {
+    "state": "ready",
+    "provider": "antigravity",
+    "model": "gemini-3-flash-agent",
+    "relayProtocol": "chatCompletions",
+    "codexPlusPlusVersion": "1.2.36",
+    "ports": {
+      "cdp": 18318,
+      "proxy": 18484,
+      "launcherGuard": 18485,
+      "managerGuard": 18486,
+      "health": 18487,
+      "adapter": 18488,
+      "helper": 18489
+    },
+    "processes": {
+      "codexPlusPlus": 16768,
+      "copiedClient": [
+        32548
+      ],
+      "managerWatcher": 21304,
+      "managerBridge": 13564
+    }
+  },
+  "isolatedMcpConfig": {
+    "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\codex-home-deepseek-app\\config.toml",
+    "names": [
+      "node_repl"
+    ],
+    "excludedDevelopmentWorkers": [
+      "deepseek-code-worker",
+      "mimo-claude-coworker",
+      "mimocode-worker",
+      "deveco-code-worker",
+      "opencode-worker",
+      "kilo-worker",
+      "codebuddy-worker",
+      "agnes-worker",
+      "antigravity-code-worker"
+    ]
+  },
+  "checks": [
+    {
+      "id": "visible_text_signed_fresh_real_result",
+      "ok": true,
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-text-b-model-gemini-3-flash-agent.json",
+      "sha256": "3274a2c082ac6f80fbf3712bde9f4d4c7a92585e4db6908288f26c693f35162a",
+      "signed": true,
+      "ageMs": 1032587.3090820312,
+      "semanticResult": true
+    },
+    {
+      "id": "visible_tool_signed_fresh_real_result",
+      "ok": true,
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-tool-b-model-gemini-3-flash-agent.json",
+      "sha256": "6147fb043135cf20b368d9916a82e488ff26907203d7be7e86f5a892f7cae191",
+      "signed": true,
+      "ageMs": 913598.3259277344,
+      "semanticResult": true
+    },
+    {
+      "id": "history_continuation_signed_fresh_real_result",
+      "ok": true,
+      "path": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-history-b-model-gemini-3-flash-agent.json",
+      "sha256": "53572f026f48de114648b2a03ff76072b618a27a470719358abc53a3911467fd",
+      "signed": true,
+      "ageMs": 868303.2380371094,
+      "semanticResult": true
+    },
+    {
+      "id": "history_reopened_by_actual_mouse_within_budget",
+      "ok": true,
+      "actualMouseClick": true,
+      "openLatencyMs": 335,
+      "sameTaskWanted": "GATE5_VISIBLE_TEXT_20260715_B"
+    },
+    {
+      "id": "tool_result_files_exist_with_exact_hashes",
+      "ok": true,
+      "artifactDir": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b",
+      "files": [
+        {
+          "name": "done.txt",
+          "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\done.txt",
+          "exists": true,
+          "bytes": 29,
+          "expectedHash": "c3fd546b148c8614ec25e9dffc61287971386dda08dc215a9cd9b55e62f82052",
+          "actualHash": "c3fd546b148c8614ec25e9dffc61287971386dda08dc215a9cd9b55e62f82052",
+          "ok": true
+        },
+        {
+          "name": "index.html",
+          "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\index.html",
+          "exists": true,
+          "bytes": 214,
+          "expectedHash": "9b60ae55440e55646f2a5597b656ab7b1306ae0ba110e721de649cc146e4bdbd",
+          "actualHash": "9b60ae55440e55646f2a5597b656ab7b1306ae0ba110e721de649cc146e4bdbd",
+          "ok": true
+        },
+        {
+          "name": "README.md",
+          "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\anticodex-gate5-visible-tool-20260715-b\\README.md",
+          "exists": true,
+          "bytes": 277,
+          "expectedHash": "05c1f6ba87ee56341a25af63af7b029968bd88b42176af04187a7914c5756e69",
+          "actualHash": "05c1f6ba87ee56341a25af63af7b029968bd88b42176af04187a7914c5756e69",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "tool_turn_showed_progress_and_host_tool_results",
+      "ok": true,
+      "visibleProgressCount": 1,
+      "taskToolCallCount": 11,
+      "taskToolOutputSeen": true
+    },
+    {
+      "id": "fixed_three_layer_route_ready",
+      "ok": true,
+      "url": "http://127.0.0.1:18487/anticodex/fixed-route/health",
+      "state": "ready",
+      "provider": "antigravity",
+      "model": "gemini-3-flash-agent",
+      "relayProtocol": "chatCompletions",
+      "codexPlusPlusVersion": "1.2.36",
+      "copiedClientPids": [
+        32548
+      ]
+    },
+    {
+      "id": "isolated_product_config_excludes_development_workers",
+      "ok": true,
+      "configPath": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\codex-home-deepseek-app\\config.toml",
+      "mcpNames": [
+        "node_repl"
+      ],
+      "developmentNames": []
+    },
+    {
+      "id": "official_shell_ui_and_current_model_visible",
+      "ok": true,
+      "status": 0,
+      "error": "",
+      "title": "Anti-Codex",
+      "version": "native-panel-v104",
+      "matchedModelText": "Gemini 3.5 Flash (High)",
+      "cdpPort": 18318
+    },
+    {
+      "id": "profile_menu_uses_exact_chinese_manager_label",
+      "ok": true,
+      "status": 0,
+      "error": "",
+      "profileEntryText": "管理",
+      "forbiddenEnglishVisible": false,
+      "actualMouseOpened": true
+    },
+    {
+      "id": "manager_close_full_height_actual_mouse",
+      "ok": true,
+      "status": 0,
+      "error": "",
+      "finalOverlayClosed": true,
+      "probes": [
+        {
+          "name": "upper-center",
+          "target": "BUTTON",
+          "closed": true,
+          "hasTextNode": false,
+          "webkitAppRegion": "no-drag"
+        },
+        {
+          "name": "center",
+          "target": "BUTTON",
+          "closed": true,
+          "hasTextNode": false,
+          "webkitAppRegion": "no-drag"
+        },
+        {
+          "name": "lower-center",
+          "target": "BUTTON",
+          "closed": true,
+          "hasTextNode": false,
+          "webkitAppRegion": "no-drag"
+        }
+      ]
+    },
+    {
+      "id": "one_anti_appserver_and_no_development_worker_multiplication",
+      "ok": true,
+      "status": 0,
+      "error": "",
+      "anticodexWorkerProcessCount": 0,
+      "anticodexDuplicateWorkerProcessCount": 0,
+      "antiAppServers": [
+        {
+          "pid": 35976,
+          "parentPid": 32548,
+          "kind": "anticodex-app-server"
+        }
+      ],
+      "originalCodexWorkerProcessCountInformational": 54,
+      "originalCodexDuplicateWorkerProcessCountInformational": 45
+    },
+    {
+      "id": "live_tray_icon_preserved",
+      "ok": true,
+      "status": 0,
+      "error": "",
+      "name": "Anti-Codex",
+      "pinkPixels": 111,
+      "minimumPinkPixels": 8,
+      "capturePath": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\gate5-live-tray-icon.png"
+    }
+  ],
+  "failures": [],
+  "report": {
+    "latest": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate5-visible-integration.json",
+    "history": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\20260715-021413-gate5-visible-integration.json",
+    "audit": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate5-visible-integration.json"
+  }
+}

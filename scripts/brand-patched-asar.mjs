@@ -10,12 +10,15 @@ import {
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
 
-const asarPath = process.argv[2];
-const exePath = process.argv[3] || "";
+const argv = process.argv.slice(2);
+const profileIndex = argv.indexOf("--profile");
+const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
+const asarPath = argv[0];
+const exePath = argv[1] && !argv[1].startsWith("--") ? argv[1] : "";
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
-if (!asarPath) {
-  console.error("Usage: node brand-patched-asar.mjs <app.asar> [Codex.exe]");
+if (!asarPath || patchProfile !== "fixed-shell-v1") {
+  console.error("Usage: node brand-patched-asar.mjs <app.asar> [Codex.exe] [--profile fixed-shell-v1]");
   process.exit(2);
 }
 
@@ -175,6 +178,16 @@ function patchConfigWriteHandler(text) {
   const currentSearch = "\"get-configuration\":async({key:e})=>({value:this.globalState.get(e)}),\"write-config-value\":async e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\"config/value/write\",e),\"set-configuration\":async({key:t,value:n})=>(this.globalState.set(t,n),t===e.Or.APPEARANCE_THEME&&VT(n),(t===e.Or.APPEARANCE_THEME||t===e.Or.APPEARANCE_LIGHT_CHROME_THEME||t===e.Or.APPEARANCE_DARK_CHROME_THEME)&&this.windowManager.refreshWindowBackdropForHost(this.hostConfig.id),{success:!0}),\"apply-patch\":async n=>{let r=n.hostConfig,i=this.getAppServerClientForHostIdOrThrow(r.id);return t.zt(n,this.gitManager,i,re(t.Hr(r)))},\"mcp-codex-config\":async({cwd:e})=>({config:await this.buildMcpCodexConfig(e)}),\"worktree-shell-environment-config\":async({cwd:n,hostId:r})=>{let i=this.getRequestAppServerClient(r),a=i.hostConfig;return{shellEnvironment:await t.Lt(e.zt(a)?n:this.mapAgentPathToLocalPath(n,a)??n,i)}},\"ide-context\":async({workspaceRoot:e,origin:t})=>{if(!e)throw Error(\"workspaceRoot required\");if(!this.isMultiClientTransport())throw Error(\"IPC\");let n=this.getIpcClientForOrigin(t);if(!n)throw Error(\"Missing IPC client\");let r=await n.sendRequest(\"ide-context\",{workspaceRoot:e});if(r.resultType===\"error\")throw Error(r.error);return{ideContext:r.result.ideContext}},";
   if (text.includes(currentSearch)) return replacePadded(text, currentSearch, replacement);
   const search = "\"get-configuration\":async({key:e})=>({value:this.globalState.get(e)}),\"set-configuration\":async({key:t,value:n})=>(this.globalState.set(t,n),t===e.Or.APPEARANCE_THEME&&VT(n),(t===e.Or.APPEARANCE_THEME||t===e.Or.APPEARANCE_LIGHT_CHROME_THEME||t===e.Or.APPEARANCE_DARK_CHROME_THEME)&&this.windowManager.refreshWindowBackdropForHost(this.hostConfig.id),{success:!0}),\"apply-patch\":async({origin:e,...n})=>{let r=n.hostConfig,i=this.getAppServerClientForHostIdOrThrow(r.id);return t.zt(n,this.gitManager,i,re(t.Hr(r)))},\"mcp-codex-config\":async({cwd:e})=>({config:await this.buildMcpCodexConfig(e)}),\"worktree-shell-environment-config\":async({cwd:n,hostId:r})=>{let i=this.getRequestAppServerClient(r),a=i.hostConfig;return{shellEnvironment:await t.Lt(e.zt(a)?n:this.mapAgentPathToLocalPath(n,a)??n,i)}},\"ide-context\":async({workspaceRoot:e,origin:t})=>{if(!e)throw Error(`workspaceRoot is required`);if(!this.isMultiClientTransport())throw Error(`IPC is disabled when connected to a non-stdio app server transport`);let n=this.getIpcClientForOrigin(t);if(!n)throw Error(`Missing IPC client for window`);let r=await n.sendRequest(`ide-context`,{workspaceRoot:e});if(r.resultType===`error`)throw Error(`Failed to get ide context: ${r.error}`);return{ideContext:r.result.ideContext}},";
+  return replacePadded(text, search, replacement);
+}
+
+function patchStartupMcpConfigReload(text) {
+  const search = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
+  const replacement = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!1})";
+  if (!text.includes(search)) {
+    if (text.includes(replacement)) return text;
+    throw new Error("Startup MCP config reload pattern not found");
+  }
   return replacePadded(text, search, replacement);
 }
 
@@ -496,6 +509,20 @@ function findConfigWriteHandlerPatch(fd, header, dataOffset) {
   throw new Error("Could not find Electron config write handler table");
 }
 
+function findStartupMcpConfigReloadPatch(fd, header, dataOffset) {
+  const search = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
+  const replacement = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!1})";
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (text.includes(search) || text.includes(replacement)) {
+      return [rel, patchStartupMcpConfigReload];
+    }
+  }
+  throw new Error("Could not find startup MCP config reload under .vite/build/*.js");
+}
+
 function findDefaultLocalePatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
@@ -799,6 +826,7 @@ const patchSpecs = [
   ["session-title", () => findMainSessionPatch(fd, header, dataOffset)],
   ["windows-close", () => findWindowsClosePatch(fd, header, dataOffset)],
   ["locale-info", () => findLocaleInfoPatch(fd, header, dataOffset)],
+  ["startup-mcp-config-reload", () => findStartupMcpConfigReloadPatch(fd, header, dataOffset)],
   ["config-write", () => findConfigWriteHandlerPatch(fd, header, dataOffset)],
   ["default-locale", () => findDefaultLocalePatch(fd, header, dataOffset)],
   ["enable-i18n", () => findEnableI18nPatch(fd, header, dataOffset)],
@@ -820,25 +848,25 @@ const patchSpecs = [
 
 const written = [];
 const skipped = [];
-const criticalPatchNames = new Set([
+const fixedShellCriticalPatchNames = new Set([
   "package-json",
   "webview-html-title",
   "app-name",
   "app-user-model-id",
   "session-title",
+  "startup-mcp-config-reload",
   "auth-requirement",
   "app-route-gate",
   "profile-dropdown-settings",
   "browser-window-icon",
   "windows-tray-icon",
-  "computer-use-legacy-notify-opt-out",
   "local-model-availability",
-  "local-plugin-catalog",
-  "electron-local-plugin-catalog",
-  "webview-local-plugin-catalog",
-  "retry-stream-error-visibility",
 ]);
-for (const [name, findPatch] of patchSpecs) {
+const selectedPatchNames = fixedShellCriticalPatchNames;
+const selectedPatchSpecs = patchSpecs.filter(([name]) => selectedPatchNames.has(name));
+const activeCriticalPatchNames = fixedShellCriticalPatchNames;
+
+for (const [name, findPatch] of selectedPatchSpecs) {
   try {
     if (forcedFailurePatch === name) {
       throw new Error(`Forced critical patch failure for transaction safety test: ${name}`);
@@ -895,8 +923,18 @@ if (oldHeaderHash !== newHeaderHash && exePath && fs.existsSync(exePath) && !exe
   console.warn(`ASAR header hash changed, but the old hash was not found in ${exePath}. Skipping EXE hash patch (asar integrity not enforced on this build).`);
 }
 
-const criticalSkipped = skipped.filter((item) => criticalPatchNames.has(item.name));
-console.log(JSON.stringify({ asarPath, written, skipped, criticalSkipped, oldHeaderHash, newHeaderHash, exePatched }, null, 2));
+const criticalSkipped = skipped.filter((item) => activeCriticalPatchNames.has(item.name));
+console.log(JSON.stringify({
+  asarPath,
+  patchProfile,
+  selectedPatchNames: [...selectedPatchNames],
+  written,
+  skipped,
+  criticalSkipped,
+  oldHeaderHash,
+  newHeaderHash,
+  exePatched,
+}, null, 2));
 if (criticalSkipped.length > 0) {
   process.exitCode = 1;
 }

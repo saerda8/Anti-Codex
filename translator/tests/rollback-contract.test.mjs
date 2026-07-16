@@ -9,6 +9,10 @@ function readRollbackScript() {
   return readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
 }
 
+function readSyncScript() {
+  return readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+}
+
 function extractFunction(text, name) {
   const marker = `function ${name}`;
   const start = text.indexOf(marker);
@@ -21,7 +25,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   const rollback = readRollbackScript();
   const validator = extractFunction(rollback, "Test-AntiCodexHost");
 
-  assert.match(validator, /anticodex-host-manifest-v1/);
+  assert.match(validator, /anticodex-host-manifest-v2/);
+  assert.match(validator, /fixed-shell-v1/);
+  assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full|legacyCriticalPatches/);
   assert.match(validator, /criticalPatches/);
   assert.match(validator, /expectedCriticalPatches/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
@@ -29,29 +35,27 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   for (const marker of [
     ".app.name=`Anti-Codex`",
     "AntiCodex",
-    "authMethod:`apikey`",
-    "requiresAuth:!1",
     "icon:`icon.ico`",
-    "marketplaces:[]",
-    "marketplaceLoadErrors:[]",
-    "listPlugins({})",
+    "__ANTICODEX_OPEN_MANAGER__",
+    "\\u7ba1\\u7406",
   ]) {
     assert.match(asarValidator, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.doesNotMatch(asarValidator, /legacyRequiredMarkers|authMethod:`apikey`|requiresAuth:!1|marketplaces:\[\]/);
+  assert.match(asarValidator, /fixed shell host contains a retired feature patch/i);
   for (const patchName of [
     "package-json",
     "webview-html-title",
     "app-name",
     "app-user-model-id",
     "session-title",
+    "startup-mcp-config-reload",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",
     "browser-window-icon",
+    "windows-tray-icon",
     "local-model-availability",
-    "local-plugin-catalog",
-    "electron-local-plugin-catalog",
-    "webview-local-plugin-catalog",
   ]) {
     assert.match(validator, new RegExp(`"${patchName}"`));
   }
@@ -68,6 +72,14 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /OriginalFilename/);
   assert.match(validator, /Anti-Codex\.exe/);
   assert.match(validator, /Anti-Codex/);
+});
+
+test("post-sync acceptance reads model availability from the models endpoint", () => {
+  const acceptance = extractFunction(readSyncScript(), "Invoke-AntiCodexPostSyncAcceptance");
+
+  assert.match(acceptance, /Invoke-RestMethod[^\r\n]*\$baseUrl\/models/);
+  assert.match(acceptance, /@\(\$models\.data\)\.Count/);
+  assert.doesNotMatch(acceptance, /\$health\.modelCount/);
 });
 
 test("rollback validates both hosts before swapping and again after activation", () => {

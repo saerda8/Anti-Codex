@@ -16,8 +16,14 @@ if ([System.Net.ServicePointManager]::DefaultConnectionLimit -lt 16) {
 }
 
 if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+    $BaseUrl = "http://127.0.0.1:18484"
 }
+$fixedRouteHealthUrl = "http://127.0.0.1:18487/anticodex/fixed-route/health"
+$authPath = Join-Path $env:APPDATA "anticodex\codex-home-deepseek-app\auth.json"
+if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) { throw "Anti-Codex local proxy auth is missing: $authPath" }
+$localProxyKey = [string]((Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json).OPENAI_API_KEY)
+if ([string]::IsNullOrWhiteSpace($localProxyKey)) { throw "Anti-Codex local proxy key is empty" }
+$proxyHeaders = @{ Authorization = "Bearer $localProxyKey" }
 
 $startedAt = [DateTime]::UtcNow
 $reportStamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -46,7 +52,7 @@ function New-ChineseMarkerPrompt {
 }
 
 function Invoke-AntiCodexHealth {
-    return Invoke-RestMethod -Uri "$BaseUrl/health" -Proxy $null -TimeoutSec 8
+    return Invoke-RestMethod -Uri $fixedRouteHealthUrl -Proxy $null -TimeoutSec 8
 }
 
 function Has-Property {
@@ -56,36 +62,25 @@ function Has-Property {
 
 function Resolve-AntiCodexMode {
     param($Health)
-    if ((Has-Property $Health "upstreamProfile") -and $Health.upstreamProfile -and (Has-Property $Health.upstreamProfile "mode")) {
-        return [string]$Health.upstreamProfile.mode
-    }
-    if (Has-Property $Health "mode") { return [string]$Health.mode }
-    if ($Health.upstream -eq "antigravity-desktop") { return "antigravity" }
+    if (Has-Property $Health "provider") { return [string]$Health.provider }
     return "unknown"
 }
 
 function Resolve-AntiCodexTestModel {
     param($Health, [string]$RequestedModel)
     if ($RequestedModel) { return $RequestedModel }
-    if ((Has-Property $Health "upstreamProfile") -and $Health.upstreamProfile -and (Has-Property $Health.upstreamProfile "model") -and $Health.upstreamProfile.model) {
-        return [string]$Health.upstreamProfile.model
-    }
     if ((Has-Property $Health "model") -and $Health.model) { return [string]$Health.model }
-    return "gemini-3.5-flash-low"
+    throw "fixed-route health did not report a model"
 }
 
 function Test-AntiCodexReadyForTraffic {
     param($Health, [string]$Mode)
-    if ($Mode -eq "third-party") {
-        $profile = if ((Has-Property $Health "upstreamProfile") -and $Health.upstreamProfile) { $Health.upstreamProfile } else { $null }
-        return [bool]($Health.ok -eq $true -and $profile -and $profile.protocol -and $profile.model)
-    }
-    return [bool]$Health.accountReady
+    return [bool]($Health.ok -eq $true -and [string]$Health.state -eq "ready" -and @("antigravity", "third-party") -contains $Mode -and $Health.model)
 }
 
-function Get-AntiCodexTranslatorPid {
+function Get-AntiCodexSupervisorPid {
     $process = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*Anti-Codex*runtime*translator*adaptive-server.mjs*" } |
+        Where-Object { $_.CommandLine -like "*Anti-Codex*runtime*scripts*start-anticodex-fixed-route.mjs*" } |
         Select-Object -First 1
     if ($process) { return [int]$process.ProcessId }
     return $null
@@ -99,6 +94,7 @@ function Invoke-AntiCodexResponse {
         return Invoke-RestMethod `
             -Uri "$BaseUrl/v1/responses" `
             -Method Post `
+            -Headers $proxyHeaders `
             -ContentType "application/json; charset=utf-8" `
             -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
             -TimeoutSec $RequestTimeoutSec `
@@ -126,6 +122,7 @@ function Invoke-AntiCodexCancelResponse {
 
     $cancelRequest = [System.Net.WebRequest]::Create("$BaseUrl/v1/responses/$ResponseId/cancel")
     $cancelRequest.Method = "POST"
+    $cancelRequest.Headers[[System.Net.HttpRequestHeader]::Authorization] = "Bearer $localProxyKey"
     $cancelRequest.Proxy = $null
     $cancelRequest.Timeout = 15000
     $cancelRequest.ReadWriteTimeout = 15000
@@ -173,6 +170,7 @@ function Invoke-AntiCodexStream {
 
     $request = [System.Net.WebRequest]::Create("$BaseUrl/v1/responses")
     $request.Method = "POST"
+    $request.Headers[[System.Net.HttpRequestHeader]::Authorization] = "Bearer $localProxyKey"
     $request.Proxy = $null
     $request.Timeout = $RequestTimeoutSec * 1000
     $request.ReadWriteTimeout = $RequestTimeoutSec * 1000
@@ -263,9 +261,9 @@ if (-not $providerReady) {
     throw "Anti-Codex provider is not ready for stability soak: mode=$upstreamMode message=$($startHealth.accountMessage)"
 }
 
-$startPid = Get-AntiCodexTranslatorPid
+$startPid = Get-AntiCodexSupervisorPid
 if (-not $startPid) {
-    throw "Anti-Codex translator process was not found."
+    throw "Anti-Codex fixed-route supervisor process was not found."
 }
 
 $turns = New-Object System.Collections.Generic.List[object]
@@ -286,7 +284,7 @@ foreach ($index in 1..3) {
     $text = Get-AntiCodexResponseText $response
     $ok = $text -match [regex]::Escape($marker)
     if (-not $ok) { $failures.Add("non-streaming marker failed: $marker -> $text") | Out-Null }
-    $turns.Add([pscustomobject]@{ name = "cn-$index"; ok = $ok; ms = $sw.ElapsedMilliseconds; text = $text; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+    $turns.Add([pscustomobject]@{ name = "cn-$index"; ok = $ok; ms = $sw.ElapsedMilliseconds; text = $text; pid = Get-AntiCodexSupervisorPid }) | Out-Null
 }
 
 $longHead = "LONGCTX_HEAD_" + (Get-Random -Minimum 10000 -Maximum 99999)
@@ -306,7 +304,7 @@ $sw.Stop()
 $longText = Get-AntiCodexResponseText $longResponse
 $longOk = $longText -match [regex]::Escape($longHead) -and $longText -match [regex]::Escape($longTail)
 if (-not $longOk) { $failures.Add("long context marker failed") | Out-Null }
-$turns.Add([pscustomobject]@{ name = "long-context"; ok = $longOk; ms = $sw.ElapsedMilliseconds; text = $longText; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+$turns.Add([pscustomobject]@{ name = "long-context"; ok = $longOk; ms = $sw.ElapsedMilliseconds; text = $longText; pid = Get-AntiCodexSupervisorPid }) | Out-Null
 
 $tool = @{
     type = "function"
@@ -375,10 +373,10 @@ if ($call -and $call.call_id) {
     $toolText = Get-AntiCodexResponseText $second
     $toolOk = $toolText -match [regex]::Escape($toolMarker) -and $toolText -match "stable"
     if (-not $toolOk) { $failures.Add("tool loop failed: $toolText") | Out-Null }
-    $turns.Add([pscustomobject]@{ name = "tool-loop"; ok = $toolOk; ms = $sw.ElapsedMilliseconds; text = $toolText; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+    $turns.Add([pscustomobject]@{ name = "tool-loop"; ok = $toolOk; ms = $sw.ElapsedMilliseconds; text = $toolText; pid = Get-AntiCodexSupervisorPid }) | Out-Null
 } else {
     $sw.Stop()
-    $turns.Add([pscustomobject]@{ name = "tool-loop"; ok = $false; ms = $sw.ElapsedMilliseconds; text = "no marker_tool call"; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+    $turns.Add([pscustomobject]@{ name = "tool-loop"; ok = $false; ms = $sw.ElapsedMilliseconds; text = "no marker_tool call"; pid = Get-AntiCodexSupervisorPid }) | Out-Null
 }
 
 $streamMarker = "STREAM_MARKER_" + (Get-Random -Minimum 10000 -Maximum 99999)
@@ -398,7 +396,7 @@ if ($completedEvent -and $completedEvent.data -and $completedEvent.data.response
 if (-not $completedText) { $completedText = $streamText }
 $streamOk = $streamText -match [regex]::Escape($streamMarker) -and $completedText -match [regex]::Escape($streamMarker)
 if (-not $streamOk) { $failures.Add("stream completion missing final marker: done=$streamText completed=$completedText") | Out-Null }
-$turns.Add([pscustomobject]@{ name = "stream"; ok = $streamOk; ms = $null; text = $streamText; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+$turns.Add([pscustomobject]@{ name = "stream"; ok = $streamOk; ms = $null; text = $streamText; pid = Get-AntiCodexSupervisorPid }) | Out-Null
 
 $cancelInput = New-MessageInput "Please wait before answering CANCEL_SHOULD_STOP."
 $cancel = Invoke-AntiCodexStream @{
@@ -409,25 +407,24 @@ $cancel = Invoke-AntiCodexStream @{
 $cancelEventNames = @($cancel.events | ForEach-Object { $_.event })
 $cancelOk = $cancelEventNames -contains "response.cancelled" -and -not ($cancelEventNames -contains "response.completed")
 if (-not $cancelOk) { $failures.Add("stream cancellation failed: $($cancelEventNames -join ',')") | Out-Null }
-$turns.Add([pscustomobject]@{ name = "cancel"; ok = $cancelOk; ms = $null; text = ($cancelEventNames -join ","); pid = Get-AntiCodexTranslatorPid }) | Out-Null
+$turns.Add([pscustomobject]@{ name = "cancel"; ok = $cancelOk; ms = $null; text = ($cancelEventNames -join ","); pid = Get-AntiCodexSupervisorPid }) | Out-Null
 
 $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(0, $DurationSec))
 $loopIndex = 0
 while ([DateTime]::UtcNow -lt $deadline) {
     $loopIndex += 1
     $health = Invoke-AntiCodexHealth
-    $translatorPid = Get-AntiCodexTranslatorPid
+    $supervisorPid = Get-AntiCodexSupervisorPid
     $healthChecks.Add([pscustomobject]@{
         index = $loopIndex
         ready = [bool](Test-AntiCodexReadyForTraffic $health $upstreamMode)
         providerReady = [bool](Test-AntiCodexReadyForTraffic $health $upstreamMode)
-        state = [string]$health.accountState
-        modelCount = [int]$health.modelCount
-        pid = $translatorPid
-        failures = [int]$health.accountConsecutiveFailures
+        state = [string]$health.state
+        model = [string]$health.model
+        pid = $supervisorPid
     }) | Out-Null
     if (-not (Test-AntiCodexReadyForTraffic $health $upstreamMode)) { $failures.Add("health not ready at loop $loopIndex") | Out-Null }
-    if ($translatorPid -ne $startPid) { $failures.Add("translator PID changed from $startPid to $translatorPid") | Out-Null }
+    if ($supervisorPid -ne $startPid) { $failures.Add("fixed-route supervisor PID changed from $startPid to $supervisorPid") | Out-Null }
 
     if ($loopIndex % 4 -eq 1) {
         $loopMarker = "SOAK_LOOP_$loopIndex"
@@ -441,13 +438,13 @@ while ([DateTime]::UtcNow -lt $deadline) {
         $loopText = Get-AntiCodexResponseText $response
         $loopOk = $loopText -match [regex]::Escape($loopMarker)
         if (-not $loopOk) { $failures.Add("loop marker failed: $loopMarker -> $loopText") | Out-Null }
-        $turns.Add([pscustomobject]@{ name = "loop-$loopIndex"; ok = $loopOk; ms = $null; text = $loopText; pid = Get-AntiCodexTranslatorPid }) | Out-Null
+        $turns.Add([pscustomobject]@{ name = "loop-$loopIndex"; ok = $loopOk; ms = $null; text = $loopText; pid = Get-AntiCodexSupervisorPid }) | Out-Null
     }
     Start-Sleep -Seconds ([Math]::Max(1, $HealthIntervalSec))
 }
 
 $endHealth = Invoke-AntiCodexHealth
-$endPid = Get-AntiCodexTranslatorPid
+$endPid = Get-AntiCodexSupervisorPid
 $result = [pscustomobject]@{
     ok = $failures.Count -eq 0
     reportName = "stability-soak"
@@ -456,8 +453,8 @@ $result = [pscustomobject]@{
     providerReady = [bool]$providerReady
     startReady = [bool](Test-AntiCodexReadyForTraffic $startHealth $upstreamMode)
     endReady = [bool](Test-AntiCodexReadyForTraffic $endHealth $upstreamMode)
-    accountReady = [bool]$startHealth.accountReady
-    modelCount = [int]$endHealth.modelCount
+    provider = [string]$endHealth.provider
+    routeState = [string]$endHealth.state
     startPid = $startPid
     endPid = $endPid
     pidStable = $startPid -eq $endPid

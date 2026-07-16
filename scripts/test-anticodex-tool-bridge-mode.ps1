@@ -93,8 +93,8 @@ if ($diagnostics) {
             if ($bridge.mode -ne "native-mcp-same-cascade") {
                 Add-Failure "toolBridge.mode is '$($bridge.mode)', expected 'native-mcp-same-cascade' when native bridge is explicitly enabled"
             }
-            if ($bridge.localAdapter -ne "native-mcp-same-cascade-with-prompt-fallback") {
-                Add-Failure "toolBridge.localAdapter is '$($bridge.localAdapter)', expected native MCP with prompt fallback when native bridge is enabled"
+            if ($bridge.localAdapter -ne "native-mcp-same-cascade-structured-fail-closed") {
+                Add-Failure "toolBridge.localAdapter is '$($bridge.localAdapter)', expected structured fail-closed native MCP when native bridge is enabled"
             }
             if ($bridge.nativeAntigravityToolEvents -ne $true) {
                 Add-Failure "toolBridge should confirm native Antigravity tool events when native bridge is enabled"
@@ -168,7 +168,7 @@ if ($diagnostics) {
             if ($native.nativeMcpPermissionMode -ne "automatic-before-codex-execution") {
                 Add-Failure "nativeToolCapability should auto-handle permission before Codex execution when native bridge is enabled"
             }
-            if ($native.codexToolBridge -ne "native-mcp-same-cascade-with-prompt-fallback") {
+            if ($native.codexToolBridge -ne "native-mcp-same-cascade-structured-fail-closed") {
                 Add-Failure "nativeToolCapability codexToolBridge is '$($native.codexToolBridge)'"
             }
         } else {
