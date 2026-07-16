@@ -1,7 +1,7 @@
 # Anti-Codex Final Migration Plan
 
 - Status: authoritative execution plan; Gates 1-8 complete
-- Updated: 2026-07-16
+- Updated: 2026-07-17
 - Architecture: [`THREE_LAYER_ARCHITECTURE.md`](THREE_LAYER_ARCHITECTURE.md)
 - Removal ledger: [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_REMOVAL_MANIFEST.md)
 - Implementation inventory: [`CURRENT_IMPLEMENTATION_AUDIT.md`](CURRENT_IMPLEMENTATION_AUDIT.md)
@@ -47,6 +47,7 @@ At the end of every cycle:
 - CodexPlusPlus isolation review, rebaseable patch, reproducible Windows launcher build and real copied-client isolation proof: complete.
 - Deterministic third-party Chat Completions route: complete. The only non-isolation CodexPlusPlus change is the documented abortive-close transport for plain HTTP loopback model streams; remote provider payloads, protocol conversion, retries and task behavior remain upstream.
 - Thin Antigravity adapter and isolated CodexPlusPlus route switch: complete. The persistent copied-client matrix, visible-client short proof, formal edge/recovery matrix, legacy zero-hit gate, release packaging proof and final multi-style Gate 8 are green.
+- Post-release real-artifact validation is active maintenance, not a new gate. The current sweep produced and independently verified a short video, PPTX, responsive website and cross-deliverable audit project. A provider 429 after completed tool work and a separate optional third-party HTTP 503 are external route conditions; neither permits adding task control to the adapter or replacing CodexPlusPlus translation.
 
 Old percentages from the mixed translator describe historical reusable evidence only. They are not completion claims for this plan.
 
