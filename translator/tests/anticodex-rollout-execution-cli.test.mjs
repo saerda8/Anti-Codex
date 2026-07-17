@@ -24,17 +24,23 @@ test("rollout execution CLI audits files and writes the same JSON report", () =>
   const root = mkdtempSync(join(os.tmpdir(), "anticodex-rollout-cli-"));
   const rollout = join(root, "rollout-clean.jsonl");
   const output = join(root, "report.json");
+  const markdown = join(root, "report.md");
   writeRollout(rollout);
   try {
-    const child = spawnSync(process.execPath, [scriptPath, "--output", output, rollout], { encoding: "utf8" });
+    const child = spawnSync(process.execPath, [scriptPath, "--output", output, "--markdown", markdown, rollout], { encoding: "utf8" });
     assert.equal(child.status, 0, child.stderr);
     const stdout = JSON.parse(child.stdout);
     const saved = JSON.parse(readFileSync(output, "utf8"));
+    const markdownText = readFileSync(markdown, "utf8");
     assert.deepEqual(saved, stdout);
     assert.equal(stdout.ok, true);
     assert.equal(stdout.taskCount, 1);
     assert.equal(stdout.tasks[0].threadId, "thread-cli");
     assert.equal(stdout.tasks[0].turnCount, 1);
+    assert.match(markdownText, /# Anti-Codex 原任务执行审计/);
+    assert.match(markdownText, /thread-cli/);
+    assert.match(markdownText, /1 \/ 1/);
+    assert.match(markdownText, /严格结果：通过/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
