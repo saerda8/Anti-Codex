@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   advanceStableIdleWindow,
@@ -41,6 +41,10 @@ import {
   readNativeCodexActivityRows,
   waitForNativeCodexRequestQuiet,
 } from "./lib/anticodex-native-request-activity.mjs";
+import {
+  diffProtectedTreeSnapshots,
+  snapshotProtectedTree,
+} from "./lib/protected-tree-evidence.mjs";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -69,6 +73,7 @@ Options:
   --report-name <name>     Isolated report name for a custom scenario.
   --required-file <path>   Require this file to be newly created or updated and non-empty.
   --required-file-contains <a|b>  Require every pipe-separated UTF-8 string in the file.
+  --protect-root <path>    Fail if anything except --required-file changes below this directory.
   --result-driven-completion      Accept the current native Codex task-complete event; final text markers stay diagnostic.
   --require-native-single-task    Require native Codex request quiet before submit and reject hidden tool execution.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
@@ -244,6 +249,40 @@ const requiredFileContains = String(args.get("--required-file-contains") || "")
 const requiredFileBefore = requiredFile && existsSync(requiredFile)
   ? { exists: true, size: statSync(requiredFile).size, mtimeMs: statSync(requiredFile).mtimeMs }
   : { exists: false, size: 0, mtimeMs: 0 };
+const protectedRoot = args.get("--protect-root") ? resolve(String(args.get("--protect-root"))) : "";
+if (protectedRoot && requiredFile) {
+  const requiredRelative = relative(protectedRoot, requiredFile);
+  if (requiredRelative === "" || requiredRelative === ".." || requiredRelative.startsWith(`..${sep}`) || isAbsolute(requiredRelative)) {
+    throw new Error("--required-file must be a file below --protect-root.");
+  }
+}
+const protectedRootBefore = protectedRoot
+  ? snapshotProtectedTree(protectedRoot, { ignoredPaths: requiredFile ? [requiredFile] : [] })
+  : null;
+
+function collectProtectedRootEvidence() {
+  if (!protectedRootBefore) return null;
+  try {
+    const after = snapshotProtectedTree(protectedRoot, { ignoredPaths: requiredFile ? [requiredFile] : [] });
+    return {
+      root: protectedRoot,
+      ignoredPath: requiredFile || null,
+      ...diffProtectedTreeSnapshots(protectedRootBefore, after),
+    };
+  } catch (error) {
+    return {
+      root: protectedRoot,
+      ignoredPath: requiredFile || null,
+      ok: false,
+      beforeFingerprint: protectedRootBefore.fingerprint,
+      afterFingerprint: "",
+      added: [],
+      removed: [],
+      changed: [],
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 const hasCustomPrompt = Boolean(promptFromFile || args.get("--prompt"));
 let promptText = String(promptFromFile || args.get("--prompt") || (taskMode === "web-search"
   ? `最近 Codex 都更新了什么？请上网搜索后用中文简要回答，最后单独写 ${marker}。`
@@ -6222,6 +6261,10 @@ async function main() {
   if (requiredFileEvidence?.missingContains?.length > 0) {
     failures.push(`desktop task required file is missing expected text: ${requiredFileEvidence.missingContains.join(", ")}`);
   }
+  const protectedRootEvidence = collectProtectedRootEvidence();
+  if (protectedRootEvidence && protectedRootEvidence.ok !== true) {
+    failures.push("protected root changed outside the required file");
+  }
   const lastRelay = diagnostics?.responsesWebSocket?.lastRelay || null;
   const lastRelayAt = Date.parse(String(lastRelay?.at || ""));
   if (Number(lastRelay?.status || 0) === 409
@@ -6265,6 +6308,8 @@ async function main() {
     marker,
     requiredFile: requiredFile || null,
     requiredFileEvidence,
+    protectedRoot: protectedRoot || null,
+    protectedRootEvidence,
     artifactDir: taskMode === "repo-file-edit"
       ? repoFileEditDir
       : taskMode === "repo-multi-file-edit"
@@ -6366,6 +6411,7 @@ if (workspaceCommand) {
   });
 } else {
   main().catch((error) => {
+    const protectedRootEvidence = collectProtectedRootEvidence();
     const payload = {
       ok: false,
       reportName,
@@ -6384,6 +6430,8 @@ if (workspaceCommand) {
       failures: [error instanceof Error ? error.message : String(error)],
       marker,
       requiredFile: requiredFile || null,
+      protectedRoot: protectedRoot || null,
+      protectedRootEvidence,
       projectChatRoot: projectChatRoot || null,
       artifactDir: taskMode === "repo-file-edit"
         ? repoFileEditDir
