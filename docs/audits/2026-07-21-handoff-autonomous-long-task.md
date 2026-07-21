@@ -1,9 +1,9 @@
 # Anti-Codex 自主长任务续跑交接
 
-更新时间：2026-07-21 14:20（Asia/Shanghai）  
-工作目录：`G:\Trae-Project\Anti-Codex\deepcodex`  
-分支：`main`  
-代码检查点：`0dcc402 checkpoint: stabilize three-layer runtime and long-task evidence`  
+更新时间：2026-07-21 14:20（Asia/Shanghai）
+工作目录：`G:\Trae-Project\Anti-Codex\deepcodex`
+分支：`main`
+代码检查点：`0dcc402 checkpoint: stabilize three-layer runtime and long-task evidence`
 来源长频道/目标：`019f42f5-22ad-72a2-a847-2b134d2126e6`
 
 ## 1. 接手结论
@@ -65,9 +65,9 @@
 - 所有生产步骤必须在 Anti-Codex 前台可见；主机不得后台代替它编写生产文件、运行渲染或把后台成果塞回前台。
 - 必须保留同一任务的多回合、真实工具调用、失败、自主修复和最终成果证据。
 
-原生任务：`019f7379-c051-7de1-b2eb-cd2e333bf8f9`  
-侧栏标题包含：`Anti-Codex 人物剧情短片`  
-工程目录：`G:\Trae-Project\Anti-Codex\deliverables\2026-07-19-alternating-provider-live-action-lipsync-stage7`  
+原生任务：`019f7379-c051-7de1-b2eb-cd2e333bf8f9`
+侧栏标题包含：`Anti-Codex 人物剧情短片`
+工程目录：`G:\Trae-Project\Anti-Codex\deliverables\2026-07-19-alternating-provider-live-action-lipsync-stage7`
 原生 rollout：`%APPDATA%\anticodex\codex-home-deepseek-app\sessions\2026\07\18\rollout-2026-07-18T12-26-26-019f7379-c051-7de1-b2eb-cd2e333bf8f9.jsonl`
 
 ## 7. 自主长任务规则（本次最重要纠偏）
