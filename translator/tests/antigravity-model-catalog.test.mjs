@@ -105,6 +105,10 @@ test("buildAntigravityModelCatalog maps model fields correctly", () => {
   assert.equal(m1.base_instructions, "System prompt");
   assert.equal(m1.shell_type, "shell_command");
   assert.equal(m1.priority, 0);
+  assert.equal(m1.visibility, "list");
+  assert.equal(m1.supported_in_api, true);
+  assert.equal(m1.upgrade, null);
+  assert.equal(m1.availability_nux, null);
 
   // Second model (No image support)
   const m2 = catalog.models[1];
@@ -114,6 +118,7 @@ test("buildAntigravityModelCatalog maps model fields correctly", () => {
   assert.equal(m2.max_context_window, 131072);
   assert.deepEqual(m2.input_modalities, ["text"]);
   assert.equal(m2.priority, 1);
+  assert.equal(m2.visibility, "list");
 });
 
 test("buildAntigravityModelCatalog maps reasoning levels correctly based on display name and ID", () => {

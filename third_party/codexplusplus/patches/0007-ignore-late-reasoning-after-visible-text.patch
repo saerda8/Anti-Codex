@@ -1,0 +1,214 @@
+From 30a17ff2ee66e640a8f40f1ebb85a2971911628f Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sun, 19 Jul 2026 08:09:32 +0800
+Subject: [PATCH 7/7] handle third-party thinking tags without interleaving
+
+
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 9cb1bbc424272c4c73ba27d24b35378ed25f029a..cb89b29713b7e880e3ceea79e0461a8854c3fe19 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
+ use std::time::Duration;
+ 
+ use anyhow::Context;
+-use serde_json::{Value, json};
++use serde_json::{json, Value};
+ 
+ use crate::relay_rotation::{RotationContext, RotationEvent};
+ use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, SettingsStore};
+@@ -19,6 +19,12 @@ const UPSTREAM_HEADER_TIMEOUT: Duration = Duration::from_secs(30);
+ const UPSTREAM_STREAM_HEADER_TIMEOUT: Duration = Duration::from_secs(120);
+ const THINK_OPEN_TAG: &str = "<think>";
+ const THINK_CLOSE_TAG: &str = "</think>";
++const THINKING_OPEN_TAG: &str = "<thinking>";
++const THINKING_CLOSE_TAG: &str = "</thinking>";
++const THINK_TAG_PAIRS: [(&str, &str); 2] = [
++    (THINK_OPEN_TAG, THINK_CLOSE_TAG),
++    (THINKING_OPEN_TAG, THINKING_CLOSE_TAG),
++];
+ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
+     "frequency_penalty",
+     "logit_bias",
+@@ -56,7 +62,7 @@ fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
+ 
+ #[cfg(test)]
+ mod isolation_port_tests {
+-    use super::{DEFAULT_PROTOCOL_PROXY_PORT, protocol_proxy_port_from_value};
++    use super::{protocol_proxy_port_from_value, DEFAULT_PROTOCOL_PROXY_PORT};
+ 
+     #[test]
+     fn protocol_proxy_port_accepts_only_nonzero_u16_values() {
+@@ -719,9 +725,9 @@ fn select_anticodex_relay_for_model(
+ #[cfg(test)]
+ mod anticodex_model_routing_tests {
+     use super::{
++        align_codex_compaction_model_with_selected, select_anticodex_relay_for_model,
+         ANTICODEX_ANTIGRAVITY_MODEL_SLOT, ANTICODEX_ANTIGRAVITY_RELAY_ID,
+         ANTICODEX_THIRD_PARTY_MODEL_SLOT, ANTICODEX_THIRD_PARTY_RELAY_ID,
+-        align_codex_compaction_model_with_selected, select_anticodex_relay_for_model,
+     };
+     use crate::settings::{BackendSettings, RelayProfile};
+     use serde_json::json;
+@@ -1898,6 +1904,10 @@ impl ChatSseState {
+     }
+ 
+     fn push_reasoning_delta_into(&mut self, delta: &str, output: &mut String) {
++        if self.text.added {
++            return;
++        }
++
+         if !self.reasoning.added {
+             let output_index = self.next_output_index();
+             let item_id = format!("rs_{}", self.response_id);
+@@ -2369,10 +2379,16 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+     if trimmed.is_empty() {
+         return ThinkPrefixDecision::NeedMore;
+     }
+-    if trimmed.starts_with(THINK_OPEN_TAG) {
++    if THINK_TAG_PAIRS
++        .iter()
++        .any(|(open_tag, _)| trimmed.starts_with(open_tag))
++    {
+         return ThinkPrefixDecision::Reasoning;
+     }
+-    if THINK_OPEN_TAG.starts_with(trimmed) {
++    if THINK_TAG_PAIRS
++        .iter()
++        .any(|(open_tag, _)| open_tag.starts_with(trimmed))
++    {
+         return ThinkPrefixDecision::NeedMore;
+     }
+     ThinkPrefixDecision::Text
+@@ -3899,13 +3915,14 @@ fn response_tool_call_item(
+ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+     let leading_ws_len = text.len() - text.trim_start().len();
+     let after_ws = &text[leading_ws_len..];
+-    if !after_ws.starts_with(THINK_OPEN_TAG) {
+-        return None;
+-    }
+-    let body_start = leading_ws_len + THINK_OPEN_TAG.len();
+-    let close_relative = text[body_start..].find(THINK_CLOSE_TAG)?;
++    let (open_tag, close_tag) = THINK_TAG_PAIRS
++        .iter()
++        .copied()
++        .find(|(open_tag, _)| after_ws.starts_with(open_tag))?;
++    let body_start = leading_ws_len + open_tag.len();
++    let close_relative = text[body_start..].find(close_tag)?;
+     let close_start = body_start + close_relative;
+-    let answer_start = close_start + THINK_CLOSE_TAG.len();
++    let answer_start = close_start + close_tag.len();
+     Some((
+         text[body_start..close_start].trim().to_string(),
+         strip_think_answer_separator(&text[answer_start..]).to_string(),
+@@ -3915,9 +3932,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+ fn strip_leading_think_open_tag(text: &str) -> Option<String> {
+     let leading_ws_len = text.len() - text.trim_start().len();
+     let after_ws = &text[leading_ws_len..];
+-    after_ws
+-        .strip_prefix(THINK_OPEN_TAG)
+-        .map(|value| value.trim().to_string())
++    THINK_TAG_PAIRS.iter().find_map(|(open_tag, _)| {
++        after_ws
++            .strip_prefix(open_tag)
++            .map(|value| value.trim().to_string())
++    })
+ }
+ 
+ fn strip_think_answer_separator(text: &str) -> &str {
+diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
+index 83308987b752ef78bce5dd2d77ee247c8cf3b495..bc080847773346f675ec8068552935dbb6ce451f 100644
+--- a/crates/codex-plus-core/tests/protocol_proxy.rs
++++ b/crates/codex-plus-core/tests/protocol_proxy.rs
+@@ -1381,6 +1381,33 @@ fn chat_completion_response_splits_inline_think_block() {
+     );
+     assert_eq!(converted["output"][1]["type"], "message");
+     assert_eq!(converted["output"][1]["content"][0]["text"], "pong");
++
++    let converted = chat_completion_to_response(json!({
++        "id": "chatcmpl_thinking",
++        "created": 123,
++        "model": "gpt-5.6-sol",
++        "choices": [{
++            "finish_reason": "stop",
++            "message": {
++                "role": "assistant",
++                "content": "<thinking>\nRun the focused checks.\n</thinking>\n\nChecks passed."
++            }
++        }]
++    }))
++    .unwrap();
++
++    assert_eq!(converted["output"][0]["type"], "reasoning");
++    assert_eq!(
++        converted["output"][0]["summary"][0]["text"],
++        "Run the focused checks."
++    );
++    assert_eq!(
++        converted["output"][1]["content"][0]["text"],
++        "Checks passed."
++    );
++    let serialized = serde_json::to_string(&converted).unwrap();
++    assert!(!serialized.contains("<thinking>"));
++    assert!(!serialized.contains("</thinking>"));
+ }
+ 
+ #[test]
+@@ -1404,6 +1431,33 @@ data: [DONE]
+     assert!(converted.contains("data: [DONE]"));
+ }
+ 
++#[test]
++fn chat_sse_does_not_interleave_late_reasoning_with_started_text() {
++    let converted = chat_sse_to_responses_sse(
++        r#"data: {"id":"chatcmpl_late_reasoning","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"content":"Starting work. "}}]}
++
++data: {"id":"chatcmpl_late_reasoning","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"reasoning_content":"This arrived after visible text."}}]}
++
++data: {"id":"chatcmpl_late_reasoning","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"content":"Continuing now."},"finish_reason":"stop"}]}
++
++data: [DONE]
++
++"#,
++    );
++
++    assert_eq!(
++        converted
++            .matches("event: response.output_item.added")
++            .count(),
++        1
++    );
++    assert!(!converted.contains("event: response.reasoning_summary_part.added"));
++    assert!(!converted.contains("This arrived after visible text."));
++    assert!(converted.contains("\"delta\":\"Starting work. \""));
++    assert!(converted.contains("\"delta\":\"Continuing now.\""));
++    assert!(converted.contains("\"text\":\"Starting work. Continuing now.\""));
++}
++
+ #[test]
+ fn chat_sse_converts_reasoning_inline_think_tools_and_errors_like_ccs() {
+     let reasoning = chat_sse_to_responses_sse(
+@@ -1436,6 +1490,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
+     assert!(!inline_think.contains("<think>"));
+     assert!(!inline_think.contains("</think>"));
+ 
++    let inline_thinking = chat_sse_to_responses_sse(
++        r#"data: {"id":"chatcmpl_sol","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"content":"<think"}}]}
++
++data: {"id":"chatcmpl_sol","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"content":"ing>\nInspect"}}]}
++
++data: {"id":"chatcmpl_sol","created":123,"model":"gpt-5.6-sol","choices":[{"delta":{"content":" files.</thinking>\n\nDone"},"finish_reason":"stop"}]}
++
++"#,
++    );
++    assert!(inline_thinking.contains("Inspect files."));
++    assert!(inline_thinking.contains("\"text\":\"Done\""));
++    assert!(!inline_thinking.contains("<thinking>"));
++    assert!(!inline_thinking.contains("</thinking>"));
++
+     let tool = chat_sse_to_responses_sse(
+         r#"data: {"id":"chatcmpl_tool","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather"}}]}}]}
+ 
+-- 
+2.55.0.windows.3
+

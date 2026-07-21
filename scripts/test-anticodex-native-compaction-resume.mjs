@@ -33,6 +33,7 @@ Options:
   --expected-marker <text>   Marker that must be visible in the selected historical task.
   --artifact-dir <path>      Existing long-project directory.
   --model <id>               Antigravity model.
+  --compact-only             Stop after visible native compaction; do not submit the built-in follow-up task.
   --timeout-ms <ms>          Compaction/follow-up timeout (default: 300000).
   --min-long-context-bytes <n> Minimum observed request body before /compact (default: 65536).
   --cpp-log-offset <bytes>   Log offset before the long journey.
@@ -70,6 +71,7 @@ const existingCompactionOffset = existingCompactionOffsetValue === undefined
   ? null
   : Number(existingCompactionOffsetValue);
 const allowRealTraffic = args.has("--allow-real-traffic");
+const compactOnly = args.has("--compact-only");
 const startedAt = Date.now();
 const runId = Date.now();
 
@@ -360,8 +362,18 @@ async function waitForCompaction(path, offset, budgetMs) {
   const deadline = Date.now() + budgetMs;
   let evidence = detectNativeCompactionEvidence([]);
   while (Date.now() < deadline) {
-    evidence = detectNativeCompactionEvidence(readRecordsSince(path, offset));
+    const records = readRecordsSince(path, offset);
+    evidence = detectNativeCompactionEvidence(records);
     if (evidence.observed) return evidence;
+    const terminalFailure = records.findLast((record) => record?.type === "event_msg"
+      && record?.payload?.type === "task_complete"
+      && record?.payload?.error?.message);
+    if (terminalFailure) {
+      return {
+        ...evidence,
+        terminalError: String(terminalFailure.payload.error.message),
+      };
+    }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
   }
   return evidence;
@@ -414,6 +426,9 @@ try {
   } else {
     commandSubmitEvidence = await submitCompactCommand(cdp);
     compactionEvidence = await waitForCompaction(rolloutFile, rolloutOffset, timeoutMs);
+    if (compactionEvidence.terminalError) {
+      throw new Error(`native Codex compaction failed: ${compactionEvidence.terminalError}`);
+    }
     if (!compactionEvidence.observed) failures.push("native Codex contextCompaction item was not written to the same rollout");
     idleAfterCompaction = await waitForIdleComposer(cdp, timeoutMs);
   }
@@ -424,7 +439,7 @@ try {
   cdp?.close();
 }
 
-if (compactionEvidence.observed && idleAfterCompaction?.ok === true) {
+if (compactionEvidence.observed && idleAfterCompaction?.ok === true && !compactOnly) {
   followupMarker = `UI_GATE8_COMPACT_RESUME_${runId}`;
   const promptPath = resolve(reportRoot, `gate8-compact-followup-${runId}.txt`);
   mkdirSync(reportRoot, { recursive: true });
@@ -486,6 +501,7 @@ const payload = writeReport({
   coverageKind: "native-codex-visible-thread-compaction-resume",
   failures,
   model,
+  compactOnly,
   threadId,
   rolloutFile,
   titleContains,

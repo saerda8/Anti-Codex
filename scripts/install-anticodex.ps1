@@ -4,6 +4,28 @@ param(
     [switch]$HostOnly
 )
 
+if ($PSVersionTable.PSEdition -eq "Core") {
+    $windowsPowerShell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+    if (-not (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) {
+        throw "Windows PowerShell is required to install the Codex desktop package copy: $windowsPowerShell"
+    }
+    $delegateArgs = @(
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $PSCommandPath,
+        "-InstallTarget", $InstallTarget
+    )
+    if ($HostOnly) { $delegateArgs += "-HostOnly" }
+    $delegateOutput = & $windowsPowerShell @delegateArgs
+    $delegateExitCode = $LASTEXITCODE
+    if ($delegateExitCode -ne 0) {
+        throw "Windows PowerShell Anti-Codex install exited with code $delegateExitCode."
+    }
+    $delegateOutput
+    return
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -303,6 +325,8 @@ $runtime = Join-Path $resolvedTarget "runtime"
 $copiedCodex = Join-Path $resolvedTarget "codex-patched-app"
 $copiedCodexStaging = Join-Path $resolvedTarget "codex-host-staging"
 $legacyRuntimeFiles = @(
+    "scripts\start-anticodex-task-hidden.vbs",
+    "scripts\start-anticodex-task-hidden.ps1",
     # Older syncs flattened these translator files into the runtime root.
     "antigravity-failure-circuit.mjs",
     "antigravity-request-queue.mjs",
@@ -404,7 +428,11 @@ if (-not $HostOnly) {
     }
     & $codexPlusPlusInstaller -InstallRoot $resolvedTarget | Out-Null
     foreach ($requiredRuntimePath in @(
+        (Join-Path $runtime "scripts\antigravity-desktop.ps1"),
+        (Join-Path $runtime "scripts\apply-anticodex-upstream.ps1"),
         (Join-Path $runtime "scripts\start-anticodex.ps1"),
+        (Join-Path $runtime "scripts\hide-anticodex-console.ps1"),
+        (Join-Path $runtime "scripts\start-anticodex-task.mjs"),
         (Join-Path $runtime "scripts\start-anticodex-fixed-route.mjs"),
         (Join-Path $runtime "scripts\anticodex-manager-service.mjs"),
         (Join-Path $runtime "scripts\install-codexplusplus-component.ps1"),
@@ -487,58 +515,15 @@ if (Test-Path -LiteralPath $snapshotSync -PathType Leaf) {
 }
 
 if (-not $HostOnly) {
-    $desktop = [Environment]::GetFolderPath("Desktop")
-    $programs = [Environment]::GetFolderPath("Programs")
-    $startMenuDir = Join-Path $programs "Anti-Codex"
-    $shell = New-Object -ComObject WScript.Shell
-    $icon = Join-Path $copiedCodex "resources\icon.ico"
-    $desktopIcon = Join-Path $runtime "assets\anticodex-desktop.ico"
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-
-    $shortcut = $shell.CreateShortcut((Join-Path $desktop "Anti-Codex.lnk"))
-    $shortcut.TargetPath = $powershell
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runtime\scripts\start-anticodex.ps1`""
-    $shortcut.WorkingDirectory = $resolvedTarget
-    $shortcut.Description = "Anti-Codex - Codex Desktop powered by Antigravity"
-    if (Test-Path -LiteralPath $desktopIcon) {
-        $shortcut.IconLocation = "$desktopIcon,0"
-    } elseif (Test-Path -LiteralPath $icon) {
-        $shortcut.IconLocation = "$icon,0"
+    $shortcutRepair = Join-Path $runtime "scripts\repair-anticodex-shortcuts.ps1"
+    if (-not (Test-Path -LiteralPath $shortcutRepair -PathType Leaf)) {
+        throw "Anti-Codex shortcut repair is missing: $shortcutRepair"
     }
-    $shortcut.Save()
-
-    New-Item -ItemType Directory -Path $startMenuDir -Force | Out-Null
-    $startShortcut = $shell.CreateShortcut((Join-Path $startMenuDir "Anti-Codex.lnk"))
-    $startShortcut.TargetPath = $powershell
-    $startShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runtime\scripts\start-anticodex.ps1`""
-    $startShortcut.WorkingDirectory = $resolvedTarget
-    $startShortcut.Description = "Anti-Codex - Codex Desktop powered by Antigravity"
-    if (Test-Path -LiteralPath $icon) { $startShortcut.IconLocation = "$icon,0" }
-    $startShortcut.Save()
-
-    $syncShortcut = $shell.CreateShortcut((Join-Path $startMenuDir "Sync Anti-Codex with Codex.lnk"))
-    $syncShortcut.TargetPath = $powershell
-    $syncShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runtime\scripts\sync-anticodex-launcher.ps1`""
-    $syncShortcut.WorkingDirectory = $resolvedTarget
-    $syncShortcut.Description = "Rebuild Anti-Codex from the installed Codex Desktop host after Codex updates"
-    if (Test-Path -LiteralPath $icon) { $syncShortcut.IconLocation = "$icon,0" }
-    $syncShortcut.Save()
-
-    $rollbackShortcut = $shell.CreateShortcut((Join-Path $startMenuDir "Rollback Anti-Codex.lnk"))
-    $rollbackShortcut.TargetPath = $powershell
-    $rollbackShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runtime\scripts\rollback-anticodex-launcher.ps1`""
-    $rollbackShortcut.WorkingDirectory = $resolvedTarget
-    $rollbackShortcut.Description = "Rollback Anti-Codex to the previous patched Codex host version"
-    if (Test-Path -LiteralPath $icon) { $rollbackShortcut.IconLocation = "$icon,0" }
-    $rollbackShortcut.Save()
-
-    $managerShortcut = $shell.CreateShortcut((Join-Path $startMenuDir "Manage Anti-Codex.lnk"))
-    $managerShortcut.TargetPath = $powershell
-    $managerShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runtime\scripts\manage-anticodex.ps1`""
-    $managerShortcut.WorkingDirectory = $resolvedTarget
-    $managerShortcut.Description = "Open the Anti-Codex maintenance and account manager"
-    if (Test-Path -LiteralPath $icon) { $managerShortcut.IconLocation = "$icon,0" }
-    $managerShortcut.Save()
+    $shortcutRepairJson = (@(& $shortcutRepair -InstallRoot $resolvedTarget) -join [Environment]::NewLine)
+    $shortcutRepairResult = $shortcutRepairJson | ConvertFrom-Json
+    if (-not $shortcutRepairResult.ok) {
+        throw "Anti-Codex shortcuts could not be installed."
+    }
 }
 
 Write-Host "Anti-Codex installed."

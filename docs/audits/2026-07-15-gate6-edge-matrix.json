@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-16T15:31:37.342Z",
+  "generatedAtUtc": "2026-07-21T06:12:07.155Z",
   "gate": "Gate 6 edge and recovery matrix",
   "ok": true,
   "failedIds": [],
@@ -12,7 +12,7 @@
       "id": "gate5_visible_integration_signed",
       "ok": true,
       "path": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate5-visible-integration.json",
-      "sha256": "ec1117acb0807e408188413085c3c08687500491c68de8ce48c4e870a15c91e6",
+      "sha256": "dd418e651847ebbd6ff9b36f32ba03ee0a97ac4f2c8a8c3c9aa585bdccfe8e0a",
       "signed": true,
       "checkCount": 13,
       "failedIds": []
@@ -53,8 +53,8 @@
       "ok": true,
       "exitCode": 0,
       "missingTestPaths": [],
-      "tests": 47,
-      "pass": 47,
+      "tests": 53,
+      "pass": 53,
       "fail": 0,
       "stderr": ""
     },
@@ -155,6 +155,6 @@
   "report": {
     "audit": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate6-edge-matrix.json",
     "latest": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\latest-gate6-edge-matrix.json",
-    "history": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\20260716-153137-gate6-edge-matrix.json"
+    "history": "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\reports\\20260721-061207-gate6-edge-matrix.json"
   }
 }

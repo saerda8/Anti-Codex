@@ -37,6 +37,7 @@ import {
 } from "./lib/ui-chat-marker-evidence.mjs";
 import {
   analyzeNativeCodexActivityRows,
+  readNativeCodexRequestSnapshot,
   nativeExpectedRequestObserved,
   readNativeCodexActivityRows,
   waitForNativeCodexRequestQuiet,
@@ -73,6 +74,7 @@ Options:
   --report-name <name>     Isolated report name for a custom scenario.
   --required-file <path>   Require this file to be newly created or updated and non-empty.
   --required-file-contains <a|b>  Require every pipe-separated UTF-8 string in the file.
+  --required-file-authoritative  For follow-up local-project turns, validate the marker in --required-file instead of reusing the first-turn done/index marker contract.
   --protect-root <path>    Fail if anything except --required-file changes below this directory.
   --result-driven-completion      Accept the current native Codex task-complete event; final text markers stay diagnostic.
   --require-native-single-task    Require native Codex request quiet before submit and reject hidden tool execution.
@@ -81,6 +83,8 @@ Options:
   --navigate-away-before-history-reopen  Open a blank new task before reopening --same-chat-title-contains.
   --require-history-responsive       Fail when reopening history exceeds the configured budget.
   --history-open-budget-ms <ms>      Maximum history click-to-interactive time (default: 3000).
+  --history-probe-only               Reopen and time an existing task without submitting model traffic.
+  --frontend-model-probe-only        Physically select --model in the current task without submitting model traffic.
   --force-reset-same-chat  Allow stale recovery to interrupt/reset a reused chat.
   --workspace-command <command>  No-traffic workspace command (restore only).
   --workspace-state-file <path>  Workspace snapshot JSON used by --workspace-command restore.
@@ -129,6 +133,8 @@ const isolateChat = !(args.has("--same-chat") || sameChatTitleContains);
 const preserveSameChatActiveTask = !isolateChat && !args.has("--force-reset-same-chat");
 const requireHistoryResponsive = args.has("--require-history-responsive");
 const historyOpenBudgetMs = Math.max(250, Number(args.get("--history-open-budget-ms") || 3_000));
+const historyProbeOnly = args.has("--history-probe-only");
+const frontendModelProbeOnly = args.has("--frontend-model-probe-only");
 const customBaseReportName = String(args.get("--report-name") || "")
   .trim()
   .toLowerCase()
@@ -246,9 +252,25 @@ const requiredFileContains = String(args.get("--required-file-contains") || "")
   .split("|")
   .map(value => value.trim())
   .filter(Boolean);
+const requiredFileAuthoritative = args.has("--required-file-authoritative");
+if (requiredFileAuthoritative && (!requiredFile || !requiredFileContains.includes(marker))) {
+  throw new Error("--required-file-authoritative requires --required-file and the exact marker in --required-file-contains.");
+}
 const requiredFileBefore = requiredFile && existsSync(requiredFile)
   ? { exists: true, size: statSync(requiredFile).size, mtimeMs: statSync(requiredFile).mtimeMs }
   : { exists: false, size: 0, mtimeMs: 0 };
+
+function requiredFileCompletionReady() {
+  if (!requiredFileAuthoritative) return true;
+  if (!requiredFile || !existsSync(requiredFile)) return false;
+  const current = statSync(requiredFile);
+  const changed = !requiredFileBefore.exists
+    || current.size !== requiredFileBefore.size
+    || current.mtimeMs > requiredFileBefore.mtimeMs;
+  if (!changed || current.size <= 0) return false;
+  const contents = readFileSync(requiredFile, "utf8");
+  return requiredFileContains.every((value) => contents.includes(value));
+}
 const protectedRoot = args.get("--protect-root") ? resolve(String(args.get("--protect-root"))) : "";
 if (protectedRoot && requiredFile) {
   const requiredRelative = relative(protectedRoot, requiredFile);
@@ -641,6 +663,11 @@ function modelValueMatches(value, expectedValues = []) {
 
 function requiredModelNeedles() {
   const values = [requiredModel, requiredModelLabel].filter(Boolean);
+  const gptDisplayAliases = values
+    .filter((value) => /^gpt[- ]\d/i.test(String(value)))
+    .map((value) => String(value).replace(/^gpt[- ]/i, ""))
+    .filter(Boolean);
+  values.push(...gptDisplayAliases);
   if (values.some((value) => /^gpt[- ]oss\b/i.test(String(value)))) {
     values.push(...values.map((value) => String(value).replace(/^gpt[- ]/i, "")).filter(Boolean));
   }
@@ -1153,8 +1180,10 @@ function compactCodexRolloutEvidence(bundles = []) {
     taskCompleteSeen: bundle.taskCompleteSeen === true,
     markerTurnIds: Array.isArray(bundle.markerTurnIds) ? bundle.markerTurnIds : [],
     completedMarkerTurnIds: Array.isArray(bundle.completedMarkerTurnIds) ? bundle.completedMarkerTurnIds : [],
+    failedMarkerTurnIds: Array.isArray(bundle.failedMarkerTurnIds) ? bundle.failedMarkerTurnIds : [],
     latestMarkerTurnId: bundle.latestMarkerTurnId || null,
     latestMarkerTurnComplete: bundle.latestMarkerTurnComplete === true,
+    latestMarkerTurnError: bundle.latestMarkerTurnError || null,
     contextItemCount: Array.isArray(bundle.contextItems) ? bundle.contextItems.length : 0,
   }));
 }
@@ -2761,6 +2790,24 @@ async function readFixedRouteHealth() {
   }
 }
 
+async function readFixedRouteRequiredModelEvidence(requiredValues = requiredModelNeedles()) {
+  const health = await readFixedRouteHealth();
+  const observedModels = [health?.requestModelOverride, health?.route?.requestModelOverride]
+    .map(String)
+    .filter(Boolean);
+  const matched = fixedRouteHealthIsReady(health)
+    && observedModels.some((value) => modelValueMatches(value, requiredValues));
+  return {
+    ok: matched,
+    matched,
+    requiredValues,
+    observedModels,
+    selectionSource: "fixed-route-request-model-override",
+    fixedRouteReady: fixedRouteHealthIsReady(health),
+    provider: health?.provider || null,
+  };
+}
+
 async function waitForStableDesktopIdle(ws, expectedMarker, url, timeoutMs = 20_000, quietMs = 12_000) {
   const startedAt = Date.now();
   const nativeProbeDeadline = startedAt + Math.min(Math.max(5_000, quietMs), 12_000);
@@ -3189,24 +3236,32 @@ function currentModelProbeExpression(requiredValues = [], { clickSelected = fals
         rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
       };
     };
-    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|model/i.test(label);
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|model|模型|自定义/i.test(label);
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
-    const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
+    const inspectedCandidates = Array.from(document.querySelectorAll('button,[role="button"],[role="menu"],[aria-haspopup]'))
       .filter(visible)
       .map((element, index) => {
         const label = labelFor(element);
         const rect = element.getBoundingClientRect();
-        const nearComposer = composerRect
-          ? Math.max(0, 180 - Math.round(Math.hypot((rect.left + rect.width / 2) - (composerRect.left + composerRect.width / 2), (rect.top + rect.height / 2) - (composerRect.top + composerRect.height / 2)) / 3))
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const horizontalGap = composerRect
+          ? Math.max(composerRect.left - centerX, 0, centerX - composerRect.right)
           : 0;
+        const verticalGap = composerRect
+          ? Math.max(composerRect.top - centerY, 0, centerY - composerRect.bottom)
+          : 0;
+        const composerDistance = composerRect ? Math.hypot(horizontalGap, verticalGap) : 0;
+        const nearComposer = composerRect ? Math.max(0, 180 - Math.round(composerDistance / 3)) : 0;
         const score = (matches(label) ? 400 : 0)
           + (modelish(label) ? 140 : 0)
           + nearComposer
           - Math.min(label.length, 100);
-        return { element, index, label, score };
-      })
-      .filter((item) => modelish(item.label) || matches(item.label))
+        return { element, index, label, score, composerDistance };
+      });
+    const candidates = inspectedCandidates
+      .filter((item) => (!composerRect || item.composerDistance <= 360) && (modelish(item.label) || matches(item.label)))
       .sort((a, b) => b.score - a.score);
     const selected = candidates[0] || null;
     if (clickSelected && selected?.element instanceof HTMLElement) {
@@ -3215,8 +3270,19 @@ function currentModelProbeExpression(requiredValues = [], { clickSelected = fals
     return {
       matched: Boolean(selected && matches(selected.label)),
       clicked: Boolean(clickSelected && selected),
+      composerRect: composerRect ? { x: Math.round(composerRect.x), y: Math.round(composerRect.y), w: Math.round(composerRect.width), h: Math.round(composerRect.height) } : null,
       selected: selected ? summarize(selected.element, selected.index, selected.score) : null,
       candidates: candidates.slice(0, 8).map((item) => summarize(item.element, item.index, item.score)),
+      inspectedNearComposerControls: inspectedCandidates
+        .filter((item) => !composerRect || item.composerDistance <= 520)
+        .sort((a, b) => a.composerDistance - b.composerDistance)
+        .slice(0, 20)
+        .map((item) => ({ ...summarize(item.element, item.index, item.score), composerDistance: Math.round(item.composerDistance) })),
+      inspectedModelCandidates: inspectedCandidates
+        .filter((item) => modelish(item.label) || matches(item.label))
+        .sort((a, b) => a.composerDistance - b.composerDistance)
+        .slice(0, 12)
+        .map((item) => ({ ...summarize(item.element, item.index, item.score), composerDistance: Math.round(item.composerDistance) })),
     };
   })()`;
 }
@@ -3286,6 +3352,7 @@ function modelOptionProbeExpression(requiredValues = [], { focusSelected = false
       ? { element: retainedSelectedElement, index: -1, label: labelFor(retainedSelectedElement), score: 450 }
       : null);
     if (focusSelected && selected?.element instanceof HTMLElement) {
+      selected.element.scrollIntoView({ block: 'center', inline: 'nearest' });
       selected.element.focus({ preventScroll: true });
     }
     const selectedPointerEvents = selected?.element instanceof HTMLElement ? getComputedStyle(selected.element).pointerEvents : '';
@@ -3418,6 +3485,8 @@ function atomicModelSelectionExpression(requiredValues = []) {
 async function selectRequiredModel(ws, timeoutMs = 20_000) {
   const requiredValues = requiredModelNeedles();
   if (requiredValues.length === 0) return null;
+  const fixedRouteEvidence = await readFixedRouteRequiredModelEvidence(requiredValues);
+  if (fixedRouteEvidence.matched) return fixedRouteEvidence;
   const deadline = Date.now() + timeoutMs;
   let latest = null;
   const knownModelMenuOrder = [
@@ -3438,11 +3507,11 @@ async function selectRequiredModel(ws, timeoutMs = 20_000) {
   const clickRectCenter = async (rect) => {
     const x = rect.x + rect.w / 2;
     const y = rect.y + rect.h / 2;
-    await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+    await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0, pointerType: "mouse" });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
-    await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1, pointerType: "mouse" });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
-    await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1, pointerType: "mouse" });
   };
   const typeModelFilter = async () => {
     const text = String(requiredModelLabel || requiredModel || requiredValues[0] || "").replace(/[^\p{L}\p{N} ._-]+/gu, " ").trim();
@@ -3658,6 +3727,18 @@ async function selectRequiredModel(ws, timeoutMs = 20_000) {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 750));
       continue;
     }
+    const focusedOptionResult = await ws.send("Runtime.evaluate", {
+      expression: modelOptionProbeExpression(requiredValues, { focusSelected: true }),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest.focusedOption = focusedOptionResult.result?.result?.value || null;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+    const focusedOptionProbe = await probeModelOptions();
+    if (focusedOptionProbe?.matched === true && focusedOptionProbe?.selected?.rect) {
+      latest.optionProbe = focusedOptionProbe;
+      latest.option = focusedOptionProbe.selected;
+    }
     await clickRectCenter(latest.option.rect);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 1000));
     const afterResult = await ws.send("Runtime.evaluate", {
@@ -3754,6 +3835,8 @@ async function selectRequiredModel(ws, timeoutMs = 20_000) {
 async function confirmRequiredModelSelected(ws, timeoutMs = 3_000) {
   const requiredValues = requiredModelNeedles();
   if (requiredValues.length === 0) return null;
+  const fixedRouteEvidence = await readFixedRouteRequiredModelEvidence(requiredValues);
+  if (fixedRouteEvidence.matched) return { ...fixedRouteEvidence, readOnly: true };
   const deadline = Date.now() + timeoutMs;
   let latest = null;
   while (Date.now() < deadline) {
@@ -4111,7 +4194,12 @@ function sameChatClickExpression(titleNeedle) {
     const visible = (el) => {
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
-      return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+      return rect.width > 1
+        && rect.height > 1
+        && rect.left < 420
+        && rect.right <= 520
+        && style.display !== "none"
+        && style.visibility !== "hidden";
     };
     const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], [role="link"], [role="treeitem"], [tabindex]'))
       .filter(visible)
@@ -4385,6 +4473,90 @@ function discoverAntiCodexCdpPorts() {
   } catch {
     return [];
   }
+}
+
+function activateAntiCodexWindow(processId) {
+  const numericProcessId = Number(processId || 0);
+  if (process.platform !== "win32" || !Number.isInteger(numericProcessId) || numericProcessId <= 0) {
+    return { attempted: false, ok: process.platform !== "win32", processId: numericProcessId || null };
+  }
+  try {
+    const activationScript = `
+$ErrorActionPreference='Stop'
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class AntiCodexForegroundWindow {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint attach, uint attachTo, bool value);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int command);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int index);
+}
+'@
+$target = [IntPtr](Get-Process -Id ${numericProcessId} -ErrorAction Stop).MainWindowHandle
+$foreground = [AntiCodexForegroundWindow]::GetForegroundWindow()
+[uint32]$foregroundProcessId = 0
+$foregroundThread = [AntiCodexForegroundWindow]::GetWindowThreadProcessId($foreground, [ref]$foregroundProcessId)
+[uint32]$targetProcessId = 0
+$targetThread = [AntiCodexForegroundWindow]::GetWindowThreadProcessId($target, [ref]$targetProcessId)
+$currentThread = [AntiCodexForegroundWindow]::GetCurrentThreadId()
+$attachedForeground = [AntiCodexForegroundWindow]::AttachThreadInput($currentThread, $foregroundThread, $true)
+$attachedTarget = [AntiCodexForegroundWindow]::AttachThreadInput($currentThread, $targetThread, $true)
+[AntiCodexForegroundWindow]::ShowWindowAsync($target, 9) | Out-Null
+[AntiCodexForegroundWindow]::BringWindowToTop($target) | Out-Null
+$setForeground = [AntiCodexForegroundWindow]::SetForegroundWindow($target)
+[AntiCodexForegroundWindow]::SetFocus($target) | Out-Null
+if ($attachedTarget) { [AntiCodexForegroundWindow]::AttachThreadInput($currentThread, $targetThread, $false) | Out-Null }
+if ($attachedForeground) { [AntiCodexForegroundWindow]::AttachThreadInput($currentThread, $foregroundThread, $false) | Out-Null }
+Start-Sleep -Milliseconds 100
+$after = [AntiCodexForegroundWindow]::GetForegroundWindow()
+[uint32]$afterProcessId = 0
+[AntiCodexForegroundWindow]::GetWindowThreadProcessId($after, [ref]$afterProcessId) | Out-Null
+$visible = [AntiCodexForegroundWindow]::IsWindowVisible($target)
+$minimized = [AntiCodexForegroundWindow]::IsIconic($target)
+$topMost = ([AntiCodexForegroundWindow]::GetWindowLong($target, -20) -band 0x8) -ne 0
+[pscustomobject]@{ ok = (($after -eq $target) -and $visible -and (-not $minimized) -and (-not $topMost)); processId = ${numericProcessId}; foregroundProcessId = $afterProcessId; setForeground = $setForeground; visible = $visible; minimized = $minimized; topMost = $topMost } | ConvertTo-Json -Compress
+`;
+    const output = execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-WindowStyle",
+      "Hidden",
+      "-Command",
+      activationScript,
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const evidence = JSON.parse(output.trim());
+    return { attempted: true, ...evidence, processId: numericProcessId };
+  } catch (error) {
+    return { attempted: true, ok: false, processId: numericProcessId, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function waitForVisibleDocument(ws, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: "({ focused: document.hasFocus(), visibility: document.visibilityState })",
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest = result.result?.result?.value || null;
+    if (latest?.visibility === "visible") return { ok: true, ...latest };
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  return { ok: false, ...(latest || {}) };
 }
 
 async function readVisibleMainPaneText(ws) {
@@ -4773,6 +4945,522 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
   };
 }
 
+async function runHistoryProbeOnly() {
+  if (!sameChatTitleContains) {
+    throw new Error("--history-probe-only requires --same-chat-title-contains");
+  }
+  let releaseUiLock = null;
+  let ws = null;
+  try {
+    releaseUiLock = await acquireUiSmokeLock();
+    const targets = await resolveCdpTargets();
+    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
+    ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    await ws.connect();
+    await ws.send("Page.bringToFront");
+    await ws.send("Runtime.enable");
+    await ws.send("DOM.enable");
+    await ws.send("Input.setIgnoreInputEvents", { ignore: false });
+    await ws.send("Runtime.evaluate", {
+      expression: "document.querySelector('.anticodex-close')?.click()",
+      awaitPromise: true,
+    });
+
+    const projectRootEvidence = projectChatRoot
+      ? await activateNativeProjectRoot(ws, projectChatRoot, projectChatLabel)
+      : null;
+    let historyReopenNavigation = null;
+    if (navigateAwayBeforeHistoryReopen) {
+      const clickedNewChat = await ws.send("Runtime.evaluate", {
+        expression: newChatClickExpression(requiresProjectChat ? projectChatLabel : ""),
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      historyReopenNavigation = clickedNewChat.result?.result?.value || null;
+      if (historyReopenNavigation?.clicked !== true) {
+        await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "n", code: "KeyN", windowsVirtualKeyCode: 78, modifiers: 2 });
+        await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17 });
+        historyReopenNavigation = { ...(historyReopenNavigation || {}), fallbackShortcut: true };
+      }
+      historyReopenNavigation.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
+      if (historyReopenNavigation.visibleIdleAfterNewChat?.ok !== true) {
+        throw new Error("history probe did not reach a blank idle task before reopening history");
+      }
+      historyReopenNavigation.navigatedAwayFirst = true;
+    }
+
+    const sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
+      waitForIdle: true,
+      idleTimeoutMs: Math.max(5_000, historyOpenBudgetMs + 2_000),
+    });
+    if (historyReopenNavigation) {
+      sameChatEvidence.historyReopenNavigation = historyReopenNavigation;
+      sameChatEvidence.navigatedAwayFirst = true;
+    }
+    const failures = sameChatEvidence.openLatencyMs > historyOpenBudgetMs
+      ? [`history task took ${sameChatEvidence.openLatencyMs} ms to become interactive (budget ${historyOpenBudgetMs} ms)`]
+      : [];
+    return {
+      ok: failures.length === 0,
+      historyProbeOnly: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "desktop-ui-history-no-traffic",
+      failures,
+      sameChatTitleContains,
+      historyOpenBudgetMs,
+      sameChatEvidence,
+      projectRootEvidence,
+      cdpPort,
+      target: { id: target.id, title: target.title, url: target.url },
+    };
+  } finally {
+    try { ws?.socket?.destroy(); } catch {}
+    releaseUiLock?.();
+  }
+}
+
+function physicalModelMenuProbeExpression(requiredValues = []) {
+  const valuesJson = JSON.stringify(requiredValues.filter(Boolean));
+  return `(() => {
+    const requiredValues = ${valuesJson};
+    const normalize = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\\s+/g, ' ');
+    const expected = requiredValues.map(normalize).filter(Boolean);
+    const matches = (value) => {
+      const text = normalize(value);
+      return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+    };
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const labelFor = (element) => String(element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent || '').replace(/\\s+/g, ' ').trim();
+    const summarize = (element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        label: labelFor(element),
+        role: element.getAttribute('role') || '',
+        hasPopup: element.getAttribute('aria-haspopup') || '',
+        rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
+      };
+    };
+    const menuItems = Array.from(document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"],[cmdk-item]')).filter(visible);
+    const target = menuItems.find((element) => element.getAttribute('aria-haspopup') !== 'menu' && matches(labelFor(element))) || null;
+    const submenu = menuItems.find((element) => {
+      const label = labelFor(element);
+      return element.getAttribute('aria-haspopup') === 'menu' || /^\\s*(模型|model)\\b/i.test(label);
+    }) || null;
+    return {
+      target: target ? summarize(target) : null,
+      submenu: submenu ? summarize(submenu) : null,
+      items: menuItems.map(summarize).slice(0, 24),
+      controls: Array.from(document.querySelectorAll('button,[role],[aria-haspopup],[data-state="open"]'))
+        .filter(visible)
+        .map(summarize)
+        .filter((item) => item.label || item.role || item.hasPopup)
+        .slice(-40),
+    };
+  })()`;
+}
+
+async function selectFrontendModelWithPhysicalMouse(ws, timeoutMs = 20_000) {
+  const requiredValues = requiredModelNeedles();
+  if (requiredValues.length === 0) throw new Error("--frontend-model-probe-only requires --model or --model-label");
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 3_000 });
+
+  const beforeResult = await ws.send("Runtime.evaluate", {
+    expression: currentModelProbeExpression(requiredValues),
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const before = beforeResult.result?.result?.value || null;
+  const selector = before?.selected || before?.candidates?.[0] || null;
+  if (!selector?.rect) throw new Error(`native model selector button was not found: ${JSON.stringify(before)}`);
+
+  const selectorHitResult = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const rect = ${JSON.stringify(selector.rect)};
+      const x = Number(rect.x) + Number(rect.w) / 2;
+      const y = Number(rect.y) + Number(rect.h) / 2;
+      const hit = document.elementFromPoint(x, y);
+      const chain = [];
+      for (let element = hit; element instanceof HTMLElement && chain.length < 6; element = element.parentElement) {
+        chain.push({
+          tag: element.tagName,
+          role: element.getAttribute('role') || '',
+          aria: element.getAttribute('aria-label') || '',
+          label: String(element.getAttribute('title') || element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+          className: String(element.className || '').slice(0, 160),
+          pointerEvents: getComputedStyle(element).pointerEvents,
+        });
+      }
+      return { x, y, focused: document.hasFocus(), visibility: document.visibilityState, chain };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const selectorHit = selectorHitResult.result?.result?.value || null;
+
+  const pointForRect = (rect) => ({
+    x: Number(rect.x) + Number(rect.w) / 2,
+    y: Number(rect.y) + Number(rect.h) / 2,
+  });
+  const physicalMove = async (fromRect, toRect, steps = 10) => {
+    const from = pointForRect(fromRect);
+    const to = pointForRect(toRect);
+    if (![from.x, from.y, to.x, to.y].every(Number.isFinite)) {
+      throw new Error("model control returned an invalid mouse path");
+    }
+    for (let step = 1; step <= steps; step += 1) {
+      const progress = step / steps;
+      await ws.send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: from.x + ((to.x - from.x) * progress),
+        y: from.y + ((to.y - from.y) * progress),
+        button: "none",
+        buttons: 0,
+        pointerType: "mouse",
+      });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 18));
+    }
+  };
+  const physicalClick = async (rect, { move = true } = {}) => {
+    const { x, y } = pointForRect(rect);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("model control returned an invalid click rectangle");
+    if (move) {
+      await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0, pointerType: "mouse" });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 120));
+    }
+    await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1, pointerType: "mouse" });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 60));
+    await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1, pointerType: "mouse" });
+  };
+  const pressArrowRight = async () => {
+    await ws.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+    await ws.send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 });
+  };
+  const probeOpenModelMenu = async () => {
+    const menuResult = await ws.send("Runtime.evaluate", {
+      expression: physicalModelMenuProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    return menuResult.result?.result?.value || null;
+  };
+  const focusModelSubmenu = async () => {
+    const focusResult = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const visible = (element) => {
+          if (!(element instanceof HTMLElement)) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+        const submenuItems = Array.from(document.querySelectorAll('[role="menuitem"]')).filter(visible);
+        const item = submenuItems.find((element) => {
+          const label = String(element.getAttribute('aria-label') || element.textContent || '').trim();
+          return label.startsWith('模型') || label.toLowerCase().startsWith('model');
+        }) || submenuItems[0] || null;
+        item?.focus();
+        return { found: Boolean(item), focused: document.activeElement === item, label: String(item?.getAttribute('aria-label') || item?.textContent || '').trim(), ariaExpanded: item?.getAttribute('aria-expanded') || '' };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    return focusResult.result?.result?.value || null;
+  };
+  const scrollTargetModelOptionIntoView = async () => {
+    const valuesJson = JSON.stringify(requiredValues);
+    const scrollResult = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const requiredValues = ${valuesJson};
+        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+        const expected = requiredValues.map(normalize).filter(Boolean);
+        const matches = (value) => {
+          const text = normalize(value);
+          return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle) || needle.includes(text));
+        };
+        const options = Array.from(document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]'));
+        const target = options.find((element) => element.getAttribute('aria-haspopup') !== 'menu' && matches(element.getAttribute('aria-label') || element.textContent || '')) || null;
+        target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        const rect = target?.getBoundingClientRect();
+        return { found: Boolean(target), viewportHeight: innerHeight, rect: rect ? { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) } : null };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    return scrollResult.result?.result?.value || null;
+  };
+
+  await physicalClick(selector.rect);
+  const deadline = Date.now() + timeoutMs;
+  let lastSelectorClickAt = Date.now();
+  let selectorRetryCount = 0;
+  let menu = null;
+  let submenuActivated = false;
+  let submenuActivationAttempts = 0;
+  let submenuFocus = null;
+  while (Date.now() < deadline) {
+    menu = await probeOpenModelMenu();
+    if (menu?.target?.rect) break;
+    if (menu?.submenu?.rect && submenuActivationAttempts < 2) {
+      submenuActivationAttempts += 1;
+      const rect = menu.submenu.rect;
+      await physicalMove(selector.rect, rect, 14);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+      const hoveredMenu = await probeOpenModelMenu();
+      if (hoveredMenu?.target?.rect) {
+        menu = hoveredMenu;
+        submenuActivated = true;
+        break;
+      }
+      submenuFocus = await focusModelSubmenu();
+      await pressArrowRight();
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+      const keyboardMenu = await probeOpenModelMenu();
+      if (keyboardMenu?.target?.rect) {
+        menu = keyboardMenu;
+        submenuActivated = true;
+        break;
+      }
+      await physicalClick(rect, { move: false });
+      submenuFocus = await focusModelSubmenu();
+      await pressArrowRight();
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    } else if (selectorRetryCount === 0 && Date.now() - lastSelectorClickAt >= 1_000) {
+      await physicalClick(selector.rect);
+      lastSelectorClickAt = Date.now();
+      selectorRetryCount = 1;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  }
+  if (!menu?.target?.rect) {
+    const visibleItems = (menu?.items || []).map((item) => item.label).filter(Boolean).join(" | ");
+    const visibleControls = (menu?.controls || []).map((item) => `${item.role || item.hasPopup || item.label}:${item.label}`).join(" | ");
+    throw new Error(`required native model option was not found: ${requiredValues.join(" / ")}; selector: ${selector.label || "unknown"} @ ${JSON.stringify(selector.rect)}; selector hit: ${JSON.stringify(selectorHit)}; submenu focus: ${JSON.stringify(submenuFocus)}; visible menu items: ${visibleItems || "none"}; controls: ${visibleControls || "none"}`);
+  }
+
+  const targetScroll = await scrollTargetModelOptionIntoView();
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  const scrolledMenu = await probeOpenModelMenu();
+  if (scrolledMenu?.target?.rect) menu = scrolledMenu;
+  await physicalMove(menu.submenu?.rect || selector.rect, menu.target.rect);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 80));
+  const optionHitResult = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const rect = ${JSON.stringify(menu.target.rect)};
+      const x = Number(rect.x) + Number(rect.w) / 2;
+      const y = Number(rect.y) + Number(rect.h) / 2;
+      const hit = document.elementFromPoint(x, y);
+      const item = hit?.closest?.('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]') || null;
+      const reactPropsKey = item ? Object.keys(item).find((key) => key.startsWith('__reactProps$')) : null;
+      const reactProps = reactPropsKey ? item[reactPropsKey] : null;
+      window.__anticodexPhysicalModelEvents = [];
+      for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+        document.addEventListener(type, (event) => {
+          window.__anticodexPhysicalModelEvents.push({
+            type,
+            target: String(event.target?.getAttribute?.('aria-label') || event.target?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+            role: event.target?.getAttribute?.('role') || '',
+            defaultPrevented: event.defaultPrevented,
+          });
+        }, { capture: true, once: true });
+      }
+      return {
+        x,
+        y,
+        hitTag: hit?.tagName || '',
+        hitLabel: String(hit?.getAttribute?.('aria-label') || hit?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+        itemTag: item?.tagName || '',
+        itemLabel: String(item?.getAttribute?.('aria-label') || item?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+        ariaDisabled: item?.getAttribute?.('aria-disabled') || '',
+        dataDisabled: item?.getAttribute?.('data-disabled') ?? null,
+        pointerEvents: item ? getComputedStyle(item).pointerEvents : '',
+        tabIndex: item?.tabIndex ?? null,
+        reactHandlers: reactProps && typeof reactProps === 'object'
+          ? Object.keys(reactProps).filter((key) => /^on[A-Z]/.test(key))
+          : [],
+        outerHtml: String(item?.outerHTML || hit?.outerHTML || '').slice(0, 600),
+      };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const optionHit = optionHitResult.result?.result?.value || null;
+  await physicalClick(menu.target.rect, { move: false });
+  const optionEventsResult = await ws.send("Runtime.evaluate", {
+    expression: "window.__anticodexPhysicalModelEvents || []",
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const optionEvents = optionEventsResult.result?.result?.value || [];
+  let after = null;
+  while (Date.now() < deadline) {
+    const afterResult = await ws.send("Runtime.evaluate", {
+      expression: currentModelProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    after = afterResult.result?.result?.value || null;
+    if (after?.matched === true) break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  }
+  await pressEscapeKey(ws);
+  return {
+    ok: after?.matched === true,
+    actualMouseClick: true,
+    selectorClick: true,
+    selectorClickCount: 1 + selectorRetryCount,
+    optionClick: true,
+    submenuActivated,
+    submenuActivationAttempts,
+    submenuFocus,
+    targetScroll,
+    requiredValues,
+    before: before?.selected || null,
+    selectorHit,
+    option: menu.target,
+    optionHit,
+    optionEvents,
+    after: after?.selected || null,
+    menuItems: menu.items || [],
+  };
+}
+
+async function readFrontendRuntimeReady() {
+  const health = await httpJson(fixedRouteHealthUrl);
+  return {
+    ok: health?.ok === true && health?.state === "ready",
+    health,
+  };
+}
+
+async function runFrontendModelProbeOnly() {
+  if (!sameChatTitleContains) {
+    throw new Error("--frontend-model-probe-only requires --same-chat-title-contains");
+  }
+  let releaseUiLock = null;
+  let ws = null;
+  try {
+    releaseUiLock = await acquireUiSmokeLock();
+    const targets = await resolveCdpTargets();
+    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
+    ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    await ws.connect();
+    await ws.send("Page.enable");
+    await ws.send("Page.bringToFront");
+    await ws.send("Runtime.enable");
+    await ws.send("DOM.enable");
+    await ws.send("Input.setIgnoreInputEvents", { ignore: false });
+    await ws.send("Runtime.evaluate", {
+      expression: "(() => { window.focus(); return { focused: document.hasFocus(), visibility: document.visibilityState }; })()",
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+    await ws.send("Runtime.evaluate", {
+      expression: "document.querySelector('.anticodex-close')?.click()",
+      awaitPromise: true,
+    });
+
+    const requestsBefore = await readNativeCodexRequestSnapshot({ codexHome: anticodexCodexHome });
+    const healthBefore = await httpJson(fixedRouteHealthUrl);
+    const expectedOriginalCodexPid = Number(args.get("--expected-original-codex-pid") || 0);
+    const expectedSupervisorPid = Number(args.get("--expected-supervisor-pid") || 0);
+    const expectedCodexPlusPlusPid = Number(args.get("--expected-codexplusplus-pid") || 0);
+    const expectedAntiCodexMainPid = Number(args.get("--expected-anticodex-main-pid") || 0);
+    const sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
+      waitForIdle: true,
+      idleTimeoutMs: 12_000,
+    });
+    const windowActivation = activateAntiCodexWindow(expectedAntiCodexMainPid || healthBefore?.processes?.copiedClient?.[0]);
+    const visibleWindow = await waitForVisibleDocument(ws, 3_000);
+    const osWindowInteractive = windowActivation?.ok === true
+      && windowActivation?.visible === true
+      && windowActivation?.minimized === false
+      && windowActivation?.topMost === false
+      && visibleWindow?.focused === true;
+    if (visibleWindow.ok !== true && !osWindowInteractive) {
+      throw new Error(`Anti-Codex window was not visible for physical model selection: ${JSON.stringify({ windowActivation, visibleWindow })}`);
+    }
+    const selection = await selectFrontendModelWithPhysicalMouse(ws, 20_000);
+    const runtime = await readFrontendRuntimeReady();
+    const requestsAfter = await readNativeCodexRequestSnapshot({ codexHome: anticodexCodexHome });
+    const healthAfter = runtime.health || await httpJson(fixedRouteHealthUrl);
+    const firstCopiedClientPid = (health) => Number(Array.isArray(health?.processes?.copiedClient) ? health.processes.copiedClient[0] : 0);
+    const processIdentity = {
+      supervisorBefore: Number(healthBefore?.pid || 0),
+      supervisorAfter: Number(healthAfter?.pid || 0),
+      codexPlusPlusBefore: Number(healthBefore?.processes?.codexPlusPlus || 0),
+      codexPlusPlusAfter: Number(healthAfter?.processes?.codexPlusPlus || 0),
+      antiCodexMainBefore: firstCopiedClientPid(healthBefore),
+      antiCodexMainAfter: firstCopiedClientPid(healthAfter),
+      expectedOriginalCodexPid,
+      originalCodexAlive: expectedOriginalCodexPid > 0 ? (() => { try { process.kill(expectedOriginalCodexPid, 0); return true; } catch { return false; } })() : null,
+    };
+    const failures = [];
+    if (selection.ok !== true || selection.actualMouseClick !== true) failures.push("native model was not selected with physical mouse input");
+    if (runtime.ok !== true) failures.push("fixed-route runtime was not ready after frontend selection");
+    if (requestsAfter.requestCount !== requestsBefore.requestCount || requestsAfter.latestRequestRowId !== requestsBefore.latestRequestRowId) {
+      failures.push("frontend model probe sent a model request");
+    }
+    if (processIdentity.supervisorBefore !== processIdentity.supervisorAfter) failures.push("fixed-route supervisor restarted during frontend selection");
+    if (processIdentity.codexPlusPlusBefore !== processIdentity.codexPlusPlusAfter) failures.push("CodexPlusPlus restarted during frontend selection");
+    if (processIdentity.antiCodexMainBefore !== processIdentity.antiCodexMainAfter) failures.push("Anti-Codex client restarted during frontend selection");
+    if (expectedSupervisorPid > 0 && processIdentity.supervisorAfter !== expectedSupervisorPid) failures.push("fixed-route supervisor changed from the acceptance baseline");
+    if (expectedCodexPlusPlusPid > 0 && processIdentity.codexPlusPlusAfter !== expectedCodexPlusPlusPid) failures.push("CodexPlusPlus changed from the acceptance baseline");
+    if (expectedAntiCodexMainPid > 0 && processIdentity.antiCodexMainAfter !== expectedAntiCodexMainPid) failures.push("Anti-Codex main process changed from the acceptance baseline");
+    if (expectedOriginalCodexPid > 0 && processIdentity.originalCodexAlive !== true) failures.push("original Codex process exited during frontend selection");
+    return {
+      ok: failures.length === 0,
+      frontendModelProbeOnly: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      coverageKind: "desktop-ui-physical-model-switch-no-traffic",
+      failures,
+      sameChatTitleContains,
+      sameChatEvidence,
+      windowActivation,
+      visibleWindow,
+      osWindowInteractive,
+      selection,
+      selectedModel: {
+        model: requiredModel || null,
+        label: requiredModelLabel || null,
+        evidence: selection.after || null,
+      },
+      runtime: {
+        ok: runtime.ok,
+        modelDirected: true,
+        baseProvider: healthAfter?.provider || null,
+        baseModel: healthAfter?.model || null,
+      },
+      requestEvidence: {
+        beforeCount: requestsBefore.requestCount,
+        afterCount: requestsAfter.requestCount,
+        beforeLatestRequestRowId: requestsBefore.latestRequestRowId,
+        afterLatestRequestRowId: requestsAfter.latestRequestRowId,
+      },
+      processIdentity,
+      cdpPort,
+      target: { id: target.id, title: target.title, url: target.url },
+    };
+  } finally {
+    try { ws?.socket?.destroy(); } catch {}
+    releaseUiLock?.();
+  }
+}
+
 async function runWorkspaceCommandOnly() {
   if (workspaceCommand !== "restore") throw new Error(`unsupported workspace command: ${workspaceCommand || "<empty>"}`);
   if (!workspaceStateFile || !existsSync(workspaceStateFile)) {
@@ -4847,8 +5535,10 @@ async function main() {
   let requestMarkerEntryIdsBefore = [];
   let nativeActivityPreflight = null;
   let nativeSingleTaskEvidence = { ok: true, skipped: true, reason: "not_required" };
+  let windowActivationEvidence = null;
   let autonomousIdleIncompleteObserved = false;
   let resultDrivenCompletionObserved = false;
+  let resultDrivenCompletionError = "";
   const complexProjectRequiresModelLed = taskMode === "complex-project" || taskMode === "autonomous-reasoning";
 
   try {
@@ -4859,10 +5549,19 @@ async function main() {
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
+    await ws.send("Page.bringToFront");
     await ws.send("Runtime.enable");
     await ws.send("DOM.enable");
     await ws.send("Network.enable");
     await ws.send("Input.setIgnoreInputEvents", { ignore: false });
+    const foregroundHealth = await readFixedRouteHealth().catch(() => null);
+    const foregroundProcessId = Number(foregroundHealth?.processes?.copiedClient?.[0] || 0);
+    const windowActivation = activateAntiCodexWindow(foregroundProcessId);
+    const visibleWindow = await waitForVisibleDocument(ws, 3_000);
+    windowActivationEvidence = { ...windowActivation, document: visibleWindow };
+    if (windowActivation?.ok !== true || visibleWindow?.focused !== true || visibleWindow?.visibility !== "visible") {
+      throw new Error(`Anti-Codex window was not foreground and visible before desktop submit: ${JSON.stringify(windowActivationEvidence)}`);
+    }
     await ws.send("Runtime.evaluate", { expression: "document.querySelector('.anticodex-close')?.click()", awaitPromise: true });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
     if (projectChatRoot && (isolateChat || sameChatTitleContains)) {
@@ -5040,7 +5739,22 @@ async function main() {
       }
       newChatEvidence.visibleIdleAfterNewChat = await waitForVisibleComposerIdle(ws, 20_000);
     } else if (sameChatTitleContains) {
-      sameChatEvidence = sameChatEvidence || await openSameChatByTitle(ws, sameChatTitleContains);
+      sameChatEvidence = sameChatEvidence || await openSameChatByTitle(ws, sameChatTitleContains, {
+        waitForIdle: preserveSameChatActiveTask,
+      });
+      if (!preserveSameChatActiveTask && sameChatEvidence?.visibleIdleAfterClick?.ok !== true) {
+        const reopenedRecovery = await ws.send("Runtime.evaluate", {
+          expression: recoverStaleComposerExpression(),
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        sameChatEvidence.staleRecovery = reopenedRecovery.result?.result?.value || null;
+        sameChatEvidence.staleRecovery = await clickRecoveryControlsWithMouse(ws, sameChatEvidence.staleRecovery);
+        sameChatEvidence.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, 20_000);
+        if (sameChatEvidence.visibleIdleAfterClick?.ok !== true) {
+          throw new Error(`same-chat task did not become idle after stale recovery: ${sameChatTitleContains}`);
+        }
+      }
     }
     if (requiredModelNeedles().length > 0) {
       modelSelectionEvidence = await selectRequiredModel(ws, 20_000);
@@ -5601,7 +6315,10 @@ async function main() {
           submitSucceeded = false;
         }
       }
-      if (submitSucceeded) submitCompletedAt = Date.now();
+      if (submitSucceeded) {
+        submitCompletedAt = Date.now();
+        windowActivationEvidence.postSubmit = activateAntiCodexWindow(windowActivationEvidence?.processId);
+      }
       if (!submitSucceeded) failures.push("send click did not submit the composer prompt");
     }
     if (clicked && submitSucceeded) {
@@ -5651,13 +6368,22 @@ async function main() {
       });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (resultDrivenCompletionEnabled) {
+        const rolloutBundles = codexRolloutMarkerBundles(marker);
+        const latestTurnError = String(rolloutBundles[0]?.latestMarkerTurnError || "").trim();
+        if (latestTurnError) {
+          resultDrivenCompletionError = latestTurnError;
+          firstReplySeenAt ||= Date.now();
+          idleCompletedAt = Date.now();
+          break;
+        }
         const fixedRouteHealth = await readFixedRouteHealth();
         if (resultDrivenTurnCompletionReady({
           enabled: true,
-          rolloutBundles: codexRolloutMarkerBundles(marker),
+          rolloutBundles,
           composerText: composer,
           marker,
           routeReady: fixedRouteHealthIsReady(fixedRouteHealth),
+          authoritativeArtifactReady: requiredFileCompletionReady(),
         })) {
           resultDrivenCompletionObserved = true;
           inLoopIdleDiagnostics = fixedRouteIdleDiagnostics(fixedRouteHealth, "codex-rollout-current-turn-complete");
@@ -5757,7 +6483,10 @@ async function main() {
             }
           }
         } catch {}
-      } else if (answerMarkerCount >= 1 && !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) {
+      } else if (answerMarkerCount >= 1
+          && requiredFileCompletionReady()
+          && (!requiredFileAuthoritative || latestMarkerTurnCompleted(codexRolloutMarkerBundles(marker)))
+          && !composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) {
         try {
           const loopDiagnostics = await httpJson(diagnosticsUrl);
           if (diagnosticsAreIdle(loopDiagnostics)) {
@@ -5770,7 +6499,8 @@ async function main() {
     }
     }
     if (!clicked) failures.push("send button was not clicked");
-    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1 && !resultDrivenCompletionObserved) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
+    if (resultDrivenCompletionError) failures.push(`provider turn failed: ${resultDrivenCompletionError}`);
+    if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && answerMarkerCount < 1 && !resultDrivenCompletionObserved && !resultDrivenCompletionError) failures.push("assistant reply marker was not observed after the submitted prompt in the desktop UI");
     if (taskMode !== "free-chat" && taskMode !== "repo-file-edit" && composerHasUnsubmittedMarker({ composerText: composer, marker, answerMarkerCount })) failures.push("composer still contains the submitted prompt");
     if (taskMode === "free-chat") {
       if (composer.includes(promptText)) failures.push("composer still contains the submitted prompt");
@@ -5831,20 +6561,23 @@ async function main() {
     if (taskMode === "local-project") {
       artifactEvidence = await waitForArtifactEvidence(
         () => verifyLocalProjectArtifact(artifactDir, marker),
-        (evidence) => evidence?.files?.indexHtml === true
-          && evidence?.files?.readmeMd === true
-          && evidence?.files?.doneTxt === true
-          && evidence.doneExact === true
-          && evidence.indexHasMarker === true
-          && evidence.readmeNonEmpty === true,
+        (evidence) => requiredFileAuthoritative
+          ? requiredFileCompletionReady()
+          : evidence?.files?.indexHtml === true
+            && evidence?.files?.readmeMd === true
+            && evidence?.files?.doneTxt === true
+            && evidence.doneExact === true
+            && evidence.indexHasMarker === true
+            && evidence.readmeNonEmpty === true,
         Math.min(timeoutMs, 90_000),
       );
-      if (!artifactEvidence?.files?.indexHtml) failures.push("local-project index.html was not created");
-      if (!artifactEvidence?.files?.readmeMd) failures.push("local-project README.md was not created");
-      if (!artifactEvidence?.files?.doneTxt) failures.push("local-project done.txt was not created");
-      if (artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("local-project done.txt did not exactly match the marker");
-      if (artifactEvidence?.files?.indexHtml && artifactEvidence.indexHasMarker !== true) failures.push("local-project index.html did not contain the marker");
-      if (artifactEvidence?.files?.readmeMd && artifactEvidence.readmeNonEmpty !== true) failures.push("local-project README.md was empty");
+      artifactEvidence.markerContract = requiredFileAuthoritative ? "required-file" : "local-project-default";
+      if (!requiredFileAuthoritative && !artifactEvidence?.files?.indexHtml) failures.push("local-project index.html was not created");
+      if (!requiredFileAuthoritative && !artifactEvidence?.files?.readmeMd) failures.push("local-project README.md was not created");
+      if (!requiredFileAuthoritative && !artifactEvidence?.files?.doneTxt) failures.push("local-project done.txt was not created");
+      if (!requiredFileAuthoritative && artifactEvidence?.files?.doneTxt && artifactEvidence.doneExact !== true) failures.push("local-project done.txt did not exactly match the marker");
+      if (!requiredFileAuthoritative && artifactEvidence?.files?.indexHtml && artifactEvidence.indexHasMarker !== true) failures.push("local-project index.html did not contain the marker");
+      if (!requiredFileAuthoritative && artifactEvidence?.files?.readmeMd && artifactEvidence.readmeNonEmpty !== true) failures.push("local-project README.md was empty");
     }
     if (taskMode === "agentic-step-flow") {
       artifactEvidence = await waitForArtifactEvidence(
@@ -6307,6 +7040,7 @@ async function main() {
     failures,
     marker,
     requiredFile: requiredFile || null,
+    requiredFileAuthoritative,
     requiredFileEvidence,
     protectedRoot: protectedRoot || null,
     protectedRootEvidence,
@@ -6336,6 +7070,7 @@ async function main() {
     baseUrl,
     target: target ? { id: target.id, title: target.title, url: target.url } : null,
     prep,
+    windowActivationEvidence,
     submitEvidence,
     submitSucceeded,
     nativeSingleTaskEvidence,
@@ -6362,6 +7097,7 @@ async function main() {
     assistantFinalMarkerObserved,
     resultDrivenCompletionEnabled,
     resultDrivenCompletionObserved,
+    resultDrivenCompletionError: resultDrivenCompletionError || null,
     responseHistoryPath,
     activeReconnectSeen,
     activeReconnectEvidence,
@@ -6395,7 +7131,35 @@ async function main() {
   process.exit(0);
 }
 
-if (workspaceCommand) {
+if (frontendModelProbeOnly) {
+  runFrontendModelProbeOnly().then((payload) => {
+    console.log(JSON.stringify(payload));
+    process.exit(payload.ok ? 0 : 1);
+  }).catch((error) => {
+    console.log(JSON.stringify({
+      ok: false,
+      frontendModelProbeOnly: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      failures: [error instanceof Error ? error.message : String(error)],
+    }));
+    process.exit(1);
+  });
+} else if (historyProbeOnly) {
+  runHistoryProbeOnly().then((payload) => {
+    console.log(JSON.stringify(payload));
+    process.exit(payload.ok ? 0 : 1);
+  }).catch((error) => {
+    console.log(JSON.stringify({
+      ok: false,
+      historyProbeOnly: true,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      failures: [error instanceof Error ? error.message : String(error)],
+    }));
+    process.exit(1);
+  });
+} else if (workspaceCommand) {
   runWorkspaceCommandOnly().then((payload) => {
     console.log(JSON.stringify(payload));
     process.exit(0);
@@ -6430,6 +7194,7 @@ if (workspaceCommand) {
       failures: [error instanceof Error ? error.message : String(error)],
       marker,
       requiredFile: requiredFile || null,
+      requiredFileAuthoritative,
       protectedRoot: protectedRoot || null,
       protectedRootEvidence,
       projectChatRoot: projectChatRoot || null,

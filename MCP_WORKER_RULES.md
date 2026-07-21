@@ -51,6 +51,22 @@ After every failure, before another dispatch:
 
 ## Incident Log
 
+### 2026-07-17 - Read-only updater audit could not start the Codex shell executor
+
+- Worker: ordinary read-only subagent `019f6ea8-4b11-7812-9c65-1c03e3961d1f` (`Hypatia`).
+- Task: inspect the existing dual-component update scripts and tests without writes, traffic or product process changes.
+- Result: every local command failed before launch with Windows `0xC0EA0001` / `找不到适用的应用许可证`; no file, process or model request changed. The host reproduced the same failure in `shell_command`, while the already-running Node REPL successfully launched `cmd.exe`, Git, PowerShell and Docker directly.
+- Cause classification: current Codex command-executor/app-license failure, not worker transport, project code, account quota or Anti-Codex runtime failure.
+- Rule change: on this exact error, stop the affected subagent and do not retry the same shell path. Use the healthy Node REPL direct-process path for bounded local work, preserve command output, and keep product/runtime diagnosis separate.
+
+### 2026-07-17 - MIMO helper-request patch guessed prompt markers and omitted tests
+
+- Worker: MIMO `dsw_mrognbgz_0w02wa` in an isolated CodexPlusPlus v1.2.38 worktree.
+- Task: strip tools only from the native Codex title and task-suggestion helper requests, with focused Rust regressions.
+- Result: the worker changed only `protocol_proxy.rs`, guessed obsolete marker text, selected the first rather than current user input, added no tests, failed `cargo fmt --all -- --check`, and remained in `model_finishing` for about four minutes after `message_stop`. The host cancelled it and rejected the partial diff.
+- Cause classification: prompt-contract guessing plus incomplete test-first execution; not `Transport closed`, quota failure or a product-path failure.
+- Rule change: native helper compatibility tasks must include the exact current prompt markers and add failing fixture tests before source changes. A source-only patch with no requested tests is invalid; if it remains in `model_finishing` without output after a second status check, cancel it, record the job and restart locally or with a materially narrower test-first task.
+
 ### 2026-07-16 - MIMO static audit misread PowerShell child environment inheritance
 
 - Worker: MIMO `dsw_mrmpfxlo_wsfqim`.

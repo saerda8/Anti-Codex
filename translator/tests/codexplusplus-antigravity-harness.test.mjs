@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +12,16 @@ import {
   runProcess,
   treeManifest,
 } from "../../scripts/lib/codexplusplus-antigravity-harness.mjs";
+
+const harnessSource = readFileSync(new URL(
+  "../../scripts/lib/codexplusplus-antigravity-harness.mjs",
+  import.meta.url,
+), "utf8");
+
+test("process snapshots avoid the resource-heavy WMI provider", () => {
+  assert.match(harnessSource, /Get-Process -Name \$names/);
+  assert.doesNotMatch(harnessSource, /Get-CimInstance Win32_Process/);
+});
 
 test("archiveDirectory creates a readable zip from the complete workspace", {
   skip: process.platform !== "win32",

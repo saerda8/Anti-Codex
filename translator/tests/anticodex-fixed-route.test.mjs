@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   resolveProductPaths,
   generateRouteConfig,
+  getCopiedClientArgs,
   getLauncherArgs,
   mergeCodexRouteConfig,
   buildCodexPlusPlusSettings
@@ -120,6 +121,11 @@ test("Contract 3: Third-party Chat API directly becomes CodexPlusPlus upstream w
   assert.ok(!configText.includes(`127.0.0.1:${adapterPort}`), "Configuration contains Antigravity adapter URL/port");
   assert.equal(routeConfig.profileId, "anticodex-third-party");
   assert.equal(routeConfig.profileName, "Anti-Codex third-party API");
+  assert.equal(routeConfig.modelContextWindow, 272000);
+  assert.equal(routeConfig.modelAutoCompactTokenLimit, 244800);
+  assert.match(routeConfig.config, /^model_context_window = 272000$/m);
+  assert.match(routeConfig.config, /^model_auto_compact_token_limit = 244800$/m);
+  assert.match(routeConfig.config, /^model_auto_compact_token_limit_scope = "total"$/m);
 });
 
 test("Contract 3b: switching upstream routes preserves the Codex provider identity used by thread history", () => {
@@ -146,39 +152,27 @@ test("Contract 3b: switching upstream routes preserves the Codex provider identi
   assert.doesNotMatch(thirdParty.config, /\[model_providers\.anticodex_third_party\]/);
 });
 
-test("Contract 4: Visible launcher args strictly use --app-path/--debug-port/--helper-port only", () => {
-  const appPath = "G:\\mock-install-root\\codex-patched-app";
+test("Contract 4: CodexPlusPlus stays helper-only while the copied client receives native desktop args", () => {
   const debugPort = 41001;
   const helperPort = 41002;
 
-  const args = getLauncherArgs({
-    launchDesktop: true,
-    appPath,
-    debugPort,
+  const proxyArgs = getLauncherArgs({
+    launchDesktop: false,
     helperPort
   });
+  assert.deepEqual(proxyArgs, ["--helper-only", "--helper-port", String(helperPort)]);
 
-  // Verify args only contain the allowed switches
-  const allowedSwitches = ["--app-path", "--debug-port", "--helper-port"];
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("-")) {
-      assert.ok(allowedSwitches.includes(args[i]), `Found forbidden/unknown launch argument: ${args[i]}`);
-    }
-  }
-
-  // Verify they are present and match their values
-  const appPathIndex = args.indexOf("--app-path");
-  assert.ok(appPathIndex !== -1, "--app-path switch is missing");
-  assert.equal(args[appPathIndex + 1], appPath);
-
-  const debugPortIndex = args.indexOf("--debug-port");
-  assert.ok(debugPortIndex !== -1, "--debug-port switch is missing");
-  assert.equal(args[debugPortIndex + 1], String(debugPort));
-
-  const helperPortIndex = args.indexOf("--helper-port");
-  assert.ok(helperPortIndex !== -1, "--helper-port switch is missing");
-  assert.equal(args[helperPortIndex + 1], String(helperPort));
+  const clientArgs = getCopiedClientArgs({
+    debugPort,
+    codexExtraArgs: ["--user-data-dir=G:\\state\\electron", "--no-first-run"],
+  });
+  assert.deepEqual(clientArgs, [
+    `--remote-debugging-port=${debugPort}`,
+    `--remote-allow-origins=http://127.0.0.1:${debugPort}`,
+    "--user-data-dir=G:\\state\\electron",
+    "--no-first-run",
+  ]);
+  assert.equal(clientArgs.some((value) => value === "--app-path"), false);
 });
 
 test("Contract 5: mergeCodexRouteConfig retains [features], [mcp_servers.*] and common root config, removes old root-level keys, generates single provider block, no 8484", () => {
@@ -195,6 +189,9 @@ openai_base_url = "http://127.0.0.1:8484/v1"
 model = "old-model-8484"
 model_provider = "old-provider"
 model_catalog_json = "C:\\\\old\\\\catalog.json"
+model_context_window = 999999
+model_auto_compact_token_limit = 888888
+model_auto_compact_token_limit_scope = "body_after_prefix"
 allow_login_shell = true
 some_root_setting = "value"
 
@@ -223,6 +220,9 @@ command = "node"
   assert.ok(!merged.includes("old-model-8484"), "Should remove old model");
   assert.ok(!merged.includes("old-provider"), "Should remove old model_provider");
   assert.ok(!merged.includes("catalog.json"), "Should remove old model_catalog_json");
+  assert.ok(!merged.includes("model_context_window"), "Should remove old model_context_window outside third-party routes");
+  assert.ok(!merged.includes("model_auto_compact_token_limit"), "Should remove old model_auto_compact_token_limit outside third-party routes");
+  assert.ok(!merged.includes("model_auto_compact_token_limit_scope"), "Should remove old model_auto_compact_token_limit_scope outside third-party routes");
   assert.ok(!merged.includes("allow_login_shell = true"), "Should remove old allow_login_shell value");
   assert.equal((merged.match(/^allow_login_shell = false$/gm) ?? []).length, 1, "Should generate exactly one disabled login shell setting");
 

@@ -1,23 +1,11 @@
-From 3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6 Mon Sep 17 00:00:00 2001
+From c5e10b1f8e67603c37740655c4b5ef6b2de2997b Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Tue, 14 Jul 2026 20:11:29 +0800
-Subject: [PATCH] isolation: scope Anti-Codex companion runtime
+Subject: [PATCH 1/7] isolation: scope Anti-Codex companion runtime
 
----
- apps/codex-plus-launcher/src/main.rs          |  56 +++++-
- .../src-tauri/src/commands.rs                 |  65 ++++++-
- apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 ++++
- crates/codex-plus-core/src/app_paths.rs       |  77 +++++++-
- crates/codex-plus-core/src/launcher.rs        |  12 +-
- crates/codex-plus-core/src/paths.rs           |  29 +++
- crates/codex-plus-core/src/protocol_proxy.rs  |  34 ++++
- crates/codex-plus-core/src/relay_config.rs    |  10 +-
- crates/codex-plus-core/src/watcher.rs         | 167 +++++++++++++++---
- crates/codex-plus-core/tests/watcher.rs       | 131 +++++++++++++-
- 10 files changed, 568 insertions(+), 46 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 81b9bb1..57e5ea0 100644
+index 81b9bb134a2924c6e23cbaed5f1de3cb51383fa3..57e5ea06dc8298066301b14581daf352499b16f2 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -43,7 +43,11 @@ async fn main() -> Result<()> {
@@ -131,10 +119,10 @@ index 81b9bb1..57e5ea0 100644
          assert!(source.contains("launcher.already_running"));
      }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index 260162e..234ec2f 100644
+index ea115d4203f5714642bb6d2c47109aba6934d65f..7c1224f08129fa9d23d2b4dfae83ea2f4b51f7ae 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
-@@ -435,11 +435,42 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+@@ -508,11 +508,42 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
  
  #[tauri::command]
  pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
@@ -179,7 +167,7 @@ index 260162e..234ec2f 100644
  fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> CommandResult<Value> {
      let debug_port = request.debug_port;
      let helper_port = request.helper_port;
-@@ -471,6 +502,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+@@ -544,6 +575,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
  }
  
  fn spawn_silent_launcher(request: &LaunchRequest) -> anyhow::Result<()> {
@@ -190,7 +178,7 @@ index 260162e..234ec2f 100644
      let mut args = Vec::new();
      if !request.app_path.trim().is_empty() {
          args.push("--app-path".to_string());
-@@ -2579,7 +2614,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
+@@ -3425,7 +3460,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -198,8 +186,8 @@ index 260162e..234ec2f 100644
 +        codex_plus_core::protocol_proxy::protocol_proxy_port(),
      ) {
          Ok(result) => {
-             let status = codex_plus_core::relay_config::relay_status_from_home(&home);
-@@ -2616,11 +2651,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
+             finish_codex_app_state_after_provider_switch(
+@@ -3466,11 +3501,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
      match codex_plus_core::relay_config::apply_relay_config_to_home_with_protocol(
          home,
          &codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
@@ -213,7 +201,7 @@ index 260162e..234ec2f 100644
      ) {
          Ok(result) => {
              let status = codex_plus_core::relay_config::relay_status_from_home(home);
-@@ -2701,7 +2736,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
+@@ -3559,7 +3594,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -221,8 +209,8 @@ index 260162e..234ec2f 100644
 +        codex_plus_core::protocol_proxy::protocol_proxy_port(),
      ) {
          Ok(result) => {
-             let status = codex_plus_core::relay_config::relay_status_from_home(&home);
-@@ -2797,6 +2832,10 @@ fn log_relay_apply_request(
+             finish_codex_app_state_after_provider_switch(
+@@ -3672,6 +3707,10 @@ fn log_relay_apply_request(
      settings: &BackendSettings,
      relay: &codex_plus_core::settings::RelayProfile,
  ) {
@@ -233,7 +221,7 @@ index 260162e..234ec2f 100644
      let _ = codex_plus_core::diagnostic_log::append_diagnostic_log(
          event,
          json!({
-@@ -2808,7 +2847,7 @@ fn log_relay_apply_request(
+@@ -3683,7 +3722,7 @@ fn log_relay_apply_request(
              "baseUrl": relay.base_url,
              "hasConfigContents": !relay.config_contents.trim().is_empty(),
              "hasAuthContents": !relay.auth_contents.trim().is_empty(),
@@ -242,9 +230,9 @@ index 260162e..234ec2f 100644
          }),
      );
  }
-@@ -3270,6 +3309,18 @@ fn default_log_lines() -> usize {
- mod tests {
-     use super::*;
+@@ -4250,6 +4289,18 @@ mod tests {
+         );
+     }
  
 +    #[test]
 +    fn isolated_manager_launch_requires_an_absolute_explicit_app_path() {
@@ -262,10 +250,10 @@ index 260162e..234ec2f 100644
      fn backend_version_returns_structured_payload() {
          let result = backend_version();
 diff --git a/apps/codex-plus-manager/src-tauri/src/lib.rs b/apps/codex-plus-manager/src-tauri/src/lib.rs
-index ded6c7c..9c343d5 100644
+index 60a385b3a3dbe9c9e4b801a18bf465c616ce5d47..ef02f5549b2791874f1a1b642ad0fa55da61b773 100644
 --- a/apps/codex-plus-manager/src-tauri/src/lib.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/lib.rs
-@@ -231,6 +231,16 @@ fn show_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
+@@ -322,6 +322,16 @@ fn show_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
      }
  }
  
@@ -282,7 +270,7 @@ index ded6c7c..9c343d5 100644
  /// Restores and focuses an existing manager window on Windows.
  ///
  /// This is a no-op on other platforms.
-@@ -238,6 +248,9 @@ pub fn focus_existing_manager_window() {
+@@ -329,6 +339,9 @@ pub fn focus_existing_manager_window() {
      #[cfg(windows)]
      {
          let current_process_id = std::process::id();
@@ -292,7 +280,7 @@ index ded6c7c..9c343d5 100644
          for process in codex_plus_core::windows_enumerate_processes() {
              if process.process_id == current_process_id {
                  continue;
-@@ -245,6 +258,9 @@ pub fn focus_existing_manager_window() {
+@@ -336,6 +349,9 @@ pub fn focus_existing_manager_window() {
              if process
                  .exe_file
                  .eq_ignore_ascii_case("codex-plus-plus-manager.exe")
@@ -302,7 +290,7 @@ index ded6c7c..9c343d5 100644
              {
                  let _ = codex_plus_core::windows_activate_process_window(process.process_id);
                  break;
-@@ -334,3 +350,20 @@ fn acquire_single_instance_guard() -> Option<codex_plus_core::ports::LoopbackPor
+@@ -425,3 +441,20 @@ fn acquire_single_instance_guard() -> Option<codex_plus_core::ports::LoopbackPor
          }
      }
  }
@@ -324,24 +312,24 @@ index ded6c7c..9c343d5 100644
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
-index 334754a..3674546 100644
+index 3d571a1e9144500a5cc48af03f285005768d6aed..8e282d973dc4f13c2a025bea41d37e14d65b9abc 100644
 --- a/crates/codex-plus-core/src/app_paths.rs
 +++ b/crates/codex-plus-core/src/app_paths.rs
 @@ -1,4 +1,4 @@
 -use std::ffi::OsStr;
 +use std::ffi::{OsStr, OsString};
  use std::path::{Path, PathBuf};
+
  #[cfg(windows)]
- use std::process::Command;
-@@ -13,6 +13,7 @@ struct AppPackageSpec {
+@@ -14,6 +14,7 @@ struct AppPackageSpec {
  
  const CODEX_PACKAGE_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
  const STANDALONE_CODEX_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
 +const APP_EXECUTABLE_ENV: &str = "CODEX_PLUS_APP_EXECUTABLE";
  
- const APP_PACKAGE_SPECS: &[AppPackageSpec] = &[
-     AppPackageSpec {
-@@ -257,6 +258,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+ #[cfg(windows)]
+ const OPENAI_PACKAGE_FAMILY_NAMES: &[&str] = &[
+@@ -420,6 +421,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
          }
          return macos_dir.join("Codex");
      }
@@ -351,7 +339,7 @@ index 334754a..3674546 100644
      if let Some(executable) = executable_in_dir(app_dir) {
          return executable;
      }
-@@ -266,6 +270,35 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+@@ -429,6 +433,35 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
      app_dir.join("Codex.exe")
  }
  
@@ -387,7 +375,7 @@ index 334754a..3674546 100644
  pub fn codex_app_version(app_dir: &Path) -> Option<String> {
      if app_dir.extension() == Some(OsStr::new("app")) {
          return macos_app_version(app_dir);
-@@ -483,6 +516,48 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
+@@ -646,6 +679,48 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
      None
  }
  
@@ -437,10 +425,10 @@ index 334754a..3674546 100644
      for spec in APP_PACKAGE_SPECS {
          let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 1ba3656..ebad60e 100644
+index c1256532e2366c8bd532f3bb252685815e62de50..393f7336a063072918c43eb114b4b91bf14f0ffe 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
-@@ -295,7 +295,7 @@ where
+@@ -306,7 +306,7 @@ where
          }
          let protocol_proxy_enabled = relay_protocol_proxy_enabled(&settings);
          if protocol_proxy_enabled {
@@ -449,7 +437,7 @@ index 1ba3656..ebad60e 100644
          }
          if settings.enhancements_enabled || protocol_proxy_enabled {
              hooks.start_helper(helper_port).await?;
-@@ -862,6 +862,10 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -897,6 +897,10 @@ impl LaunchHooks for DefaultLaunchHooks {
      async fn write_status(&self, _status: &str) {}
  
      async fn wait_for_codex_exit(&self, launch: &CodexLaunch) -> anyhow::Result<()> {
@@ -460,7 +448,7 @@ index 1ba3656..ebad60e 100644
          match launch {
              CodexLaunch::Process { .. } => {
                  if let Some(mut child) = self.child.lock().await.take() {
-@@ -876,7 +880,11 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -911,7 +915,11 @@ impl LaunchHooks for DefaultLaunchHooks {
          }
          let mut empty_streak = 0u32;
          loop {
@@ -474,7 +462,7 @@ index 1ba3656..ebad60e 100644
                  if empty_streak >= 3 {
                      break;
 diff --git a/crates/codex-plus-core/src/paths.rs b/crates/codex-plus-core/src/paths.rs
-index 5bffb4a..1a993c3 100644
+index 36cc88e2ee24dab22e387ead9c9e20d959205fb1..240e2b8bfe0ec3706c9b1047181ae9a5f3f7cad7 100644
 --- a/crates/codex-plus-core/src/paths.rs
 +++ b/crates/codex-plus-core/src/paths.rs
 @@ -6,8 +6,25 @@ const SETTINGS_FILE: &str = "settings.json";
@@ -503,7 +491,7 @@ index 5bffb4a..1a993c3 100644
      if let Some(home_dir) = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()) {
          return home_dir.join(APP_STATE_DIR);
      }
-@@ -83,4 +100,16 @@ mod tests {
+@@ -95,4 +112,16 @@ mod tests {
  
          assert!(path.ends_with(".codex-session-delete/pending-provider-import.json"));
      }
@@ -521,7 +509,7 @@ index 5bffb4a..1a993c3 100644
 +    }
  }
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index aed1085..6890f32 100644
+index ada6885c7eae9bd054a0a580a9f666b3e96aba5f..e7a4faa3fa97200fd3e461c19c7a339c2c7cf3f4 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -13,6 +13,7 @@ use crate::relay_rotation::{RotationContext, RotationEvent};
@@ -573,10 +561,10 @@ index aed1085..6890f32 100644
  enum ChatReasoningStyle {
      Default,
 diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
-index 21076b5..ef25276 100644
+index 2463a6d9cadc7d33bd0d29b069c2fde40bad343e..a999c01f8b2b9d8f7f39f3f0353e11a0e58ab344 100644
 --- a/crates/codex-plus-core/src/relay_config.rs
 +++ b/crates/codex-plus-core/src/relay_config.rs
-@@ -236,7 +236,7 @@ pub fn apply_relay_config_to_home(
+@@ -250,7 +250,7 @@ pub fn apply_relay_config_to_home(
          base_url,
          bearer_token,
          RelayProtocol::Responses,
@@ -585,7 +573,7 @@ index 21076b5..ef25276 100644
      )
  }
  
-@@ -280,7 +280,7 @@ pub fn apply_pure_api_config_to_home(
+@@ -294,7 +294,7 @@ pub fn apply_pure_api_config_to_home(
          base_url,
          bearer_token,
          RelayProtocol::Responses,
@@ -594,7 +582,7 @@ index 21076b5..ef25276 100644
      )
  }
  
-@@ -1885,7 +1885,7 @@ pub fn relay_profile_model(profile: &RelayProfile) -> String {
+@@ -1998,7 +1998,7 @@ pub fn relay_profile_model(profile: &RelayProfile) -> String {
  pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
      if profile.relay_mode == crate::settings::RelayMode::Aggregate {
          return crate::protocol_proxy::local_responses_proxy_base_url(
@@ -603,7 +591,7 @@ index 21076b5..ef25276 100644
          );
      }
      if profile.protocol == RelayProtocol::ChatCompletions {
-@@ -1907,7 +1907,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
+@@ -2020,7 +2020,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
      if profile.protocol == RelayProtocol::ChatCompletions
          && provider_base_url
              == crate::protocol_proxy::local_responses_proxy_base_url(
@@ -612,7 +600,7 @@ index 21076b5..ef25276 100644
              )
      {
          String::new()
-@@ -2000,7 +2000,7 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
+@@ -2113,7 +2113,7 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
      let provider_base_url = codex_base_url_for_protocol(
          base_url.trim(),
          profile.protocol,
@@ -622,7 +610,7 @@ index 21076b5..ef25276 100644
      if !provider_base_url.trim().is_empty() {
          provider["base_url"] = toml_edit::value(provider_base_url.trim());
 diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
-index df08126..9943757 100644
+index f11acc1554cb5aba0a91a68fbc3fabe1f0f4831b..bb7b7c3db75d36919ef2c7f6c4681d8f50db278d 100644
 --- a/crates/codex-plus-core/src/watcher.rs
 +++ b/crates/codex-plus-core/src/watcher.rs
 @@ -16,7 +16,6 @@ const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
@@ -710,7 +698,7 @@ index df08126..9943757 100644
      Ok(())
  }
  
-@@ -231,6 +272,68 @@ pub fn find_codex_processes_from_snapshot(
+@@ -256,6 +297,68 @@ pub fn find_session_index_cleanup_blocking_processes_from_snapshot(
      ids
  }
  
@@ -776,10 +764,10 @@ index df08126..9943757 100644
 +    Vec::new()
 +}
 +
- #[cfg(not(windows))]
+ #[cfg(target_os = "macos")]
  pub fn find_codex_processes() -> Vec<u32> {
-     Vec::new()
-@@ -238,16 +341,31 @@ pub fn find_codex_processes() -> Vec<u32> {
+     let mut ids = ["Codex", "ChatGPT"]
+@@ -297,16 +400,31 @@ pub fn find_session_index_cleanup_blocking_processes() -> Vec<u32> {
  
  #[cfg(windows)]
  pub fn stop_launcher_processes() {
@@ -819,7 +807,7 @@ index df08126..9943757 100644
      );
      for process_id in killable {
          let _ = crate::windows_integration::terminate_process(process_id);
-@@ -255,20 +373,15 @@ pub fn stop_launcher_processes() {
+@@ -314,20 +432,15 @@ pub fn stop_launcher_processes() {
  }
  
  #[cfg(not(windows))]
@@ -845,7 +833,7 @@ index df08126..9943757 100644
      );
      terminate_and_wait_for_exit(
          killable,
-@@ -278,7 +391,7 @@ pub fn stop_launcher_processes_and_wait() {
+@@ -337,7 +450,7 @@ pub fn stop_launcher_processes_and_wait() {
  }
  
  #[cfg(not(windows))]
@@ -854,7 +842,7 @@ index df08126..9943757 100644
  
  #[cfg(windows)]
  pub fn stop_codex_processes() {
-@@ -302,6 +415,18 @@ pub fn stop_codex_processes_and_wait() {
+@@ -361,6 +474,18 @@ pub fn stop_codex_processes_and_wait() {
  #[cfg(not(windows))]
  pub fn stop_codex_processes_and_wait() {}
  
@@ -874,23 +862,19 @@ index df08126..9943757 100644
  fn terminate_and_wait_for_exit(process_ids: Vec<u32>, timeout_ms: u64, interval_ms: u64) {
      if process_ids.is_empty() {
 diff --git a/crates/codex-plus-core/tests/watcher.rs b/crates/codex-plus-core/tests/watcher.rs
-index c2ad8f5..b5c6078 100644
+index 03feecd24d4f49bea0e6a794dc2aa89f1928e559..78bd4849b7f978704cc03ef4710142b9b3ddce2d 100644
 --- a/crates/codex-plus-core/tests/watcher.rs
 +++ b/crates/codex-plus-core/tests/watcher.rs
-@@ -5,7 +5,11 @@ use codex_plus_core::watcher::{
+@@ -8,6 +8,8 @@ use codex_plus_core::watcher::{
+ use codex_plus_core::watcher::{
+     WindowsProcessInfo, find_codex_processes_from_snapshot,
+     find_session_index_cleanup_blocking_processes_from_snapshot,
++    filter_killable_launcher_processes_for_path, find_codex_processes_from_snapshot_for_app_path,
++    find_codex_processes_from_snapshot_for_executable,
  };
  
- #[cfg(windows)]
--use codex_plus_core::watcher::{WindowsProcessInfo, find_codex_processes_from_snapshot};
-+use codex_plus_core::watcher::{
-+    WindowsProcessInfo, filter_killable_launcher_processes_for_path,
-+    find_codex_processes_from_snapshot, find_codex_processes_from_snapshot_for_app_path,
-+    find_codex_processes_from_snapshot_for_executable,
-+};
- 
  #[test]
- fn cdp_listening_returns_true_for_bound_loopback_port() {
-@@ -154,6 +158,131 @@ fn find_codex_processes_finds_local_install_with_capitial_c() {
+@@ -157,6 +159,131 @@ fn find_codex_processes_finds_local_install_with_capitial_c() {
      assert_eq!(find_codex_processes_from_snapshot(&processes), vec![42]);
  }
  
@@ -1023,5 +1007,4 @@ index c2ad8f5..b5c6078 100644
  #[test]
  fn find_codex_processes_ignores_lowercase_local_cli_binary() {
 -- 
-2.55.0.windows.1
-
+2.55.0.windows.3

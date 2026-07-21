@@ -22,6 +22,27 @@ test("extracts only loopback listening ports owned by the Antigravity process", 
   assert.deepEqual(cascadeClientModule.extractListeningPortsForProcess(netstat, 33752), [57882, 57883, 57884]);
 });
 
+test("discovers the current Antigravity connection from official desktop logs", () => {
+  const mainLog = [
+    "Spawning: language_server.exe --csrf_token stale-token --app_data_dir antigravity",
+    "Spawning: language_server.exe --standalone --csrf_token current-token --app_data_dir antigravity --enable_sidecars",
+  ].join("\n");
+  const languageServerLog = [
+    "I server.go:493] Language server listening on random port at 54518 for HTTPS (gRPC)",
+    "I server.go:500] Language server listening on random port at 54519 for HTTP",
+  ].join("\n");
+
+  assert.equal(typeof cascadeClientModule.extractAntigravityConnectionFromLogs, "function");
+  assert.deepEqual(
+    cascadeClientModule.extractAntigravityConnectionFromLogs(mainLog, languageServerLog),
+    {
+      agentApiAddress: "127.0.0.1:54518",
+      lsAddress: "127.0.0.1:54519",
+      csrfToken: "current-token",
+    },
+  );
+});
+
 test("discovers standard model metadata and account readiness through the local service", async () => {
   const service = fakeService({
     GetAvailableModels: () => jsonResponse(modelPayload()),
@@ -96,6 +117,55 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.equal(send.body.cascadeConfig.plannerConfig.planModel, "MODEL_PRO");
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.runCommand.forceDisable, true);
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
+});
+
+test("gives Cascade startup a bounded 60 second default while preserving explicit overrides", async () => {
+  assert.equal(cascadeClientModule.DEFAULT_START_TIMEOUT_MS, 60_000);
+
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: ({ signal }) => abortableResponse(signal),
+  });
+  const client = clientFor(service.fetch, { startTimeoutMs: 10 });
+
+  await assert.rejects(
+    collect(client.start({
+      model: "gemini-pro-agent",
+      userText: "timeout override",
+      tools: [],
+    })),
+    /StartCascade timed out after 10ms/u,
+  );
+});
+
+test("classifies unsupported-location trajectories as non-retryable client errors", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_region_blocked" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: ({ signal }) => abortableResponse(signal),
+    GetCascadeTrajectory: () => jsonResponse({
+      trajectory: {
+        steps: [{
+          errorMessage: {
+            error: {
+              modelErrorMessage: "FAILED_PRECONDITION (code 400): User location is not supported for the API use.",
+            },
+          },
+        }],
+      },
+    }),
+  });
+  const client = clientFor(service.fetch);
+
+  await assert.rejects(
+    collect(client.start({
+      model: "gemini-pro-agent",
+      userText: "region probe",
+      tools: [],
+    })),
+    (error) => error.statusCode === 400 && /location is not supported/i.test(error.message),
+  );
 });
 
 test("captures a native MCP call and resumes the exact same Cascade with the exact result", async () => {

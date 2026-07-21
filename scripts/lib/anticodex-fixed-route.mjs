@@ -2,6 +2,19 @@ import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 
 export const FIXED_ROUTE_SCHEMA = "anticodex-fixed-route-v1";
 const CODEX_THREAD_PROVIDER_NAME = "anticodex_antigravity";
+export const ANTIGRAVITY_RELAY_ID = "anticodex-antigravity";
+export const THIRD_PARTY_RELAY_ID = "anticodex-third-party";
+export const ANTIGRAVITY_MODEL_SLOT = "anticodex/antigravity";
+export const THIRD_PARTY_MODEL_SLOT = "anticodex/third-party";
+export const THIRD_PARTY_MODEL_PREFIX = `${THIRD_PARTY_MODEL_SLOT}/`;
+const DEFAULT_THIRD_PARTY_CONTEXT_WINDOW = 272_000;
+const THIRD_PARTY_AUTO_COMPACT_PERCENT = 90;
+
+export function thirdPartyNativeModel(model) {
+  const value = String(model ?? "").trim();
+  if (!value) throw new Error("third-party model is required");
+  return `${THIRD_PARTY_MODEL_PREFIX}${value}`;
+}
 
 export function resolveProductPaths(installRoot, stateRoot) {
   const install = requireAbsoluteRoot(installRoot, "installRoot");
@@ -36,6 +49,11 @@ export function generateRouteConfig(options = {}) {
       ?? "gemini-3-flash-agent",
   ).trim();
   if (!model) throw new Error("model is required");
+  const clientModel = String(options.clientModel ?? model).trim();
+  if (!clientModel) throw new Error("clientModel is required");
+  const relayModelList = [...new Set((Array.isArray(options.relayModelList)
+    ? options.relayModelList
+    : [clientModel]).map((value) => String(value ?? "").trim()).filter(Boolean))];
 
   const localProxyKey = String(options.localProxyKey ?? "anticodex-local-proxy-key");
   let adapterEnabled;
@@ -44,13 +62,15 @@ export function generateRouteConfig(options = {}) {
   let profileId;
   let profileName;
   let upstreamApiKey = "";
+  let modelContextWindow = null;
+  let modelAutoCompactTokenLimit = null;
 
   if (provider === "antigravity") {
     const adapterPort = requirePort(options.adapterPort, "adapterPort");
     adapterEnabled = true;
     relayProtocol = "chatCompletions";
     codexPlusPlusUpstreamUrl = `http://127.0.0.1:${adapterPort}/v1`;
-    profileId = "anticodex-antigravity";
+    profileId = ANTIGRAVITY_RELAY_ID;
     profileName = "Anti-Codex Antigravity";
   } else if (provider === "third-party") {
     const thirdParty = options.thirdPartyConfig ?? {};
@@ -59,7 +79,13 @@ export function generateRouteConfig(options = {}) {
     codexPlusPlusUpstreamUrl = normalizeUpstreamBaseUrl(thirdParty.baseUrl);
     upstreamApiKey = String(thirdParty.apiKey ?? "");
     if (!upstreamApiKey) throw new Error("thirdPartyConfig.apiKey is required");
-    profileId = "anticodex-third-party";
+    modelContextWindow = requireContextWindow(
+      options.contextWindow ?? thirdParty.contextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+    );
+    modelAutoCompactTokenLimit = Math.floor(
+      modelContextWindow * THIRD_PARTY_AUTO_COMPACT_PERCENT / 100,
+    );
+    profileId = THIRD_PARTY_RELAY_ID;
     profileName = "Anti-Codex third-party API";
   } else {
     throw new Error("provider must be antigravity or third-party");
@@ -71,8 +97,11 @@ export function generateRouteConfig(options = {}) {
     ? `model_catalog_json = ${tomlString(resolve(String(options.catalogPath)))}`
     : "";
   const config = [
-    `model = ${tomlString(model)}`,
+    `model = ${tomlString(clientModel)}`,
     catalogLine,
+    modelContextWindow ? `model_context_window = ${modelContextWindow}` : "",
+    modelAutoCompactTokenLimit ? `model_auto_compact_token_limit = ${modelAutoCompactTokenLimit}` : "",
+    modelAutoCompactTokenLimit ? 'model_auto_compact_token_limit_scope = "total"' : "",
     `model_provider = ${tomlString(providerName)}`,
     "approval_policy = \"never\"",
     "sandbox_mode = \"danger-full-access\"",
@@ -92,12 +121,16 @@ export function generateRouteConfig(options = {}) {
     schema: FIXED_ROUTE_SCHEMA,
     provider,
     model,
+    clientModel,
+    relayModelList,
     adapterEnabled,
     relayProtocol,
     codexBaseUrl,
     codexPlusPlusUpstreamUrl,
     profileId,
     profileName,
+    modelContextWindow,
+    modelAutoCompactTokenLimit,
     localProxyKey,
     upstreamApiKey,
     config,
@@ -121,9 +154,32 @@ export function getLauncherArgs(options = {}) {
   ];
 }
 
+export function getCopiedClientArgs(options = {}) {
+  const debugPort = requirePort(options.debugPort, "debugPort");
+  const codexExtraArgs = Array.isArray(options.codexExtraArgs)
+    ? options.codexExtraArgs.map((value) => String(value))
+    : [];
+  return [
+    `--remote-debugging-port=${debugPort}`,
+    `--remote-allow-origins=http://127.0.0.1:${debugPort}`,
+    ...codexExtraArgs,
+  ];
+}
+
 export function buildCodexPlusPlusSettings(options = {}) {
   const route = options.route;
   if (!route || route.schema !== FIXED_ROUTE_SCHEMA) throw new Error("route is required");
+  const relayRoutes = Array.isArray(options.relayRoutes) && options.relayRoutes.length > 0
+    ? options.relayRoutes
+    : [route];
+  for (const relayRoute of relayRoutes) {
+    if (!relayRoute || relayRoute.schema !== FIXED_ROUTE_SCHEMA) {
+      throw new Error("relayRoutes must contain fixed-route entries");
+    }
+  }
+  if (!relayRoutes.some((relayRoute) => relayRoute.profileId === route.profileId)) {
+    throw new Error("active route must be included in relayRoutes");
+  }
   const userDataDir = String(options.userDataDir ?? "").trim();
   if (!userDataDir || !isAbsolute(userDataDir)) throw new Error("userDataDir must be absolute");
   const codexExtraArgs = [
@@ -140,9 +196,6 @@ export function buildCodexPlusPlusSettings(options = {}) {
       "--in-process-gpu",
     );
   }
-  const relayAuthContents = route.upstreamApiKey
-    ? `${JSON.stringify({ OPENAI_API_KEY: route.upstreamApiKey }, null, 2)}\n`
-    : route.authContents;
   return {
     codexExtraArgs,
     enhancementsEnabled: false,
@@ -152,19 +205,27 @@ export function buildCodexPlusPlusSettings(options = {}) {
     codexAppPluginMarketplaceUnlock: false,
     codexAppNativeMenuLocalization: false,
     codexAppFastStartup: false,
-    relayProfiles: [{
-      id: route.profileId,
-      name: route.profileName,
-      upstreamBaseUrl: route.codexPlusPlusUpstreamUrl,
-      apiKey: route.upstreamApiKey,
-      protocol: route.relayProtocol,
+    relayProfiles: relayRoutes.map((relayRoute) => ({
+      id: relayRoute.profileId,
+      name: relayRoute.profileName,
+      upstreamBaseUrl: relayRoute.codexPlusPlusUpstreamUrl,
+      apiKey: relayRoute.upstreamApiKey,
+      protocol: relayRoute.relayProtocol,
       relayMode: "pureApi",
-      testModel: route.model,
-      configContents: route.config,
-      authContents: relayAuthContents,
+      testModel: relayRoute.model,
+      configContents: relayRoute.config,
+      authContents: relayRoute.upstreamApiKey
+        ? `${JSON.stringify({ OPENAI_API_KEY: relayRoute.upstreamApiKey }, null, 2)}\n`
+        : relayRoute.authContents,
       useCommonConfig: false,
-      modelList: route.model,
-    }],
+      contextWindow: relayRoute.modelContextWindow ? String(relayRoute.modelContextWindow) : "",
+      autoCompactLimit: relayRoute.modelAutoCompactTokenLimit
+        ? String(relayRoute.modelAutoCompactTokenLimit)
+        : "",
+      modelList: (relayRoute.relayModelList?.length
+        ? relayRoute.relayModelList
+        : [relayRoute.clientModel ?? relayRoute.model]).join("\n"),
+    })),
     activeRelayId: route.profileId,
     relayTestModel: route.model,
   };
@@ -181,6 +242,9 @@ export function mergeCodexRouteConfig(existingConfig, route) {
   const managedKeys = new Set([
     "model",
     "model_catalog_json",
+    "model_context_window",
+    "model_auto_compact_token_limit",
+    "model_auto_compact_token_limit_scope",
     "model_provider",
     "chatgpt_base_url",
     "openai_base_url",
@@ -265,6 +329,14 @@ function requirePort(value, name) {
     throw new Error(`${name} must be a valid TCP port`);
   }
   return port;
+}
+
+function requireContextWindow(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 16_000 || parsed > 4_000_000) {
+    throw new Error("contextWindow must be an integer between 16000 and 4000000");
+  }
+  return parsed;
 }
 
 function tomlString(value) {

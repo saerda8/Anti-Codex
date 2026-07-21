@@ -14,7 +14,7 @@ export function classifyReconnectOutcome({
   const terminalProviderError = String(answerText || "")
     .split(/\r?\n/u)
     .map((line) => line.replace(/\s+/g, " ").trim())
-    .find((line) => /RESOURCE_EXHAUSTED|Individual quota reached|quota (?:has been )?(?:reached|exhausted)|rate limit exceeded|unexpected status (?:4\d\d|5\d\d)|(?:stream )?disconnected before completion|额度(?:已)?(?:用完|耗尽)|配额(?:已)?(?:用完|耗尽)/i.test(line))
+    .find((line) => /RESOURCE_EXHAUSTED|FAILED_PRECONDITION\s*\(code\s*400\)|location is not supported|unsupported_location|Individual quota reached|quota (?:has been )?(?:reached|exhausted)|rate limit exceeded|unexpected status (?:4\d\d|5\d\d)|(?:stream )?disconnected before completion|额度(?:已)?(?:用完|耗尽)|配额(?:已)?(?:用完|耗尽)/i.test(line))
     ?.slice(0, 600) || null;
   const recovered = reconnectSeen === true
     && terminalProviderError === null
@@ -126,9 +126,11 @@ export function resultDrivenTurnCompletionReady({
   composerText = "",
   marker = "",
   routeReady = false,
+  authoritativeArtifactReady = true,
 } = {}) {
   return enabled === true
     && routeReady === true
+    && authoritativeArtifactReady === true
     && latestMarkerTurnCompleted(rolloutBundles)
     && !composerHasUnsubmittedMarker({ composerText, marker, answerMarkerCount: 0 });
 }
@@ -294,6 +296,7 @@ export function collectCodexRolloutMarkerEvidence(records = [], marker = "") {
   const assistantMarkerMessages = new Set();
   const markerTurnIds = [];
   const completedMarkerTurnIds = new Set();
+  const failedMarkerTurnErrors = new Map();
   let sessionId = "";
   let sessionCwd = "";
   let currentTurnId = "";
@@ -318,7 +321,16 @@ export function collectCodexRolloutMarkerEvidence(records = [], marker = "") {
         currentTurnId = String(payload.turn_id || payload.id || currentTurnId || "");
       } else if (payload.type === "task_complete") {
         const completedTurnId = String(payload.turn_id || currentTurnId || markerTurnIds.at(-1) || "");
-        if (markerTurnIds.includes(completedTurnId)) completedMarkerTurnIds.add(completedTurnId);
+        if (markerTurnIds.includes(completedTurnId)) {
+          const rawError = payload.error;
+          const errorText = String(
+            typeof rawError === "string"
+              ? rawError
+              : rawError?.message ?? rawError?.code ?? "",
+          ).trim();
+          if (errorText) failedMarkerTurnErrors.set(completedTurnId, errorText.slice(0, 1200));
+          else completedMarkerTurnIds.add(completedTurnId);
+        }
       }
       continue;
     }
@@ -357,8 +369,15 @@ export function collectCodexRolloutMarkerEvidence(records = [], marker = "") {
     taskCompleteSeen: completedMarkerTurnIds.size > 0,
     markerTurnIds,
     completedMarkerTurnIds: markerTurnIds.filter((turnId) => completedMarkerTurnIds.has(turnId)),
+    failedMarkerTurnIds: markerTurnIds.filter((turnId) => failedMarkerTurnErrors.has(turnId)),
+    markerTurnErrors: Object.fromEntries(markerTurnIds
+      .filter((turnId) => failedMarkerTurnErrors.has(turnId))
+      .map((turnId) => [turnId, failedMarkerTurnErrors.get(turnId)])),
     latestMarkerTurnId,
-    latestMarkerTurnComplete: latestMarkerTurnId !== "" && completedMarkerTurnIds.has(latestMarkerTurnId),
+    latestMarkerTurnComplete: latestMarkerTurnId !== ""
+      && completedMarkerTurnIds.has(latestMarkerTurnId)
+      && !failedMarkerTurnErrors.has(latestMarkerTurnId),
+    latestMarkerTurnError: latestMarkerTurnId ? failedMarkerTurnErrors.get(latestMarkerTurnId) ?? null : null,
     contextItems,
   };
 }

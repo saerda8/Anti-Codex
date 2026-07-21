@@ -125,6 +125,36 @@ test("returns OpenAI-shaped JSON errors before streaming headers", async () => {
   }
 });
 
+test("returns a terminal quota status before opening an empty stream", async () => {
+  const client = {
+    ...fakeClient([]),
+    start() {
+      return (async function* () {
+        throw Object.assign(new Error("RESOURCE_EXHAUSTED"), { statusCode: 429 });
+      }());
+    },
+  };
+  const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
+  try {
+    const response = await fetch(`${server.url}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body({ stream: true })),
+    });
+    assert.equal(response.status, 429);
+    assert.match(response.headers.get("content-type"), /^application\/json/);
+    assert.deepEqual(await response.json(), {
+      error: {
+        message: "RESOURCE_EXHAUSTED",
+        type: "server_error",
+        code: "quota_exceeded",
+      },
+    });
+  } finally {
+    await server.close();
+  }
+});
+
 test("malformed native tool arguments return a structured 502 and cancel the continuation", async () => {
   const continuation = { cascadeId: "malformed-http" };
   const cancels = [];
@@ -241,18 +271,16 @@ test("client disconnect aborts the in-flight Cascade request", async () => {
         path: target.pathname,
         method: "POST",
         headers: { "content-type": "application/json" },
-      }, (response) => {
-        response.once("data", () => {
-          request.destroy();
-          response.destroy();
-          resolve();
-        });
-      });
+      }, (response) => response.resume());
       request.once("error", (error) => {
         if (error.code === "ECONNRESET") resolve();
         else reject(error);
       });
       request.end(JSON.stringify(body({ stream: true })));
+      setTimeout(() => {
+        request.destroy();
+        resolve();
+      }, 50);
     });
     const reason = await Promise.race([
       aborted,

@@ -397,11 +397,9 @@ export function getProcessSnapshot(candidateAppDir = "") {
     row.name.toLowerCase() === "anti-codex.exe"
     && (!candidateAppDir || !isPathUnderRoot(row.executablePath, candidateAppDir))
   ));
-  const antiIds = new Set(antiRows.map((row) => row.processId));
-  const antiCodexRoots = antiRows.filter((row) => !antiIds.has(row.parentProcessId));
   return {
     originalCodex: sortProcesses(originalCodex),
-    antiCodexRoots: sortProcesses(antiCodexRoots),
+    antiCodexRoots: sortProcesses(antiRows),
     candidateProcesses: candidateAppDir ? sortProcesses(candidateProcesses(candidateAppDir)) : [],
   };
 }
@@ -517,13 +515,15 @@ function toolObservation(request) {
 
 function getProcesses() {
   const script = [
-    "$filter = \"Name='ChatGPT.exe' OR Name='Codex.exe' OR Name='Anti-Codex.exe' OR Name='codex-plus-plus.exe'\"",
-    "$rows = Get-CimInstance Win32_Process -Filter $filter | ForEach-Object {",
+    "$names = @('ChatGPT', 'Codex', 'Anti-Codex', 'codex-plus-plus')",
+    "$rows = Get-Process -Name $names -ErrorAction SilentlyContinue | ForEach-Object {",
+    "  $path = ''",
+    "  try { $path = [string]$_.Path } catch {}",
     "  [pscustomobject]@{",
-    "    processId = [int]$_.ProcessId",
-    "    parentProcessId = [int]$_.ParentProcessId",
-    "    name = [string]$_.Name",
-    "    executablePath = [string]$_.ExecutablePath",
+    "    processId = [int]$_.Id",
+    "    parentProcessId = 0",
+    "    name = ([string]$_.ProcessName) + '.exe'",
+    "    executablePath = $path",
     "  }",
     "}",
     "ConvertTo-Json -InputObject @($rows) -Compress",
@@ -621,55 +621,48 @@ async function waitFor(check, options = {}) {
 function killProcessTree(child) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   if (process.platform === "win32") {
-    const descendants = windowsDescendantProcessIds(child.pid);
-    spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+    const script = [
+      `$root = ${Number(child.pid)}`,
+      "$parents = @{}",
+      "Get-Process -ErrorAction SilentlyContinue | ForEach-Object {",
+      "  $parentId = 0",
+      "  try { if ($_.Parent) { $parentId = [int]$_.Parent.Id } } catch {}",
+      "  $parents[[int]$_.Id] = $parentId",
+      "}",
+      "$known = [Collections.Generic.HashSet[int]]::new()",
+      "$null = $known.Add($root)",
+      "$descendants = [Collections.Generic.List[int]]::new()",
+      "do {",
+      "  $added = $false",
+      "  foreach ($entry in $parents.GetEnumerator()) {",
+      "    $processId = [int]$entry.Key",
+      "    if (-not $known.Contains($processId) -and $known.Contains([int]$entry.Value)) {",
+      "      $null = $known.Add($processId)",
+      "      $descendants.Add($processId)",
+      "      $added = $true",
+      "    }",
+      "  }",
+      "} while ($added)",
+      "for ($index = $descendants.Count - 1; $index -ge 0; $index -= 1) {",
+      "  Stop-Process -Id $descendants[$index] -Force -ErrorAction SilentlyContinue",
+      "}",
+      "Stop-Process -Id $root -Force -ErrorAction SilentlyContinue",
+    ].join("\n");
+    const treeKill = spawnSync("pwsh.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
       windowsHide: true,
-      timeout: 10_000,
+      timeout: 6_000,
+      stdio: "ignore",
     });
-    for (const processId of descendants.reverse()) {
-      spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], {
+    if (treeKill.status !== 0) {
+      spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
         windowsHide: true,
-        timeout: 5_000,
+        timeout: 4_000,
+        stdio: "ignore",
       });
     }
+    try { child.kill("SIGKILL"); } catch {}
   } else {
     child.kill("SIGKILL");
-  }
-}
-
-function windowsDescendantProcessIds(rootProcessId) {
-  const script = [
-    `$root = ${Number(rootProcessId)}`,
-    "$rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId)",
-    "$known = [Collections.Generic.HashSet[int]]::new()",
-    "$null = $known.Add($root)",
-    "$result = [Collections.Generic.List[int]]::new()",
-    "do {",
-    "  $added = $false",
-    "  foreach ($row in $rows) {",
-    "    $processId = [int]$row.ProcessId",
-    "    if (-not $known.Contains($processId) -and $known.Contains([int]$row.ParentProcessId)) {",
-    "      $null = $known.Add($processId)",
-    "      $result.Add($processId)",
-    "      $added = $true",
-    "    }",
-    "  }",
-    "} while ($added)",
-    "ConvertTo-Json -InputObject @($result) -Compress",
-  ].join("\n");
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", script], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 10_000,
-  });
-  if (result.status !== 0) return [];
-  try {
-    const parsed = JSON.parse(String(result.stdout ?? "").trim() || "[]");
-    return (Array.isArray(parsed) ? parsed : [parsed])
-      .map(Number)
-      .filter((value) => Number.isInteger(value) && value > 0 && value !== rootProcessId);
-  } catch {
-    return [];
   }
 }
 

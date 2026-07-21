@@ -21,7 +21,6 @@ const ALLOWED_MANAGER_BRIDGE_REQUESTS = new Map([
   ["/anticodex/upstream-profile", new Set(["GET", "POST"])],
   ["/anticodex/model-routes", new Set(["GET"])],
   ["/anticodex/upstream-test", new Set(["POST"])],
-  ["/anticodex/upstream-apply", new Set(["POST"])],
   ["/anticodex/local-connectors/allowlist", new Set(["GET", "POST"])],
   ["/backend-api/ps/plugins/installed", new Set(["GET"])],
   ["/backend-api/aip/connectors", new Set(["GET"])],

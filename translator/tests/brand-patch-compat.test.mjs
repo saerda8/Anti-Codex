@@ -5,6 +5,49 @@ import * as brandPatchCompat from "../../scripts/brand-patch-compat.mjs";
 
 const { hasProductNameDrivenSessionTitle } = brandPatchCompat;
 
+test("patches startup MCP config reload across minified variable renames", () => {
+  const previous = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
+  const current = "await e.sendAppServerRequest(`config/batchWrite`,{edits:go(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
+  const unrelated = "await e.sendAppServerRequest(`config/batchWrite`,{edits:[{keyPath:`plugins.x.enabled`}],reloadUserConfig:!0})";
+
+  for (const source of [previous, current]) {
+    assert.equal(brandPatchCompat.hasStartupMcpConfigReload(source), true);
+    const patched = brandPatchCompat.patchStartupMcpConfigReload(source);
+    assert.equal(patched.length, source.length);
+    assert.match(patched, /reloadUserConfig:!1/);
+    assert.equal(brandPatchCompat.patchStartupMcpConfigReload(patched), patched);
+  }
+
+  assert.equal(brandPatchCompat.hasStartupMcpConfigReload(unrelated), false);
+  assert.throws(
+    () => brandPatchCompat.patchStartupMcpConfigReload(unrelated),
+    /pattern not found/,
+  );
+});
+
+test("recognizes padded idempotent auth and local-model patches", () => {
+  assert.equal(
+    brandPatchCompat.hasPatchedAuthRequirement(
+      "requiresAuth:!1                                       ,email:e.account?.type===`chatgpt`?e.account.email:null",
+    ),
+    true,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedLocalModelAvailability(
+      "let c=[],l=null,u=!1                    ,d=o.some(e=>e.hidden)",
+    ),
+    true,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedAuthRequirement("requiresAuth:!0,email:null"),
+    false,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedLocalModelAvailability("let c=[],l=null,u=e&&e!==`amazonBedrock`,d=1"),
+    false,
+  );
+});
+
 test("patches Codex 26.609 system window titles without changing bundle size", () => {
   const source = [
     "let M=new r.BrowserWindow({width:b,height:x,",

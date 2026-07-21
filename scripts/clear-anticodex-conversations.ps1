@@ -366,7 +366,8 @@ if ($antiCodexWasRunning -and -not $WhatIfOnly -and -not $SkipRestart) {
             "-NoProfile",
             "-ExecutionPolicy", "Bypass",
             "-File", ('"{0}"' -f $installedLauncher),
-            "-SkipUpdateCheck"
+            "-SkipUpdateCheck",
+            "-InlineSupervisor"
         )
         $launcherProcess = Start-Process -FilePath $powershellExe -ArgumentList $launcherArgs -WindowStyle Hidden -PassThru
         $restartLauncherProcessId = [int]$launcherProcess.Id

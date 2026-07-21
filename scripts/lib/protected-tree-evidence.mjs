@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, readlinkSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readlinkSync, readSync, statSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
+
+const HASH_BUFFER_BYTES = 1024 * 1024;
 
 export function snapshotProtectedTree(root, options = {}) {
   const rootPath = resolve(root);
@@ -19,12 +21,12 @@ export function snapshotProtectedTree(root, options = {}) {
         entries.push({ path: rel, type: "directory" });
         walk(path);
       } else if (entry.isFile()) {
-        const content = readFileSync(path);
+        const file = hashFile(path);
         entries.push({
           path: rel,
           type: "file",
-          size: content.length,
-          sha256: createHash("sha256").update(content).digest("hex"),
+          size: file.size,
+          sha256: file.sha256,
         });
       } else if (entry.isSymbolicLink()) {
         entries.push({ path: rel, type: "symlink", target: readlinkSync(path) });
@@ -40,6 +42,24 @@ export function snapshotProtectedTree(root, options = {}) {
     entries,
     fingerprint: createHash("sha256").update(JSON.stringify(entries)).digest("hex"),
   };
+}
+
+function hashFile(path) {
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(HASH_BUFFER_BYTES);
+  const descriptor = openSync(path, "r");
+  let size = 0;
+  try {
+    while (true) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      hash.update(buffer.subarray(0, bytesRead));
+      size += bytesRead;
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return { size, sha256: hash.digest("hex") };
 }
 
 export function diffProtectedTreeSnapshots(before, after) {

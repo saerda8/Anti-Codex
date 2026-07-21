@@ -87,6 +87,30 @@ test("maps Chat messages into structured Cascade input without task semantics", 
   await adapter.close();
 });
 
+test("passes the model selected by the native Codex UI to Antigravity", async () => {
+  const client = fakeClient({
+    startEvents: [
+      { type: "text_delta", delta: "continued" },
+      { type: "done" },
+    ],
+  });
+  const adapter = createAntigravityChatAdapter({
+    client,
+    idFactory: sequentialId(),
+    now: () => 1_700_000_000_000,
+  });
+
+  const completion = await adapter.complete(baseBody({
+    model: "gemini-3-flash-agent",
+    messages: [{ role: "user", content: "continue with the model selected in the UI" }],
+  }));
+
+  assert.equal(client.starts.length, 1);
+  assert.equal(client.starts[0].model, "gemini-3-flash-agent");
+  assert.equal(completion.model, "gemini-3-flash-agent");
+  await adapter.close();
+});
+
 test("Codex structured title requests stay text-only and carry the JSON schema", async () => {
   const client = fakeClient({
     startEvents: [
@@ -646,6 +670,7 @@ test("maps authentication, quota, network and timeout failures without retrying"
   for (const [input, expected] of [
     [Object.assign(new Error("login required"), { statusCode: 401 }), [401, "authentication_error"]],
     [Object.assign(new Error("RESOURCE_EXHAUSTED"), { statusCode: 429 }), [429, "quota_exceeded"]],
+    [Object.assign(new Error("User location is not supported for the API use."), { statusCode: 400 }), [400, "unsupported_location"]],
     [Object.assign(new Error("fetch failed"), { code: "ECONNREFUSED" }), [502, "upstream_network_error"]],
     [Object.assign(new Error("timed out"), { name: "TimeoutError" }), [504, "upstream_timeout"]],
   ]) {

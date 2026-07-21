@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -12,7 +12,14 @@ import {
   buildFixedRoutePlan,
   buildSupervisorChildEnvironment,
   liveOwnedClientPids,
+  observeCopiedClientSession,
+  parseTasklistAntiCodexProcesses,
   proxyModelCatalogReady,
+  readCompatibilityModelAliases,
+  scanCopiedClientProcessesSafely,
+  startHealthServer,
+  updateClientExitGrace,
+  waitForOwnedProcessExit,
 } from "../../scripts/start-anticodex-fixed-route.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
@@ -21,16 +28,19 @@ const injectorPath = resolve(root, "scripts", "deepcodex-cdp-inject.mjs");
 const managerScriptPath = resolve(root, "scripts", "anticodex-manager-inject.js");
 const managerBridgePath = resolve(root, "scripts", "anticodex-manager-bridge.mjs");
 
-test("fixed-route supervisor has one CodexPlusPlus-owned product path", () => {
+test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns the copied client", () => {
   const source = readFileSync(supervisorPath, "utf8");
   assert.match(source, /startAntigravityChatProvider/);
   assert.match(source, /createAntiCodexManagerService/);
   assert.match(source, /await managerService\.listen\(\)/);
   assert.match(source, /managerService:\s*process\.pid/);
   assert.match(source, /buildAntigravityModelCatalog/);
+  assert.match(source, /readCompatibilityModelAliases/);
   assert.match(source, /buildCodexPlusPlusSettings/);
   assert.match(source, /mergeCodexRouteConfig/);
   assert.match(source, /getLauncherArgs/);
+  assert.match(source, /getCopiedClientArgs/);
+  assert.match(source, /spawn\(plan\.paths\.appExecutable, plan\.clientArgs/);
   assert.match(source, /CODEX_PLUS_STATE_DIR/);
   assert.match(source, /CODEX_PLUS_APP_EXECUTABLE/);
   assert.match(source, /CODEX_PLUS_PROTOCOL_PROXY_PORT/);
@@ -72,11 +82,145 @@ test("Manager support children exit when their owning supervisor no longer exist
   assert.equal(bridge.status, 0);
 });
 
-test("ready-state supervision uses owned PIDs and never repeats PowerShell process scans", () => {
+test("ready-state supervision follows copied-client process handoffs through CDP without runtime scans", async () => {
   const source = readFileSync(supervisorPath, "utf8");
   assert.deepEqual(liveOwnedClientPids([101, 202, 303], (pid) => pid !== 202), [101, 303]);
-  assert.match(source, /liveOwnedClientPids\(ownedClients\)/);
-  assert.equal((source.match(/getCopiedClientProcesses\(plan\.paths\.appDir\)/g) || []).length, 1);
+  const ownedClients = new Set([101]);
+  const observed = await observeCopiedClientSession(ownedClients, {
+    isAlive: () => false,
+    isCdpReady: async () => true,
+  });
+  assert.deepEqual(observed, {
+    ready: true,
+    livePids: [],
+    ownershipChanged: true,
+    source: "cdp",
+  });
+  assert.deepEqual([...ownedClients], []);
+  assert.match(source, /observeCopiedClientSession\(ownedClients/);
+  assert.match(source, /tasklist\.exe/);
+  assert.doesNotMatch(source, /Get-CimInstance Win32_Process/);
+  assert.doesNotMatch(source, /execFileSync\("powershell\.exe"/);
+  assert.match(source, /const startupProcessScan = assertNoExistingClient\(\)/);
+  assert.match(source, /const processScan = scanCopiedClientProcessesSafely\(\)/);
+  const readyLoop = source.slice(source.indexOf("let clientMissingSince = null"), source.indexOf("} catch (error)", source.indexOf("let clientMissingSince = null")));
+  assert.doesNotMatch(readyLoop, /tasklist|scanCopiedClientProcessesSafely|getCopiedClientProcesses/);
+});
+
+test("client handoff uses CDP and requires a sustained exit", async () => {
+  const observed = await observeCopiedClientSession(new Set([101]), {
+    isAlive: () => false,
+    isCdpReady: async () => true,
+  });
+  assert.equal(observed.ready, true);
+  assert.equal(observed.source, "cdp");
+
+  assert.deepEqual(updateClientExitGrace(null, false, 1_000, 10_000), {
+    missingSince: 1_000,
+    expired: false,
+  });
+  assert.deepEqual(updateClientExitGrace(1_000, false, 10_999, 10_000), {
+    missingSince: 1_000,
+    expired: false,
+  });
+  assert.deepEqual(updateClientExitGrace(1_000, false, 11_000, 10_000), {
+    missingSince: 1_000,
+    expired: true,
+  });
+  assert.deepEqual(updateClientExitGrace(1_000, true, 11_000, 10_000), {
+    missingSince: null,
+    expired: false,
+  });
+});
+
+test("cleanup persists its reason before terminating any owned process", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const cleanupStart = source.indexOf("const cleanup = async");
+  const stoppingState = source.indexOf('state: "stopping"', cleanupStart);
+  const firstTermination = source.indexOf("stopOwnedProcess(", cleanupStart);
+  assert.ok(cleanupStart >= 0 && stoppingState > cleanupStart);
+  assert.ok(firstTermination > stoppingState);
+});
+
+test("owned-process shutdown waits for every unique process and reports survivors", async () => {
+  const alive = new Set([101]);
+  const stopped = await waitForOwnedProcessExit([101, 101, 202], {
+    isAlive: (pid) => alive.has(pid),
+    timeoutMs: 50,
+    intervalMs: 10,
+    sleep: async () => alive.clear(),
+  });
+  assert.deepEqual(stopped, []);
+
+  const survivors = await waitForOwnedProcessExit([303, 303], {
+    isAlive: () => true,
+    timeoutMs: 0,
+  });
+  assert.deepEqual(survivors, [303]);
+
+  const source = readFileSync(supervisorPath, "utf8");
+  assert.match(source, /shutdownSurvivors = await waitForOwnedProcessExit\(shutdownPids\)/);
+  assert.match(source, /state: stoppedNormally && fullyStopped \? "stopped" : "error"/);
+  assert.match(source, /process\.kill\(Number\(pid\), "SIGKILL"\)/);
+});
+
+test("tasklist duplicate-client scan is locale independent and ignores no-match text", () => {
+  assert.deepEqual(parseTasklistAntiCodexProcesses([
+    '"Anti-Codex.exe","40148","Console","1","120,000 K"',
+    '"Anti-Codex.exe","40149","Console","1","80,000 K"',
+  ].join("\r\n")), [
+    { processId: 40148 },
+    { processId: 40149 },
+  ]);
+  assert.deepEqual(parseTasklistAntiCodexProcesses("INFO: No tasks are running which match the specified criteria."), []);
+  assert.deepEqual(parseTasklistAntiCodexProcesses("信息: 没有运行的任务与指定标准匹配。"), []);
+});
+
+test("a timed-out startup process scan is advisory because the launcher guard remains authoritative", () => {
+  const result = scanCopiedClientProcessesSafely(() => {
+    const error = new Error("tasklist timed out");
+    error.code = "ETIMEDOUT";
+    throw error;
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    processes: [],
+    error: "tasklist timed out",
+  });
+});
+
+test("fixed-route shutdown is loopback-token protected and acknowledged before cleanup", async (t) => {
+  const shutdownReasons = [];
+  const health = await startHealthServer(0, () => ({ ok: true, state: "ready" }), {
+    shutdownToken: "test-control-token",
+    onShutdown: (reason) => shutdownReasons.push(reason),
+  });
+  t.after(() => health.close());
+
+  const denied = await fetch(`${health.url}/anticodex/fixed-route/shutdown`, { method: "POST" });
+  assert.equal(denied.status, 403);
+  assert.deepEqual(shutdownReasons, []);
+
+  const accepted = await fetch(`${health.url}/anticodex/fixed-route/shutdown`, {
+    method: "POST",
+    headers: { authorization: "Bearer test-control-token" },
+  });
+  assert.equal(accepted.status, 202);
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.deepEqual(shutdownReasons, ["control_shutdown"]);
+});
+
+test("supervisor closes the Antigravity provider before terminating owned children", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const cleanupStart = source.indexOf("const cleanup = async");
+  const cleanupEnd = source.indexOf("requestShutdown =", cleanupStart);
+  const cleanup = cleanupStart >= 0 && cleanupEnd > cleanupStart
+    ? source.slice(cleanupStart, cleanupEnd)
+    : "";
+  const providerClose = cleanup.indexOf("await provider?.close?.()");
+  const childStop = cleanup.indexOf("stopOwnedProcess(launcher)");
+  assert.ok(providerClose >= 0, "cleanup must close the provider");
+  assert.ok(childStop > providerClose, "provider close must precede child termination");
 });
 
 test("plan-json proves third-party bypass without starting processes or exposing keys", () => {
@@ -99,6 +243,7 @@ test("plan-json proves third-party bypass without starting processes or exposing
       UPSTREAM_PROTOCOL: "openai-compatible",
       UPSTREAM_URL: "https://api.example.test/v1",
       UPSTREAM_MODEL: "example-model",
+      UPSTREAM_CONTEXT_WINDOW: "128000",
       UPSTREAM_API_KEY: apiKey,
     },
   });
@@ -109,18 +254,25 @@ test("plan-json proves third-party bypass without starting processes or exposing
   assert.equal(plan.route.adapterEnabled, false);
   assert.equal(plan.route.codexPlusPlusUpstreamUrl, "https://api.example.test/v1");
   assert.equal(plan.route.codexBaseUrl, "http://127.0.0.1:41002/v1");
-  assert.equal(plan.launcherArgs[0], "--app-path");
+  assert.equal(plan.modelContextWindow, 128000);
+  assert.equal(plan.route.modelContextWindow, 128000);
+  assert.equal(plan.route.modelAutoCompactTokenLimit, 115200);
+  assert.deepEqual(plan.launcherArgs, ["--helper-only", "--helper-port", "41002"]);
+  assert.equal(plan.clientArgs[0], "--remote-debugging-port=41004");
   assert.equal(output.includes(apiKey), false);
   assert.equal(output.toLowerCase().includes("antigravity-chat"), false);
   assert.deepEqual(plan.lifecycle, {
     launchesVisibleClientOnce: true,
+    headlessProtocolProxy: true,
+    codexPlusPlusOwnsClient: false,
+    clientOwner: "fixed-route-supervisor",
     automaticallyRelaunchesClient: false,
     ownsTaskControl: false,
     cleansOnlyOwnedChildren: true,
   });
 });
 
-test("third-party route explicitly points Codex at a complete compatibility catalog", () => {
+test("third-party route points Codex at the stable unified model catalog", () => {
   const plan = buildFixedRoutePlan([
     "--install-root", "G:\\AntiCodex-Test-Install",
     "--state-root", "G:\\AntiCodex-Test-State",
@@ -137,7 +289,8 @@ test("third-party route explicitly points Codex at a complete compatibility cata
     UPSTREAM_API_KEY: "catalog-test-key",
   });
 
-  assert.match(plan.route.config, /^model_catalog_json = ".*third-party-model-catalog\.json"$/m);
+  assert.match(plan.route.config, /^model_catalog_json = ".*anticodex-model-catalog\.json"$/m);
+  assert.match(plan.route.config, /^model = "anticodex\/third-party\/gpt-5\.6-terra"$/m);
 });
 
 test("third-party compatibility catalog clones native Codex tool capabilities", async () => {
@@ -154,13 +307,130 @@ test("third-party compatibility catalog clones native Codex tool capabilities", 
       context_window: 272000,
       max_context_window: 272000,
     }],
-  }, "gpt-5.6-terra");
+  }, "gpt-5.6-terra", 128000);
 
   assert.equal(catalog.models.length, 1);
   assert.equal(catalog.models[0].slug, "gpt-5.6-terra");
   assert.equal(catalog.models[0].shell_type, "shell_command");
   assert.equal(catalog.models[0].apply_patch_tool_type, "freeform");
   assert.equal(catalog.models[0].supports_parallel_tool_calls, true);
+  assert.equal(catalog.models[0].context_window, 128000);
+  assert.equal(catalog.models[0].max_context_window, 128000);
+  assert.equal(catalog.models[0].effective_context_window_percent, 90);
+});
+
+test("external model catalogs keep Codex tools available outside the new code-only mode", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  const bundled = { models: [
+    {
+      slug: "gpt-5.6-sol",
+      visibility: "list",
+      supported_in_api: true,
+      shell_type: "shell_command",
+      apply_patch_tool_type: "freeform",
+      tool_mode: "code_mode_only",
+      template_marker: "restricted",
+    },
+    {
+      slug: "gpt-5.5",
+      visibility: "list",
+      supported_in_api: true,
+      shell_type: "shell_command",
+      apply_patch_tool_type: "freeform",
+      template_marker: "unrestricted",
+    },
+  ] };
+
+  const preferred = supervisor.buildThirdPartyModelCatalog(bundled, "external-model");
+  assert.equal(preferred.models[0].template_marker, "unrestricted");
+  assert.equal(preferred.models[0].tool_mode, undefined);
+
+  const fallback = supervisor.buildThirdPartyModelCatalog({ models: [bundled.models[0]] }, "external-model");
+  assert.equal(fallback.models[0].template_marker, "restricted");
+  assert.equal(fallback.models[0].tool_mode, undefined);
+});
+
+test("third-party compatibility catalog retains hidden historical model aliases", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  const catalog = supervisor.buildThirdPartyModelCatalog({
+    models: [{
+      slug: "gpt-5.4",
+      display_name: "GPT-5.4",
+      shell_type: "shell_command",
+      apply_patch_tool_type: "freeform",
+      supports_parallel_tool_calls: true,
+      context_window: 272000,
+      max_context_window: 272000,
+    }],
+  }, "gpt-5.6-sol", 272000, [
+    "claude-sonnet-4-6",
+    "gpt-5.6-sol",
+    "",
+    "claude-sonnet-4-6",
+    "gemini-3-flash-agent",
+  ]);
+
+  assert.deepEqual(catalog.models.map((entry) => entry.slug), [
+    "gpt-5.6-sol",
+    "claude-sonnet-4-6",
+    "gemini-3-flash-agent",
+  ]);
+  assert.equal(catalog.models[0].visibility, "list");
+  for (const alias of catalog.models.slice(1)) {
+    assert.equal(alias.visibility, "hide");
+    assert.equal(alias.shell_type, "shell_command");
+    assert.equal(alias.apply_patch_tool_type, "freeform");
+    assert.equal(alias.supports_parallel_tool_calls, true);
+    assert.equal(alias.context_window, 272000);
+    assert.equal(alias.max_context_window, 272000);
+    assert.equal(alias.effective_context_window_percent, 90);
+  }
+});
+
+test("compatibility aliases load from durable catalogs without trusting malformed state", () => {
+  const fixture = join(tmpdir(), `anticodex-model-aliases-${randomUUID()}`);
+  const currentCatalog = join(fixture, "current.json");
+  const legacyCatalog = join(fixture, "legacy.json");
+  const malformedCatalog = join(fixture, "malformed.json");
+  mkdirSync(fixture, { recursive: true });
+  try {
+    writeFileSync(currentCatalog, JSON.stringify({ models: [
+      { slug: "claude-sonnet-4-6" },
+      { slug: "gemini-3-flash-agent" },
+      { slug: "" },
+    ] }));
+    writeFileSync(legacyCatalog, JSON.stringify({ models: [
+      { slug: "claude-sonnet-4-6" },
+      { slug: "gpt-oss-120b-medium" },
+    ] }));
+    writeFileSync(malformedCatalog, "{not-json");
+
+    assert.deepEqual(readCompatibilityModelAliases([
+      currentCatalog,
+      malformedCatalog,
+      legacyCatalog,
+      join(fixture, "missing.json"),
+    ]), [
+      "claude-sonnet-4-6",
+      "gemini-3-flash-agent",
+      "gpt-oss-120b-medium",
+    ]);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test("third-party context window rejects unsafe or malformed profile values", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  const bundled = { models: [{ slug: "gpt-5.4", context_window: 272000 }] };
+  assert.throws(
+    () => supervisor.buildThirdPartyModelCatalog(bundled, "example-model", 8000),
+    /context-window must be an integer between 16000 and 4000000/,
+  );
+  assert.throws(
+    () => supervisor.buildThirdPartyModelCatalog(bundled, "example-model", "not-a-number"),
+    /context-window must be an integer between 16000 and 4000000/,
+  );
 });
 
 test("plan-json keeps Antigravity behind the thin adapter", () => {
@@ -181,10 +451,11 @@ test("plan-json keeps Antigravity behind the thin adapter", () => {
   assert.equal(plan.route.codexPlusPlusUpstreamUrl, "http://127.0.0.1:42003/v1");
   assert.equal(plan.route.codexBaseUrl, "http://127.0.0.1:42002/v1");
   assert.deepEqual(plan.launcherArgs.filter((value) => value.startsWith("--")), [
-    "--app-path",
-    "--debug-port",
+    "--helper-only",
     "--helper-port",
   ]);
+  assert.equal(plan.clientArgs[0], "--remote-debugging-port=42004");
+  assert.equal(plan.clientArgs[1], "--remote-allow-origins=http://127.0.0.1:42004");
 });
 
 test("plan-json creates no install/state paths and unsupported protocols fail before writes", () => {
@@ -316,6 +587,7 @@ test("copied client environment removes original Codex pointers and provider sec
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
   });
   assert.equal(child.CODEX_HOME, plan.paths.codexHome);
+  assert.equal(child.CODEX_PLUS_FIXED_MODEL, undefined);
   assert.equal(child.RUST_LOG, "info");
   assert.equal(child.CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED, "1");
   for (const name of ["GLOBAL_CODEX_HOME", "DEEPCODEX_SHARED_CODEX_HOME", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "UPSTREAM_API_KEY"]) {

@@ -52,6 +52,15 @@ export async function createAntigravityChatServer(options = {}) {
 
       const body = await readJsonBody(request, maxBodyBytes);
       if (body?.stream === true) {
+        iterator = adapter.stream(body, { signal: controller.signal })[Symbol.asyncIterator]();
+        const buffered = [];
+        while (true) {
+          const item = await iterator.next();
+          if (item.done) break;
+          buffered.push(item.value);
+          if (chatChunkCommitsResponse(item.value)) break;
+        }
+        if (response.destroyed || controller.signal.aborted) return;
         response.writeHead(200, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
@@ -59,7 +68,9 @@ export async function createAntigravityChatServer(options = {}) {
           "x-accel-buffering": "no",
         });
         response.flushHeaders?.();
-        iterator = adapter.stream(body, { signal: controller.signal })[Symbol.asyncIterator]();
+        for (const value of buffered) {
+          response.write(`data: ${JSON.stringify(value)}\n\n`);
+        }
         while (true) {
           const item = await iterator.next();
           if (item.done) break;
@@ -162,6 +173,17 @@ function sendJson(response, statusCode, value) {
     "content-length": Buffer.byteLength(body),
   });
   response.end(body);
+}
+
+function chatChunkCommitsResponse(value) {
+  const choices = Array.isArray(value?.choices) ? value.choices : [];
+  return choices.some((choice) => {
+    const delta = choice?.delta;
+    return choice?.finish_reason !== null
+      || typeof delta?.content === "string"
+      || typeof delta?.reasoning_content === "string"
+      || Array.isArray(delta?.tool_calls);
+  });
 }
 
 function positiveInteger(value, fallback) {

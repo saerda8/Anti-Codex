@@ -26,7 +26,9 @@ const completeSnapshotPaths = [
 ];
 
 test("Manager bridge snapshots identify themselves to the launcher-owned service", () => {
-  const block = source.match(/async function managerSnapshot\(\) \{[\s\S]*?\n\}\n\nasync function runAction/)?.[0] ?? "";
+  const start = source.indexOf("async function managerSnapshot()");
+  const end = source.indexOf("async function runManagerRequest", start);
+  const block = source.slice(start, end);
   assert.match(block, /const trustedHeaders\s*=\s*\{/);
   assert.match(block, /origin:\s*baseUrl/);
   assert.match(block, /referer:\s*`\$\{baseUrl\}\/anticodex\/manager`/);
@@ -34,7 +36,9 @@ test("Manager bridge snapshots identify themselves to the launcher-owned service
 });
 
 test("Manager bridge and startup injector both build complete read snapshots", () => {
-  const bridgeBlock = source.match(/async function managerSnapshot\(\) \{[\s\S]*?\n\}\n\nasync function runAction/)?.[0] ?? "";
+  const snapshotStart = source.indexOf("async function managerSnapshot()");
+  const snapshotEnd = source.indexOf("async function runManagerRequest", snapshotStart);
+  const bridgeBlock = source.slice(snapshotStart, snapshotEnd);
   const injectorBlock = cdpInject.match(/const snapshot = \{[\s\S]*?source = \[/)?.[0] ?? "";
   for (const path of completeSnapshotPaths) {
     assert.match(bridgeBlock, new RegExp(path.replaceAll("/", "\\/")), `bridge snapshot is missing ${path}`);
@@ -53,12 +57,11 @@ test("Manager bridge reinstalls its renderer runtime after reload", () => {
 
 test("third-party profile reads and writes use a bounded renderer-to-Manager request bridge", () => {
   const allowedRequestBlock = source.match(/const ALLOWED_MANAGER_BRIDGE_REQUESTS = new Map\([\s\S]*?\n\]\);/)?.[0] ?? "";
-  for (const path of [...completeSnapshotPaths, "/anticodex/account", "/anticodex/upstream-test", "/anticodex/upstream-apply"]) {
+  for (const path of [...completeSnapshotPaths, "/anticodex/account", "/anticodex/upstream-test"]) {
     assert.match(allowedRequestBlock, new RegExp(path.replaceAll("/", "\\/")), `request bridge is missing ${path}`);
   }
   for (const path of [
     "/anticodex/upstream-test",
-    "/anticodex/upstream-apply",
     "/anticodex/local-connectors/allowlist",
   ]) {
     assert.match(allowedRequestBlock, new RegExp(path.replaceAll("/", "\\/")), `request bridge is missing ${path}`);
@@ -85,6 +88,17 @@ test("Manager initial render consumes its complete snapshot without serial bridg
   const upstreamConfigEnd = managerInject.indexOf("function installActions()", upstreamConfigStart);
   const upstreamConfigBlock = managerInject.slice(upstreamConfigStart, upstreamConfigEnd);
   assert.match(upstreamConfigBlock, /safeJson\("\/anticodex\/upstream-profile", \{ preferSnapshot: true \}\)/);
+});
+
+test("Manager theme sync does not observe every renderer subtree mutation", () => {
+  const start = managerInject.indexOf("function installManagerThemeSync(root)");
+  const end = managerInject.indexOf("function apiCandidates()", start);
+  const block = managerInject.slice(start, end);
+  assert.match(block, /const hostThemeNodes = \[/);
+  assert.match(block, /for \(const node of new Set\(hostThemeNodes\.filter\(Boolean\)\)\)/);
+  assert.doesNotMatch(block, /subtree:\s*true/);
+  assert.match(managerInject, /__ANTICODEX_MANAGER_THEME_OBSERVER__\?\.disconnect/);
+  assert.match(block, /__ANTICODEX_MANAGER_THEME_OBSERVER__ = managerThemeObserver/);
 });
 
 test("high-impact confirmation resolves the live result node inside its own scope", () => {
@@ -131,8 +145,8 @@ test("Manager bridge refreshes the model catalog through the read-only models en
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v105"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v105"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v107"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v107"/);
   for (const [name, text] of Object.entries({ source, managerInject, managerService })) {
     assert.doesNotMatch(text, /resetAntigravitySessionLock/, `${name} still exposes the removed session reset`);
   }

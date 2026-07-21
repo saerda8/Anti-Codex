@@ -11,8 +11,12 @@ $ErrorActionPreference = "Stop"
 
 $expectedInstallRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 $resolvedInstallRoot = [IO.Path]::GetFullPath($InstallRoot)
-if (-not $resolvedInstallRoot.Equals($expectedInstallRoot, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "CodexPlusPlus may only be installed under $expectedInstallRoot"
+$allowedInstallRoots = @(
+    $expectedInstallRoot,
+    [IO.Path]::GetFullPath((Join-Path $expectedInstallRoot "update-candidate"))
+)
+if ($resolvedInstallRoot -notin $allowedInstallRoots) {
+    throw "CodexPlusPlus may only be installed in the active or fixed update-candidate Anti-Codex root."
 }
 
 $componentRoot = Join-Path $resolvedInstallRoot "components\codexplusplus"
@@ -43,6 +47,12 @@ if (-not $SourceBinary -and $env:ANTICODEX_CODEXPLUSPLUS_BINARY) {
 }
 if (-not $SourceBinary -and (Test-Path -LiteralPath $destinationBinary -PathType Leaf)) {
     $SourceBinary = $destinationBinary
+}
+if (-not $SourceBinary) {
+    $activeBinary = Join-Path $expectedInstallRoot "components\codexplusplus\codex-plus-plus.exe"
+    if (Test-Path -LiteralPath $activeBinary -PathType Leaf) {
+        $SourceBinary = $activeBinary
+    }
 }
 if (-not $SourceBinary) {
     $localBuild = Join-Path $env:LOCALAPPDATA "Temp\CodexPlusPlus-analysis-20260714\target\x86_64-pc-windows-msvc\release\codex-plus-plus.exe"
@@ -93,7 +103,7 @@ $result = [ordered]@{
     isolationPatchCommit = [string]$metadata.isolationPatchCommit
     patchCommit = [string]$metadata.patchCommit
     binary = [ordered]@{
-        path = $destinationBinary
+        path = "codex-plus-plus.exe"
         sha256 = $actualHash
         length = [int64](Get-Item -LiteralPath $resolvedSourceBinary).Length
     }

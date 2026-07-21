@@ -1,24 +1,14 @@
-From 0c7c4fb156fc1635c9d4da0f930213d33db540fa Mon Sep 17 00:00:00 2001
+From 7029a2b76c09ee0bcd7425302893976ff4bee03e Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
-Date: Tue, 14 Jul 2026 23:46:32 +0800
-Subject: [PATCH] fix: abort cancelled loopback model streams
+Date: Fri, 17 Jul 2026 13:37:37 +0800
+Subject: [PATCH 2/7] fix: cancel loopback streams without resets
 
----
- Cargo.lock                                   |   5 +
- Cargo.toml                                   |   5 +
- crates/codex-plus-core/Cargo.toml            |   5 +
- crates/codex-plus-core/src/abortive_http.rs  | 132 +++++++++
- crates/codex-plus-core/src/launcher.rs       | 284 +++++++++++++++++++
- crates/codex-plus-core/src/lib.rs            |   1 +
- crates/codex-plus-core/src/protocol_proxy.rs | 209 ++++++++++++++
- 7 files changed, 641 insertions(+)
- create mode 100644 crates/codex-plus-core/src/abortive_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
-index 31688d7..16341d6 100644
+index 4ac2ff67bd1f2ed80412c8a78f22ef59ae68d768..49156a1254dc2cd738410ddb2f2caad5afc7fb7c 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -412,9 +412,13 @@ dependencies = [
+@@ -422,9 +422,13 @@ dependencies = [
   "anyhow",
   "async-trait",
   "base64 0.22.1",
@@ -32,16 +22,8 @@ index 31688d7..16341d6 100644
   "reqwest 0.12.28",
   "rusqlite",
   "serde",
-@@ -426,6 +430,7 @@ dependencies = [
-  "tokio-tungstenite",
-  "toml 0.8.2",
-  "toml_edit 0.22.27",
-+ "tower-service",
-  "uuid",
-  "windows 0.58.0",
-  "zip",
 diff --git a/Cargo.toml b/Cargo.toml
-index 9e618fe..b04112c 100644
+index f1cdfbb237e3da6ee5c7f78f09aca31f78a4e020..b3b0d7e93a8c716a0f18d569f9137dac724076ee 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -17,9 +17,13 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
@@ -58,16 +40,8 @@ index 9e618fe..b04112c 100644
  reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "system-proxy"], default-features = false }
  rusqlite = { version = "0.32", features = ["bundled"] }
  serde = { version = "1", features = ["derive"] }
-@@ -31,6 +35,7 @@ tokio = { version = "1", features = ["macros", "process", "rt-multi-thread", "ti
- tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
- toml = "0.8"
- toml_edit = "0.22"
-+tower-service = "0.3"
- url = "2"
- uuid = { version = "1", features = ["v4"] }
- winresource = "0.1"
 diff --git a/crates/codex-plus-core/Cargo.toml b/crates/codex-plus-core/Cargo.toml
-index 7ef996c..5058ef9 100644
+index 63dfa5dacd0af53dc17e83245abf9e4d300a3098..25356dee08d8189f3db6b6e54f0da564165cea6d 100644
 --- a/crates/codex-plus-core/Cargo.toml
 +++ b/crates/codex-plus-core/Cargo.toml
 @@ -10,9 +10,13 @@ aes-gcm.workspace = true
@@ -84,154 +58,8 @@ index 7ef996c..5058ef9 100644
  reqwest.workspace = true
  rusqlite.workspace = true
  serde.workspace = true
-@@ -23,6 +27,7 @@ tokio = { workspace = true, features = ["net"] }
- tokio-tungstenite.workspace = true
- toml.workspace = true
- toml_edit.workspace = true
-+tower-service.workspace = true
- uuid.workspace = true
- zip.workspace = true
- 
-diff --git a/crates/codex-plus-core/src/abortive_http.rs b/crates/codex-plus-core/src/abortive_http.rs
-new file mode 100644
-index 0000000..1de0caf
---- /dev/null
-+++ b/crates/codex-plus-core/src/abortive_http.rs
-@@ -0,0 +1,132 @@
-+use std::error::Error;
-+use std::future::Future;
-+use std::net::IpAddr;
-+use std::pin::Pin;
-+use std::task::{Context, Poll};
-+use std::time::Duration;
-+
-+use anyhow::Context as _;
-+use bytes::Bytes;
-+use http_body_util::Full;
-+use hyper::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, USER_AGENT};
-+use hyper::{Method, Request, Uri};
-+use hyper_util::client::legacy::Client;
-+use hyper_util::client::legacy::connect::HttpConnector;
-+use hyper_util::rt::{TokioExecutor, TokioIo};
-+use tokio::net::TcpStream;
-+use tower_service::Service;
-+
-+type BoxError = Box<dyn Error + Send + Sync>;
-+
-+#[derive(Clone, Debug)]
-+struct AbortiveLoopbackConnector {
-+    inner: HttpConnector,
-+}
-+
-+impl AbortiveLoopbackConnector {
-+    fn new() -> Self {
-+        let mut inner = HttpConnector::new();
-+        inner.enforce_http(true);
-+        Self { inner }
-+    }
-+}
-+
-+impl Service<Uri> for AbortiveLoopbackConnector {
-+    type Response = TokioIo<TcpStream>;
-+    type Error = BoxError;
-+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-+
-+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-+        self.inner
-+            .poll_ready(cx)
-+            .map_err(|error| Box::new(error) as BoxError)
-+    }
-+
-+    fn call(&mut self, uri: Uri) -> Self::Future {
-+        let future = self.inner.call(uri);
-+        Box::pin(async move {
-+            let stream = future.await.map_err(|error| Box::new(error) as BoxError)?;
-+            stream
-+                .inner()
-+                .set_zero_linger()
-+                .context("failed to enable abortive close on loopback model connection")?;
-+            Ok(stream)
-+        })
-+    }
-+}
-+
-+pub fn supports(endpoint: &str) -> bool {
-+    let Ok(uri) = endpoint.parse::<Uri>() else {
-+        return false;
-+    };
-+    if uri.scheme_str() != Some("http") {
-+        return false;
-+    }
-+    let Some(host) = uri.host() else {
-+        return false;
-+    };
-+    let host = host
-+        .strip_prefix('[')
-+        .and_then(|host| host.strip_suffix(']'))
-+        .unwrap_or(host);
-+    host.eq_ignore_ascii_case("localhost")
-+        || host
-+            .parse::<IpAddr>()
-+            .is_ok_and(|address| address.is_loopback())
-+}
-+
-+pub async fn post_json(
-+    endpoint: &str,
-+    api_key: &str,
-+    user_agent: &str,
-+    body: &serde_json::Value,
-+    timeout: Duration,
-+) -> anyhow::Result<hyper::Response<hyper::body::Incoming>> {
-+    anyhow::ensure!(
-+        supports(endpoint),
-+        "abortive model transport only supports HTTP loopback endpoints"
-+    );
-+    let uri = endpoint
-+        .parse::<Uri>()
-+        .context("invalid loopback model endpoint")?;
-+    let mut request = Request::builder()
-+        .method(Method::POST)
-+        .uri(uri)
-+        .header(AUTHORIZATION, format!("Bearer {}", api_key.trim()))
-+        .header(CONTENT_TYPE, "application/json")
-+        .header(ACCEPT, "text/event-stream")
-+        .header(CACHE_CONTROL, "no-cache");
-+    if !user_agent.trim().is_empty() {
-+        request = request.header(USER_AGENT, user_agent.trim());
-+    }
-+    let request = request
-+        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))
-+        .context("failed to build loopback model request")?;
-+    let client = Client::builder(TokioExecutor::new())
-+        .pool_max_idle_per_host(0)
-+        .build(AbortiveLoopbackConnector::new());
-+    tokio::time::timeout(timeout, client.request(request))
-+        .await
-+        .with_context(|| {
-+            format!(
-+                "loopback model request exceeded {} seconds before response headers",
-+                timeout.as_secs()
-+            )
-+        })?
-+        .context("loopback model request failed")
-+}
-+
-+#[cfg(test)]
-+mod tests {
-+    use super::supports;
-+
-+    #[test]
-+    fn only_plain_http_loopback_endpoints_are_supported() {
-+        assert!(supports("http://127.0.0.1:57321/v1/chat/completions"));
-+        assert!(supports("http://[::1]:57321/v1/chat/completions"));
-+        assert!(supports("http://localhost:57321/v1/chat/completions"));
-+        assert!(!supports("https://127.0.0.1/v1/chat/completions"));
-+        assert!(!supports("http://example.com/v1/chat/completions"));
-+        assert!(!supports("not a URL"));
-+    }
-+}
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index ebad60e..f2f9b7a 100644
+index 393f7336a063072918c43eb114b4b91bf14f0ffe..f8cb43c8007c558b126e60b1401f61345d90016e 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
@@ -242,7 +70,7 @@ index ebad60e..f2f9b7a 100644
  use serde_json::Value;
  use tokio::io::{AsyncReadExt, AsyncWriteExt};
  use tokio::process::{Child, Command};
-@@ -1233,6 +1234,261 @@ async fn handle_models_proxy_connection(
+@@ -1350,6 +1351,261 @@ async fn handle_models_proxy_connection(
      stream.shutdown().await?;
      Ok(())
  }
@@ -266,13 +94,13 @@ index ebad60e..f2f9b7a 100644
 +        .unwrap_or(false)
 +}
 +
-+async fn collect_abortive_body(
++async fn collect_loopback_body(
 +    response: hyper::Response<hyper::body::Incoming>,
 +) -> anyhow::Result<Vec<u8>> {
 +    Ok(response.into_body().collect().await?.to_bytes().to_vec())
 +}
 +
-+async fn try_handle_abortive_protocol_proxy_stream(
++async fn try_handle_cancel_aware_protocol_proxy_stream(
 +    stream: &mut tokio::net::TcpStream,
 +    request_body: &str,
 +    request_user_agent: Option<&str>,
@@ -281,7 +109,7 @@ index ebad60e..f2f9b7a 100644
 +    path: &str,
 +    remote_addr_text: Option<String>,
 +) -> anyhow::Result<bool> {
-+    let open_upstream = crate::protocol_proxy::open_abortive_loopback_responses_proxy_request(
++    let open_upstream = crate::protocol_proxy::open_cancel_aware_loopback_responses_proxy_request(
 +        request_body,
 +        request_user_agent,
 +    );
@@ -318,7 +146,7 @@ index ebad60e..f2f9b7a 100644
 +    if !upstream.is_success() {
 +        let status_code = upstream.status_code;
 +        let content_type = upstream.content_type.clone();
-+        let upstream_body = collect_abortive_body(upstream.response).await?;
++        let upstream_body = collect_loopback_body(upstream.response).await?;
 +        let error = crate::protocol_proxy::responses_error_from_upstream(
 +            status_code,
 +            &content_type,
@@ -406,7 +234,7 @@ index ebad60e..f2f9b7a 100644
 +    Ok(true)
 +}
 +
-+async fn try_handle_abortive_chat_completions_proxy_stream(
++async fn try_handle_cancel_aware_chat_completions_proxy_stream(
 +    stream: &mut tokio::net::TcpStream,
 +    request_body: &str,
 +    request_user_agent: Option<&str>,
@@ -415,7 +243,7 @@ index ebad60e..f2f9b7a 100644
 +    remote_addr_text: Option<String>,
 +) -> anyhow::Result<bool> {
 +    let open_upstream =
-+        crate::protocol_proxy::open_abortive_loopback_chat_completions_proxy_request(
++        crate::protocol_proxy::open_cancel_aware_loopback_chat_completions_proxy_request(
 +            request_body,
 +            request_user_agent,
 +        );
@@ -456,7 +284,7 @@ index ebad60e..f2f9b7a 100644
 +    };
 +    if !upstream.is_stream || !upstream.is_success() {
 +        let is_success = upstream.is_success();
-+        let body = collect_abortive_body(upstream.response).await?;
++        let body = collect_loopback_body(upstream.response).await?;
 +        write_http_response(stream, &status, &content_type, &body).await?;
 +        log_helper_response(
 +            if is_success {
@@ -504,12 +332,12 @@ index ebad60e..f2f9b7a 100644
  async fn handle_protocol_proxy_connection(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
-@@ -1242,6 +1498,20 @@ async fn handle_protocol_proxy_connection(
+@@ -1359,6 +1615,20 @@ async fn handle_protocol_proxy_connection(
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
      let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
 +    if request_wants_stream(request_json.as_ref())
-+        && try_handle_abortive_protocol_proxy_stream(
++        && try_handle_cancel_aware_protocol_proxy_stream(
 +            stream,
 +            request_body,
 +            request_user_agent,
@@ -525,13 +353,13 @@ index ebad60e..f2f9b7a 100644
      let upstream = match crate::protocol_proxy::open_responses_proxy_request(
          request_body,
          request_user_agent,
-@@ -1405,6 +1675,20 @@ async fn handle_chat_completions_proxy_connection(
+@@ -1586,6 +1856,20 @@ async fn handle_chat_completions_proxy_connection(
      path: &str,
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
 +    let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
 +    if request_wants_stream(request_json.as_ref())
-+        && try_handle_abortive_chat_completions_proxy_stream(
++        && try_handle_cancel_aware_chat_completions_proxy_stream(
 +            stream,
 +            request_body,
 +            request_user_agent,
@@ -547,16 +375,114 @@ index ebad60e..f2f9b7a 100644
          request_body,
          request_user_agent,
 diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
-index 6f1c625..ea069c9 100644
+index 203b41176ae1e3f77289aeed384587f6c2adc5fa..1feee3137d20061822cb7227ecdefadf0b22c4bb 100644
 --- a/crates/codex-plus-core/src/lib.rs
 +++ b/crates/codex-plus-core/src/lib.rs
-@@ -1,3 +1,4 @@
-+mod abortive_http;
- pub mod ads;
- pub mod app_paths;
- pub mod assets;
+@@ -18,6 +18,7 @@ pub mod env_conflicts;
+ pub mod http_client;
+ pub mod install;
+ pub mod launcher;
++mod loopback_http;
+ pub mod model_catalog;
+ pub mod model_suffix;
+ pub mod models;
+diff --git a/crates/codex-plus-core/src/loopback_http.rs b/crates/codex-plus-core/src/loopback_http.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..c49b42091bf2745d360b2628857ae5f0640ee26e
+--- /dev/null
++++ b/crates/codex-plus-core/src/loopback_http.rs
+@@ -0,0 +1,89 @@
++use std::net::IpAddr;
++use std::time::Duration;
++
++use anyhow::Context as _;
++use bytes::Bytes;
++use http_body_util::Full;
++use hyper::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, USER_AGENT};
++use hyper::{Method, Request, Uri};
++use hyper_util::client::legacy::Client;
++use hyper_util::client::legacy::connect::HttpConnector;
++use hyper_util::rt::TokioExecutor;
++
++pub fn supports(endpoint: &str) -> bool {
++    let Ok(uri) = endpoint.parse::<Uri>() else {
++        return false;
++    };
++    if uri.scheme_str() != Some("http") {
++        return false;
++    }
++    let Some(host) = uri.host() else {
++        return false;
++    };
++    let host = host
++        .strip_prefix('[')
++        .and_then(|host| host.strip_suffix(']'))
++        .unwrap_or(host);
++    host.eq_ignore_ascii_case("localhost")
++        || host
++            .parse::<IpAddr>()
++            .is_ok_and(|address| address.is_loopback())
++}
++
++pub async fn post_json(
++    endpoint: &str,
++    api_key: &str,
++    user_agent: &str,
++    body: &serde_json::Value,
++    timeout: Duration,
++) -> anyhow::Result<hyper::Response<hyper::body::Incoming>> {
++    anyhow::ensure!(
++        supports(endpoint),
++        "cancel-aware model transport only supports HTTP loopback endpoints"
++    );
++    let uri = endpoint
++        .parse::<Uri>()
++        .context("invalid loopback model endpoint")?;
++    let mut request = Request::builder()
++        .method(Method::POST)
++        .uri(uri)
++        .header(AUTHORIZATION, format!("Bearer {}", api_key.trim()))
++        .header(CONTENT_TYPE, "application/json")
++        .header(ACCEPT, "text/event-stream")
++        .header(CACHE_CONTROL, "no-cache");
++    if !user_agent.trim().is_empty() {
++        request = request.header(USER_AGENT, user_agent.trim());
++    }
++    let request = request
++        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))
++        .context("failed to build loopback model request")?;
++    let mut connector = HttpConnector::new();
++    connector.enforce_http(true);
++    let client = Client::builder(TokioExecutor::new())
++        .pool_max_idle_per_host(0)
++        .build(connector);
++    tokio::time::timeout(timeout, client.request(request))
++        .await
++        .with_context(|| {
++            format!(
++                "loopback model request exceeded {} seconds before response headers",
++                timeout.as_secs()
++            )
++        })?
++        .context("loopback model request failed")
++}
++
++#[cfg(test)]
++mod tests {
++    use super::supports;
++
++    #[test]
++    fn only_plain_http_loopback_endpoints_are_supported() {
++        assert!(supports("http://127.0.0.1:57321/v1/chat/completions"));
++        assert!(supports("http://[::1]:57321/v1/chat/completions"));
++        assert!(supports("http://localhost:57321/v1/chat/completions"));
++        assert!(!supports("https://127.0.0.1/v1/chat/completions"));
++        assert!(!supports("http://example.com/v1/chat/completions"));
++        assert!(!supports("not a URL"));
++    }
++}
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 6890f32..bc6ff02 100644
+index e7a4faa3fa97200fd3e461c19c7a339c2c7cf3f4..aedd23149d0c0f7f5da824d3dc42977d2b942a5f 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -324,6 +324,14 @@ pub struct UpstreamProxyResponse {
@@ -574,7 +500,7 @@ index 6890f32..bc6ff02 100644
  #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
  pub enum UpstreamWireApi {
      Responses,
-@@ -340,6 +348,16 @@ impl UpstreamProxyResponse {
+@@ -341,6 +349,16 @@ impl UpstreamProxyResponse {
      }
  }
  
@@ -591,11 +517,11 @@ index 6890f32..bc6ff02 100644
  pub fn upstream_header_timeout() -> Duration {
      UPSTREAM_HEADER_TIMEOUT
  }
-@@ -665,6 +683,150 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -677,6 +695,150 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      anyhow::bail!("未找到可用的聚合供应商成员")
  }
  
-+pub async fn open_abortive_loopback_responses_proxy_request(
++pub async fn open_cancel_aware_loopback_responses_proxy_request(
 +    body: &str,
 +    original_user_agent: Option<&str>,
 +) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
@@ -621,8 +547,8 @@ index 6890f32..bc6ff02 100644
 +    for (attempt, relay) in relays.into_iter().enumerate() {
 +        validate_upstream(&relay)?;
 +        let (endpoint, upstream_body, wire_api) =
-+            upstream_request_parts(&relay, request_json.clone())?;
-+        if !crate::abortive_http::supports(&endpoint) {
++            upstream_request_parts(&relay, request_json.clone()).await?;
++        if !crate::loopback_http::supports(&endpoint) {
 +            return Ok(None);
 +        }
 +        let has_more_candidates = attempt + 1 < candidate_count;
@@ -635,13 +561,13 @@ index 6890f32..bc6ff02 100644
 +                "endpoint": endpoint,
 +                "wireApi": wire_api,
 +                "stream": true,
-+                "transport": "abortive_loopback",
++                "transport": "cancel_aware_loopback",
 +                "attempt": attempt + 1,
 +                "candidateCount": candidate_count,
 +                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
 +            }),
 +        );
-+        let upstream = match crate::abortive_http::post_json(
++        let upstream = match crate::loopback_http::post_json(
 +            &endpoint,
 +            relay.api_key.trim(),
 +            &user_agent,
@@ -660,7 +586,7 @@ index 6890f32..bc6ff02 100644
 +                        "endpoint": endpoint,
 +                        "wireApi": wire_api,
 +                        "stream": true,
-+                        "transport": "abortive_loopback",
++                        "transport": "cancel_aware_loopback",
 +                        "attempt": attempt + 1,
 +                        "candidateCount": candidate_count,
 +                        "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs(),
@@ -695,7 +621,7 @@ index 6890f32..bc6ff02 100644
 +                "endpoint": endpoint,
 +                "wireApi": wire_api,
 +                "stream": true,
-+                "transport": "abortive_loopback",
++                "transport": "cancel_aware_loopback",
 +                "statusCode": status_code,
 +                "attempt": attempt + 1,
 +                "candidateCount": candidate_count,
@@ -728,7 +654,7 @@ index 6890f32..bc6ff02 100644
 +                "endpoint": endpoint,
 +                "wireApi": wire_api,
 +                "stream": true,
-+                "transport": "abortive_loopback",
++                "transport": "cancel_aware_loopback",
 +                "statusCode": status_code,
 +                "attempt": attempt + 1,
 +                "candidateCount": candidate_count,
@@ -742,11 +668,11 @@ index 6890f32..bc6ff02 100644
  pub async fn open_models_proxy_request(
      original_user_agent: Option<&str>,
  ) -> anyhow::Result<UpstreamProxyResponse> {
-@@ -708,6 +870,53 @@ pub async fn open_models_proxy_request(
-     })
+@@ -780,6 +942,53 @@ fn response_header_timeout(is_stream: bool) -> Duration {
+     }
  }
  
-+pub async fn open_abortive_loopback_chat_completions_proxy_request(
++pub async fn open_cancel_aware_loopback_chat_completions_proxy_request(
 +    body: &str,
 +    original_user_agent: Option<&str>,
 +) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
@@ -765,11 +691,11 @@ index 6890f32..bc6ff02 100644
 +        return Ok(None);
 +    }
 +    let endpoint = chat_completions_url(&relay.base_url);
-+    if !crate::abortive_http::supports(&endpoint) {
++    if !crate::loopback_http::supports(&endpoint) {
 +        return Ok(None);
 +    }
 +    let user_agent = effective_user_agent(&relay.user_agent, original_user_agent);
-+    let upstream = crate::abortive_http::post_json(
++    let upstream = crate::loopback_http::post_json(
 +        &endpoint,
 +        relay.api_key.trim(),
 +        &user_agent,
@@ -797,5 +723,5 @@ index 6890f32..bc6ff02 100644
      body: &str,
      original_user_agent: Option<&str>,
 -- 
-2.55.0.windows.1
+2.55.0.windows.3
 

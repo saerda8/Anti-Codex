@@ -13,6 +13,31 @@ $ErrorActionPreference = "Stop"
 
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex" }
 if (-not $StateRoot) { $StateRoot = Join-Path $env:APPDATA "anticodex" }
+
+if ($PSVersionTable.PSEdition -eq "Core" -and -not $SourceRoot) {
+    $windowsPowerShell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+    if (-not (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) {
+        throw "Windows PowerShell is required to query the installed Codex package: $windowsPowerShell"
+    }
+    $delegateArgs = @(
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $PSCommandPath,
+        "-InstallRoot", $InstallRoot,
+        "-StateRoot", $StateRoot
+    )
+    if ($Prompt) { $delegateArgs += "-Prompt" }
+    if ($NoPersist) { $delegateArgs += "-NoPersist" }
+    $delegateOutput = & $windowsPowerShell @delegateArgs
+    $delegateExitCode = $LASTEXITCODE
+    if ($delegateExitCode -ne 0) {
+        throw "Windows PowerShell update check exited with code $delegateExitCode."
+    }
+    $delegateOutput
+    return
+}
+
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $StateRoot = [IO.Path]::GetFullPath($StateRoot)
 $updateStatusModule = Join-Path $PSScriptRoot "anticodex-update-status.psm1"
@@ -48,7 +73,9 @@ function Resolve-CodexSource {
         }
     }
     foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
-        $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
+        $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
         if ($pkg) {
             $root = Join-Path $pkg.InstallLocation "app"
             $desktopHost = Resolve-CodexDesktopHost -AppRoot $root
@@ -65,10 +92,23 @@ function Resolve-CodexSource {
     return $null
 }
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $stream = [IO.File]::OpenRead($Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Get-OptionalHash {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    return Get-AntiCodexSha256 -Path $Path
 }
 
 function Get-ObjectPropertyValue {
@@ -230,7 +270,7 @@ function Test-ActiveHostGuardrails {
             continue
         }
         if ($manifestFiles) {
-            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            $actual = Get-AntiCodexSha256 -Path $path
             $recorded = Get-ObjectPropertyValue -InputObject $manifestFiles -Name $name
             if (-not $recorded -or [string]$recorded -ne [string]$actual) {
                 $failures.Add("active host marker hash mismatch: $name") | Out-Null
@@ -296,6 +336,12 @@ $source = Resolve-CodexSource
 $activeRoot = Join-Path $InstallRoot "codex-patched-app"
 $activeMarker = Join-Path $InstallRoot "codex-patched-app.ok"
 $activeManifest = Read-ActiveHostManifest -MarkerPath $activeMarker
+$sourceComponentMetadataPath = if (-not $allowTestRoot) { Join-Path (Split-Path -Parent $PSScriptRoot) "third_party\codexplusplus\upstream.json" } else { $null }
+$sourceComponentMetadata = if ($sourceComponentMetadataPath) { Read-ActiveHostManifest -MarkerPath $sourceComponentMetadataPath } else { $null }
+$activeComponentRoot = Join-Path $InstallRoot "components\codexplusplus"
+$activeComponentManifestPath = Join-Path $activeComponentRoot "component-manifest.json"
+$activeComponentBinaryPath = Join-Path $activeComponentRoot "codex-plus-plus.exe"
+$activeComponentManifest = Read-ActiveHostManifest -MarkerPath $activeComponentManifestPath
 $activeManifestSource = Get-ObjectPropertyValue -InputObject $activeManifest -Name "source"
 $activePackageVersion = Get-ObjectPropertyValue -InputObject $activeManifestSource -Name "packageVersion"
 $statusPath = Join-Path $StateRoot "update-status.json"
@@ -320,8 +366,30 @@ $activeGuardrails = Test-ActiveHostGuardrails -Manifest $activeManifest -HostRoo
 $comparable = [bool]($sourceHostHash -and $sourceCliHash -and $activeHostHash -and $activeCliHash)
 $hostChanged = [bool]($sourceHostHash -and $activeHostHash -and $sourceHostHash -ne $activeHostHash)
 $cliChanged = [bool]($sourceCliHash -and $activeCliHash -and $sourceCliHash -ne $activeCliHash)
+$packageVersionChanged = [bool](
+    $source -and
+    -not [string]::IsNullOrWhiteSpace([string]$source.packageVersion) -and
+    [string]$source.packageVersion -ne [string]$activePackageVersion
+)
 $guardrailDrift = [bool]($source -and $comparable -and $activeGuardrails.ok -ne $true)
-$updateNeeded = [bool]($comparable -and ($hostChanged -or $cliChanged -or $guardrailDrift))
+$sourceComponentVersion = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "version"
+$sourceComponentVerification = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "verification"
+$sourceComponentPatches = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "patches"
+$sourceComponentHash = ([string](Get-ObjectPropertyValue -InputObject $sourceComponentVerification -Name "launcherReleaseBuild")).Replace("sha256:", "").ToLowerInvariant()
+$activeComponentVersion = Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "version"
+$activeComponentExpectedHash = ([string](Get-ObjectPropertyValue -InputObject (Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "binary") -Name "sha256")).ToLowerInvariant()
+$activeComponentPatches = Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "patches"
+$activeComponentActualHash = (Get-OptionalHash $activeComponentBinaryPath)
+if ($activeComponentActualHash) { $activeComponentActualHash = $activeComponentActualHash.ToLowerInvariant() }
+$componentComparable = [bool]($sourceComponentVersion -and ($sourceComponentHash -match '^[0-9a-f]{64}$') -and @($sourceComponentPatches).Count -gt 0 -and $activeComponentVersion -and $activeComponentActualHash)
+$componentDrift = [bool]($sourceComponentMetadata -and (
+    -not $componentComparable -or
+    [string]$sourceComponentVersion -ne [string]$activeComponentVersion -or
+    $sourceComponentHash -ne $activeComponentActualHash -or
+    $activeComponentExpectedHash -ne $activeComponentActualHash -or
+    @($activeComponentPatches).Count -ne @($sourceComponentPatches).Count
+))
+$updateNeeded = [bool]($comparable -and ($hostChanged -or $cliChanged -or $packageVersionChanged -or $guardrailDrift -or $componentDrift))
 $driftState = if (-not $source -or -not $comparable) {
     "unknown"
 } elseif ($updateNeeded) {
@@ -335,11 +403,16 @@ $reason = if (-not $source) {
     "fingerprint_unavailable"
 } elseif ($hostChanged -or $cliChanged) {
     "source_codex_changed"
+} elseif ($componentDrift) {
+    "codexplusplus_component_changed"
+} elseif ($packageVersionChanged) {
+    "source_package_version_changed"
 } elseif ($cachedStatus -and
     $cachedStatus.ok -eq $true -and
     $cachedStatus.updateNeeded -eq $false -and
     [string]$cachedStatus.source.packageVersion -eq [string]$source.packageVersion -and
-    $activeGuardrails.ok -eq $true) {
+    $activeGuardrails.ok -eq $true -and
+    -not $componentDrift) {
     "up_to_date_cached"
 } elseif ($guardrailDrift) {
     "active_host_guardrail_failed"
@@ -361,7 +434,9 @@ if (-not $NoPersist -and
 $syncLauncher = Join-Path $InstallRoot "runtime\scripts\sync-anticodex-launcher.ps1"
 $launchedSync = $false
 $prompted = $false
-$sourceFingerprint = if ($sourceHostHash -and $sourceCliHash) { "$sourceHostHash`:$sourceCliHash" } else { $null }
+$sourceFingerprint = if ($sourceHostHash -and $sourceCliHash) {
+    "$($source.packageName):$($source.packageVersion):$sourceHostHash`:$sourceCliHash"
+} else { $null }
 $promptStatePath = Join-Path $StateRoot "update-prompt.json"
 $lastPromptFingerprint = $null
 if (Test-Path -LiteralPath $promptStatePath) {
@@ -374,7 +449,7 @@ if ($Prompt -and $updateNeeded -and $sourceFingerprint -ne $lastPromptFingerprin
     try {
         $shell = New-Object -ComObject WScript.Shell
         $choice = $shell.Popup(
-            "Codex Desktop has been updated. Sync Anti-Codex now?`n`nAnti-Codex will build and validate a candidate first. The current version stays available if validation fails.",
+            "Codex Desktop or CodexPlusPlus has an update. Update Anti-Codex now?`n`nAnti-Codex will stage and validate both components first. The current release stays available if validation fails.",
             30,
             "Anti-Codex Update Available",
             68
@@ -407,7 +482,7 @@ $guardrailMessage = if ($activeGuardrails.ok) {
 }
 
 $result = [pscustomobject]@{
-    ok = [bool]($comparable -and $activeGuardrails.ok)
+    ok = [bool]($comparable -and $activeGuardrails.ok -and -not $componentDrift)
     checkedAt = [DateTime]::UtcNow.ToString("o")
     updateNeeded = $updateNeeded
     reason = $reason
@@ -425,10 +500,22 @@ $result = [pscustomobject]@{
         cliHash = $activeCliHash
         packageVersion = $activePackageVersion
     }
+    components = [pscustomobject]@{
+        updateNeeded = $componentDrift
+        comparable = $componentComparable
+        sourceVersion = $sourceComponentVersion
+        activeVersion = $activeComponentVersion
+        sourceHash = $sourceComponentHash
+        activeHash = $activeComponentActualHash
+        manifestHash = $activeComponentExpectedHash
+        expectedPatchCount = if ($sourceComponentMetadata) { @($sourceComponentPatches).Count } else { 0 }
+        patchCount = if ($activeComponentManifest) { @($activeComponentPatches).Count } else { 0 }
+    }
     drift = [pscustomobject]@{
         state = $driftState
         hostChanged = $hostChanged
         cliChanged = $cliChanged
+        packageVersionChanged = $packageVersionChanged
         activePackageVersion = $activePackageVersion
         sourcePackageVersion = if ($source) { $source.packageVersion } else { $null }
     }

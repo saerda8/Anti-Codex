@@ -934,6 +934,14 @@ export function mapAntigravityError(error) {
   if (statusCode === 401 || statusCode === 403 || /(?:login|sign[ -]?in|unauthori[sz]ed|forbidden)/i.test(message)) {
     return new ChatAdapterError(message, { cause: error, statusCode: 401, code: "authentication_error" });
   }
+  if (statusCode === 400 && /(?:user\s+)?location is not supported|unsupported (?:user\s+)?location/i.test(message)) {
+    return new ChatAdapterError(message, {
+      cause: error,
+      statusCode: 400,
+      code: "unsupported_location",
+      type: "invalid_request_error",
+    });
+  }
   if (statusCode === 429 || /(?:RESOURCE_EXHAUSTED|quota|usage limit|rate limit)/i.test(message)) {
     return new ChatAdapterError(message, { cause: error, statusCode: 429, code: "quota_exceeded" });
   }

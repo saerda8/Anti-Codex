@@ -349,6 +349,15 @@ test("the formal Gate 8 context threshold reaches the native compaction verifier
   assert.match(native, /if \(longContextBytes < minLongContextBytes\)/);
 });
 
+test("native compaction can stop before the scenario-specific follow-up turn", async () => {
+  const native = await readFile(new URL("../../scripts/test-anticodex-native-compaction-resume.mjs", import.meta.url), "utf8");
+  assert.match(native, /const compactOnly = args\.has\("--compact-only"\)/);
+  assert.match(native, /compactionEvidence\.observed && idleAfterCompaction\?\.ok === true && !compactOnly/);
+  assert.match(native, /record\?\.payload\?\.type === "task_complete"/);
+  assert.match(native, /native Codex compaction failed:/);
+  assert.match(native, /compactOnly,/);
+});
+
 test("the formal Gate 8 run verifies signed-in account readiness before first model traffic", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-gate8-final-long-task.mjs", import.meta.url), "utf8");
   const accountProbe = source.indexOf("const accountBefore = await accountReadiness()");
@@ -723,6 +732,13 @@ test("the release Gate 8 validator requires all eight turns and quota-safe prefl
   assert.match(source, /Number\(report\?\.interaction\?\.nonEmptyToolResults\) < 8/);
   assert.match(source, /Number\(report\?\.interaction\?\.modelProvenTurns\) < 8/);
   assert.match(source, /report\?\.interaction\?\.turnContractsPassed !== true/);
+});
+
+test("signed completed Gate 8 reports do not expire on the live-report clock", async () => {
+  const source = await readFile(new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url), "utf8");
+  assert.match(source, /id: "formalLongTask", signed: true, live: false/);
+  assert.match(source, /id: "multiStyleLongTasks", signed: true, live: false/);
+  assert.match(source, /Maximum age for live Gate 7 evidence/);
 });
 
 test("multi-style release acceptance requires result-proven migration and greenfield journeys", async () => {

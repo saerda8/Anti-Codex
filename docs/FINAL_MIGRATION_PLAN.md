@@ -1,7 +1,7 @@
 # Anti-Codex Final Migration Plan
 
-- Status: authoritative execution plan; Gates 1-8 complete
-- Updated: 2026-07-17
+- Status: authoritative execution plan; maintenance acceptance reopened for seamless frontend switching
+- Updated: 2026-07-20
 - Architecture: [`THREE_LAYER_ARCHITECTURE.md`](THREE_LAYER_ARCHITECTURE.md)
 - Removal ledger: [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_REMOVAL_MANIFEST.md)
 - Implementation inventory: [`CURRENT_IMPLEMENTATION_AUDIT.md`](CURRENT_IMPLEMENTATION_AUDIT.md)
@@ -11,7 +11,7 @@
 
 ```text
 isolated official Codex copy
-  -> CodexPlusPlus launcher/provider stack with isolation-only patch
+  -> CodexPlusPlus launcher/provider stack with nine narrow compatibility patches
      -> ordinary third-party Responses or Chat API
      -> Antigravity provider: thin Chat Completions to Cascade adapter
         -> native Antigravity Desktop Cascade, account, models and quota
@@ -19,7 +19,9 @@ isolated official Codex copy
 
 There is no fourth task-control layer. Codex owns planning, tools, commands, files, approvals, retries, continuation, compaction and completion. CodexPlusPlus owns all ordinary third-party provider integration and the general Codex Responses/Chat conversion. Third-party models bypass Antigravity completely. Anti-Codex owns only the smallest Chat-to-Cascade mapping for Antigravity models.
 
-The provider identity persisted by the copied Codex client is a stable local Anti-Codex bridge identity, not the selected upstream route. Switching between Antigravity and a third-party API may change the CodexPlusPlus relay profile, model, protocol and upstream URL, but it must not change `model_provider`. Codex thread history defaults to the current provider identity; changing that identity hides otherwise healthy same-task history and breaks the required quota-fallback continuation.
+The provider identity persisted by the copied Codex client is a stable local Anti-Codex bridge identity, not the selected upstream route. Switching between Antigravity and a third-party API changes only the frontend-selected model slot and the matching resident CodexPlusPlus relay; it must not change `model_provider` or restart the client/helper. Codex thread history defaults to the current provider identity; changing that identity hides otherwise healthy same-task history and breaks the required quota-fallback continuation.
+
+The frontend selection is the source of truth. A fixed backend model override is forbidden. The unified native catalog and two resident relays must allow Gemini, Claude and configured third-party models to switch in the current task without restarting Anti-Codex. The backend may resolve a generic slot or strip the third-party namespace only at the upstream boundary.
 
 Changing this target, routing third-party APIs through Antigravity, moving task decisions out of Codex, replacing CodexPlusPlus conversion, or changing the adapter to a self-written Responses translator requires an explicit user decision and a prior update to the cornerstone architecture.
 
@@ -43,13 +45,15 @@ At the end of every cycle:
 
 ## 3. Current Completion Baseline
 
+**Superseding maintenance status, 2026-07-20:** the current installed release has restored seamless native model switching without client/helper/task restart and now uses the accepted nine-patch CodexPlusPlus `v1.2.39` component. Patch 0009 raises only the bounded local helper body limit to 128 MiB; repeated approximately 35 MiB same-task multimodal turns, the 50.342-second live-action Stage 4B video and the 19-entry Stage 4D package are independently green. The remaining real-provider acceptance gap is Antigravity Gemini: the currently logged-in Pro account reaches native Cascade but is rejected as `unsupported_location` before tools run. This external account-region condition does not reopen the fixed architecture or third-party route.
+
 - Reusable shell, isolation, branding, Antigravity connection and verifier assets: complete for the fixed route.
 - Deliverable completion on the fixed three-layer runtime route: 100%. Gates 1 through 8 are complete and the independent release summary reports `releaseReady:true`.
 - Inventory and exact keep/adapt/delete classification: complete.
 - CodexPlusPlus isolation review, rebaseable patch, reproducible Windows launcher build and real copied-client isolation proof: complete.
-- Deterministic third-party Chat Completions route: complete. The only non-isolation CodexPlusPlus change is the documented abortive-close transport for plain HTTP loopback model streams; remote provider payloads, protocol conversion, retries and task behavior remain upstream.
+- Deterministic third-party Chat Completions route: complete. The only non-isolation CodexPlusPlus transport change is the documented one-shot cancel-aware path for plain HTTP loopback model streams; normal completion closes gracefully, while remote provider payloads, protocol conversion, retries and task behavior remain upstream.
 - Thin Antigravity adapter and isolated CodexPlusPlus route switch: complete. The persistent copied-client matrix, visible-client short proof, formal edge/recovery matrix, legacy zero-hit gate, release packaging proof and final multi-style Gate 8 are green.
-- Post-release real-artifact validation is active maintenance, not a new gate. The current sweep produced and independently verified a short video, PPTX, responsive website and cross-deliverable audit project. The website passes 28/28 Node tests, complete real-browser interaction evidence, desktop/mobile browser QA and a 37-entry release-package content audit. Gemini and Claude 429 plus a third-party HTTP 503 are external route conditions; neither permits adding task control to the adapter or replacing CodexPlusPlus translation.
+- Post-release real-artifact validation is maintenance, not a new architecture gate. It now includes the earlier short video/PPTX/site matrix, the accepted 68-second character-dialogue animation, a separate offline premiere-site project, a host-verified 50.342-second真人口型剪辑, a hash-bound 19-entry provisional package, and a further 22m50s same-task publish-suite turn producing verified 49.716s/29.821s/15.015s真人 videos plus a 24-entry package. Claude 429 and the current-account Gemini location rejection remain provider conditions; third-party recovery completed real artifacts without adding task control or replacing CodexPlusPlus translation.
 
 Old percentages from the mixed translator describe historical reusable evidence only. They are not completion claims for this plan.
 
@@ -57,11 +61,11 @@ Old percentages from the mixed translator describe historical reusable evidence 
 
 Every progress report to the user must use these three product parts in this order, with separate evidence-based percentages:
 
-1. **Anti-Codex shell plus native Codex client features - 100% implementation.** Isolation, native task behavior, crash/same-task resume, packaging, upgrade/rollback, exact Chinese `管理`, preserved Anti-Codex icons, responsive history and upper/center/lower real-mouse close clicks all pass.
-2. **CodexPlusPlus general translation layer - 100% implementation.** General Codex Responses/Chat translation remains upstream CodexPlusPlus `1.2.36`; Anti-Codex carries only the rebaseable isolation patch and documented plain-HTTP-loopback abortive-close transport patch. The ordinary third-party API route passes 27/27 and bypasses Antigravity.
-3. **Native Antigravity export plus thin Chat adapter - 100% implementation.** Real native tools, multi-turn work, adapter restart, cancellation/recovery, exact failed-tool results, parallel tool results and deterministic quota/auth/network/timeout mapping pass. The adapter remains Chat-to-Cascade only and contains no Codex task controller. Gate 8 is acceptance of the assembled product, not unfinished adapter implementation.
+1. **Anti-Codex shell plus native Codex client features - 100% current acceptance.** Isolation, native task behavior, exact Chinese `管理`, preserved Anti-Codex icons, upper/center/lower close clicks, unified model menu and installed real-mouse no-restart switching are proven while original Codex stays alive.
+2. **CodexPlusPlus general translation layer - 100% current acceptance.** General conversion remains upstream CodexPlusPlus `1.2.39`; Anti-Codex carries only nine documented compatibility patches. The installed build preserves process/task identity and completed repeated approximately 35 MiB multimodal turns above the former 32 MiB bound, with explicit 413 regression coverage above the new 128 MiB bound.
+3. **Native Antigravity export plus thin Chat adapter - 100% implementation, current live-provider acceptance blocked externally.** Native tools, multi-turn work, adapter restart, cancellation/recovery, exact failed-tool results, parallel tool results and deterministic quota/auth/network/timeout/location mapping remain proven. The current Pro account exposes models but Antigravity rejects real Gemini turns as `unsupported_location` before tool execution; no product code can truthfully mark that account-specific run green.
 
-Overall fixed-route completion is 100%. Component percentages and the integrated release acceptance gate are all complete. Each future maintenance report must still say what changed in each part and whether third-party API routing is affected.
+Overall implementation and installed third-party acceptance are 100%; full current-account alternating-provider acceptance remains 99% until Antigravity accepts one real Gemini contribution in the preserved task. Each report must say what changed in each part and whether third-party API routing is affected.
 
 ## 4. Sequential Gates
 
@@ -83,11 +87,11 @@ Current source result:
 
 - passed: explicit copied app path, `CODEX_HOME`, inherited child environment and configurable launcher guard port;
 - unpatched-upstream blockers: independent CodexPlusPlus state root, independent protocol-proxy port, branded copied-executable selection, copied-app-path-scoped process/manager handling, and shared current-user logon-watcher registration;
-- isolated patch: commit `3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6`, pinned under `third_party/codexplusplus/` against upstream `91a83acd`; isolated launch/restart and branded executable selection fail closed instead of falling back to original Codex or `ChatGPT.exe`;
-- repository audit: 7/7 regression tests pass, the patched source passes 9/9 checks, and the saved patch cleanly replays with an identical tree on the pinned upstream commit;
-- compiled checks: pinned cargo-xwin Docker checks pass for core and Manager. Windows-native execution passes 124 core tests and 20 watcher tests;
-- reproducible launcher: release build passed with SHA-256 `56dded2e546a9a54e4d6fc3988b324fb4a8102702a0d8b83140aa80fe22d54a1`;
-- runtime result: copied Codex `26.707.9981.0` passed 20/20 checks. Invalid branded-executable selection exited with code 1; the valid process was created only from the candidate path with the sealed launcher as parent; isolated state, Electron user data and `CODEX_HOME` received real writes; original Codex and the existing Anti-Codex process sets, stable files, shortcuts, persistent environment and global watcher stayed unchanged before, during and after cleanup;
+- accepted nine-patch source series: commit `8ac882f55daf80c406e31c9d01803032f4e5daf1`, pinned under `third_party/codexplusplus/` against upstream `37c628e58b21cd3698b68a72c15133c91ccc5f92`;
+- repository audit: 16/16 component regressions and 9/9 source-isolation checks pass, and all nine patch files are hash-bound in the component manifest;
+- compiled checks: the preceding seven-patch tree passed 190/190 core and 54/54 protocol-proxy tests, patch 0008 passed its no-secret tool audit, and patch 0009 passed 5/5 exact body-boundary regressions;
+- reproducible launcher: pinned cargo-xwin Windows release build passed; 16,943,616 bytes, SHA-256 `9ae04c69b65ead219053974a38b4ffa29475a3e9c6f36fd9b032df86556587ce`;
+- runtime result: copied Codex `26.715.4045.0` passed isolation checks. Invalid branded-executable selection fails closed; isolated state, Electron user data and `CODEX_HOME` receive only Anti-Codex writes; original Codex remains alive and unchanged through controlled Anti-Codex restarts;
 - cleanup result: zero candidate or launcher processes and no default `.codex-session-delete` state remained. Gate 1 used no model traffic.
 
 ### Gate 2: Deterministic Third-Party Provider Route - COMPLETE
@@ -96,12 +100,12 @@ Connect the isolated client through CodexPlusPlus directly to a local fake third
 
 Current result:
 
-- accepted CodexPlusPlus commit: `0c7c4fb156fc1635c9d4da0f930213d33db540fa`, based on upstream `91a83acd` plus the Gate 1 isolation commit;
-- transport exception: only plain HTTP loopback model endpoints use an abortive Hyper connector so Codex cancellation reaches the controlled local adapter after streaming starts or while response headers are pending; remote third-party endpoints retain the upstream reqwest route;
+- historical Gate 2 acceptance used commit `58d984fa0c0a8e92072ae36c35082e575bfa1b1e` from the then-current patch series; the current seven-patch maintenance candidate supersedes that component while leaving upstream third-party conversion unchanged;
+- transport exception: only plain HTTP loopback model endpoints use a one-shot Hyper connection; downstream cancellation drops the request after streaming starts or while response headers are pending, normal responses close gracefully without zero-linger resets, and remote third-party endpoints retain the upstream reqwest route;
 - formal report: `docs/audits/2026-07-14-codexplusplus-third-party-route.json`, 27/27 checks passed, `failedIds:[]`, loopback fake provider only and no model traffic;
 - real copied native Codex CLI executed exactly one PowerShell command and returned its exact output through the second Chat request;
 - focused evidence: fixture 16/16, core 125/125, protocol-proxy integration 44/44, launcher 64/64 with one unrelated Windows symlink-privilege test skipped;
-- release launcher SHA-256: `AAE5E052A03B82B0C0B1F4AA0DFF175DE2AA51F5A2572C4C757FEC9CFCF1B02B`;
+- release launcher SHA-256: `3a4043b9941118af2fc1422b3d3ab3cdb6f8c49ffbce9be3a4c366a67fb1b9fd`;
 - original Codex and the active Anti-Codex process/state fingerprints stayed unchanged, and candidate/helper/fake processes were zero after cleanup.
 
 ### Gate 3: Thin Antigravity Chat Adapter - COMPLETE
@@ -226,7 +230,7 @@ Current release summary reports `shellProgress:100`, `codexPlusPlusProgress:100`
 
 Only after all three reported product parts are at 100%, run the final visible long project. It must include repeated file edits, real tests, at least one mid-task user correction/dialogue, long-context pressure and native Codex compaction/resume. Judge artifacts, hashes, command counts, test exits, continuity and cleanup. Do not use the long task as an implementation-debug loop; if it fails, reopen the responsible component percentage and fix that component before rerunning the failed lane.
 
-Final accepted evidence has two parts. The signed formal inventory journey completed eight visible turns, four edit rounds, 49 real tool calls, correction, controlled interruption/recovery, actual-mouse history reopen and native compaction/same-thread continuation. The signed multi-style run then completed interrupted migration and a greenfield 12-file project in 8/8 additional visible turns. Migration passed protected-input, test, exact-output, two-run idempotency and stale-temp recovery checks. Greenfield passed tests, JSON/text CLI, expected metrics, Chinese README/full HTML and hash-stable read-only verification. Each project's title and task-suggestion helpers made one request and zero tools. Final no-traffic source regression passes 369/369; installed fast checks and sync readiness pass on official Codex `26.707.12708.0` / CLI `0.144.5`.
+Final accepted evidence has two parts. The signed formal inventory journey completed eight visible turns, four edit rounds, 49 real tool calls, correction, controlled interruption/recovery, actual-mouse history reopen and native compaction/same-thread continuation. The signed multi-style run then completed interrupted migration and a greenfield 12-file project in 8/8 additional visible turns. Migration passed protected-input, test, exact-output, two-run idempotency and stale-temp recovery checks. Greenfield passed tests, JSON/text CLI, expected metrics, Chinese README/full HTML and hash-stable read-only verification. Each project's title and task-suggestion helpers made one request and zero tools. Later maintenance added the 68-second character-dialogue animation and offline premiere site as tangible cross-provider evidence. Installed checks target official Codex `26.715.4045.0` / CLI `0.145.0-alpha.18`.
 
 The paragraphs below retain the chronological Gate 8 failure and hardening record. They are historical diagnostics, not current blockers.
 
@@ -252,7 +256,7 @@ The two required post-Gate-8 human journeys also have no historical model defaul
 
 A gate advances only when every listed observation has fresh evidence from the current route. A unit test cannot substitute for the copied desktop path; the Gate 5 short smoke cannot substitute for the final Gate 8 long project; a response marker cannot substitute for artifacts; and a previous mixed-translator success cannot substitute for CodexPlusPlus route evidence. Gate 8 cannot start until the three progress-report components each have 100% implementation evidence.
 
-## 6. Current Three-Part Status And Final Acceptance Blocker (2026-07-16 09:51 +08:00)
+## 6. Historical Three-Part Snapshot Before Final Acceptance (2026-07-16 09:51 +08:00)
 
 1. **Official copied Codex shell: 100%.** The active copy matches official Codex `26.707.9981.0` and CLI `0.144.2`, while Anti-Codex state, process tree, branding and icons remain isolated. Chinese `管理`, `native-panel-v105`, and real upper/center/lower close clicks pass. The official project's current `在 <项目> 中新建任务` control is used for fixture-rooted verification.
 2. **Upstream CodexPlusPlus integration: 100%.** Pinned upstream `1.2.36` owns Responses/Chat conversion and ordinary provider behavior. Anti-Codex carries only the documented isolation and loopback-cancellation transport patches. Third-party API URL, key, model and Chat/Responses protocol are configured in `管理`, stored only in isolated Anti-Codex state, and routed directly through CodexPlusPlus without Antigravity.
@@ -279,3 +283,11 @@ Verifier isolation is part of this permanent contract. A Manager test may replac
 The accepted implementation proves this boundary with an installed actual-mouse third-party form run and a separate close run. The form exposes Chat Completions/Responses, URL/model/key, test/save/restore, disabled save before testing, unchanged profile and zero traffic. The close run hits upper/center/lower, has no real label text node and leaves the exact same live action function reference. After both runs, the snapshot has all 11 responses, is not in flight, and no verifier global remains. Current regression evidence is 11/11 Manager bridge contracts, 40/40 related Manager/service/route tests and 331/331 complete no-traffic preflight tests; the synchronized verifier hash is `ABFBB65D98788F6C21AFEFD8FEAA1AD1E063D2D24A0D473091C93A7BA8A1DB64`.
 
 The final pre-reset practice refresh remains result-based. Deterministic run `BEF4919C5961` passed 44/44 with four same-thread dialogue turns, three edit rounds, four host test runs, user correction, read-only stability, native compaction, controlled interruption/resume and exactly-once execution; archive SHA-256 is `56feb3d1c42161347f5a3147d6a4aab2aaae5e12be82538b9b72c397d3c7b95b`. Diverse run `D963645D1FE3` passed 42/42 for repair, correction, interruption/resume, already-running no-relaunch and failed-launch single-attempt diagnosis; archive SHA-256 is `504ad4a4c22d3847de69b34784380f2a5ee18daabe5c4f39f1958035faf979ae`. Both used copied native Codex plus CodexPlusPlus and a loopback scripted Chat provider, sent zero Antigravity traffic, and left original Codex, the single Anti-Codex root and candidate-process counts unchanged. They strengthen the practice record but cannot replace the visible real-Antigravity Gate 8 journey.
+
+## 7. 2026-07-19 Maintenance Closure
+
+- **Shell/client: 100%.** Official Codex `26.715.4045.0` is isolated with preserved Anti-Codex icons and Chinese Manager UI. The direct Node scheduled-task owner is intentionally retained and hidden; eight checks over 120 seconds kept one visible Anti-Codex window and original Codex alive.
+- **CodexPlusPlus: 100%.** Current component is upstream `v1.2.39` plus seven replayable, documented compatibility patches. The seventh keeps late reasoning from opening a second Responses output item after visible text begins. Its installed build passed a real 28.6-second transport marker and a 25m18s same-task live-action build without reconnect.
+- **Antigravity thin adapter: 100%.** Claude performed real file work before quota exhaustion; Gemini's unsupported-location error occurred before tool work and was reported without fabricated completion. Third-party fallback continued from disk artifacts, while Codex remained the task/tool owner.
+- Tangible outputs are the host-verified真人成片 `deliverables/2026-07-18-character-dialogue-short-video/live-action-stage6/final-live-action.mp4` and `deliverables/2026-07-19-character-film-premiere-site/release-package-stage5.zip`. The rejected Stage 4 animation remains only as historical engineering evidence. Hashes, independent QA and the 73.68 MiB intermediate-output cleanup are recorded in `CURRENT_LONG_TASK_ACCEPTANCE.md`.
+- Gate 8's two signed, hash-checked acceptance reports are retained audits and do not expire after 48 hours. Freshness remains mandatory for Gate 7's current source, installed runtime, sync and legacy checks; model traffic is not repeated solely to refresh a timestamp.

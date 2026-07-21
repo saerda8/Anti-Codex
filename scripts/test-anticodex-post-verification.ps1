@@ -228,7 +228,9 @@ function Open-AntigravityDesktopIfNeeded {
         $path = Resolve-AntigravityDesktopPath
         if ($path) {
             $running = Get-AntigravityMainProcess -ExecutablePath $path
-            if (-not $running) { Start-Process -FilePath $path | Out-Null }
+            if (-not $running) {
+                Start-AntigravityDesktop -ExecutablePath $path -StateRoot (Split-Path -Parent $ReportRoot) | Out-Null
+            }
             $script:openedAntigravity = $true
         }
     } catch {}

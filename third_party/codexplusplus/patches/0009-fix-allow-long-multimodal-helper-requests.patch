@@ -1,0 +1,40 @@
+From 8ac882f55daf80c406e31c9d01803032f4e5daf1 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Mon, 20 Jul 2026 09:04:01 +0800
+Subject: [PATCH] fix: allow long multimodal helper requests
+
+---
+ crates/codex-plus-core/src/launcher.rs | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index f8cb43c..9bfcb83 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -2018,8 +2018,8 @@ mod computer_use_tests {
+ }
+ 
+ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+-const MAX_HTTP_BODY_BYTES: usize = 32 * 1024 * 1024;
+-const MAX_HTTP_ENCODED_BODY_BYTES: usize = 64 * 1024 * 1024;
++const MAX_HTTP_BODY_BYTES: usize = 128 * 1024 * 1024;
++const MAX_HTTP_ENCODED_BODY_BYTES: usize = 256 * 1024 * 1024;
+ 
+ struct HttpRequest {
+     headers: Vec<u8>,
+@@ -3337,6 +3337,12 @@ mod tests {
+         assert_eq!(error.status(), "413 Payload Too Large");
+     }
+ 
++    #[test]
++    fn helper_body_limit_covers_long_multimodal_codex_turns() {
++        assert_eq!(MAX_HTTP_BODY_BYTES, 128 * 1024 * 1024);
++        assert_eq!(MAX_HTTP_ENCODED_BODY_BYTES, 2 * MAX_HTTP_BODY_BYTES);
++    }
++
+     #[tokio::test]
+     async fn helper_returns_400_for_ambiguous_body_framing() {
+         let response = send_raw_helper_request(
+-- 
+2.55.0.windows.3
+

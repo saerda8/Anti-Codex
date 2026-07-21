@@ -1,0 +1,282 @@
+From 16847861cfc180a761ac74f3d3fd2d885e8c2471 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Sun, 19 Jul 2026 02:30:42 +0800
+Subject: [PATCH 5/7] fix: preserve image tool outputs for chat relays
+
+
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c833a6c439 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -2559,7 +2559,7 @@ fn append_responses_item(
+             messages.push(json!({
+                 "role": "tool",
+                 "tool_call_id": call_id,
+-                "content": response_output_text(item.get("output").unwrap_or(&Value::Null))
++                "content": response_output_to_chat_content(item.get("output").unwrap_or(&Value::Null))
+             }));
+         }
+         Some("custom_tool_call") => {
+@@ -2605,7 +2605,7 @@ fn append_responses_item(
+             messages.push(json!({
+                 "role": "tool",
+                 "tool_call_id": call_id,
+-                "content": response_output_text(item.get("output").unwrap_or(&Value::Null))
++                "content": response_output_to_chat_content(item.get("output").unwrap_or(&Value::Null))
+             }));
+         }
+         Some("tool_call") => {
+@@ -2651,7 +2651,7 @@ fn append_responses_item(
+             messages.push(json!({
+                 "role": "tool",
+                 "tool_call_id": call_id,
+-                "content": response_output_text(output)
++                "content": response_output_to_chat_content(output)
+             }));
+         }
+         Some("reasoning") => {
+@@ -2688,11 +2688,26 @@ fn append_responses_item(
+ }
+ 
+ fn orphan_tool_output_message(call_id: &str, output: &Value) -> Value {
++    let content = response_output_to_chat_content(output);
++    if let Some(parts) = content.as_array() {
++        let mut parts = parts.clone();
++        parts.insert(
++            0,
++            json!({
++                "type": "text",
++                "text": format!("Function call output ({call_id}):")
++            }),
++        );
++        return json!({
++            "role": "user",
++            "content": parts
++        });
++    }
+     json!({
+         "role": "user",
+         "content": format!(
+             "Function call output ({call_id}): {}",
+-            response_output_text(output)
++            content.as_str().unwrap_or_default()
+         )
+     })
+ }
+@@ -4077,6 +4092,135 @@ fn response_output_text(value: &Value) -> String {
+     }
+ }
+ 
++const TOOL_IMAGE_PLACEHOLDER: &str = "[image output forwarded as image_url]";
++
++fn response_output_to_chat_content(value: &Value) -> Value {
++    let parsed = value.as_str().and_then(|text| {
++        let trimmed = text.trim();
++        if trimmed.starts_with('{') || trimmed.starts_with('[') {
++            serde_json::from_str::<Value>(trimmed).ok()
++        } else {
++            None
++        }
++    });
++    let source = parsed.as_ref().unwrap_or(value);
++    let mut image_urls = Vec::new();
++    let sanitized = sanitize_response_output_images(source, &mut image_urls);
++    if image_urls.is_empty() {
++        return Value::String(response_output_text(value));
++    }
++
++    let mut parts = Vec::with_capacity(image_urls.len() + 1);
++    let text = match sanitized {
++        Value::Null => String::new(),
++        Value::String(text) => text,
++        other => canonical_json_string(&other),
++    };
++    if !text.trim().is_empty() {
++        parts.push(json!({ "type": "text", "text": text }));
++    }
++    for image_url in image_urls {
++        parts.push(json!({
++            "type": "image_url",
++            "image_url": { "url": image_url }
++        }));
++    }
++    Value::Array(parts)
++}
++
++fn sanitize_response_output_images(value: &Value, image_urls: &mut Vec<String>) -> Value {
++    match value {
++        Value::Array(items) => Value::Array(
++            items
++                .iter()
++                .map(|item| sanitize_response_output_images(item, image_urls))
++                .collect(),
++        ),
++        Value::Object(object) => {
++            let image_kind = object.get("type").and_then(Value::as_str).unwrap_or("");
++            let image_url = match image_kind {
++                "image" => object
++                    .get("data")
++                    .and_then(Value::as_str)
++                    .filter(|data| !data.is_empty())
++                    .map(|data| {
++                        if data.starts_with("data:image/") {
++                            data.to_string()
++                        } else {
++                            let mime_type = object
++                                .get("mimeType")
++                                .or_else(|| object.get("mime_type"))
++                                .and_then(Value::as_str)
++                                .filter(|mime| mime.starts_with("image/"))
++                                .unwrap_or("image/png");
++                            format!("data:{mime_type};base64,{data}")
++                        }
++                    }),
++                "input_image" | "image_url" => {
++                    object.get("image_url").and_then(response_output_image_url)
++                }
++                _ => object.get("image_url").and_then(response_output_image_url),
++            };
++
++            if let Some(image_url) = image_url.filter(|url| !url.is_empty()) {
++                if !image_urls.contains(&image_url) {
++                    image_urls.push(image_url);
++                }
++                let mut sanitized = object.clone();
++                if image_kind == "image" {
++                    sanitized.insert("data".to_string(), json!(TOOL_IMAGE_PLACEHOLDER));
++                } else {
++                    sanitized.insert("image_url".to_string(), json!(TOOL_IMAGE_PLACEHOLDER));
++                }
++                for (key, item) in object {
++                    if key == "data" || key == "image_url" {
++                        continue;
++                    }
++                    sanitized.insert(
++                        key.clone(),
++                        sanitize_response_output_images(item, image_urls),
++                    );
++                }
++                return Value::Object(sanitized);
++            }
++
++            Value::Object(
++                object
++                    .iter()
++                    .map(|(key, item)| {
++                        (
++                            key.clone(),
++                            sanitize_response_output_images(item, image_urls),
++                        )
++                    })
++                    .collect(),
++            )
++        }
++        Value::String(text) if response_output_image_url(value).is_some() => {
++            let image_url = text.to_string();
++            if !image_urls.contains(&image_url) {
++                image_urls.push(image_url);
++            }
++            json!(TOOL_IMAGE_PLACEHOLDER)
++        }
++        _ => value.clone(),
++    }
++}
++
++fn response_output_image_url(value: &Value) -> Option<String> {
++    match value {
++        Value::String(url)
++            if url.starts_with("data:image/")
++                || url.starts_with("https://")
++                || url.starts_with("http://") =>
++        {
++            Some(url.clone())
++        }
++        Value::Object(object) => object.get("url").and_then(response_output_image_url),
++        _ => None,
++    }
++}
++
+ fn build_custom_tool_call_history(name: &str, input: &Value) -> (String, String) {
+     let input = response_output_text(input);
+     if name == "apply_patch" || input.starts_with("*** Begin Patch") {
+diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
+index 6ae97de41eb4450dadafa52420351a792120db72..75420c6c7596b6cc2add0d6abcf495f5f8b7b8af 100644
+--- a/crates/codex-plus-core/tests/protocol_proxy.rs
++++ b/crates/codex-plus-core/tests/protocol_proxy.rs
+@@ -834,6 +834,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+     );
+ }
+ 
++#[test]
++fn responses_input_preserves_mcp_image_tool_output_as_multimodal_content() {
++    let image_data = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=";
++    let expected_url = format!("data:image/png;base64,{image_data}");
++    let converted = responses_to_chat_completions(json!({
++        "model": "gpt-5.6-sol",
++        "input": [
++            {
++                "type": "function_call",
++                "call_id": "call_image",
++                "name": "view_image",
++                "arguments": "{\"path\":\"contact-sheet.png\"}"
++            },
++            {
++                "type": "function_call_output",
++                "call_id": "call_image",
++                "output": {
++                    "content": [
++                        { "type": "text", "text": "Contact sheet loaded." },
++                        { "type": "image", "data": image_data, "mimeType": "image/png" }
++                    ],
++                    "detail": "high"
++                }
++            }
++        ]
++    }))
++    .unwrap();
++
++    let content = converted["messages"][1]["content"].as_array().unwrap();
++    assert_eq!(content[0]["type"], "text");
++    assert!(!content[0]["text"].as_str().unwrap().contains(image_data));
++    assert_eq!(content[1]["type"], "image_url");
++    assert_eq!(content[1]["image_url"]["url"], expected_url);
++}
++
++#[test]
++fn responses_input_preserves_direct_view_image_output_without_textual_base64() {
++    let image_url = "data:image/png;base64,QUJDREVGRw==";
++    let output = json!({
++        "detail": "high",
++        "image_url": image_url
++    })
++    .to_string();
++    let converted = responses_to_chat_completions(json!({
++        "model": "gpt-5.6-sol",
++        "input": [
++            {
++                "type": "custom_tool_call",
++                "call_id": "call_image",
++                "name": "view_image",
++                "input": "{\"path\":\"contact-sheet.png\"}"
++            },
++            {
++                "type": "custom_tool_call_output",
++                "call_id": "call_image",
++                "output": output
++            }
++        ]
++    }))
++    .unwrap();
++
++    let content = converted["messages"][1]["content"].as_array().unwrap();
++    assert_eq!(content[0]["type"], "text");
++    assert!(!content[0]["text"].as_str().unwrap().contains(image_url));
++    assert_eq!(content[1]["image_url"]["url"], image_url);
++}
++
+ #[test]
+ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+     let converted = responses_to_chat_completions(json!({
+-- 
+2.55.0.windows.3
+

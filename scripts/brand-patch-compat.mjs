@@ -6,6 +6,9 @@ const WINDOWS_TRAY_BRAND_ICONS = [
   "`chatgpt-tray-light.ico`",
 ];
 
+const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
+  /await [\w$]+\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+\([\w$]+\),expectedVersion:null,filePath:null,reloadUserConfig:!(?<reload>[01])\}\)/;
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -17,6 +20,34 @@ function padReplacement(match, replacement) {
     );
   }
   return replacement + " ".repeat(match.length - replacement.length);
+}
+
+export function hasStartupMcpConfigReload(text) {
+  return STARTUP_MCP_CONFIG_RELOAD_PATTERN.test(String(text ?? ""));
+}
+
+export function patchStartupMcpConfigReload(text) {
+  const source = String(text ?? "");
+  const match = STARTUP_MCP_CONFIG_RELOAD_PATTERN.exec(source);
+  if (!match?.groups) {
+    throw new Error("Startup MCP config reload pattern not found");
+  }
+  if (match.groups.reload === "1") return source;
+
+  const patched = match[0].replace("reloadUserConfig:!0", "reloadUserConfig:!1");
+  return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
+}
+
+export function hasPatchedAuthRequirement(text) {
+  return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===`chatgpt`\?\1\.account\.email:null/.test(
+    String(text ?? ""),
+  );
+}
+
+export function hasPatchedLocalModelAvailability(text) {
+  return /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*(?=[,;])/.test(
+    String(text ?? ""),
+  );
 }
 
 function hasPatchedProductNameDrivenSessionTitle(text) {

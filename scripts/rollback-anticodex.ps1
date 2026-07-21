@@ -23,6 +23,9 @@ $rollbackHost = Join-Path $installRoot "rollback-host"
 $rollbackMarker = Join-Path $installRoot "rollback-host.ok"
 $swapHost = Join-Path $installRoot "rollback-swap-host"
 $swapMarker = Join-Path $installRoot "rollback-swap-host.ok"
+$activeComponent = Join-Path $installRoot "components\codexplusplus"
+$rollbackComponent = Join-Path $installRoot "rollback-codexplusplus"
+$swapComponent = Join-Path $installRoot "rollback-swap-codexplusplus"
 $startAntiCodex = Join-Path $sourceRoot "scripts\start-anticodex.ps1"
 $baseUrlResolver = Join-Path $sourceRoot "scripts\resolve-anticodex-base-url.ps1"
 $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) { $env:ANTICODEX_HOST_SYNC_MARKER } else { Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock" }
@@ -43,6 +46,23 @@ function Move-FixedHostDirectory {
     $fullDestination = Assert-FixedHostPath $Destination
     if (-not [IO.Directory]::Exists("\\?\$fullSource")) { throw "Anti-Codex host source is missing: $fullSource" }
     if ([IO.Directory]::Exists("\\?\$fullDestination")) { throw "Anti-Codex host destination already exists: $fullDestination" }
+    [IO.Directory]::Move("\\?\$fullSource", "\\?\$fullDestination")
+}
+
+function Assert-FixedComponentPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $allowed = @($activeComponent, $rollbackComponent, $swapComponent) | ForEach-Object { [IO.Path]::GetFullPath($_) }
+    if ($fullPath -notin $allowed) { throw "Refusing to modify an unexpected CodexPlusPlus component path: $fullPath" }
+    return $fullPath
+}
+
+function Move-FixedComponentDirectory {
+    param([Parameter(Mandatory = $true)][string]$Source, [Parameter(Mandatory = $true)][string]$Destination)
+    $fullSource = Assert-FixedComponentPath $Source
+    $fullDestination = Assert-FixedComponentPath $Destination
+    if (-not [IO.Directory]::Exists("\\?\$fullSource")) { throw "CodexPlusPlus component source is missing: $fullSource" }
+    if ([IO.Directory]::Exists("\\?\$fullDestination")) { throw "CodexPlusPlus component destination already exists: $fullDestination" }
     [IO.Directory]::Move("\\?\$fullSource", "\\?\$fullDestination")
 }
 
@@ -232,6 +252,42 @@ function Test-AntiCodexHost {
     if ([string]$versionInfo.OriginalFilename -ne "Anti-Codex.exe") { throw "Anti-Codex host OriginalFilename is invalid." }
 }
 
+function Test-AntiCodexComponent {
+    param([Parameter(Mandatory = $true)][string]$ComponentRoot)
+
+    $resolvedRoot = Assert-FixedComponentPath $ComponentRoot
+    $manifestPath = Join-Path $resolvedRoot "component-manifest.json"
+    $metadataPath = Join-Path $resolvedRoot "upstream.json"
+    $binaryPath = Join-Path $resolvedRoot "codex-plus-plus.exe"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or -not (Test-Path -LiteralPath $metadataPath -PathType Leaf) -or -not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
+        throw "CodexPlusPlus component is incomplete: $resolvedRoot"
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([string]$manifest.schema -ne "codexplusplus-component-manifest-v1" -or [string]$manifest.component -ne "CodexPlusPlus" -or [string]$manifest.license -ne "AGPL-3.0-only") {
+        throw "CodexPlusPlus component identity or schema is invalid: $resolvedRoot"
+    }
+    $installedPatches = @($manifest.patches)
+    $acceptedPatches = @($metadata.patches)
+    if ($acceptedPatches.Count -eq 0 -or $installedPatches.Count -ne $acceptedPatches.Count) {
+        throw "CodexPlusPlus component patch set does not match its upstream metadata: $resolvedRoot"
+    }
+    for ($index = 0; $index -lt $acceptedPatches.Count; $index++) {
+        if ([string]$installedPatches[$index].file -ne [string]$acceptedPatches[$index].file -or
+            ([string]$installedPatches[$index].sha256).ToLowerInvariant() -ne ([string]$acceptedPatches[$index].sha256).ToLowerInvariant()) {
+            throw "CodexPlusPlus component patch set does not match its upstream metadata: $resolvedRoot"
+        }
+    }
+    if ([string]$manifest.patchCommit -ne [string]$metadata.patchCommit) {
+        throw "CodexPlusPlus component patch commit does not match its upstream metadata: $resolvedRoot"
+    }
+    $expectedHash = ([string]$manifest.binary.sha256).ToLowerInvariant()
+    $actualHash = (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($expectedHash -notmatch '^[0-9a-f]{64}$' -or $actualHash -ne $expectedHash) {
+        throw "CodexPlusPlus component binary hash is invalid: $resolvedRoot"
+    }
+}
+
 function Get-AntiCodexHostProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         if (-not $_.ExecutablePath) { return $false }
@@ -251,6 +307,25 @@ function Wait-AntiCodexHostRelease {
     return @(Get-AntiCodexHostProcesses).Count -eq 0
 }
 
+function Get-AntiCodexComponentProcesses {
+    return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        if (-not $_.ExecutablePath) { return $false }
+        try { return ([IO.Path]::GetFullPath([string]$_.ExecutablePath)).StartsWith($activeComponent, [StringComparison]::OrdinalIgnoreCase) } catch { return $false }
+    })
+}
+
+function Wait-AntiCodexComponentRelease {
+    param([int]$TimeoutSeconds = 20)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $remaining = @(Get-AntiCodexComponentProcesses)
+        if ($remaining.Count -eq 0) { return $true }
+        foreach ($process in $remaining) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return @(Get-AntiCodexComponentProcesses).Count -eq 0
+}
+
 function Stop-AntiCodexLaunchers {
     $escapedStartScript = [regex]::Escape($startAntiCodex)
     $launchers = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and ([string]$_.CommandLine) -match $escapedStartScript })
@@ -262,7 +337,7 @@ function Start-AntiCodexDetached {
         throw "Anti-Codex start script is missing after rollback: $startAntiCodex"
     }
     $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    Start-Process -FilePath $powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $startAntiCodex) -WindowStyle Hidden | Out-Null
+    Start-Process -FilePath $powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $startAntiCodex, "-InlineSupervisor") -WindowStyle Hidden | Out-Null
 }
 
 function Wait-AntiCodexPostRollbackReady {
@@ -293,11 +368,13 @@ function Wait-AntiCodexPostRollbackReady {
     return $false
 }
 
-function Restore-OriginalActiveHost {
+function Restore-OriginalActiveRelease {
     if ([IO.Directory]::Exists("\\?\$activeHost") -and -not [IO.Directory]::Exists("\\?\$rollbackHost")) { Move-FixedHostDirectory -Source $activeHost -Destination $rollbackHost }
     if ([IO.File]::Exists($activeMarker) -and -not [IO.File]::Exists($rollbackMarker)) { Move-FixedMarker -Source $activeMarker -Destination $rollbackMarker }
     if ([IO.Directory]::Exists("\\?\$swapHost") -and -not [IO.Directory]::Exists("\\?\$activeHost")) { Move-FixedHostDirectory -Source $swapHost -Destination $activeHost }
     if ([IO.File]::Exists($swapMarker) -and -not [IO.File]::Exists($activeMarker)) { Move-FixedMarker -Source $swapMarker -Destination $activeMarker }
+    if ([IO.Directory]::Exists("\\?\$activeComponent") -and -not [IO.Directory]::Exists("\\?\$rollbackComponent")) { Move-FixedComponentDirectory -Source $activeComponent -Destination $rollbackComponent }
+    if ([IO.Directory]::Exists("\\?\$swapComponent") -and -not [IO.Directory]::Exists("\\?\$activeComponent")) { Move-FixedComponentDirectory -Source $swapComponent -Destination $activeComponent }
 }
 
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
@@ -308,10 +385,12 @@ $restartAfterRollback = $false
 $rollbackStage = "rollback_validation"
 try {
     try {
-        Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_validation" -Message "Validating the active and rollback hosts." -RollbackAvailable $true -StateRoot $stateRoot
-        if ([IO.Directory]::Exists("\\?\$swapHost") -or [IO.File]::Exists($swapMarker)) { throw "A stale rollback swap is present. Anti-Codex was not changed." }
+        Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_validation" -Message "Validating both active and rollback releases." -RollbackAvailable $true -StateRoot $stateRoot
+        if ([IO.Directory]::Exists("\\?\$swapHost") -or [IO.File]::Exists($swapMarker) -or [IO.Directory]::Exists("\\?\$swapComponent")) { throw "A stale rollback swap is present. Anti-Codex was not changed." }
         Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
         Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
+        Test-AntiCodexComponent -ComponentRoot $activeComponent
+        Test-AntiCodexComponent -ComponentRoot $rollbackComponent
 
         $rollbackStage = "rollback_stopping_host"
         Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_stopping_host" -Message "Stopping Anti-Codex before rollback." -RollbackAvailable $true -StateRoot $stateRoot
@@ -320,23 +399,30 @@ try {
         $restartAfterRollback = $true
         Stop-AntiCodexLaunchers
         if (-not (Wait-AntiCodexHostRelease -TimeoutSeconds 20)) { throw "Anti-Codex host processes did not exit before the rollback timeout. Anti-Codex was not changed." }
+        if (-not (Wait-AntiCodexComponentRelease -TimeoutSeconds 20)) { throw "CodexPlusPlus processes did not exit before the rollback timeout. Anti-Codex was not changed." }
 
         $rollbackStage = "rollback_activation"
         Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_activation" -Message "Activating the previous Anti-Codex host." -RollbackAvailable $true -StateRoot $stateRoot
         try {
             Move-FixedHostDirectory -Source $activeHost -Destination $swapHost
             Move-FixedMarker -Source $activeMarker -Destination $swapMarker
+            Move-FixedComponentDirectory -Source $activeComponent -Destination $swapComponent
             Move-FixedHostDirectory -Source $rollbackHost -Destination $activeHost
             Move-FixedMarker -Source $rollbackMarker -Destination $activeMarker
+            Move-FixedComponentDirectory -Source $rollbackComponent -Destination $activeComponent
             Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
+            Test-AntiCodexComponent -ComponentRoot $activeComponent
             Move-FixedHostDirectory -Source $swapHost -Destination $rollbackHost
             Move-FixedMarker -Source $swapMarker -Destination $rollbackMarker
+            Move-FixedComponentDirectory -Source $swapComponent -Destination $rollbackComponent
             Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
+            Test-AntiCodexComponent -ComponentRoot $rollbackComponent
         } catch {
             $swapError = $_.Exception.Message
             try {
-                Restore-OriginalActiveHost
+                Restore-OriginalActiveRelease
                 Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
+                Test-AntiCodexComponent -ComponentRoot $activeComponent
             } catch {
                 throw "Rollback failed. Automatic recovery also failed: $swapError; recovery error: $($_.Exception.Message)"
             }
@@ -377,4 +463,4 @@ if ($restartAfterRollback -and -not (Wait-AntiCodexPostRollbackReady -TimeoutSec
     throw "The rolled-back Anti-Codex host did not become ready. Automatic recovery restored the original active version."
 }
 
-Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host successfully." -RollbackAvailable $true -StateRoot $stateRoot
+Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component successfully." -RollbackAvailable $true -StateRoot $stateRoot

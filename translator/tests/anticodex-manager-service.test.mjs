@@ -139,6 +139,16 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
   });
 
   await t.test("diagnostics report route facts and fail closed when the fixed route is offline", async () => {
+    const originalStatus = fs.readFileSync(statusPath, "utf8");
+    fs.writeFileSync(statusPath, JSON.stringify({
+      ok: true,
+      state: "ready",
+      provider: "third-party",
+      model: "stale-model",
+      pid: 999999,
+      readyAt: "2026-07-18T00:00:00.000Z",
+      ports: { proxy: 18485 },
+    }), "utf8");
     const offlineService = createAntiCodexManagerService({
       port: 0,
       host: "127.0.0.1",
@@ -157,6 +167,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.equal(body.health.ok, false);
       assert.equal(body.mode.upstreamMode, "offline");
       assert.deepEqual(body.models.active, []);
+      assert.equal(body.lifecycle.state, "offline");
       assert.equal(body.accountTracking.state, "unavailable");
       assert.equal(body.accountTracking.identityAvailable, false);
       assert.equal(body.tools.owner, "codex-native-harness");
@@ -165,6 +176,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.doesNotMatch(JSON.stringify(body), /deepseek-v4-pro|antigravityCli|secondAccount/);
     } finally {
       await offlineService.close();
+      fs.writeFileSync(statusPath, originalStatus, "utf8");
     }
   });
 
@@ -252,6 +264,8 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body.baseUrl, `${baseUrl}`);
     assert.ok(body.actions);
     assert.ok(body.actions.accountSwitch);
+    assert.equal(body.actions.updateCheck.label, "检查全部更新");
+    assert.equal(body.actions.syncHost.label, "一键更新");
     assert.deepEqual(Object.keys(body.actions).sort(), [
       "accountProxy",
       "accountSwitch",
@@ -276,6 +290,85 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     ].sort());
 
     token = body.token;
+  });
+
+  await t.test("Antigravity model catalog and selection are exposed through the profile API", async () => {
+    const catalogDir = path.join(tempDir, "codex-home-deepseek-app");
+    fs.mkdirSync(catalogDir, { recursive: true });
+    fs.writeFileSync(path.join(catalogDir, "antigravity-model-catalog.json"), JSON.stringify({
+      models: [
+        { slug: "gemini-3-flash-agent", display_name: "Gemini 3.5 Flash (High)" },
+        { slug: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6 (Thinking)" },
+      ],
+    }), "utf8");
+
+    const componentStateDir = path.join(tempDir, "codexplusplus");
+    fs.mkdirSync(componentStateDir, { recursive: true });
+    fs.writeFileSync(path.join(componentStateDir, "settings.json"), JSON.stringify({
+      relayProfiles: [{
+        id: "anticodex-antigravity",
+        name: "Anti-Codex Antigravity",
+        upstreamBaseUrl: "http://127.0.0.1:18488/v1",
+        protocol: "chatCompletions",
+        relayMode: "pureApi",
+        testModel: "gemini-3-flash-agent",
+        modelList: "gemini-3-flash-agent\nclaude-sonnet-4-6",
+      }],
+      activeRelayId: "anticodex-antigravity",
+      relayTestModel: "gemini-3-flash-agent",
+    }), "utf8");
+
+    const healthServer = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        state: "ready",
+        provider: "antigravity",
+        model: "gemini-3-flash-agent",
+        ports: { adapter: 18488 },
+      }));
+    });
+    await listenOnLoopback(healthServer);
+    const selectionService = createAntiCodexManagerService({
+      port: 0,
+      host: "127.0.0.1",
+      stateRoot: tempDir,
+      fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
+    });
+    const selectionServer = await selectionService.listen();
+    const selectionBaseUrl = `http://127.0.0.1:${selectionServer.address().port}`;
+    try {
+      const bootstrapResponse = await fetch(`${selectionBaseUrl}/anticodex/manager/bootstrap`, {
+        headers: { origin: selectionBaseUrl },
+      });
+      assert.equal(bootstrapResponse.status, 200);
+      const selectionToken = (await bootstrapResponse.json()).token;
+
+      const beforeResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`);
+      assert.equal(beforeResponse.status, 200);
+      const before = await beforeResponse.json();
+      const antigravityModelIds = before.antigravityModels.map((entry) => entry.id);
+      assert.ok(antigravityModelIds.includes("gemini-3-flash-agent"));
+      assert.ok(antigravityModelIds.includes("claude-sonnet-4-6"));
+
+      const saveResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`, {
+        method: "POST",
+        headers: {
+          origin: selectionBaseUrl,
+          "content-type": "application/json",
+          "x-anticodex-manager-token": selectionToken,
+        },
+        body: JSON.stringify({ mode: "antigravity", antigravityModel: "claude-sonnet-4-6" }),
+      });
+      assert.equal(saveResponse.status, 200);
+      const saved = await saveResponse.json();
+      assert.equal(saved.saved.antigravityModel, "claude-sonnet-4-6");
+      assert.equal(saved.restartRequired, false);
+      assert.equal(saved.hotSwitch, true);
+    } finally {
+      await selectionService.close();
+      await closeServer(healthServer);
+    }
   });
 
   await t.test("service instances issue independent action tokens", async () => {

@@ -34,7 +34,7 @@ if (args.has("--help") || args.has("-h")) {
 Options:
   --report-root <path>    Anti-Codex report directory
   --source-root <path>    Source workspace root
-  --max-age-hours <n>     Maximum age for live Gate 7/8 evidence (default: 48)
+  --max-age-hours <n>     Maximum age for live Gate 7 evidence (default: 48)
   --strict                Exit non-zero until all eight gates pass
   --summary               Print the compact status
   --compact               Print the compact status
@@ -60,6 +60,12 @@ function sha256File(path) {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8").replace(/^\uFEFF/, ""));
+}
+
+const codexPlusPlusMetadata = readJson(join(sourceRoot, "third_party", "codexplusplus", "upstream.json"));
+const expectedCodexPlusPlusPatchCommit = String(codexPlusPlusMetadata?.patchCommit || "");
+if (!/^[0-9a-f]{40}$/.test(expectedCodexPlusPlusPatchCommit)) {
+  throw new Error("Pinned CodexPlusPlus patch commit is missing or invalid.");
 }
 
 function writeAtomic(path, value, encoding = "utf8") {
@@ -149,7 +155,7 @@ function inspectEvidence(definition) {
     id: definition.id,
     path,
     selectedFile: basename(path),
-    selectedKind: definition.live === true ? "latest" : "tracked-audit",
+    selectedKind: definition.live === true ? "latest" : definition.signed === true ? "signed-retained" : "tracked-audit",
     selectedMtime: present ? statSync(path).mtime.toISOString() : "",
     present,
     parseable,
@@ -171,7 +177,7 @@ function validateGate1(report, failures) {
   if (report?.schema !== "anticodex-codexplusplus-runtime-isolation-v1") failures.push("gate1_schema");
   if (report?.ok !== true || report?.noModelTraffic !== true) failures.push("gate1_result");
   if (!empty(report?.failedCheckIds)) failures.push("gate1_failed_ids");
-  if (report?.launcher?.patchCommit !== "3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6") failures.push("gate1_patch_commit");
+  if (report?.launcher?.patchCommit !== expectedCodexPlusPlusPatchCommit) failures.push("gate1_patch_commit");
   checkArray(report, 20, ["original_processes_unchanged", "stable_original_state_unchanged_after_cleanup"], failures, "gate1");
 }
 
@@ -297,8 +303,8 @@ const gate7Definitions = [
 ];
 
 const gate8Definitions = [
-  { id: "formalLongTask", signed: true, live: true, path: join(reportRoot, "latest-gate8-final-long-task.json"), validate: validateGate8 },
-  { id: "multiStyleLongTasks", signed: true, live: true, path: join(reportRoot, "latest-ui-human-long-journey.json"), validate: validateGate8MultiStyle },
+  { id: "formalLongTask", signed: true, live: false, path: join(reportRoot, "latest-gate8-final-long-task.json"), validate: validateGate8 },
+  { id: "multiStyleLongTasks", signed: true, live: false, path: join(reportRoot, "latest-ui-human-long-journey.json"), validate: validateGate8MultiStyle },
 ];
 
 function makeGate(definition) {

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { platform } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +12,7 @@ import { extractAvailableAgentModels } from "../antigravity-model-catalog.mjs";
 
 const SERVICE_PREFIX = "/exa.language_server_pb.LanguageServerService";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+export const DEFAULT_START_TIMEOUT_MS = 60 * 1000;
 const MAX_TRANSIENT_IDLE_RETRIES = 10;
 const TOOL_COMPATIBILITY_SECTION = Object.freeze({
   title: "Anti-Codex Antigravity tool compatibility",
@@ -123,7 +125,7 @@ export function createAntigravityCascadeClient(options = {}) {
       const started = await serviceCall(activeConnection, "StartCascade", startBody, {
         fetchImpl,
         signal,
-        timeoutMs: request.startTimeoutMs ?? options.startTimeoutMs ?? 15000,
+        timeoutMs: request.startTimeoutMs ?? options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS,
       });
       const cascadeId = String(started?.cascadeId ?? started?.cascade_id ?? "");
       if (!cascadeId) throw new AntigravityCascadeError("Antigravity did not create a Cascade.", { statusCode: 503 });
@@ -473,11 +475,13 @@ function extractTrajectoryError(payload) {
 }
 
 function classifyTrajectoryError(message) {
-  const statusCode = /(?:RESOURCE_EXHAUSTED|quota|usage limit|rate limit)/i.test(message)
-    ? 429
-    : /(?:login|sign[ -]?in|unauthori[sz]ed|forbidden)/i.test(message)
-      ? 401
-      : 503;
+  const statusCode = /(?:user\s+)?location is not supported|unsupported (?:user\s+)?location/i.test(message)
+    ? 400
+    : /(?:RESOURCE_EXHAUSTED|quota|usage limit|rate limit)/i.test(message)
+      ? 429
+      : /(?:login|sign[ -]?in|unauthori[sz]ed|forbidden)/i.test(message)
+        ? 401
+        : 503;
   return new AntigravityCascadeError(message, { statusCode });
 }
 
@@ -541,6 +545,8 @@ export function discoverAntigravityDesktopConnection(env = process.env) {
   if (platform() !== "win32") {
     throw new AntigravityCascadeError("Antigravity Desktop discovery is currently supported on Windows only.", { statusCode: 503 });
   }
+  const loggedConnection = discoverAntigravityDesktopConnectionFromFiles(env);
+  if (loggedConnection) return loggedConnection;
   const script = [
     "$filter = \"Name='language_server.exe' OR Name='language_server_windows_x64.exe'\"",
     "$rows = Get-CimInstance Win32_Process -Filter $filter | ForEach-Object {",
@@ -579,6 +585,55 @@ export function discoverAntigravityDesktopConnection(env = process.env) {
     }
   }
   throw new AntigravityCascadeError("Antigravity Desktop is not ready or signed in.", { statusCode: 503 });
+}
+
+export function extractAntigravityConnectionFromLogs(mainLog, languageServerLog) {
+  let csrfToken = "";
+  for (const line of String(mainLog ?? "").split(/\r?\n/)) {
+    if (!/\bSpawning:\s+.*language_server(?:\.exe)?\b/i.test(line)
+      || !/--app_data_dir\s+antigravity(?:\s|$)/i.test(line)) {
+      continue;
+    }
+    const match = line.match(/--csrf_token\s+([^\s]+)/i);
+    if (match?.[1]) csrfToken = match[1];
+  }
+
+  let httpsPort = 0;
+  let httpPort = 0;
+  for (const line of String(languageServerLog ?? "").split(/\r?\n/)) {
+    const httpsMatch = line.match(/listening on random port at\s+(\d+)\s+for HTTPS\b/i);
+    const httpMatch = line.match(/listening on random port at\s+(\d+)\s+for HTTP\b/i);
+    if (httpsMatch?.[1]) httpsPort = Number(httpsMatch[1]);
+    if (httpMatch?.[1]) httpPort = Number(httpMatch[1]);
+  }
+  if (!csrfToken || !Number.isInteger(httpPort) || httpPort <= 0 || httpPort > 65535) return null;
+  const agentPort = Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort <= 65535
+    ? httpsPort
+    : httpPort;
+  return {
+    agentApiAddress: `127.0.0.1:${agentPort}`,
+    lsAddress: `127.0.0.1:${httpPort}`,
+    csrfToken,
+  };
+}
+
+function discoverAntigravityDesktopConnectionFromFiles(env) {
+  const appData = String(env.APPDATA || process.env.APPDATA || "").trim();
+  if (!appData) return null;
+  const stateRoot = String(env.DEEPCODEX_STATE_ROOT || join(appData, "anticodex")).trim();
+  const mainLogPaths = [
+    env.ANTIGRAVITY_MAIN_LOG_PATH,
+    join(appData, "Antigravity", "logs", "main.log"),
+    join(stateRoot, "antigravity-desktop.out.log"),
+  ].filter(Boolean);
+  const languageServerLogPaths = [
+    env.ANTIGRAVITY_LANGUAGE_SERVER_LOG_PATH,
+    join(appData, "Antigravity", "logs", "language_server.log"),
+  ].filter(Boolean);
+  const readLogs = (paths) => paths.map((file) => {
+    try { return readFileSync(file, "utf8"); } catch { return ""; }
+  }).filter(Boolean).join("\n");
+  return extractAntigravityConnectionFromLogs(readLogs(mainLogPaths), readLogs(languageServerLogPaths));
 }
 
 export function extractListeningPortsForProcess(netstatOutput, processId) {

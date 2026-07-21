@@ -56,6 +56,18 @@ test("a terminal provider quota error is never hidden as a recovered reconnect",
   assert.match(outcome.terminalProviderError, /RESOURCE_EXHAUSTED.*Individual quota reached/i);
 });
 
+test("an unsupported-location provider error is terminal even without reconnect text", () => {
+  const outcome = classifyReconnectOutcome({
+    reconnectSeen: false,
+    answerText: "FAILED_PRECONDITION (code 400): User location is not supported for the API use.",
+    completionObserved: true,
+    stableIdleObserved: true,
+  });
+  assert.equal(outcome.recovered, false);
+  assert.equal(outcome.unresolved, true);
+  assert.match(outcome.terminalProviderError, /location is not supported/i);
+});
+
 test("a reconnect without completed idle evidence remains unresolved", () => {
   assert.deepEqual(classifyReconnectOutcome({
     reconnectSeen: true,
@@ -164,6 +176,33 @@ test("native Codex rollout evidence distinguishes repeated marker turns in one s
   assert.equal(evidence.latestMarkerTurnComplete, true);
 });
 
+test("native Codex rollout evidence exposes a failed marker turn instead of completing it", () => {
+  const marker = "UI_PROVIDER_FAILURE_123";
+  const evidence = collectCodexRolloutMarkerEvidence([
+    { type: "event_msg", payload: { type: "task_started", turn_id: "turn-failed" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: marker }] } },
+    {
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        turn_id: "turn-failed",
+        error: { message: "FAILED_PRECONDITION (code 400): User location is not supported for the API use." },
+      },
+    },
+  ], marker);
+
+  assert.equal(evidence.latestMarkerTurnComplete, false);
+  assert.match(evidence.latestMarkerTurnError, /location is not supported/i);
+  assert.deepEqual(evidence.failedMarkerTurnIds, ["turn-failed"]);
+  assert.equal(resultDrivenTurnCompletionReady({
+    enabled: true,
+    rolloutBundles: [evidence],
+    composerText: "",
+    marker,
+    routeReady: true,
+  }), false);
+});
+
 test("latest marker turn completion ignores an older completed rollout", () => {
   assert.equal(latestMarkerTurnCompleted([
     {
@@ -214,6 +253,14 @@ test("result-driven completion accepts the current completed turn without trusti
     composerText: "",
     marker: "UI_CURRENT_123",
     routeReady: true,
+  }), false);
+  assert.equal(resultDrivenTurnCompletionReady({
+    enabled: true,
+    rolloutBundles,
+    composerText: "",
+    marker: "UI_CURRENT_123",
+    routeReady: true,
+    authoritativeArtifactReady: false,
   }), false);
 });
 

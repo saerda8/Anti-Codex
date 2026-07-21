@@ -19,26 +19,47 @@ function Get-AntigravityMainProcess {
 
     $expectedPath = ConvertTo-AntigravityExecutablePath $ExecutablePath
     try {
-        return Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        return Get-Process -Name "Antigravity", "Antigravity IDE" -ErrorAction SilentlyContinue |
             Where-Object {
-                $name = [string]$_.Name
-                $commandLine = [string]$_.CommandLine
-                $processPath = ConvertTo-AntigravityExecutablePath ([string]$_.ExecutablePath)
-                $supportedName = $name -ieq "Antigravity.exe" -or $name -ieq "Antigravity IDE.exe"
-                $isDesktopMain = $supportedName -and
-                    $processPath -and
-                    $commandLine -notmatch "\s--type=" -and
-                    $commandLine -notmatch "\s--sandbox(?:\s|$)" -and
+                $processPath = try { ConvertTo-AntigravityExecutablePath ([string]$_.Path) } catch { $null }
+                $isDesktopMain = $processPath -and
                     $processPath -notmatch "\\bin\\antigravity\.exe$"
                 if (-not $isDesktopMain) { return $false }
                 if (-not $expectedPath) { return $true }
                 return $processPath -ieq $expectedPath
             } |
-            Sort-Object CreationDate -Descending |
-            Select-Object -First 1
+            Sort-Object @{ Expression = { if ($_.MainWindowHandle -ne 0) { 0 } else { 1 } } }, StartTime |
+            Select-Object -First 1 `
+                @{ Name = "ProcessId"; Expression = { [int]$_.Id } },
+                @{ Name = "ExecutablePath"; Expression = { [string]$_.Path } },
+                @{ Name = "CreationDate"; Expression = { $_.StartTime } },
+                MainWindowHandle
     } catch {
         return $null
     }
+}
+
+function Start-AntigravityDesktop {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [string]$StateRoot = ""
+    )
+
+    $resolvedStateRoot = if ($StateRoot) {
+        [IO.Path]::GetFullPath($StateRoot)
+    } elseif ($env:DEEPCODEX_STATE_ROOT) {
+        [IO.Path]::GetFullPath($env:DEEPCODEX_STATE_ROOT)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $env:APPDATA "anticodex"))
+    }
+    New-Item -ItemType Directory -Path $resolvedStateRoot -Force | Out-Null
+    $stdoutPath = Join-Path $resolvedStateRoot "antigravity-desktop.out.log"
+    $stderrPath = Join-Path $resolvedStateRoot "antigravity-desktop.err.log"
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    return Start-Process -FilePath $ExecutablePath `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
+        -PassThru
 }
 
 function Get-AntigravityRegistryCandidates {

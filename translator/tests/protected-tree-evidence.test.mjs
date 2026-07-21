@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
@@ -46,6 +47,25 @@ test("protected tree diff reports added, removed, and changed paths", () => {
     assert.deepEqual(diff.added, ["src/new.txt"]);
     assert.deepEqual(diff.removed, ["remove.txt"]);
     assert.deepEqual(diff.changed, ["keep.txt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("protected tree hashes large files incrementally", () => {
+  const root = mkdtempSync(join(os.tmpdir(), "anticodex-protected-tree-stream-"));
+  const largePath = join(root, "large.bin");
+  const content = Buffer.alloc((3 * 1024 * 1024) + 17, 0x5a);
+  writeFileSync(largePath, content);
+  try {
+    const snapshot = snapshotProtectedTree(root);
+    const entry = snapshot.entries.find((item) => item.path === "large.bin");
+    assert.equal(entry.size, content.length);
+    assert.equal(entry.sha256, createHash("sha256").update(content).digest("hex"));
+
+    const source = readFileSync(new URL("../../scripts/lib/protected-tree-evidence.mjs", import.meta.url), "utf8");
+    assert.match(source, /readSync\(/);
+    assert.doesNotMatch(source, /readFileSync\(/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

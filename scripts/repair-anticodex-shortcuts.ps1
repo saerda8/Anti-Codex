@@ -22,7 +22,16 @@ $rollbackScript = Join-Path $runtimeRoot "scripts\rollback-anticodex-launcher.ps
 $managerScript = Join-Path $runtimeRoot "scripts\manage-anticodex.ps1"
 $hostIcon = Join-Path $hostRoot "resources\icon.ico"
 $desktopIcon = Join-Path $runtimeRoot "assets\anticodex-desktop.ico"
-$powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+$powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+$schtasks = Join-Path ([Environment]::SystemDirectory) "schtasks.exe"
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+$node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
+$launchTaskName = "Anti-Codex Launcher"
+$hideConsoleScript = Join-Path $runtimeRoot "scripts\hide-anticodex-console.ps1"
+$launchTaskScript = Join-Path $runtimeRoot "scripts\start-anticodex-task.mjs"
+$launchTaskActionArguments = "`"$launchTaskScript`" --hide-console"
+$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"Start-ScheduledTask -TaskName '$launchTaskName'`""
 $desktop = [Environment]::GetFolderPath("Desktop")
 $programs = [Environment]::GetFolderPath("Programs")
 $startMenuDir = Join-Path $programs "Anti-Codex"
@@ -43,24 +52,169 @@ function New-AntiCodexShortcutSpec {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Script,
         [Parameter(Mandatory = $true)][string]$Description,
-        [Parameter(Mandatory = $true)][string]$Icon
+        [Parameter(Mandatory = $true)][string]$Icon,
+        [switch]$InlineSupervisor,
+        [switch]$UseLaunchTask
     )
     $displayName = Split-Path -Leaf $Path
+    $expectedArguments = if ($UseLaunchTask) {
+        $launchTaskShortcutArguments
+    } else {
+        $arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Script`""
+        if ($InlineSupervisor) { $arguments += " -InlineSupervisor" }
+        $arguments
+    }
     [pscustomobject]@{
         path = $Path
         displayName = $displayName
         expectedDisplayName = $displayName
+        expectedTarget = $powershell
         expectedScript = $Script
         expectedLauncherTarget = $Script
+        expectedArguments = $expectedArguments
         expectedDescription = $Description
         expectedIconLocation = "$Icon,0"
         iconSource = $Icon
+        inlineSupervisor = [bool]$InlineSupervisor
+        launchMode = if ($UseLaunchTask) { "scheduled-task" } else { "powershell-direct" }
+        useNativeLauncher = $false
     }
 }
 
+function Get-AntiCodexLaunchTaskEvidence {
+    $task = Get-ScheduledTask -TaskName $launchTaskName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $task) {
+        return [pscustomobject]@{
+            ok = $false
+            exists = $false
+            taskName = $launchTaskName
+            expectedScript = $startScript
+            actualScript = ""
+            error = "scheduled task is missing"
+        }
+    }
+
+    $action = @($task.Actions | Select-Object -First 1)[0]
+    $actualExecute = [string]$action.Execute
+    $actualArguments = [string]$action.Arguments
+    $actualWorkingDirectory = [string]$action.WorkingDirectory
+    $argumentMatch = [regex]::Match($actualArguments, '^"([^"]+)"\s+--hide-console$')
+    $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+    try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
+    $actionMatches = (
+        $actualExecute -ieq $node -and
+        $actualArguments -ceq $launchTaskActionArguments -and
+        $actualWorkingDirectory -ieq $installRootFull -and
+        $actualScript -ieq $launchTaskScript
+    )
+    $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentShortUserName = ($currentUserName -split "\\")[-1]
+    $taskUserName = [string]$task.Principal.UserId
+    $principalMatches = (
+        ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
+        [string]$task.Principal.LogonType -eq "Interactive" -and
+        [string]$task.Principal.RunLevel -eq "Limited"
+    )
+    $settingsMatch = (
+        [string]$task.Settings.MultipleInstances -eq "IgnoreNew" -and
+        $task.Settings.DisallowStartIfOnBatteries -eq $false -and
+        $task.Settings.StopIfGoingOnBatteries -eq $false -and
+        $task.Settings.RestartCount -eq 1 -and
+        [string]$task.Settings.RestartInterval -eq "PT1M" -and
+        [string]$task.Settings.ExecutionTimeLimit -eq "PT0S"
+    )
+    return [pscustomobject]@{
+        ok = ($actionMatches -and $principalMatches -and $settingsMatch)
+        exists = $true
+        taskName = $launchTaskName
+        expectedExecute = $node
+        actualExecute = $actualExecute
+        expectedArguments = $launchTaskActionArguments
+        actualArguments = $actualArguments
+        expectedWorkingDirectory = $installRootFull
+        actualWorkingDirectory = $actualWorkingDirectory
+        expectedScript = $launchTaskScript
+        actualScript = $actualScript
+        taskScript = $launchTaskScript
+        actionMatches = $actionMatches
+        principalMatches = $principalMatches
+        settingsMatch = $settingsMatch
+        state = [string]$task.State
+        error = ""
+    }
+}
+
+function Set-AntiCodexLaunchTask {
+    $existing = Get-AntiCodexLaunchTaskEvidence
+    if ($existing.ok) { return $existing }
+
+    $taskXmlPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-launch-task-" + [Guid]::NewGuid().ToString("N") + ".xml")
+    try {
+        $sidXml = [Security.SecurityElement]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+        $nodeXml = [Security.SecurityElement]::Escape($node)
+        $argumentsXml = [Security.SecurityElement]::Escape($launchTaskActionArguments)
+        $workingDirectoryXml = [Security.SecurityElement]::Escape($installRootFull)
+        $taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Launch Anti-Codex outside the native Codex process job.</Description>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>$sidXml</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>1</Count>
+    </RestartOnFailure>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers />
+  <Actions Context="Author">
+    <Exec>
+      <Command>$nodeXml</Command>
+      <Arguments>$argumentsXml</Arguments>
+      <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"@
+        [IO.File]::WriteAllText($taskXmlPath, $taskXml, [Text.UnicodeEncoding]::new($false, $true))
+        $taskOutput = @(& $schtasks /Create /TN $launchTaskName /XML $taskXmlPath /F 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw (($taskOutput | ForEach-Object { [string]$_ }) -join " ")
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            exists = $false
+            taskName = $launchTaskName
+            expectedScript = $startScript
+            actualScript = ""
+            error = $_.Exception.Message
+        }
+    } finally {
+        if (Test-Path -LiteralPath $taskXmlPath -PathType Leaf) {
+            Remove-Item -LiteralPath $taskXmlPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    return Get-AntiCodexLaunchTaskEvidence
+}
+
 $shortcutSpecs = @(
-    New-AntiCodexShortcutSpec -Path (Join-Path $desktop "Anti-Codex.lnk") -Script $startScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $desktopShortcutIcon
-    New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Anti-Codex.lnk") -Script $startScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $hostIcon
+    New-AntiCodexShortcutSpec -Path (Join-Path $desktop "Anti-Codex.lnk") -Script $launchTaskScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $desktopShortcutIcon -UseLaunchTask
+    New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Anti-Codex.lnk") -Script $launchTaskScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $hostIcon -UseLaunchTask
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Sync Anti-Codex with Codex.lnk") -Script $syncScript -Description "Rebuild Anti-Codex from the installed Codex Desktop host after Codex updates" -Icon $hostIcon
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Rollback Anti-Codex.lnk") -Script $rollbackScript -Description "Rollback Anti-Codex to the previous patched Codex host version" -Icon $hostIcon
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Manage Anti-Codex.lnk") -Script $managerScript -Description "Open the Anti-Codex maintenance and account manager" -Icon $hostIcon
@@ -70,6 +224,7 @@ foreach ($spec in $shortcutSpecs) {
     $protectedShortcutPaths[[IO.Path]::GetFullPath([string]$spec.path).ToLowerInvariant()] = $true
 }
 $residualShortcutNames = @(
+    "Anti-Codex.lnk",
     "Codex.lnk",
     "Codex Desktop.lnk",
     "DeepCodex.lnk",
@@ -78,6 +233,7 @@ $residualShortcutNames = @(
 $legacyDeepCodexStartMenuDir = Join-Path $programs "DeepCodex"
 $residualShortcutRoots = @(
     [pscustomobject]@{ path = $desktop; location = "desktop"; removeCodexByName = $false },
+    [pscustomobject]@{ path = $programs; location = "start-menu-root"; removeCodexByName = $false },
     [pscustomobject]@{ path = $startMenuDir; location = "start-menu-anticodex"; removeCodexByName = $true },
     [pscustomobject]@{ path = $legacyDeepCodexStartMenuDir; location = "start-menu-deepcodex"; removeCodexByName = $true }
 )
@@ -206,10 +362,15 @@ function Repair-AntiCodexResidualShortcuts {
 $residualShortcutEvidence = @(Repair-AntiCodexResidualShortcuts)
 $residualShortcutFailures = @($residualShortcutEvidence | Where-Object { $_.action -ne "removed" -and $_.action -ne "preserved-native-codex" })
 $failures = New-Object System.Collections.Generic.List[string]
-foreach ($path in @($startScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon)) {
+foreach ($path in @($startScript, $hideConsoleScript, $launchTaskScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon, $node, $powershell, $schtasks)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         $failures.Add("Required Anti-Codex shortcut target is missing: $path") | Out-Null
     }
+}
+$launchTaskEvidence = if ($failures.Count -eq 0) { Set-AntiCodexLaunchTask } else { $null }
+if ($null -ne $launchTaskEvidence -and -not $launchTaskEvidence.ok) {
+    $launchTaskError = if ($launchTaskEvidence.error) { [string]$launchTaskEvidence.error } else { "task contract mismatch" }
+    $failures.Add("Anti-Codex launch task could not be installed or verified: $launchTaskError") | Out-Null
 }
 foreach ($residual in $residualShortcutFailures) {
     if ($residual.action -eq "reported") {
@@ -217,6 +378,11 @@ foreach ($residual in $residualShortcutFailures) {
     } else {
         $failures.Add("Residual shortcut could not be removed: $($residual.path)") | Out-Null
     }
+}
+$nativeLauncherBuild = [pscustomobject]@{
+    path = $null
+    mode = "scheduled-task-broker"
+    reason = "Use a signed Windows broker so Anti-Codex never inherits the native Codex process job."
 }
 if ($failures.Count -gt 0) {
     $result = [pscustomobject]@{
@@ -231,6 +397,8 @@ if ($failures.Count -gt 0) {
         preservedNativeCodexShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "preserved-native-codex" }).Count
         failures = $failures.ToArray()
         residualShortcuts = $residualShortcutEvidence
+        nativeLauncher = $nativeLauncherBuild
+        launchTask = $launchTaskEvidence
         shortcutEvidence = @()
         shortcuts = @()
     }
@@ -238,6 +406,70 @@ if ($failures.Count -gt 0) {
     $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
     $result | ConvertTo-Json -Depth 8
     exit 1
+}
+
+function Get-AntiCodexShortcutEvidence {
+    param(
+        [Parameter(Mandatory = $true)]$Spec
+    )
+
+    $shortcutPath = [string]$Spec.path
+    if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) { return $null }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($shortcutPath)
+    try {
+        $actualTarget = [string]$shortcut.TargetPath
+        $actualArguments = [string]$shortcut.Arguments
+        $actualDescription = [string]$shortcut.Description
+        $actualIconLocation = [string]$shortcut.IconLocation
+    } finally {
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut)
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
+    }
+
+    $actualLauncherTarget = if ([string]$Spec.launchMode -eq "scheduled-task") {
+        if ($launchTaskEvidence) { [string]$launchTaskEvidence.actualScript } else { "" }
+    } else {
+        Get-AntiCodexShortcutLauncherTarget $actualArguments
+    }
+    $displayName = Split-Path -Leaf $shortcutPath
+    $launcherTargetMatches = ($actualLauncherTarget -and ($actualLauncherTarget -ieq [string]$Spec.expectedLauncherTarget))
+    $scriptMatches = $launcherTargetMatches
+    $argumentsMatches = ($actualArguments -ceq [string]$Spec.expectedArguments)
+    $iconMatches = ($actualIconLocation -ieq [string]$Spec.expectedIconLocation)
+    $displayNameMatches = ($displayName -ceq [string]$Spec.expectedDisplayName)
+    $targetMatches = ($actualTarget -ieq [string]$Spec.expectedTarget)
+    $descriptionMatches = ($actualDescription -eq [string]$Spec.expectedDescription)
+    $forbiddenCodexBranding = ($displayName -notmatch "Anti-Codex") -or (($actualDescription -match "^Codex(\s|$)") -and ($actualDescription -notmatch "Anti-Codex"))
+
+    return [pscustomobject]@{
+        ok = ($targetMatches -and $scriptMatches -and $argumentsMatches -and $iconMatches -and $displayNameMatches -and $descriptionMatches -and -not $forbiddenCodexBranding)
+        path = $shortcutPath
+        displayName = $displayName
+        expectedDisplayName = [string]$Spec.expectedDisplayName
+        displayNameMatches = $displayNameMatches
+        launchMode = [string]$Spec.launchMode
+        expectedTarget = [string]$Spec.expectedTarget
+        expectedScript = [string]$Spec.expectedScript
+        expectedLauncherTarget = [string]$Spec.expectedLauncherTarget
+        expectedArguments = [string]$Spec.expectedArguments
+        expectedIconLocation = [string]$Spec.expectedIconLocation
+        expectedDescription = [string]$Spec.expectedDescription
+        actualTarget = $actualTarget
+        actualLauncherTarget = $actualLauncherTarget
+        actualArguments = $actualArguments
+        actualDescription = $actualDescription
+        actualIconLocation = $actualIconLocation
+        useNativeLauncher = $false
+        targetMatches = $targetMatches
+        launcherTargetMatches = $launcherTargetMatches
+        scriptMatches = $scriptMatches
+        argumentsMatches = $argumentsMatches
+        iconMatches = $iconMatches
+        descriptionMatches = $descriptionMatches
+        forbiddenCodexBranding = $forbiddenCodexBranding
+    }
 }
 
 function Set-AntiCodexShortcut {
@@ -249,56 +481,62 @@ function Set-AntiCodexShortcut {
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut([string]$Spec.path)
-    $shortcut.TargetPath = $powershell
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$($Spec.expectedScript)`""
-    $shortcut.WorkingDirectory = $installRootFull
-    $shortcut.Description = [string]$Spec.expectedDescription
-    $shortcut.IconLocation = [string]$Spec.expectedIconLocation
-    $shortcut.Save()
+    $existingEvidence = Get-AntiCodexShortcutEvidence -Spec $Spec
+    if ($existingEvidence -and $existingEvidence.ok) { return $existingEvidence }
 
-    $verified = $shell.CreateShortcut([string]$Spec.path)
-    $actualTarget = [string]$verified.TargetPath
-    $actualArguments = [string]$verified.Arguments
-    $actualDescription = [string]$verified.Description
-    $actualIconLocation = [string]$verified.IconLocation
-    $actualLauncherTarget = Get-AntiCodexShortcutLauncherTarget $actualArguments
-    $displayName = Split-Path -Leaf ([string]$Spec.path)
-    $launcherTargetMatches = ($actualLauncherTarget -and ($actualLauncherTarget -ieq [string]$Spec.expectedLauncherTarget))
-    $scriptMatches = $launcherTargetMatches
-    $iconMatches = ($actualIconLocation -ieq [string]$Spec.expectedIconLocation)
-    $displayNameMatches = ($displayName -ceq [string]$Spec.expectedDisplayName)
-    $targetMatches = ($actualTarget -match "powershell\.exe$")
-    $descriptionMatches = ($actualDescription -eq [string]$Spec.expectedDescription)
-    $forbiddenCodexBranding = ($displayName -notmatch "Anti-Codex") -or (($actualDescription -match "^Codex(\s|$)") -and ($actualDescription -notmatch "Anti-Codex"))
-
-    [pscustomobject]@{
-        ok = ($targetMatches -and $scriptMatches -and $iconMatches -and $displayNameMatches -and $descriptionMatches -and -not $forbiddenCodexBranding)
-        path = [string]$Spec.path
-        displayName = $displayName
-        expectedDisplayName = [string]$Spec.expectedDisplayName
-        displayNameMatches = $displayNameMatches
-        expectedScript = [string]$Spec.expectedScript
-        expectedLauncherTarget = [string]$Spec.expectedLauncherTarget
-        expectedIconLocation = [string]$Spec.expectedIconLocation
-        expectedDescription = [string]$Spec.expectedDescription
-        actualTarget = $actualTarget
-        actualLauncherTarget = $actualLauncherTarget
-        actualArguments = $actualArguments
-        actualDescription = $actualDescription
-        actualIconLocation = $actualIconLocation
-        targetMatches = $targetMatches
-        launcherTargetMatches = $launcherTargetMatches
-        scriptMatches = $scriptMatches
-        iconMatches = $iconMatches
-        descriptionMatches = $descriptionMatches
-        forbiddenCodexBranding = $forbiddenCodexBranding
+    $shortcutPath = [string]$Spec.path
+    $pendingShortcut = Join-Path $parent ((Split-Path -Leaf $shortcutPath) + ".pending." + [Guid]::NewGuid().ToString("N") + ".lnk")
+    $shell = $null
+    $shortcut = $null
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($pendingShortcut)
+        $shortcut.TargetPath = [string]$Spec.expectedTarget
+        $shortcut.Arguments = [string]$Spec.expectedArguments
+        $shortcut.WorkingDirectory = $installRootFull
+        $shortcut.Description = [string]$Spec.expectedDescription
+        $shortcut.IconLocation = [string]$Spec.expectedIconLocation
+        $shortcut.Save()
+    } finally {
+        if ($null -ne $shortcut) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) }
+        if ($null -ne $shell) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
     }
+
+    $shortcutInstalled = $false
+    try {
+        for ($attempt = 0; $attempt -lt 10 -and -not $shortcutInstalled; $attempt++) {
+            try {
+                [IO.File]::Copy($pendingShortcut, $shortcutPath, $true)
+                $shortcutInstalled = $true
+            } catch {
+                if ($attempt -lt 9) { Start-Sleep -Milliseconds 100 }
+            }
+        }
+        if (-not $shortcutInstalled) {
+            throw "Unable to replace Anti-Codex shortcut: $shortcutPath"
+        }
+    } finally {
+        if (Test-Path -LiteralPath $pendingShortcut -PathType Leaf) {
+            Remove-Item -LiteralPath $pendingShortcut -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return Get-AntiCodexShortcutEvidence -Spec $Spec
 }
 
 $shortcutEvidence = @($shortcutSpecs | ForEach-Object { Set-AntiCodexShortcut -Spec $_ })
 $repaired = $shortcutEvidence
+
+$legacyNativeLauncherCandidates = @(
+    Get-ChildItem -LiteralPath $installRootFull -Filter "Anti-Codex Launcher.exe*" -File -ErrorAction SilentlyContinue
+)
+foreach ($candidate in $legacyNativeLauncherCandidates) {
+    try { Remove-Item -LiteralPath $candidate.FullName -Force -ErrorAction Stop } catch {}
+}
+$legacyNativeLauncherResiduals = @(
+    Get-ChildItem -LiteralPath $installRootFull -Filter "Anti-Codex Launcher.exe*" -File -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty FullName
+)
 
 try { & ie4uinit.exe -show | Out-Null } catch {}
 
@@ -313,6 +551,9 @@ $result = [pscustomobject]@{
     reportedResidualShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "reported" }).Count
     preservedNativeCodexShortcutCount = @($residualShortcutEvidence | Where-Object { $_.action -eq "preserved-native-codex" }).Count
     residualShortcuts = $residualShortcutEvidence
+    nativeLauncher = $nativeLauncherBuild
+    launchTask = $launchTaskEvidence
+    legacyNativeLauncherResiduals = $legacyNativeLauncherResiduals
     shortcutEvidence = $shortcutEvidence
     shortcuts = $repaired
 }

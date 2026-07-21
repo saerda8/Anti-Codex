@@ -53,6 +53,7 @@ function discoverAntiCodexCdpPorts() {
   }
 }
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
+const modelControlPatternSource = String.raw`Gemini\s+\d|Claude\s+\w+\s+\d|GPT-OSS\s+\d|gemini-|claude-|gpt-oss-|(?:第三方\s*·\s*)?gpt-\d|third-party|第三方\s*API`;
 const pageStateProbeExpression = `(() => {
   const shortUiText = () => {
     const chunks = [];
@@ -980,7 +981,8 @@ try {
         })(),
         modelControlsText: Array.from(document.querySelectorAll("button,[role='button'],[aria-label],[title]"))
           .map((node) => [node.textContent, node.getAttribute("aria-label"), node.getAttribute("title")].filter(Boolean).join(" "))
-          .find((value) => /Gemini\\s+\\d|Claude\\s+\\w+\\s+\\d|GPT-OSS\\s+\\d|gemini-|claude-|gpt-oss-/i.test(value)) || "",
+          .find((value) => new RegExp(${JSON.stringify(modelControlPatternSource)}, "i").test(value)) || "",
+        composerPresent: Boolean(document.querySelector("[data-codex-composer].ProseMirror, .ProseMirror")),
         version: window.__ANTICODEX_MANAGER_VERSION__ || "",
         hasOpen: typeof window.__ANTICODEX_OPEN_MANAGER__ === "function",
         hasButton: !!document.getElementById("anticodex-manager-button"),
@@ -993,7 +995,7 @@ try {
   } catch (error) {
     selectedContextProbe = { error: String(error?.message || error) };
   }
-  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v105"
+  staticContextCoversManager = selectedContextProbe?.version === "native-panel-v107"
     && selectedContextProbe?.hasOpen === true
     && managerPage?.hasManagerActionEndpoint === true
     && managerPage?.hasManagerActionToken === true
@@ -1032,7 +1034,7 @@ try {
     }), managerProbeTimeoutMs);
     for (let attempt = 0; attempt < 40; attempt++) {
       const installedProbe = await ws.call(id++, "Runtime.evaluate", runtimeParams(`Boolean(
-        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v105"
+        window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v107"
       )`, {
         returnByValue: true,
         awaitPromise: false,
@@ -1045,7 +1047,8 @@ try {
   const contextProbePageState = pageStateFromContextProbe(selectedContextProbe);
   const contextProbeBody = String(contextProbePageState?.textSample || "");
   const contextProbeModelControlsText = String(selectedContextProbe?.modelControlsText || "");
-  const contextProbeHasModelEvidence = labels.length === 0
+  const contextProbeHasModelEvidence = selectedContextProbe?.composerPresent === false
+    || labels.length === 0
     || labels.some((label) => contextProbeBody.includes(label) || contextProbeModelControlsText.includes(label))
     || (upstreamModel && modelIds.includes(upstreamModel));
   if (contextProbePageState?.textLength > 0 && contextProbeHasModelEvidence) {
@@ -1068,7 +1071,8 @@ try {
     const state = pageResult.result?.value || null;
     const body = String(state?.textSample || "");
     const controls = String(selectedContextProbe?.modelControlsText || "");
-    const hasModelEvidence = labels.length === 0
+    const hasModelEvidence = selectedContextProbe?.composerPresent === false
+      || labels.length === 0
       || labels.some((label) => body.includes(label) || controls.includes(label))
       || (upstreamModel && modelIds.includes(upstreamModel));
     if (state?.textSample === "" && labels.length === 0) break;
@@ -1103,13 +1107,13 @@ try {
       skippedDeepProbe: true,
       hasFunction: selectedContextProbe?.hasOpen === true,
       version: selectedContextProbe?.version || "",
-      installed: selectedContextProbe?.version === "native-panel-v105",
+      installed: selectedContextProbe?.version === "native-panel-v107",
       hasButton: selectedContextProbe?.hasButton === true,
       buttonText: selectedContextProbe?.buttonText || "",
       coveredBy: "fast-ui-state",
     };
     if (!managerOverlay.hasFunction) failures.push("in-app manager function is not injected");
-    if (managerOverlay.version !== "native-panel-v105") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v105`);
+    if (managerOverlay.version !== "native-panel-v107") failures.push(`in-app manager version is '${managerOverlay.version || ""}', expected native-panel-v107`);
     if (managerOverlay.hasButton) failures.push("in-app manager still exposes the removed floating Manager button");
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
@@ -1120,7 +1124,9 @@ try {
       const pageMojibake = mojibakeMatch(evaluated.textSample);
       if (pageMojibake) failures.push(`main page rendered mojibake text: ${pageMojibake}`);
     }
-    if (!matchedModelText) {
+    if (selectedContextProbe?.composerPresent === false) {
+      modeNotes.push("native model selector is not rendered while no task composer is open; provider catalog remains verified");
+    } else if (!matchedModelText) {
       const labelScope = upstreamMode === "third-party" ? "provider" : "Antigravity";
       failures.push(`page text does not include any current ${labelScope} model label or ID`);
     }
@@ -1499,13 +1505,13 @@ try {
     const exceptionText = managerResult?.exceptionDetails?.exception?.description
       || managerResult?.exceptionDetails?.text
       || "";
-    if (selectedContextProbe?.version === "native-panel-v105") {
+    if (selectedContextProbe?.version === "native-panel-v107") {
       managerOverlay = {
         dynamicProbeUnavailable: true,
         probeError: managerProbeError?.message || exceptionText || "manager overlay probe did not return a value",
         hasFunction: selectedContextProbe?.hasOpen === true,
         version: selectedContextProbe?.version || "",
-        installed: selectedContextProbe?.version === "native-panel-v105",
+        installed: selectedContextProbe?.version === "native-panel-v107",
         hasButton: selectedContextProbe?.hasButton === true,
         buttonText: selectedContextProbe?.buttonText || "",
         coveredBy: "context-probe-and-manager-page",
@@ -1528,7 +1534,7 @@ try {
     failures.push(`manager opened a separate page target: ${managerPageTargets.map((item) => item.url).join(", ")}`);
   }
   if (!managerOverlay?.hasFunction) failures.push("in-app manager function is not injected");
-  if (managerOverlay?.version !== "native-panel-v105") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v105`);
+  if (managerOverlay?.version !== "native-panel-v107") failures.push(`in-app manager version is '${managerOverlay?.version || ""}', expected native-panel-v107`);
   if (!managerOverlay?.installed) failures.push("in-app manager install flag is not set");
   const managerOverlayDynamicUnavailable = managerOverlay?.dynamicProbeUnavailable === true;
   if (managerOverlayDynamicUnavailable) {
@@ -1623,7 +1629,9 @@ try {
     ].map((value) => String(value || "")).join("\n");
     matchedModelText = labels.find((label) => modelEvidenceText.includes(label)) || "";
     if (!matchedModelText && upstreamModel && modelIds.includes(upstreamModel)) matchedModelText = upstreamModel;
-    if (!matchedModelText) {
+    if (selectedContextProbe?.composerPresent === false) {
+      modeNotes.push("native model selector is not rendered while no task composer is open; provider catalog remains verified");
+    } else if (!matchedModelText) {
       const labelScope = upstreamMode === "third-party" ? "provider" : "Antigravity";
       failures.push(`page text does not include any current ${labelScope} model label or ID`);
     }

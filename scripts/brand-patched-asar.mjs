@@ -2,10 +2,14 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  hasPatchedAuthRequirement,
+  hasPatchedLocalModelAvailability,
   hasProductNameDrivenSessionTitle,
+  hasStartupMcpConfigReload,
   hasWindowsTrayIconSelection,
   patchComputerUseLegacyNotifyOptOut,
   patchProductNameDrivenSessionTitle,
+  patchStartupMcpConfigReload,
   patchWindowsTrayIconSelection,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
@@ -181,16 +185,6 @@ function patchConfigWriteHandler(text) {
   return replacePadded(text, search, replacement);
 }
 
-function patchStartupMcpConfigReload(text) {
-  const search = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
-  const replacement = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!1})";
-  if (!text.includes(search)) {
-    if (text.includes(replacement)) return text;
-    throw new Error("Startup MCP config reload pattern not found");
-  }
-  return replacePadded(text, search, replacement);
-}
-
 function patchDefaultLocale(text) {
   if (text.includes("var t=`zh-CN`,n=Object.assign")) return text;
   return replacePadded(text, "var t=`en-US`,n=Object.assign", "var t=`zh-CN`,n=Object.assign");
@@ -259,7 +253,7 @@ function patchAuthRequirement(text) {
       "requiresAuth:!1",
     );
   }
-  if (next.includes("requiresAuth:!1                                       ,email:e.account?.type===`chatgpt`?e.account.email:null")) {
+  if (hasPatchedAuthRequirement(next)) {
     return next;
   }
   return next;
@@ -370,7 +364,7 @@ function patchLocalModelAvailability(text) {
   const source = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`(?=[,;])/;
   const match = source.exec(text);
   if (!match) {
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) return text;
+    if (hasPatchedLocalModelAvailability(text)) return text;
     throw new Error("Local model availability filter pattern not found");
   }
   const replacement = `let ${match[1]}=[],${match[2]}=null,${match[3]}=!1`;
@@ -510,13 +504,11 @@ function findConfigWriteHandlerPatch(fd, header, dataOffset) {
 }
 
 function findStartupMcpConfigReloadPatch(fd, header, dataOffset) {
-  const search = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
-  const replacement = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!1})";
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes(search) || text.includes(replacement)) {
+    if (hasStartupMcpConfigReload(text)) {
       return [rel, patchStartupMcpConfigReload];
     }
   }
@@ -572,7 +564,8 @@ function findAuthRequirementPatch(fd, header, dataOffset) {
         text.includes("function T(){return{openAIAuth:1,authMethod:1,requiresAuth:!1,email:null,planAtLogin:null}}") ||
         text.includes("function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}") ||
         text.includes("function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}") ||
-        text.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)")) {
+        text.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)") ||
+        hasPatchedAuthRequirement(text)) {
       return [rel, patchAuthRequirement];
     }
     if (text.includes("function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}") &&
@@ -688,7 +681,7 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
-        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) {
+        hasPatchedLocalModelAvailability(text)) {
       return [rel, patchLocalModelAvailability];
     }
   }
@@ -697,7 +690,7 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
-        /let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1(?=[,;])/.test(text)) {
+        hasPatchedLocalModelAvailability(text)) {
       return [rel, patchLocalModelAvailability];
     }
   }

@@ -177,7 +177,7 @@ try {
     $env:ANTICODEX_FORCE_STARTUP_MODEL_REFRESH = "1"
     Start-Process `
         -FilePath $powerShellBin `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$startAntiCodex`"") `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$startAntiCodex`"", "-InlineSupervisor") `
         -WindowStyle Hidden | Out-Null
 } finally {
     $env:ANTICODEX_FORCE_STARTUP_MODEL_REFRESH = $previousForceStartupModelRefresh

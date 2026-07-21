@@ -2,31 +2,66 @@
   "component": "CodexPlusPlus",
   "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
   "license": "AGPL-3.0-only",
-  "version": "1.2.36",
-  "tag": "v1.2.36",
-  "upstreamCommit": "91a83acd8bdf79a388a106c7c1ea76f9df6bcea9",
-  "isolationPatchCommit": "3487f1a4c25aa8d525b6eec055ef6339f8a0f0d6",
-  "patchCommit": "0c7c4fb156fc1635c9d4da0f930213d33db540fa",
+  "version": "1.2.39",
+  "tag": "v1.2.39",
+  "upstreamCommit": "37c628e58b21cd3698b68a72c15133c91ccc5f92",
+  "isolationPatchCommit": "c5e10b1f8e67603c37740655c4b5ef6b2de2997b",
+  "patchCommit": "8ac882f55daf80c406e31c9d01803032f4e5daf1",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-      "sha256": "1d52576bf856e14a16a743b33f7c46d3f416eece1f4a1b8c5d90a33b7ecd0277",
+      "sha256": "a3f073ab259478caf1586896a77f1acda94135b13bf6767625522cf3f960c3a5",
       "scope": "state, ports, branded executable selection, process paths and global watcher isolation only"
     },
     {
-      "file": "patches/0002-abort-cancelled-loopback-model-streams.patch",
-      "sha256": "f2933ef4197724b456cf96fdd5a41c3437700d134d86e26b5c4a3da5527ad9aa",
-      "scope": "abortive close for cancelled plain-HTTP loopback model streams only; remote HTTPS and non-loopback providers retain upstream transport"
+      "file": "patches/0002-cancel-loopback-streams-without-resets.patch",
+      "sha256": "fcbf411478011b4f9599aa4d791569af93b609fc00594629e1eb72eeb21e5f87",
+      "scope": "one-shot cancel-aware plain-HTTP loopback streams; downstream cancellation drops the request while normal completion closes gracefully without zero-linger resets"
+    },
+    {
+      "file": "patches/0003-native-codex-helper-requests-text-only.patch",
+      "sha256": "8d0f4cd765bd2ac99223d9925b7ec7eced8c15cec23d74bc8d053b241fb1fa71",
+      "scope": "strip project tool controls only from exact official Codex title and task-suggestion helper requests; ordinary user tasks and all other conversion behavior remain upstream"
+    },
+    {
+      "file": "patches/0004-route-anticodex-model-slots.patch",
+      "sha256": "4b9b62336bc6e58a2ee8c3dece4d996e3526069fabc5896ff34067217911845d",
+      "scope": "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction requests align a stale model to the current isolated frontend selection, directed requests fail closed without fallback, and ordinary CodexPlusPlus relay selection remains unchanged"
+    },
+    {
+      "file": "patches/0005-preserve-image-tool-outputs-for-chat-relays.patch",
+      "sha256": "12cf7f72d413b5fcf9dad4b211fde6bf49d9e9c9f06bf8d0eb1141ce253d4afd",
+      "scope": "convert image-bearing Responses tool outputs to standard multimodal Chat content instead of textual JSON/Base64; ordinary tool text, tool association, streaming, retries, history and task control remain unchanged"
+    },
+    {
+      "file": "patches/0006-guide-models-to-structured-patch-tools.patch",
+      "sha256": "b990aef6cc525d30c4a20bcc4dec972a99d210e9aea1b697e7949966e493b03f",
+      "scope": "expose an exact-name structured apply_patch function before compatibility proxies and command tools, reuse existing native custom-tool reconstruction, and add generic request-level plus command-tool guidance only when apply_patch is present; command execution, routing, history, retries and task control remain unchanged"
+    },
+    {
+      "file": "patches/0007-ignore-late-reasoning-after-visible-text.patch",
+      "sha256": "b1fdaf86ccc1890f7295a838d1d7eb554279c5ac6f2a552659f9c259702a8c59",
+      "scope": "map balanced leading think or thinking blocks to reasoning and ignore a separate reasoning delta only after visible text has already started; visible text, reasoning-first streams, tools, routing, retries, history and task control remain unchanged"
+    },
+    {
+      "file": "patches/0008-chore-audit-Codex-tool-conversion.patch",
+      "sha256": "fbc34e5847957637770c66e50778890190e53427d49f20133aa9f0a995be9755",
+      "scope": "record only native and converted tool counts, names and types for local relay diagnosis; request content, arguments, credentials, routing and model behavior remain unchanged"
+    },
+    {
+      "file": "patches/0009-fix-allow-long-multimodal-helper-requests.patch",
+      "sha256": "5769f690353fb85bd7edda6db1f2f1083c29007f5ed4d5770b26a9cf52bf85e9",
+      "scope": "raise the bounded loopback helper request limit from 32 MiB to 128 MiB for long multimodal Codex turns while preserving explicit 413 rejection above the limit; routing, translation, retries, history and task control remain unchanged"
     }
   ],
   "verification": {
-    "patchReplay": "both patches replayed; final tree fad5e31d2c4460d86408dc86276bdad85a33475f matches accepted commit",
+    "patchReplay": "nine patches applied from v1.2.39; accepted source series head 8ac882f55daf80c406e31c9d01803032f4e5daf1",
     "sourceIsolationAudit": "9/9 passed",
-    "auditRegressionTests": "7/7 passed",
-    "cargoFmt": "passed",
-    "cargoCheck": "passed for core and manager with pinned cargo-xwin Docker image",
-    "windowsNativeTests": "124 core and 20 watcher tests passed",
-    "launcherReleaseBuild": "sha256:aae5e052a03b82b0c0b1f4aa0dff175de2aa51f5a2572c4c757fec9cfcf1b02b",
-    "runtimeIsolation": "20/20 passed against copied Codex 26.707.9981.0 with original Codex unchanged"
+    "auditRegressionTests": "previous seven-patch tree passed 190/190 core and 54/54 protocol proxy tests; the eighth diagnostic patch passed its focused no-secret tool-audit test; the ninth body-limit patch passed 5/5 focused boundary tests in the pinned build container",
+    "cargoFmt": "changed launcher source passed rustfmt --check; unrelated upstream watcher formatting remains outside the accepted patch",
+    "cargoCheck": "Windows x64 codex-plus-launcher release build passed with pinned cargo-xwin Docker image",
+    "windowsNativeTests": "Windows x64 release build passed in the pinned cargo-xwin environment; the focused diagnostic regression passed in the pinned build container",
+    "launcherReleaseBuild": "sha256:9ae04c69b65ead219053974a38b4ffa29475a3e9c6f36fd9b032df86556587ce",
+    "runtimeIsolation": "installed real-mouse provider/model switching preserved the copied client, CodexPlusPlus process, original Codex process and visible task; repeated approximately 35 MiB same-task multimodal third-party requests completed above the former 32 MiB limit"
   }
 }

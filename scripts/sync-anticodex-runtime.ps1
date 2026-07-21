@@ -22,10 +22,25 @@ if ($targetRuntimeFull -ne $expectedRuntime) {
 }
 
 $requiredSourceFiles = @(
+    "scripts\antigravity-desktop.ps1",
+    "scripts\apply-anticodex-upstream.ps1",
+    "scripts\repair-anticodex-shortcuts.ps1",
     "scripts\start-anticodex.ps1",
+    "scripts\hide-anticodex-console.ps1",
+    "scripts\start-anticodex-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
     "scripts\anticodex-manager-service.mjs",
     "scripts\install-codexplusplus-component.ps1",
+    "third_party\codexplusplus\upstream.json",
+    "third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch",
+    "third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch",
+    "third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch",
+    "third_party\codexplusplus\patches\0004-route-anticodex-model-slots.patch",
+    "third_party\codexplusplus\patches\0005-preserve-image-tool-outputs-for-chat-relays.patch",
+    "third_party\codexplusplus\patches\0006-guide-models-to-structured-patch-tools.patch",
+    "third_party\codexplusplus\patches\0007-ignore-late-reasoning-after-visible-text.patch",
+    "third_party\codexplusplus\patches\0008-chore-audit-Codex-tool-conversion.patch",
+    "third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\anticodex-update-status.psm1",
@@ -181,6 +196,10 @@ function Copy-AntiCodexPublicDocs {
 }
 
 $legacyRuntimeFiles = @(
+    "scripts\AntiCodexLauncher.cs",
+    "scripts\start-anticodex-task.cmd",
+    "scripts\start-anticodex-task-hidden.vbs",
+    "scripts\start-anticodex-task-hidden.ps1",
     # Older syncs flattened these translator files into the runtime root.
     "antigravity-failure-circuit.mjs",
     "antigravity-request-queue.mjs",
@@ -271,7 +290,54 @@ function Get-AntiCodexFixedRouteSupervisorProcesses {
     })
 }
 
+function Invoke-AntiCodexFixedRouteShutdown {
+    $authPath = Join-Path $antiCodexStateRoot "codex-home-deepseek-app\auth.json"
+    $controlToken = "anticodex-local-proxy-key"
+    try {
+        if (Test-Path -LiteralPath $authPath -PathType Leaf) {
+            $auth = Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if (-not [string]::IsNullOrWhiteSpace([string]$auth.OPENAI_API_KEY)) {
+                $controlToken = [string]$auth.OPENAI_API_KEY
+            }
+        }
+        $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:18487/anticodex/fixed-route/shutdown")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = 3000
+        $request.ReadWriteTimeout = 3000
+        $request.ContentLength = 0
+        $request.Headers[[Net.HttpRequestHeader]::Authorization] = "Bearer $controlToken"
+        $response = $request.GetResponse()
+        try {
+            return [int]$response.StatusCode -eq 202
+        } finally {
+            $response.Dispose()
+        }
+    } catch {
+        return $false
+    }
+}
+
 function Stop-AntiCodexFixedRouteSupervisor {
+    $statusPath = Join-Path $antiCodexStateRoot "fixed-route-status.json"
+    $knownSupervisorPid = 0
+    try {
+        if (Test-Path -LiteralPath $statusPath -PathType Leaf) {
+            $knownSupervisorPid = [int](Get-Content -LiteralPath $statusPath -Raw -Encoding UTF8 | ConvertFrom-Json).pid
+        }
+    } catch {}
+    if ($knownSupervisorPid -gt 0 -and (Get-Process -Id $knownSupervisorPid -ErrorAction SilentlyContinue)) {
+        if (Invoke-AntiCodexFixedRouteShutdown) {
+            $gracefulDeadline = [DateTime]::UtcNow.AddSeconds(10)
+            while ((Get-Process -Id $knownSupervisorPid -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $gracefulDeadline) {
+                Start-Sleep -Milliseconds 100
+            }
+            if (-not (Get-Process -Id $knownSupervisorPid -ErrorAction SilentlyContinue)) {
+                return 1
+            }
+        }
+    }
+
     $stopped = 0
     foreach ($process in @(Get-AntiCodexFixedRouteSupervisorProcesses)) {
         $commandLine = [string]$process.CommandLine
@@ -387,51 +453,59 @@ function Invoke-AntiCodexFixedRouteLauncher {
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
         throw "Anti-Codex fixed-route launcher is missing: $launcher"
     }
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    $stdoutPath = [IO.Path]::GetTempFileName()
-    $stderrPath = [IO.Path]::GetTempFileName()
-    try {
-        $proc = Start-Process -FilePath $powershell `
-            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$launcher`"", "-SkipUpdateCheck") `
-            -WindowStyle Hidden `
-            -PassThru `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath
-        [void]$proc.Handle
-        $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(10, $Seconds))
-        $health = $null
-        $fixedRoute = $null
-        do {
-            $health = Wait-AntiCodexHealth -Seconds 1
-            $fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds 1
-            if ($health -and $fixedRoute) { break }
+    $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+    $taskkill = Join-Path ([Environment]::SystemDirectory) "taskkill.exe"
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+    if (-not $nodeCommand) { throw "Node.js is required to relaunch the fixed Anti-Codex route." }
+    $nodeExecutable = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
+    $userProfilePath = if ($env:USERPROFILE) {
+        [IO.Path]::GetFullPath($env:USERPROFILE)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $antiCodexStateRoot "..\..\.."))
+    }
+    $launchCommandLine = "`"$powershell`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`" -SkipUpdateCheck -InlineSupervisor -StateRootPath `"$antiCodexStateRoot`" -NodeExecutablePath `"$nodeExecutable`" -UserProfilePath `"$userProfilePath`""
+    $launched = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = $launchCommandLine
+        CurrentDirectory = (Split-Path -Parent $launcher)
+    }
+    if ([int]$launched.ReturnValue -ne 0 -or [int]$launched.ProcessId -le 0) {
+        return [pscustomobject]@{
+            ok = $false
+            exitCode = [int]$launched.ReturnValue
+            stderr = "Could not create the inline fixed-route launcher."
+        }
+    }
+
+    $proc = Get-Process -Id ([int]$launched.ProcessId) -ErrorAction SilentlyContinue
+    $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(10, $Seconds))
+    $health = $null
+    $fixedRoute = $null
+    do {
+        $health = Wait-AntiCodexHealth -Seconds 1
+        $fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds 1
+        if ($health -and $fixedRoute) { break }
+        if ($proc) {
             try { $proc.Refresh() } catch {}
             if ($proc.HasExited) { break }
-        } while ([DateTime]::UtcNow -lt $deadline)
+        }
+    } while ([DateTime]::UtcNow -lt $deadline)
 
-        $ready = ($null -ne $health -and $null -ne $fixedRoute)
-        if ($ready -and -not $proc.HasExited) {
-            try { [void]$proc.WaitForExit(5000) } catch {}
-            try { $proc.Refresh() } catch {}
-        }
-        if (-not $ready -and -not $proc.HasExited) {
-            & taskkill.exe /PID $proc.Id /T /F 2>$null | Out-Null
-            try { $proc.Refresh() } catch {}
-        }
-        $exitCode = if ($proc.HasExited) { [int]$proc.ExitCode } else { $null }
-        $stderr = ""
-        try { $stderr = [IO.File]::ReadAllText($stderrPath, [Text.Encoding]::UTF8).Trim() } catch {}
-        return [pscustomobject]@{
-            ok = $ready -and ($null -eq $exitCode -or $exitCode -eq 0)
-            exitCode = $exitCode
-            stderr = $stderr
-        }
-    } finally {
-        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    $ready = ($null -ne $health -and $null -ne $fixedRoute)
+    if (-not $ready -and $proc -and -not $proc.HasExited) {
+        & $taskkill /PID $proc.Id /T /F 2>$null | Out-Null
+        try { $proc.Refresh() } catch {}
+    }
+    $exitCode = if ($proc -and $proc.HasExited) { [int]$proc.ExitCode } else { $null }
+    return [pscustomobject]@{
+        ok = $ready -and ($null -eq $exitCode -or $exitCode -eq 0)
+        exitCode = $exitCode
+        stderr = ""
     }
 }
 
 $syntaxCheckedJavaScriptFiles = @(
+    "scripts\start-anticodex-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
     "scripts\anticodex-manager-service.mjs",
     "scripts\lib\anticodex-fixed-route.mjs",
@@ -461,7 +535,7 @@ foreach ($relative in $syntaxCheckedJavaScriptFiles) {
         -Label "source $relative"
 }
 
-foreach ($dir in @("scripts", "translator", "assets", "codex-home-deepseek-app")) {
+foreach ($dir in @("scripts", "translator", "assets", "codex-home-deepseek-app", "third_party")) {
     Copy-AntiCodexRuntimeTree (Join-Path $sourceRootFull $dir) (Join-Path $targetRuntimeFull $dir)
 }
 Copy-AntiCodexPublicDocs -SourceRoot $sourceRootFull -DestinationRoot $targetRuntimeFull
@@ -473,11 +547,27 @@ foreach ($relative in $requiredSourceFiles) {
         throw "Anti-Codex target runtime component missing after sync: $relative"
     }
 }
+$runtimeHashMismatches = @($requiredSourceFiles | Where-Object {
+    $sourcePath = Join-Path $sourceRootFull $_
+    $targetPath = Join-Path $targetRuntimeFull $_
+    (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash
+})
+if ($runtimeHashMismatches.Count -gt 0) {
+    throw "Anti-Codex runtime hash verification failed: $($runtimeHashMismatches -join ', ')"
+}
 
 foreach ($relative in $syntaxCheckedJavaScriptFiles) {
     Test-AntiCodexJavaScriptSyntax `
         -Path (Join-Path $targetRuntimeFull $relative) `
         -Label "runtime $relative"
+}
+
+$shortcutRepairScript = Join-Path $targetRuntimeFull "scripts\repair-anticodex-shortcuts.ps1"
+$shortcutRepairJson = (@(& $shortcutRepairScript -InstallRoot (Split-Path -Parent $targetRuntimeFull)) -join [Environment]::NewLine)
+$shortcutRepairResult = $shortcutRepairJson | ConvertFrom-Json
+if (-not $shortcutRepairResult.ok) {
+    throw "Anti-Codex shortcuts could not be refreshed after runtime sync."
 }
 
 if (-not $BaseUrl) {
@@ -503,11 +593,17 @@ if (-not $NoRestart) {
     }
 }
 
-$health = Wait-AntiCodexHealth -Seconds $TimeoutSec
-$fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds $TimeoutSec
+$health = $null
+$fixedRoute = $null
+if (-not $NoRestart) {
+    $health = Wait-AntiCodexHealth -Seconds $TimeoutSec
+    $fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds $TimeoutSec
+}
 
 $result = [pscustomobject]@{
-    ok = ($null -ne $health -and $null -ne $fixedRoute)
+    ok = if ($NoRestart) { $runtimeHashMismatches.Count -eq 0 } else { $null -ne $health -and $null -ne $fixedRoute }
+    mode = if ($NoRestart) { "synced_without_restart" } else { "synced_and_restarted" }
+    verifiedFileCount = $requiredSourceFiles.Count
     sourceRoot = $sourceRootFull
     targetRuntime = $targetRuntimeFull
     baseUrl = $BaseUrl

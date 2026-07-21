@@ -140,20 +140,40 @@ $missingRuntimeFiles = @($requiredRuntimeFiles | Where-Object { -not (Test-Path 
 Add-Check "runtimeFiles" ($missingRuntimeFiles.Count -eq 0) ([pscustomobject]@{ required = $requiredRuntimeFiles.Count; missing = $missingRuntimeFiles }) "Installed runtime is missing current three-layer files"
 
 $componentManifestPath = Join-Path $installRoot "components\codexplusplus\component-manifest.json"
+$componentMetadataPath = Join-Path $installRoot "components\codexplusplus\upstream.json"
 $component = $null
 $componentBinaryPath = ""
 $componentActualHash = ""
 $componentOk = $false
 try {
     $component = Get-Content -LiteralPath $componentManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $componentBinaryPath = Normalize-Path ([string]$component.binary.path)
+    $componentMetadata = Get-Content -LiteralPath $componentMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $installedPatches = @($component.patches)
+    $acceptedPatches = @($componentMetadata.patches)
+    $componentPatchSetOk = $acceptedPatches.Count -gt 0 -and $installedPatches.Count -eq $acceptedPatches.Count
+    if ($componentPatchSetOk) {
+        for ($index = 0; $index -lt $acceptedPatches.Count; $index++) {
+            if ([string]$installedPatches[$index].file -ne [string]$acceptedPatches[$index].file -or
+                ([string]$installedPatches[$index].sha256).ToLowerInvariant() -ne ([string]$acceptedPatches[$index].sha256).ToLowerInvariant()) {
+                $componentPatchSetOk = $false
+                break
+            }
+        }
+    }
+    $componentBinaryReference = [string]$component.binary.path
+    $componentBinaryPath = Normalize-Path $(if ([IO.Path]::IsPathRooted($componentBinaryReference)) {
+        $componentBinaryReference
+    } else {
+        Join-Path (Split-Path -Parent $componentManifestPath) $componentBinaryReference
+    })
     $componentActualHash = (Get-FileHash -LiteralPath $componentBinaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $componentOk = [bool](
         $component.ok -eq $true -and
         [string]$component.schema -eq "codexplusplus-component-manifest-v1" -and
         [string]$component.component -eq "CodexPlusPlus" -and
         [string]$component.license -eq "AGPL-3.0-only" -and
-        @($component.patches).Count -eq 2 -and
+        $componentPatchSetOk -and
+        [string]$component.patchCommit -eq [string]$componentMetadata.patchCommit -and
         $componentBinaryPath.StartsWith($installRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
         $componentActualHash -eq ([string]$component.binary.sha256).ToLowerInvariant()
     )

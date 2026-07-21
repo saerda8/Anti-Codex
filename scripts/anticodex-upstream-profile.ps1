@@ -10,6 +10,8 @@ param(
     [string]$Protocol = "",
     [string]$BaseUrl = "",
     [string]$Model = "",
+    [int]$ContextWindow = 272000,
+    [string]$AntigravityModel = "",
     [string]$ApiKey = "",
     [string]$TestStatus = "pending",
     [string]$CapabilitiesJson = "{}"
@@ -46,6 +48,8 @@ function New-DefaultProfile {
         protocol = ""
         baseUrl = ""
         model = ""
+        contextWindow = 272000
+        antigravityModel = ""
         lastTestStatus = ""
         lastTestAt = ""
         capabilities = @{}
@@ -73,6 +77,8 @@ function Read-Profile {
             protocol = [string](Get-SafeProperty $parsed "protocol" "")
             baseUrl = [string](Get-SafeProperty $parsed "baseUrl" "")
             model = [string](Get-SafeProperty $parsed "model" "")
+            contextWindow = [int](Get-SafeProperty $parsed "contextWindow" 272000)
+            antigravityModel = [string](Get-SafeProperty $parsed "antigravityModel" "")
             lastTestStatus = [string](Get-SafeProperty $parsed "lastTestStatus" "")
             lastTestAt = [string](Get-SafeProperty $parsed "lastTestAt" "")
             capabilities = Get-SafeProperty $parsed "capabilities" @{}
@@ -162,6 +168,8 @@ function Public-Profile {
         protocol = $Profile.protocol
         baseUrl = $Profile.baseUrl
         model = $Profile.model
+        contextWindow = $Profile.contextWindow
+        antigravityModel = $Profile.antigravityModel
         lastTestStatus = $Profile.lastTestStatus
         lastTestAt = $Profile.lastTestAt
         capabilities = $Profile.capabilities
@@ -188,6 +196,8 @@ try {
                 protocol = $profile.protocol
                 baseUrl = $profile.baseUrl
                 model = $profile.model
+                contextWindow = $profile.contextWindow
+                antigravityModel = $profile.antigravityModel
                 lastTestStatus = $profile.lastTestStatus
                 lastTestAt = $profile.lastTestAt
                 capabilities = $profile.capabilities
@@ -201,8 +211,12 @@ try {
             }
             if ([string]::IsNullOrWhiteSpace($BaseUrl)) { throw "BaseUrl is required." }
             if ([string]::IsNullOrWhiteSpace($Model)) { throw "Model is required." }
+            if ($ContextWindow -lt 16000 -or $ContextWindow -gt 4000000) {
+                throw "ContextWindow must be between 16000 and 4000000 tokens."
+            }
             Test-AllowedBaseUrl $BaseUrl
 
+            $existingProfile = Read-Profile
             $existingKey = Unprotect-ApiKey
             if ([string]::IsNullOrEmpty($ApiKey)) {
                 if ([string]::IsNullOrEmpty($existingKey)) {
@@ -218,6 +232,8 @@ try {
                 protocol = $Protocol
                 baseUrl = $BaseUrl.TrimEnd("/")
                 model = $Model
+                contextWindow = $ContextWindow
+                antigravityModel = $existingProfile.antigravityModel
                 lastTestStatus = $TestStatus
                 lastTestAt = [DateTime]::UtcNow.ToString("o")
                 capabilities = Read-Capabilities
@@ -228,6 +244,9 @@ try {
         "UseAntigravity" {
             $profile = Read-Profile
             $profile["mode"] = "antigravity"
+            if (-not [string]::IsNullOrWhiteSpace($AntigravityModel)) {
+                $profile["antigravityModel"] = $AntigravityModel.Trim()
+            }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20
         }

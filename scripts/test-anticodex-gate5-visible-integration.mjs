@@ -309,7 +309,7 @@ const uiState = runJson(process.execPath, [
 record("official_shell_ui_and_current_model_visible", Boolean(
   uiState.ok
     && uiState.data?.target?.title === "Anti-Codex"
-    && uiState.data?.selectedContextProbe?.version === "native-panel-v105"
+    && uiState.data?.selectedContextProbe?.version === "native-panel-v107"
     && uiState.data?.matchedModelText === expectedModelLabel
     && uiState.data?.managerPage?.hasZhLang === true
     && Number(uiState.data?.port) === Number(fixedHealth?.ports?.cdp || 18318),

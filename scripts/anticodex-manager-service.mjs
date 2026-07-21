@@ -8,6 +8,13 @@ import { fileURLToPath } from "node:url";
 
 import { testCodexPlusPlusUpstreamConnection } from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
+import {
+    ANTIGRAVITY_MODEL_SLOT,
+    ANTIGRAVITY_RELAY_ID,
+    THIRD_PARTY_MODEL_SLOT,
+    THIRD_PARTY_RELAY_ID,
+    thirdPartyNativeModel,
+} from "./lib/anticodex-fixed-route.mjs";
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,7 +62,7 @@ const MANAGER_ACTIONS = Object.freeze({
         timeoutMs: 30000,
     },
     updateCheck: {
-        label: "检查 Codex 更新",
+        label: "检查全部更新",
         script: "check-anticodex-update.ps1",
         args: [],
         timeoutMs: 30000,
@@ -72,7 +79,7 @@ const MANAGER_ACTIONS = Object.freeze({
         virtual: true,
     },
     syncHost: {
-        label: "同步 Codex 更新",
+        label: "一键更新",
         script: "sync-anticodex-launcher.ps1",
         args: [],
         timeoutMs: 10000,
@@ -729,6 +736,8 @@ async function runUpstreamProfileScript(action, values = {}, stateRoot = "", scr
     addArg("Protocol", values.protocol);
     addArg("BaseUrl", values.baseUrl);
     addArg("Model", values.model);
+    addArg("ContextWindow", values.contextWindow);
+    addArg("AntigravityModel", values.antigravityModel);
     addArg("TestStatus", values.testStatus);
     addArg("CapabilitiesJson", values.capabilitiesJson);
     const { stdout } = await execFileAsync(powershellPath(), args, {
@@ -753,6 +762,212 @@ async function runUpstreamProfileScript(action, values = {}, stateRoot = "", scr
         }
     }
     return {};
+}
+
+function uniqueModelIds(values = []) {
+    const output = [];
+    const seen = new Set();
+    for (const value of values) {
+        const model = String(value || "").trim();
+        if (!model || seen.has(model)) continue;
+        seen.add(model);
+        output.push(model);
+    }
+    return output;
+}
+
+function thirdPartyRelayProtocol(protocol) {
+    const value = String(protocol || "").trim().toLowerCase();
+    if (value === "responses") return "responses";
+    if (value === "openai-compatible") return "chatCompletions";
+    throw new Error("Third-party protocol must be openai-compatible or responses.");
+}
+
+function writeJsonAtomic(filePath, value) {
+    const parent = path.dirname(filePath);
+    fs.mkdirSync(parent, { recursive: true });
+    const temporary = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+    try {
+        fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+        fs.renameSync(temporary, filePath);
+    } finally {
+        try { fs.rmSync(temporary, { force: true }); } catch {}
+    }
+}
+
+export function hotSwitchCodexPlusPlusSettings(options = {}) {
+    const settingsPath = path.resolve(String(options.settingsPath || ""));
+    if (!fs.existsSync(settingsPath)) {
+        throw new Error("CodexPlusPlus settings are unavailable for an in-place switch.");
+    }
+    const mode = String(options.mode || "").trim().toLowerCase();
+    if (mode !== "antigravity" && mode !== "third-party") {
+        throw new Error("Anti-Codex mode must be antigravity or third-party.");
+    }
+    const adapterPort = validLoopbackPort(options.adapterPort);
+    if (!adapterPort) throw new Error("The Antigravity adapter port is unavailable.");
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const profiles = Array.isArray(settings.relayProfiles) ? settings.relayProfiles : [];
+    const byId = new Map(profiles.map((profile) => [String(profile?.id || ""), profile]));
+    const antigravityModel = String(options.antigravityModel || "gemini-3-flash-agent").trim();
+    const antigravityModels = uniqueModelIds([
+        ANTIGRAVITY_MODEL_SLOT,
+        antigravityModel,
+        ...(Array.isArray(options.antigravityModels) ? options.antigravityModels : []),
+    ]);
+    const antigravityProfile = {
+        ...(byId.get(ANTIGRAVITY_RELAY_ID) || {}),
+        id: ANTIGRAVITY_RELAY_ID,
+        name: "Anti-Codex Antigravity",
+        upstreamBaseUrl: `http://127.0.0.1:${adapterPort}/v1`,
+        apiKey: "",
+        protocol: "chatCompletions",
+        relayMode: "pureApi",
+        testModel: antigravityModel,
+        useCommonConfig: false,
+        modelList: antigravityModels.join("\n"),
+    };
+    byId.set(ANTIGRAVITY_RELAY_ID, antigravityProfile);
+
+    const thirdParty = options.thirdParty && typeof options.thirdParty === "object"
+        ? options.thirdParty
+        : null;
+    if (thirdParty?.baseUrl || thirdParty?.model || thirdParty?.apiKey) {
+        const baseUrl = String(thirdParty.baseUrl || "").trim().replace(/\/$/, "");
+        const model = String(thirdParty.model || "").trim();
+        const apiKey = String(thirdParty.apiKey || "");
+        if (!baseUrl || !model || !apiKey) {
+            throw new Error("Saved third-party route is incomplete for an in-place switch.");
+        }
+        const modelIds = uniqueModelIds([
+            THIRD_PARTY_MODEL_SLOT,
+            thirdPartyNativeModel(model),
+            ...(Array.isArray(thirdParty.providerModels)
+                ? thirdParty.providerModels
+                    .map((entry) => String(entry || "").trim())
+                    .filter(Boolean)
+                    .map((entry) => thirdPartyNativeModel(entry))
+                : []),
+        ]);
+        byId.set(THIRD_PARTY_RELAY_ID, {
+            ...(byId.get(THIRD_PARTY_RELAY_ID) || {}),
+            id: THIRD_PARTY_RELAY_ID,
+            name: "Anti-Codex third-party API",
+            upstreamBaseUrl: baseUrl,
+            apiKey,
+            protocol: thirdPartyRelayProtocol(thirdParty.protocol),
+            relayMode: "pureApi",
+            testModel: model,
+            contextWindow: String(Number(thirdParty.contextWindow || 272000)),
+            autoCompactLimit: String(Math.floor(Number(thirdParty.contextWindow || 272000) * 0.9)),
+            authContents: `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
+            useCommonConfig: false,
+            modelList: modelIds.join("\n"),
+        });
+    }
+    const thirdPartyProfile = byId.get(THIRD_PARTY_RELAY_ID);
+    if (mode === "third-party" && !thirdPartyProfile) {
+        throw new Error("No saved third-party relay is available for an in-place switch.");
+    }
+
+    const orderedProfiles = [
+        byId.get(ANTIGRAVITY_RELAY_ID),
+        byId.get(THIRD_PARTY_RELAY_ID),
+        ...profiles.filter((profile) => ![ANTIGRAVITY_RELAY_ID, THIRD_PARTY_RELAY_ID].includes(String(profile?.id || ""))),
+    ].filter(Boolean);
+    settings.relayProfiles = orderedProfiles;
+    settings.activeRelayId = mode === "antigravity" ? ANTIGRAVITY_RELAY_ID : THIRD_PARTY_RELAY_ID;
+    settings.relayTestModel = mode === "antigravity" ? antigravityModel : thirdPartyProfile.testModel;
+    writeJsonAtomic(settingsPath, settings);
+
+    const nativeCatalogModels = new Set(
+        Array.isArray(options.nativeCatalogModels)
+            ? options.nativeCatalogModels.map((entry) => String(entry || "").trim()).filter(Boolean)
+            : [],
+    );
+    let nativeModel;
+    if (mode === "antigravity") {
+        nativeModel = nativeCatalogModels.size === 0 || nativeCatalogModels.has(antigravityModel)
+            ? { slug: antigravityModel, label: antigravityModel }
+            : { slug: ANTIGRAVITY_MODEL_SLOT, label: "Antigravity（当前模型）" };
+    } else {
+        const exact = thirdPartyNativeModel(thirdPartyProfile.testModel);
+        nativeModel = nativeCatalogModels.has(exact)
+            ? { slug: exact, label: `第三方 · ${thirdPartyProfile.testModel}` }
+            : { slug: THIRD_PARTY_MODEL_SLOT, label: "第三方 API（当前模型）" };
+    }
+    return {
+        ok: true,
+        hotSwitch: true,
+        restartRequired: false,
+        mode,
+        model: settings.relayTestModel,
+        activeRelayId: settings.activeRelayId,
+        nativeModel,
+    };
+}
+
+function antigravityModelsFromCatalog(stateRoot = "") {
+    const catalogPath = path.join(stateRoot, "codex-home-deepseek-app", "antigravity-model-catalog.json");
+    try {
+        const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+        return (Array.isArray(parsed?.models) ? parsed.models : [])
+            .slice(0, 256)
+            .map((entry) => ({
+                id: String(entry?.slug || entry?.id || "").trim().slice(0, 200),
+                label: String(entry?.display_name || entry?.displayName || entry?.slug || entry?.id || "").trim().slice(0, 200),
+            }))
+            .filter((entry) => entry.id);
+    } catch {
+        return [];
+    }
+}
+
+function nativeModelSlugsFromCatalog(stateRoot = "") {
+    const catalogPath = path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json");
+    try {
+        const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+        return uniqueModelIds(
+            (Array.isArray(parsed?.models) ? parsed.models : []).map((entry) => entry?.slug),
+        );
+    } catch {
+        return [];
+    }
+}
+
+function savedThirdPartyForHotSwitch(runtimeProfile = {}) {
+    const providerModels = Array.isArray(runtimeProfile?.capabilities?.providerModels)
+        ? runtimeProfile.capabilities.providerModels
+        : [];
+    if (!runtimeProfile.baseUrl && !runtimeProfile.model && !runtimeProfile.apiKey) return null;
+    return {
+        protocol: runtimeProfile.protocol,
+        baseUrl: runtimeProfile.baseUrl,
+        model: runtimeProfile.model,
+        apiKey: runtimeProfile.apiKey,
+        contextWindow: runtimeProfile.contextWindow,
+        providerModels,
+    };
+}
+
+async function applySavedProfileHotSwitch(mode, options = {}) {
+    const { stateRoot, scriptsRoot, fixedHealthUrl } = options;
+    const [runtimeProfile, fixedRoute] = await Promise.all([
+        runUpstreamProfileScript("GetRuntime", {}, stateRoot, scriptsRoot),
+        fixedRouteHealthSnapshot(fixedHealthUrl),
+    ]);
+    if (fixedRoute.ready !== true || !fixedRoute.adapterPort) {
+        throw new Error("Anti-Codex fixed route is not ready for an in-place model switch.");
+    }
+    return hotSwitchCodexPlusPlusSettings({
+        settingsPath: path.join(stateRoot, "codexplusplus", "settings.json"),
+        mode,
+        adapterPort: fixedRoute.adapterPort,
+        antigravityModel: runtimeProfile.antigravityModel,
+        antigravityModels: antigravityModelsFromCatalog(stateRoot).map((entry) => entry.id),
+        thirdParty: savedThirdPartyForHotSwitch(runtimeProfile),
+        nativeCatalogModels: nativeModelSlugsFromCatalog(stateRoot),
+    });
 }
 
 async function fixedRouteHealthSnapshot(fixedHealthUrl) {
@@ -1156,8 +1371,11 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl) {
         startedAt: item.foregroundStartedAt || "",
     }));
     const longTaskItems = [...backgroundItems, ...foregroundItems];
-    const provider = fixedRoute.provider || String(fixedStatus?.provider || "");
-    const model = fixedRoute.model || String(fixedStatus?.model || "");
+    // Persisted supervisor status is historical evidence only. A hard process-job
+    // teardown cannot update that file, so live diagnostics must fail closed on
+    // the health endpoint instead of reviving a stale `ready` route.
+    const provider = fixedRoute.provider;
+    const model = fixedRoute.model;
     const routeReady = fixedRoute.ready === true;
 
     return {
@@ -1220,7 +1438,14 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl) {
         },
         toolBridge: { mode: "codex-native-harness", active: routeReady, owner: "codex" },
         nativeToolCapability: { owner: "codex", adapterExecutesTools: false, transport: "codex-native" },
-        lifecycle: { state: String(fixedStatus?.state || fixedRoute.state || "offline") },
+        lifecycle: {
+            state: fixedRoute.state || "offline",
+            live: routeReady,
+            persistedState: String(fixedStatus?.state || ""),
+            persistedProvider: String(fixedStatus?.provider || ""),
+            persistedModel: String(fixedStatus?.model || ""),
+            persistedPid: Number.isInteger(Number(fixedStatus?.pid)) ? Number(fixedStatus.pid) : null,
+        },
         updateStatus,
         postVerification: {
             present: releaseGates.exists,
@@ -1530,12 +1755,18 @@ export function createAntiCodexManagerService(options = {}) {
           runUpstreamProfileScript("GetPublic", {}, stateRoot, scriptsRoot),
           fixedRouteHealthSnapshot(fixedHealthUrl),
         ]);
+        const antigravityModels = antigravityModelsFromCatalog(stateRoot);
+        if (fixedRoute.provider === "antigravity" && fixedRoute.model
+            && !antigravityModels.some((entry) => entry.id === fixedRoute.model)) {
+          antigravityModels.unshift({ id: fixedRoute.model, label: fixedRoute.model });
+        }
         return jsonResponse(res, 200, {
           ok: true,
           active: activeUpstreamMode(fixedRoute),
           runtime: { mode: activeUpstreamMode(fixedRoute), provider: fixedRoute.provider, model: fixedRoute.model },
           saved,
           fixedRoute,
+          antigravityModels,
         }, req);
       } catch (error) {
         return jsonResponse(res, error.statusCode || 500, { ok: false, message: error.message }, req);
@@ -1577,8 +1808,19 @@ export function createAntiCodexManagerService(options = {}) {
         const raw = await readRequestBody(req);
         const body = JSON.parse(raw.toString("utf8") || "{}");
         if (body.mode === "antigravity") {
-          const saved = await runUpstreamProfileScript("UseAntigravity", {}, stateRoot, scriptsRoot);
-          return jsonResponse(res, 200, { ok: true, saved, restartRequired: true }, req);
+          const antigravityModel = String(body.antigravityModel || "").trim();
+          const availableModels = antigravityModelsFromCatalog(stateRoot);
+          if (antigravityModel && availableModels.length > 0
+              && !availableModels.some((entry) => entry.id === antigravityModel)) {
+            return jsonResponse(res, 400, { ok: false, message: "所选 Antigravity 模型不在当前模型目录中。" }, req);
+          }
+          const saved = await runUpstreamProfileScript("UseAntigravity", { antigravityModel }, stateRoot, scriptsRoot);
+          const switched = await applySavedProfileHotSwitch("antigravity", {
+            stateRoot,
+            scriptsRoot,
+            fixedHealthUrl,
+          });
+          return jsonResponse(res, 200, { ok: true, saved, ...switched }, req);
         }
         let apiKey = String(body.apiKey || "");
         if (!apiKey) {
@@ -1605,41 +1847,19 @@ export function createAntiCodexManagerService(options = {}) {
           protocol: body.protocol,
           baseUrl: body.baseUrl,
           model: body.model,
+          contextWindow: body.contextWindow,
           apiKey,
           testStatus,
           capabilitiesJson: JSON.stringify(capabilities),
         }, stateRoot, scriptsRoot);
-        return jsonResponse(res, 200, { ok: true, saved, restartRequired: true }, req);
+        const switched = await applySavedProfileHotSwitch("third-party", {
+          stateRoot,
+          scriptsRoot,
+          fixedHealthUrl,
+        });
+        return jsonResponse(res, 200, { ok: true, saved, ...switched }, req);
       } catch (error) {
         return jsonResponse(res, error.statusCode || 400, { ok: false, message: error.message }, req);
-      }
-    }
-
-    if (req.method === "POST" && pathname === "/anticodex/upstream-apply") {
-      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
-      try {
-        const scriptPath = path.resolve(scriptsRoot, "apply-anticodex-upstream.ps1");
-        if (!fs.existsSync(scriptPath)) {
-          return jsonResponse(res, 404, { ok: false, message: "Missing apply script" }, req);
-        }
-        const child = spawn(powershellPath(), [
-          "-NoProfile",
-          "-NonInteractive",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          scriptPath,
-        ], {
-          cwd: scriptsRoot,
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-          env: process.env,
-        });
-        child.unref();
-        return jsonResponse(res, 200, { ok: true, restarting: true, pid: child.pid }, req);
-      } catch (error) {
-        return jsonResponse(res, 500, { ok: false, message: error.message }, req);
       }
     }
 

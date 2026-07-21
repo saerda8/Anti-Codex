@@ -23,16 +23,25 @@ import { startAntigravityChatProvider } from "../translator/provider/start-antig
 import { createAntiCodexManagerService } from "./anticodex-manager-service.mjs";
 import { ownerProcessIsAlive } from "./lib/anticodex-owner-process.mjs";
 import {
+  ANTIGRAVITY_MODEL_SLOT,
+  ANTIGRAVITY_RELAY_ID,
+  THIRD_PARTY_MODEL_SLOT,
+  THIRD_PARTY_RELAY_ID,
   buildCodexPlusPlusSettings,
   generateRouteConfig,
+  getCopiedClientArgs,
   getLauncherArgs,
   isPathInsideRoot,
   mergeCodexRouteConfig,
   resolveProductPaths,
+  thirdPartyNativeModel,
 } from "./lib/anticodex-fixed-route.mjs";
 
 const COMPONENT_SCHEMA = "codexplusplus-component-manifest-v1";
 const STATUS_SCHEMA = "anticodex-fixed-route-status-v1";
+const DEFAULT_THIRD_PARTY_CONTEXT_WINDOW = 272_000;
+const CLIENT_EXIT_GRACE_MS = 10_000;
+const OWNED_PROCESS_STOP_WAIT_MS = 5_000;
 const DEFAULT_PORTS = Object.freeze({
   cdp: 18318,
   proxy: 18484,
@@ -49,7 +58,34 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
   const stateRoot = resolve(args.stateRoot ?? join(requiredEnv(env, "APPDATA"), "anticodex"));
   const paths = resolveProductPaths(installRoot, stateRoot);
   const provider = String(args.provider ?? env.ANTICODEX_PROVIDER ?? "antigravity").trim().toLowerCase();
-  const model = optionalText(args.model ?? env.ANTICODEX_MODEL ?? env.UPSTREAM_MODEL);
+  if (!["antigravity", "third-party"].includes(provider)) {
+    throw new Error("provider must be antigravity or third-party");
+  }
+  const requestedModel = optionalText(args.model ?? env.ANTICODEX_MODEL);
+  const antigravityModel = optionalText(
+    env.ANTICODEX_ANTIGRAVITY_MODEL
+      ?? (provider === "antigravity" ? requestedModel : undefined),
+  ) ?? "gemini-3-flash-agent";
+  const thirdPartyModel = optionalText(
+    env.UPSTREAM_MODEL
+      ?? (provider === "third-party" ? requestedModel : undefined),
+  );
+  const thirdPartyConfig = env.UPSTREAM_URL && thirdPartyModel && env.UPSTREAM_API_KEY
+    ? {
+        protocol: env.UPSTREAM_PROTOCOL ?? "chat",
+        baseUrl: env.UPSTREAM_URL,
+        model: thirdPartyModel,
+        apiKey: env.UPSTREAM_API_KEY,
+      }
+    : null;
+  if (provider === "third-party" && !thirdPartyConfig) {
+    throw new Error("Saved third-party route is incomplete");
+  }
+  const model = provider === "third-party" ? thirdPartyModel : antigravityModel;
+  const modelContextWindow = provider === "third-party"
+    ? contextWindow(args.contextWindow ?? env.UPSTREAM_CONTEXT_WINDOW, DEFAULT_THIRD_PARTY_CONTEXT_WINDOW)
+    : null;
+  const headless = truthy(args.headless ?? env.ANTICODEX_HEADLESS);
   const ports = {
     cdp: port(args.cdpPort, DEFAULT_PORTS.cdp, "cdp-port"),
     proxy: port(args.proxyPort, DEFAULT_PORTS.proxy, "proxy-port"),
@@ -61,35 +97,51 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
   };
   ensureUniquePorts(ports);
 
-  const catalogPath = provider === "antigravity"
-    ? join(paths.codexHome, "antigravity-model-catalog.json")
-    : provider === "third-party"
-      ? join(paths.codexHome, "third-party-model-catalog.json")
-      : undefined;
-  const route = generateRouteConfig({
-    provider,
-    model,
+  const catalogPath = join(paths.codexHome, "anticodex-model-catalog.json");
+  const localProxyKey = randomBytes(24).toString("hex");
+  const antigravityRoute = generateRouteConfig({
+    provider: "antigravity",
+    model: antigravityModel,
+    clientModel: provider === "antigravity" ? antigravityModel : ANTIGRAVITY_MODEL_SLOT,
     proxyPort: ports.proxy,
     adapterPort: ports.adapter,
     catalogPath,
-    localProxyKey: randomBytes(24).toString("hex"),
-    thirdPartyConfig: provider === "third-party" ? {
-      protocol: env.UPSTREAM_PROTOCOL ?? "chat",
-      baseUrl: env.UPSTREAM_URL,
-      model: model ?? env.UPSTREAM_MODEL,
-      apiKey: env.UPSTREAM_API_KEY,
-    } : undefined,
+    localProxyKey,
+    relayModelList: [ANTIGRAVITY_MODEL_SLOT, antigravityModel],
   });
-  const launcherArgs = getLauncherArgs({
-    launchDesktop: true,
-    appPath: paths.appDir,
-    debugPort: ports.cdp,
-    helperPort: ports.helper,
-  });
+  const thirdPartyRoute = thirdPartyConfig
+    ? generateRouteConfig({
+        provider: "third-party",
+        model: thirdPartyModel,
+        clientModel: provider === "third-party"
+          ? thirdPartyNativeModel(thirdPartyModel)
+          : THIRD_PARTY_MODEL_SLOT,
+        contextWindow: contextWindow(
+          env.UPSTREAM_CONTEXT_WINDOW,
+          DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+        ),
+        proxyPort: ports.proxy,
+        catalogPath,
+        localProxyKey,
+        thirdPartyConfig,
+        relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(thirdPartyModel)],
+      })
+    : null;
+  const route = provider === "third-party" ? thirdPartyRoute : antigravityRoute;
+  const relayRoutes = [antigravityRoute, thirdPartyRoute].filter(Boolean);
   const settings = buildCodexPlusPlusSettings({
     route,
+    relayRoutes,
     userDataDir: paths.electronUserData,
     disableGpu: truthy(args.disableGpu ?? env.ANTICODEX_DISABLE_GPU),
+  });
+  const launcherArgs = getLauncherArgs({
+    launchDesktop: false,
+    helperPort: ports.proxy,
+  });
+  const clientArgs = headless ? [] : getCopiedClientArgs({
+    debugPort: ports.cdp,
+    codexExtraArgs: settings.codexExtraArgs,
   });
   const managerBaseUrl = normalizeLoopbackUrl(
     args.managerBaseUrl ?? env.ANTICODEX_MANAGER_API ?? "http://127.0.0.1:8484",
@@ -100,9 +152,15 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
     paths,
     provider,
     model: route.model,
+    antigravityModel,
+    thirdPartyConfig,
+    modelContextWindow,
+    headless,
     ports,
     route,
+    relayRoutes,
     launcherArgs,
+    clientArgs,
     settings,
     managerBaseUrl,
   };
@@ -126,11 +184,16 @@ export function sanitizeFixedRoutePlan(plan) {
       statusFile: plan.paths.statusFile,
     },
     ports: plan.ports,
+    modelContextWindow: plan.modelContextWindow,
     route: publicRoute(plan.route),
     launcherArgs: plan.launcherArgs,
+    clientArgs: plan.clientArgs,
     childEnvironment: publicChildEnvironment(plan),
     lifecycle: {
-      launchesVisibleClientOnce: true,
+      launchesVisibleClientOnce: !plan.headless,
+      headlessProtocolProxy: true,
+      codexPlusPlusOwnsClient: false,
+      clientOwner: plan.headless ? null : "fixed-route-supervisor",
       automaticallyRelaunchesClient: false,
       ownsTaskControl: false,
       cleansOnlyOwnedChildren: true,
@@ -140,7 +203,7 @@ export function sanitizeFixedRoutePlan(plan) {
 
 async function runSupervisor(plan) {
   assertProductionRoots(plan);
-  assertNoExistingClient(plan.paths.appDir);
+  const startupProcessScan = assertNoExistingClient();
   const component = validateInstalledComponent(plan.paths);
   ensureProductDirectories(plan.paths);
 
@@ -151,6 +214,7 @@ async function runSupervisor(plan) {
     pid: process.pid,
     provider: plan.provider,
     model: plan.model,
+    modelContextWindow: plan.modelContextWindow,
     route: publicRoute(plan.route),
     ports: plan.ports,
     appExecutable: plan.paths.appExecutable,
@@ -165,12 +229,22 @@ async function runSupervisor(plan) {
     stoppedAt: null,
     error: null,
     processes: {},
+    startupProcessScan: {
+      ok: startupProcessScan.ok,
+      processCount: startupProcessScan.processes.length,
+      error: startupProcessScan.error,
+    },
   };
-  const health = await startHealthServer(plan.ports.health, () => status);
+  let requestShutdown = null;
+  const health = await startHealthServer(plan.ports.health, () => runtimeRouteStatus(status, plan), {
+    shutdownToken: plan.route.localProxyKey,
+    onShutdown: (reason) => requestShutdown?.(reason),
+  });
   writeStatus(plan.paths.statusFile, status);
 
   let provider = null;
   let launcher = null;
+  let copiedClient = null;
   let managerService = null;
   let managerWatcher = null;
   let managerBridge = null;
@@ -184,26 +258,50 @@ async function runSupervisor(plan) {
     if (closing) return;
     closing = true;
     shutdownReason = reason;
-    stopOwnedProcess(managerWatcher);
-    stopOwnedProcess(managerBridge);
-    stopOwnedProcess(launcher);
-    if (options.stopClient === true) {
-      for (const pid of ownedClients) stopProcessTree(pid);
-    }
-    await provider?.close?.().catch(() => {});
-    await managerService?.close?.().catch(() => {});
-    if (launcherLog !== null) closeSync(launcherLog);
-    if (launcherErrorLog !== null) closeSync(launcherErrorLog);
+    const stoppedNormally = ["client_exited", "control_shutdown", "signal_sigint", "signal_sigterm"].includes(reason);
+    const shutdownPids = [...new Set([
+      managerWatcher?.pid,
+      managerBridge?.pid,
+      ...(options.stopClient === true ? [copiedClient?.pid, ...ownedClients] : []),
+      launcher?.pid,
+    ].map(Number).filter((pid) => Number.isInteger(pid) && pid > 0))];
     status = {
       ...status,
-      ok: reason === "client_exited",
-      state: reason === "client_exited" ? "stopped" : "error",
-      stoppedAt: new Date().toISOString(),
+      ok: false,
+      state: "stopping",
+      stoppingAt: new Date().toISOString(),
       stopReason: reason,
     };
     writeStatus(plan.paths.statusFile, status);
+    await provider?.close?.().catch(() => {});
+    stopOwnedProcess(managerWatcher);
+    stopOwnedProcess(managerBridge);
+    if (options.stopClient === true) {
+      stopOwnedProcess(copiedClient);
+      for (const pid of ownedClients) stopProcessTree(pid);
+    }
+    stopOwnedProcess(launcher);
+    await managerService?.close?.().catch(() => {});
+    const shutdownSurvivors = await waitForOwnedProcessExit(shutdownPids);
+    if (launcherLog !== null) closeSync(launcherLog);
+    if (launcherErrorLog !== null) closeSync(launcherErrorLog);
+    const fullyStopped = shutdownSurvivors.length === 0;
+    status = {
+      ...status,
+      ok: stoppedNormally && fullyStopped,
+      state: stoppedNormally && fullyStopped ? "stopped" : "error",
+      stoppedAt: new Date().toISOString(),
+      stopReason: reason,
+      shutdownSurvivors,
+      error: fullyStopped
+        ? status.error
+        : `Owned Anti-Codex processes did not stop: ${shutdownSurvivors.join(", ")}`,
+    };
+    writeStatus(plan.paths.statusFile, status);
     await health.close().catch(() => {});
+    return { fullyStopped, shutdownSurvivors };
   };
+  requestShutdown = (reason) => cleanup(reason, { stopClient: true });
 
   const signalHandler = (signal) => {
     void cleanup(`signal_${signal.toLowerCase()}`, { stopClient: true })
@@ -224,40 +322,70 @@ async function runSupervisor(plan) {
     status.processes.managerService = process.pid;
     writeStatus(plan.paths.statusFile, status);
 
-    let catalog = null;
-    if (plan.provider === "antigravity") {
-      const client = createAntigravityCascadeClient();
-      const readiness = await client.getReadiness();
-      if (readiness?.signedIn !== true) throw new Error("Antigravity Desktop is not signed in.");
-      const availableModels = await client.listModels();
-      catalog = buildRuntimeCatalog(plan.paths.codexCli, availableModels);
-      if (!catalog.models.some((entry) => entry.slug === plan.model)) {
-        throw new Error(`Antigravity model is unavailable: ${plan.model}`);
+    const bundledCatalog = readBundledCatalog(plan.paths.codexCli);
+    const antigravityCatalogPath = join(plan.paths.codexHome, "antigravity-model-catalog.json");
+    const unifiedCatalogPath = join(plan.paths.codexHome, "anticodex-model-catalog.json");
+    const antigravityClient = createAntigravityCascadeClient();
+    let antigravityReady = false;
+    let antigravityCatalog = readCatalogSafely(antigravityCatalogPath) ?? { ...bundledCatalog, models: [] };
+    try {
+      const readiness = await antigravityClient.getReadiness();
+      antigravityReady = readiness?.signedIn === true;
+      if (antigravityReady) {
+        const availableModels = await antigravityClient.listModels();
+        antigravityCatalog = buildRuntimeCatalogFromBundled(bundledCatalog, availableModels);
+        writeTextAtomic(antigravityCatalogPath, `${JSON.stringify(antigravityCatalog, null, 2)}\n`);
       }
-      writeTextAtomic(join(plan.paths.codexHome, "antigravity-model-catalog.json"), `${JSON.stringify(catalog, null, 2)}\n`);
-      provider = await startAntigravityChatProvider({
-        client,
-        host: "127.0.0.1",
-        port: plan.ports.adapter,
-      });
-    } else if (plan.provider === "third-party") {
-      catalog = buildThirdPartyModelCatalog(readBundledCatalog(plan.paths.codexCli), plan.model);
-      writeTextAtomic(
-        join(plan.paths.codexHome, "third-party-model-catalog.json"),
-        `${JSON.stringify(catalog, null, 2)}\n`,
-      );
+    } catch (error) {
+      if (plan.provider === "antigravity") throw error;
     }
+    if (plan.provider === "antigravity" && !antigravityReady) {
+      throw new Error("Antigravity Desktop is not signed in.");
+    }
+    if (plan.provider === "antigravity"
+        && !antigravityCatalog.models.some((entry) => entry.slug === plan.model)) {
+      throw new Error(`Antigravity model is unavailable: ${plan.model}`);
+    }
+    provider = await startAntigravityChatProvider({
+      client: antigravityClient,
+      host: "127.0.0.1",
+      port: plan.ports.adapter,
+    });
+
+    const thirdPartyRoute = plan.relayRoutes.find((entry) => entry.profileId === THIRD_PARTY_RELAY_ID) ?? null;
+    const catalog = buildUnifiedModelCatalog(bundledCatalog, {
+      antigravityCatalog,
+      thirdPartyModel: thirdPartyRoute?.model,
+      thirdPartyModels: thirdPartyRoute?.model ? [thirdPartyRoute.model] : [],
+      thirdPartyContextWindow: thirdPartyRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+    });
+    writeTextAtomic(unifiedCatalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+
+    const antigravityModelIds = antigravityCatalog.models
+      .map((entry) => String(entry?.slug ?? "").trim())
+      .filter(Boolean);
+    const runtimeRelayRoutes = plan.relayRoutes.map((entry) => {
+      if (entry.profileId === ANTIGRAVITY_RELAY_ID) {
+        return { ...entry, relayModelList: [ANTIGRAVITY_MODEL_SLOT, ...antigravityModelIds] };
+      }
+      return {
+        ...entry,
+        relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(entry.model)],
+      };
+    });
+    const runtimeRoute = runtimeRelayRoutes.find((entry) => entry.profileId === plan.route.profileId);
 
     const configPath = join(plan.paths.codexHome, "config.toml");
     const existingConfig = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
-    const mergedConfig = mergeCodexRouteConfig(existingConfig, plan.route);
+    const mergedConfig = mergeCodexRouteConfig(existingConfig, runtimeRoute);
     const settings = buildCodexPlusPlusSettings({
-      route: { ...plan.route, config: mergedConfig },
+      route: { ...runtimeRoute, config: mergedConfig },
+      relayRoutes: runtimeRelayRoutes.map((entry) => ({ ...entry, config: mergedConfig })),
       userDataDir: plan.paths.electronUserData,
       disableGpu: truthy(plan.args.disableGpu ?? process.env.ANTICODEX_DISABLE_GPU),
     });
     writeTextAtomic(configPath, mergedConfig);
-    writeTextAtomic(join(plan.paths.codexHome, "auth.json"), plan.route.authContents);
+    writeTextAtomic(join(plan.paths.codexHome, "auth.json"), runtimeRoute.authContents);
     writeTextAtomic(join(plan.paths.codexPlusPlusState, "settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
 
     const childEnvironment = buildSupervisorChildEnvironment(plan, process.env);
@@ -274,26 +402,70 @@ async function runSupervisor(plan) {
     status.processes.codexPlusPlus = launcher.pid;
     writeStatus(plan.paths.statusFile, status);
 
-    const ready = await waitFor(async () => {
-      let clients;
-      try {
-        clients = getCopiedClientProcesses(plan.paths.appDir);
-      } catch {
-        return null;
-      }
+    await waitFor(async () => {
       if (launcher.exitCode !== null) {
-        if (!clients.length) throw new Error(`CodexPlusPlus exited before launch: ${launcher.exitCode}`);
+        throw new Error(`CodexPlusPlus protocol proxy exited before readiness: ${launcher.exitCode}`);
       }
-      for (const row of clients) ownedClients.add(row.processId);
-      if (!clients.length) return null;
-      const [proxyReady, cdpReady, selectedModelReady] = await Promise.all([
+      const [proxyReady, selectedModelReady] = await Promise.all([
         tcpReady(plan.ports.proxy),
-        cdpPageReady(plan.ports.cdp),
         plan.provider === "antigravity"
           ? proxyModelCatalogReady(plan.ports.proxy, plan.route.localProxyKey, plan.model)
           : Promise.resolve(true),
       ]);
-      return proxyReady && cdpReady && selectedModelReady ? clients : null;
+      return proxyReady && selectedModelReady ? true : null;
+    }, { timeoutMs: 90_000, intervalMs: 1_000, description: "fixed-route protocol proxy" });
+
+    if (plan.headless) {
+      status = {
+        ...status,
+        ok: true,
+        state: "ready",
+        readyAt: new Date().toISOString(),
+        headless: true,
+        antigravityReady,
+        catalogModelCount: catalog?.models?.length ?? null,
+        processes: {
+          managerService: process.pid,
+          codexPlusPlus: launcher.pid,
+          copiedClient: [],
+          managerWatcher: null,
+          managerBridge: null,
+        },
+      };
+      writeStatus(plan.paths.statusFile, status);
+
+      while (!closing) {
+        if (launcher.exitCode !== null) {
+          await cleanup("headless_proxy_exited");
+          break;
+        }
+        await sleep(1_000);
+      }
+      return { shutdownReason };
+    }
+
+    copiedClient = spawn(plan.paths.appExecutable, plan.clientArgs, {
+      cwd: plan.paths.appDir,
+      env: childEnvironment,
+      windowsHide: false,
+      stdio: "ignore",
+    });
+    ownedClients.add(copiedClient.pid);
+    status.processes.copiedClient = [copiedClient.pid];
+    writeStatus(plan.paths.statusFile, status);
+
+    const ready = await waitFor(async () => {
+      const processScan = scanCopiedClientProcessesSafely();
+      const clients = processScan.processes;
+      if (launcher.exitCode !== null) {
+        throw new Error(`CodexPlusPlus protocol proxy exited during client startup: ${launcher.exitCode}`);
+      }
+      if (copiedClient.exitCode !== null && processScan.ok && !clients.length) {
+        throw new Error(`Anti-Codex exited before readiness: ${copiedClient.exitCode}`);
+      }
+      for (const row of clients) ownedClients.add(row.processId);
+      const cdpReady = await cdpPageReady(plan.ports.cdp);
+      return cdpReady ? { clients, processScan } : null;
     }, { timeoutMs: 90_000, intervalMs: 1_000, description: "fixed-route Anti-Codex" });
 
     const management = startManagerSupport(plan, childEnvironment);
@@ -304,21 +476,33 @@ async function runSupervisor(plan) {
       ok: true,
       state: "ready",
       readyAt: new Date().toISOString(),
-      antigravityReady: plan.provider === "antigravity",
+      antigravityReady,
       catalogModelCount: catalog?.models?.length ?? null,
       processes: {
         managerService: process.pid,
         codexPlusPlus: launcher.pid,
-        copiedClient: ready.map((row) => row.processId),
+        copiedClient: ready.clients.map((row) => row.processId),
         managerWatcher: managerWatcher?.pid ?? null,
         managerBridge: managerBridge?.pid ?? null,
       },
     };
     writeStatus(plan.paths.statusFile, status);
 
+    let clientMissingSince = null;
     while (!closing) {
-      const liveClients = liveOwnedClientPids(ownedClients);
-      if (!liveClients.length) {
+      if (launcher.exitCode !== null) {
+        throw new Error(`CodexPlusPlus protocol proxy exited while Anti-Codex was running: ${launcher.exitCode}`);
+      }
+      const clientSession = await observeCopiedClientSession(ownedClients, {
+        isCdpReady: () => cdpPageReady(plan.ports.cdp),
+      });
+      const exitGrace = updateClientExitGrace(clientMissingSince, clientSession.ready);
+      clientMissingSince = exitGrace.missingSince;
+      if (clientSession.ownershipChanged) {
+        status.processes.copiedClient = clientSession.livePids;
+        writeStatus(plan.paths.statusFile, status);
+      }
+      if (exitGrace.expired) {
         await cleanup("client_exited");
         break;
       }
@@ -348,6 +532,7 @@ function parseArgs(argv) {
     ["--state-root", "stateRoot"],
     ["--provider", "provider"],
     ["--model", "model"],
+    ["--context-window", "contextWindow"],
     ["--proxy-port", "proxyPort"],
     ["--adapter-port", "adapterPort"],
     ["--cdp-port", "cdpPort"],
@@ -357,7 +542,7 @@ function parseArgs(argv) {
     ["--manager-guard-port", "managerGuardPort"],
     ["--manager-base-url", "managerBaseUrl"],
   ]);
-  const result = { planJson: false, disableGpu: false };
+  const result = { planJson: false, disableGpu: false, headless: false };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === "--plan-json") {
@@ -366,6 +551,10 @@ function parseArgs(argv) {
     }
     if (token === "--disable-gpu") {
       result.disableGpu = true;
+      continue;
+    }
+    if (token === "--headless") {
+      result.headless = true;
       continue;
     }
     const key = aliases.get(token);
@@ -389,7 +578,80 @@ function publicRoute(route) {
     codexPlusPlusUpstreamUrl: route.codexPlusPlusUpstreamUrl,
     profileId: route.profileId,
     profileName: route.profileName,
+    modelContextWindow: route.modelContextWindow,
+    modelAutoCompactTokenLimit: route.modelAutoCompactTokenLimit,
+    requestModelOverride: null,
   };
+}
+
+function configuredNativeModel(configPath) {
+  if (!existsSync(configPath)) return "";
+  try {
+    const source = readFileSync(configPath, "utf8").replaceAll("\r\n", "\n");
+    const root = source.split(/^\s*\[[^\]]+\]\s*$/m, 1)[0];
+    const match = /^\s*model\s*=\s*"([^"]+)"\s*(?:#.*)?$/m.exec(root);
+    return String(match?.[1] ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function runtimeRouteStatus(baseStatus, plan) {
+  if (!baseStatus || baseStatus.state !== "ready") return baseStatus;
+  try {
+    const settingsPath = join(plan.paths.codexPlusPlusState, "settings.json");
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    const profiles = Array.isArray(settings.relayProfiles) ? settings.relayProfiles : [];
+    const antigravity = profiles.find((entry) => entry?.id === ANTIGRAVITY_RELAY_ID) ?? null;
+    const thirdParty = profiles.find((entry) => entry?.id === THIRD_PARTY_RELAY_ID) ?? null;
+    const nativeModel = configuredNativeModel(join(plan.paths.codexHome, "config.toml"));
+    const antigravityModels = new Set(String(antigravity?.modelList ?? "")
+      .split(/[\r\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean));
+    let provider;
+    let model;
+    let profile;
+    if (nativeModel === THIRD_PARTY_MODEL_SLOT || nativeModel.startsWith(`${THIRD_PARTY_MODEL_SLOT}/`)) {
+      provider = "third-party";
+      model = nativeModel.startsWith(`${THIRD_PARTY_MODEL_SLOT}/`)
+        ? nativeModel.slice(THIRD_PARTY_MODEL_SLOT.length + 1)
+        : String(thirdParty?.testModel ?? "");
+      profile = thirdParty;
+    } else if (nativeModel === ANTIGRAVITY_MODEL_SLOT || antigravityModels.has(nativeModel)) {
+      provider = "antigravity";
+      model = nativeModel === ANTIGRAVITY_MODEL_SLOT
+        ? String(antigravity?.testModel ?? "")
+        : nativeModel;
+      profile = antigravity;
+    } else {
+      provider = settings.activeRelayId === THIRD_PARTY_RELAY_ID ? "third-party" : "antigravity";
+      profile = provider === "third-party" ? thirdParty : antigravity;
+      model = String(profile?.testModel ?? baseStatus.model ?? "");
+    }
+    if (!profile || !model) return baseStatus;
+    return {
+      ...baseStatus,
+      provider,
+      model,
+      modelContextWindow: provider === "third-party"
+        ? Number(profile.contextWindow || baseStatus.modelContextWindow || DEFAULT_THIRD_PARTY_CONTEXT_WINDOW)
+        : null,
+      route: {
+        ...baseStatus.route,
+        provider,
+        model,
+        profileId: profile.id,
+        profileName: profile.name,
+        relayProtocol: profile.protocol,
+        codexPlusPlusUpstreamUrl: profile.upstreamBaseUrl,
+        adapterEnabled: true,
+        requestModelOverride: null,
+      },
+    };
+  } catch {
+    return baseStatus;
+  }
 }
 
 function publicChildEnvironment(plan) {
@@ -465,9 +727,13 @@ export function assertProductionRoots(plan, env = process.env) {
 }
 
 function validateInstalledComponent(paths) {
-  const manifestPath = join(paths.installRoot, "components", "codexplusplus", "component-manifest.json");
+  const componentRoot = join(paths.installRoot, "components", "codexplusplus");
+  const manifestPath = join(componentRoot, "component-manifest.json");
+  const metadataPath = join(componentRoot, "upstream.json");
   if (!existsSync(manifestPath)) throw new Error(`CodexPlusPlus component manifest is missing: ${manifestPath}`);
+  if (!existsSync(metadataPath)) throw new Error(`CodexPlusPlus upstream metadata is missing: ${metadataPath}`);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
   if (manifest.schema !== COMPONENT_SCHEMA) throw new Error(`CodexPlusPlus component schema must be ${COMPONENT_SCHEMA}`);
   if (manifest.component !== "CodexPlusPlus" || manifest.license !== "AGPL-3.0-only") {
     throw new Error("CodexPlusPlus component identity or license metadata is invalid.");
@@ -478,8 +744,23 @@ function validateInstalledComponent(paths) {
   if (!/^[a-f0-9]{64}$/.test(expectedHash) || actualHash !== expectedHash) {
     throw new Error("CodexPlusPlus component binary hash mismatch.");
   }
-  if (!Array.isArray(manifest.patches) || manifest.patches.length !== 2) {
-    throw new Error("CodexPlusPlus component must contain the two accepted patches.");
+  const installedPatches = manifest.patches;
+  const acceptedPatches = metadata.patches;
+  if (!Array.isArray(installedPatches) || !Array.isArray(acceptedPatches)
+      || acceptedPatches.length === 0 || installedPatches.length !== acceptedPatches.length) {
+    throw new Error("CodexPlusPlus component patch set does not match the installed upstream metadata.");
+  }
+  for (let index = 0; index < acceptedPatches.length; index += 1) {
+    const installedPatch = installedPatches[index];
+    const acceptedPatch = acceptedPatches[index];
+    if (String(installedPatch?.file ?? "") !== String(acceptedPatch?.file ?? "")
+        || String(installedPatch?.sha256 ?? "").toLowerCase()
+          !== String(acceptedPatch?.sha256 ?? "").toLowerCase()) {
+      throw new Error("CodexPlusPlus component patch set does not match the installed upstream metadata.");
+    }
+  }
+  if (String(manifest.patchCommit ?? "") !== String(metadata.patchCommit ?? "")) {
+    throw new Error("CodexPlusPlus component patch commit does not match the installed upstream metadata.");
   }
   if (!existsSync(paths.appExecutable) || !existsSync(paths.codexCli)) {
     throw new Error("The copied Anti-Codex client or bundled Codex CLI is missing.");
@@ -508,28 +789,147 @@ function readBundledCatalog(codexCli) {
   }));
 }
 
-export function buildThirdPartyModelCatalog(bundled, model) {
+export function readCompatibilityModelAliases(catalogPaths) {
+  const aliases = [];
+  const seen = new Set();
+  for (const catalogPath of Array.isArray(catalogPaths) ? catalogPaths : []) {
+    if (!catalogPath || !existsSync(catalogPath)) continue;
+    try {
+      const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+      for (const entry of Array.isArray(catalog?.models) ? catalog.models : []) {
+        const modelId = String(entry?.slug ?? "").trim();
+        if (!modelId || seen.has(modelId)) continue;
+        seen.add(modelId);
+        aliases.push(modelId);
+      }
+    } catch {
+      // Compatibility state must never prevent the current provider from starting.
+    }
+  }
+  return aliases;
+}
+
+export function buildThirdPartyModelCatalog(
+  bundled,
+  model,
+  modelContextWindow = DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+  compatibilityModelAliases = [],
+) {
   const modelId = String(model ?? "").trim();
   if (!modelId) throw new Error("Third-party model is required for the compatibility catalog.");
-  const template = bundled.models?.find((entry) => entry.slug === "gpt-5.4") ?? bundled.models?.[0];
+  const safeContextWindow = contextWindow(modelContextWindow, DEFAULT_THIRD_PARTY_CONTEXT_WINDOW);
+  const template = selectNativeToolCatalogTemplate(bundled);
   if (!template) throw new Error("The copied Codex CLI returned no bundled model template.");
+  const modelIds = [];
+  const seen = new Set();
+  for (const candidate of [modelId, ...(Array.isArray(compatibilityModelAliases) ? compatibilityModelAliases : [])]) {
+    const candidateId = String(candidate ?? "").trim();
+    if (!candidateId || seen.has(candidateId)) continue;
+    seen.add(candidateId);
+    modelIds.push(candidateId);
+  }
   return {
     ...bundled,
-    models: [{
+    models: modelIds.map((candidateId, index) => ({
       ...template,
-      slug: modelId,
-      display_name: modelId,
-      description: `Third-party API model ${modelId}`,
-      priority: 0,
-      visibility: "list",
+      slug: candidateId,
+      display_name: candidateId,
+      description: index === 0
+        ? `Third-party API model ${modelId}`
+        : `Historical model compatibility alias routed to ${modelId}`,
+      priority: index === 0 ? 0 : 1_000 + index,
+      visibility: index === 0 ? "list" : "hide",
       supported_in_api: true,
-    }],
+      upgrade: null,
+      availability_nux: null,
+      context_window: safeContextWindow,
+      max_context_window: safeContextWindow,
+      effective_context_window_percent: 90,
+    })),
   };
 }
 
-function buildRuntimeCatalog(codexCli, availableModels) {
-  const bundled = readBundledCatalog(codexCli);
-  const template = bundled.models?.find((entry) => entry.slug === "gpt-5.4") ?? bundled.models?.[0];
+export function buildUnifiedModelCatalog(bundled, options = {}) {
+  const template = selectNativeToolCatalogTemplate(bundled);
+  if (!template) throw new Error("The copied Codex CLI returned no bundled model template.");
+  const antigravityCatalog = options.antigravityCatalog ?? { models: [] };
+  const antigravityModels = Array.isArray(antigravityCatalog.models)
+    ? antigravityCatalog.models
+    : [];
+  const thirdPartyContextWindow = contextWindow(
+    options.thirdPartyContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+    DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+  );
+  const thirdPartyModels = [];
+  const thirdPartySeen = new Set();
+  for (const value of [
+    options.thirdPartyModel,
+    ...(Array.isArray(options.thirdPartyModels) ? options.thirdPartyModels : []),
+  ]) {
+    const model = String(value ?? "").trim();
+    if (!model || thirdPartySeen.has(model)) continue;
+    thirdPartySeen.add(model);
+    thirdPartyModels.push(model);
+  }
+
+  const visibleModels = [];
+  const seenSlugs = new Set();
+  const add = (entry) => {
+    const slug = String(entry?.slug ?? "").trim();
+    if (!slug || seenSlugs.has(slug)) return;
+    seenSlugs.add(slug);
+    visibleModels.push({
+      ...entry,
+      slug,
+      visibility: "list",
+      supported_in_api: true,
+      upgrade: null,
+      availability_nux: null,
+      priority: visibleModels.length,
+    });
+  };
+  for (const entry of antigravityModels) add(entry);
+  for (const model of thirdPartyModels) {
+    add({
+      ...template,
+      slug: thirdPartyNativeModel(model),
+      display_name: `第三方 · ${model}`,
+      description: `第三方 API 模型 ${model}`,
+      context_window: thirdPartyContextWindow,
+      max_context_window: thirdPartyContextWindow,
+      effective_context_window_percent: 90,
+    });
+  }
+  add({
+    ...template,
+    slug: ANTIGRAVITY_MODEL_SLOT,
+    display_name: "Antigravity（当前模型）",
+    description: "使用管理页当前保存的 Antigravity 模型",
+  });
+  add({
+    ...template,
+    slug: THIRD_PARTY_MODEL_SLOT,
+    display_name: "第三方 API（当前模型）",
+    description: "使用管理页当前保存的第三方 API 模型",
+    context_window: thirdPartyContextWindow,
+    max_context_window: thirdPartyContextWindow,
+    effective_context_window_percent: 90,
+  });
+  return { ...bundled, models: visibleModels };
+}
+
+function readCatalogSafely(catalogPath) {
+  if (!catalogPath || !existsSync(catalogPath)) return null;
+  try {
+    const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+    return Array.isArray(catalog?.models) ? catalog : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildRuntimeCatalogFromBundled(bundled, availableModels) {
+  const template = selectNativeToolCatalogTemplate(bundled);
   if (!template) throw new Error("The copied Codex CLI returned no bundled model template.");
   return buildAntigravityModelCatalog(
     { ...bundled, models: [template] },
@@ -545,6 +945,28 @@ function buildRuntimeCatalog(codexCli, availableModels) {
       minThinkingBudget: entry.minThinkingBudget,
     })),
   );
+}
+
+function buildRuntimeCatalog(codexCli, availableModels) {
+  return buildRuntimeCatalogFromBundled(readBundledCatalog(codexCli), availableModels);
+}
+
+function selectNativeToolCatalogTemplate(bundled) {
+  const models = Array.isArray(bundled?.models) ? bundled.models : [];
+  const template = models.find((entry) => entry?.visibility === "list"
+      && entry?.supported_in_api !== false
+      && entry?.shell_type === "shell_command"
+      && entry?.apply_patch_tool_type === "freeform"
+      && entry?.tool_mode !== "code_mode_only")
+    ?? models.find((entry) => entry?.visibility === "list"
+      && entry?.supported_in_api !== false
+      && entry?.shell_type === "shell_command"
+      && entry?.apply_patch_tool_type === "freeform")
+    ?? models.find((entry) => entry?.visibility === "list" && entry?.supported_in_api !== false)
+    ?? models[0];
+  if (!template || template.tool_mode !== "code_mode_only") return template;
+  const { tool_mode: _codeModeOnly, ...unrestrictedTemplate } = template;
+  return unrestrictedTemplate;
 }
 
 function startManagerSupport(plan, childEnvironment) {
@@ -586,37 +1008,84 @@ function startManagerSupport(plan, childEnvironment) {
   return { watcher, bridge };
 }
 
-function getCopiedClientProcesses(appDir) {
-  if (process.platform !== "win32") return [];
-  const escapedRoot = resolve(appDir).replaceAll("'", "''");
-  const script = [
-    `$root = '${escapedRoot}'`,
-    "$rows = Get-CimInstance Win32_Process -Filter \"Name='Anti-Codex.exe'\" -ErrorAction SilentlyContinue | ForEach-Object {",
-    "  $path = [string]$_.ExecutablePath",
-    "  $line = [string]$_.CommandLine",
-    "  if ($path -and $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -and $line -notmatch '(?i)(^|\\s)--type=') {",
-    "    [pscustomobject]@{ processId = [int]$_.ProcessId; parentProcessId = [int]$_.ParentProcessId; executablePath = $path; commandLine = $line }",
-    "  }",
-    "}",
-    "ConvertTo-Json -InputObject @($rows) -Compress",
-  ].join("\n");
-  const output = execFileSync("powershell.exe", ["-NoProfile", "-Command", script], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 12_000,
-  });
-  const parsed = JSON.parse(output.trim() || "[]");
-  return Array.isArray(parsed) ? parsed : [parsed];
+export function parseTasklistAntiCodexProcesses(output) {
+  const rows = [];
+  for (const line of String(output ?? "").split(/\r?\n/)) {
+    const match = line.match(/^"Anti-Codex\.exe","(\d+)"(?:,|$)/i);
+    if (!match) continue;
+    const processId = Number(match[1]);
+    if (Number.isInteger(processId) && processId > 0) rows.push({ processId });
+  }
+  return rows;
 }
 
-function assertNoExistingClient(appDir) {
-  const existing = getCopiedClientProcesses(appDir);
-  return assertNoExistingClientProcesses(existing);
+export function scanCopiedClientProcessesSafely(scan = getCopiedClientProcesses) {
+  try {
+    return { ok: true, processes: scan(), error: null };
+  } catch (error) {
+    return {
+      ok: false,
+      processes: [],
+      error: String(error?.message ?? error),
+    };
+  }
+}
+
+function getCopiedClientProcesses() {
+  if (process.platform !== "win32") return [];
+  const output = execFileSync("tasklist.exe", [
+    "/FI", "IMAGENAME eq Anti-Codex.exe",
+    "/FO", "CSV",
+    "/NH",
+  ], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 5_000,
+  });
+  return parseTasklistAntiCodexProcesses(output);
+}
+
+function assertNoExistingClient() {
+  const scan = scanCopiedClientProcessesSafely();
+  if (scan.ok) assertNoExistingClientProcesses(scan.processes);
+  return scan;
 }
 
 export function liveOwnedClientPids(processIds = [], isAlive = ownerProcessIsAlive) {
   return [...new Set([...processIds].map(Number))]
     .filter((pid) => Number.isInteger(pid) && pid > 0 && isAlive(pid));
+}
+
+export async function observeCopiedClientSession(ownedClients, options = {}) {
+  if (!(ownedClients instanceof Set)) throw new TypeError("ownedClients must be a Set.");
+  const isAlive = options.isAlive ?? ownerProcessIsAlive;
+  const isCdpReady = options.isCdpReady ?? (() => Promise.resolve(false));
+
+  const liveOwned = liveOwnedClientPids(ownedClients, isAlive);
+  const ownershipChanged = liveOwned.length !== ownedClients.size;
+  for (const pid of [...ownedClients]) {
+    if (!liveOwned.includes(Number(pid))) ownedClients.delete(pid);
+  }
+  if (liveOwned.length > 0) {
+    return { ready: true, livePids: liveOwned, ownershipChanged, source: "owned" };
+  }
+
+  const cdpReady = await isCdpReady();
+  return {
+    ready: cdpReady === true,
+    livePids: [],
+    ownershipChanged,
+    source: cdpReady === true ? "cdp" : "missing",
+  };
+}
+
+export function updateClientExitGrace(missingSince, clientReady, now = Date.now(), graceMs = CLIENT_EXIT_GRACE_MS) {
+  if (clientReady) return { missingSince: null, expired: false };
+  const startedAt = missingSince ?? now;
+  return {
+    missingSince: startedAt,
+    expired: now - startedAt >= graceMs,
+  };
 }
 
 export function assertNoExistingClientProcesses(existing = []) {
@@ -626,9 +1095,22 @@ export function assertNoExistingClientProcesses(existing = []) {
   return true;
 }
 
-async function startHealthServer(healthPort, status) {
+export async function startHealthServer(healthPort, status, options = {}) {
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    if (request.method === "POST" && path === "/anticodex/fixed-route/shutdown") {
+      const expected = String(options.shutdownToken ?? "");
+      const authorization = String(request.headers.authorization ?? "");
+      if (!expected || authorization !== `Bearer ${expected}`) {
+        sendJson(response, 403, { ok: false, error: "forbidden" });
+        return;
+      }
+      sendJson(response, 202, { ok: true, state: "stopping" });
+      setImmediate(() => {
+        Promise.resolve(options.onShutdown?.("control_shutdown")).catch(() => {});
+      });
+      return;
+    }
     if (request.method !== "GET" || !["/health", "/anticodex/fixed-route/health"].includes(path)) {
       sendJson(response, 404, { ok: false, error: "not_found" });
       return;
@@ -640,7 +1122,10 @@ async function startHealthServer(healthPort, status) {
     server.once("error", reject);
     server.listen(healthPort, "127.0.0.1", resolveListen);
   });
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : healthPort;
   return {
+    url: `http://127.0.0.1:${port}`,
     close: () => new Promise((resolveClose, reject) => {
       server.close((error) => error ? reject(error) : resolveClose());
     }),
@@ -657,12 +1142,164 @@ function sendJson(response, statusCode, value) {
   response.end(body);
 }
 
-async function cdpPageReady(cdpPort) {
+class CdpProbeSocket {
+  constructor(url) {
+    this.url = new URL(url);
+    this.socket = null;
+    this.buffer = Buffer.alloc(0);
+    this.pending = new Map();
+  }
+
+  async open(timeoutMs = 1_500) {
+    if (this.url.protocol !== "ws:" || !["127.0.0.1", "localhost", "::1"].includes(this.url.hostname)) {
+      throw new Error("CDP renderer probe must use a loopback WebSocket.");
+    }
+    const key = randomBytes(16).toString("base64");
+    this.socket = connect({ host: this.url.hostname, port: Number(this.url.port) });
+    await new Promise((resolveOpen, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timed out opening the CDP renderer probe.")), timeoutMs);
+      const fail = (error) => {
+        clearTimeout(timer);
+        reject(error);
+      };
+      this.socket.once("error", fail);
+      this.socket.once("connect", () => {
+        this.socket.write([
+          `GET ${this.url.pathname}${this.url.search} HTTP/1.1`,
+          `Host: ${this.url.host}`,
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          `Sec-WebSocket-Key: ${key}`,
+          "Sec-WebSocket-Version: 13",
+          "",
+          "",
+        ].join("\r\n"));
+      });
+      const onHandshake = (chunk) => {
+        this.buffer = Buffer.concat([this.buffer, chunk]);
+        const split = this.buffer.indexOf("\r\n\r\n");
+        if (split === -1) return;
+        const header = this.buffer.slice(0, split).toString("utf8");
+        this.buffer = this.buffer.slice(split + 4);
+        this.socket.off("data", onHandshake);
+        this.socket.off("error", fail);
+        clearTimeout(timer);
+        if (!/^HTTP\/1\.1 101\b/.test(header)) {
+          reject(new Error(`CDP WebSocket upgrade failed: ${header.split("\r\n")[0]}`));
+          return;
+        }
+        this.socket.on("data", (data) => this.onData(data));
+        this.parseFrames();
+        resolveOpen();
+      };
+      this.socket.on("data", onHandshake);
+    });
+  }
+
+  onData(chunk) {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+    this.parseFrames();
+  }
+
+  parseFrames() {
+    while (this.buffer.length >= 2) {
+      const first = this.buffer[0];
+      const second = this.buffer[1];
+      let offset = 2;
+      let length = second & 0x7f;
+      if (length === 126) {
+        if (this.buffer.length < offset + 2) return;
+        length = this.buffer.readUInt16BE(offset);
+        offset += 2;
+      } else if (length === 127) {
+        if (this.buffer.length < offset + 8) return;
+        const high = this.buffer.readUInt32BE(offset);
+        const low = this.buffer.readUInt32BE(offset + 4);
+        if (high > 0x1fffff) throw new Error("CDP renderer response is too large.");
+        length = high * 0x100000000 + low;
+        offset += 8;
+      }
+      const masked = (second & 0x80) !== 0;
+      const maskLength = masked ? 4 : 0;
+      if (this.buffer.length < offset + maskLength + length) return;
+      let payload = this.buffer.slice(offset + maskLength, offset + maskLength + length);
+      if (masked) {
+        const mask = this.buffer.slice(offset, offset + 4);
+        payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
+      }
+      this.buffer = this.buffer.slice(offset + maskLength + length);
+      if ((first & 0x0f) !== 0x1) continue;
+      const message = JSON.parse(payload.toString("utf8"));
+      if (!message.id || !this.pending.has(message.id)) continue;
+      const pending = this.pending.get(message.id);
+      clearTimeout(pending.timer);
+      this.pending.delete(message.id);
+      if (message.error) pending.reject(new Error(JSON.stringify(message.error)));
+      else pending.resolve(message);
+    }
+  }
+
+  call(id, method, params, timeoutMs = 1_500) {
+    const payload = Buffer.from(JSON.stringify({ id, method, params }), "utf8");
+    const mask = randomBytes(4);
+    let header;
+    if (payload.length < 126) {
+      header = Buffer.from([0x81, 0x80 | payload.length]);
+    } else {
+      header = Buffer.alloc(4);
+      header[0] = 0x81;
+      header[1] = 0x80 | 126;
+      header.writeUInt16BE(payload.length, 2);
+    }
+    const masked = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
+    return new Promise((resolveCall, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Timed out waiting for ${method}.`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve: resolveCall, reject, timer });
+      this.socket.write(Buffer.concat([header, mask, masked]));
+    });
+  }
+
+  close() {
+    this.socket?.destroy();
+  }
+}
+
+async function cdpRendererReady(webSocketDebuggerUrl) {
+  const socket = new CdpProbeSocket(webSocketDebuggerUrl);
   try {
-    const response = await fetch(`http://127.0.0.1:${cdpPort}/json`, { signal: AbortSignal.timeout(1_500) });
+    await socket.open();
+    const result = await socket.call(1, "Runtime.evaluate", {
+      expression: `(() => {
+        if (document.readyState === "loading" || !document.body) return false;
+        const text = String(document.body.innerText || document.body.textContent || "").trim();
+        const interactive = document.body.querySelector('textarea, [contenteditable="true"], button, a, [role="button"], [role="link"]');
+        return text.length >= 8 && Boolean(interactive);
+      })()`,
+      returnByValue: true,
+    });
+    return result?.result?.result?.value === true;
+  } catch {
+    return false;
+  } finally {
+    socket.close();
+  }
+}
+
+export async function cdpPageReady(cdpPort, options = {}) {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const rendererProbe = options.rendererProbe ?? cdpRendererReady;
+  try {
+    const response = await fetchImpl(`http://127.0.0.1:${cdpPort}/json`, { signal: AbortSignal.timeout(1_500) });
     if (!response.ok) return false;
     const targets = await response.json();
-    return targets.some((target) => target?.type === "page" && target?.webSocketDebuggerUrl);
+    const pages = targets.filter((target) => target?.type === "page" && target?.webSocketDebuggerUrl);
+    for (const page of pages) {
+      if (await rendererProbe(page.webSocketDebuggerUrl)) return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -720,14 +1357,32 @@ function stopOwnedProcess(child) {
 function stopProcessTree(pid) {
   if (!Number.isInteger(Number(pid)) || Number(pid) <= 0) return;
   if (process.platform === "win32") {
-    spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
+    const result = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
       windowsHide: true,
-      timeout: 10_000,
+      timeout: 5_000,
       stdio: "ignore",
     });
+    if (result.status !== 0) {
+      try { process.kill(Number(pid), "SIGKILL"); } catch {}
+    }
   } else {
     try { process.kill(Number(pid), "SIGTERM"); } catch {}
   }
+}
+
+export async function waitForOwnedProcessExit(processIds = [], options = {}) {
+  const isAlive = options.isAlive ?? ownerProcessIsAlive;
+  const sleepFn = options.sleep ?? sleep;
+  const timeoutMs = Math.max(0, Number(options.timeoutMs ?? OWNED_PROCESS_STOP_WAIT_MS));
+  const intervalMs = Math.max(10, Number(options.intervalMs ?? 100));
+  const pids = [...new Set(processIds.map(Number).filter((pid) => Number.isInteger(pid) && pid > 0))];
+  const deadline = Date.now() + timeoutMs;
+  let survivors = pids.filter((pid) => isAlive(pid));
+  while (survivors.length > 0 && Date.now() < deadline) {
+    await sleepFn(Math.min(intervalMs, Math.max(1, deadline - Date.now())));
+    survivors = pids.filter((pid) => isAlive(pid));
+  }
+  return survivors;
 }
 
 function writeTextAtomic(path, text) {
@@ -755,6 +1410,14 @@ function port(value, fallback, name) {
   const number = Number(value ?? fallback);
   if (!Number.isInteger(number) || number < 1 || number > 65535) throw new Error(`${name} must be a valid TCP port`);
   return number;
+}
+
+function contextWindow(value, fallback) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < 16_000 || parsed > 4_000_000) {
+    throw new Error("context-window must be an integer between 16000 and 4000000");
+  }
+  return parsed;
 }
 
 function ensureUniquePorts(ports) {

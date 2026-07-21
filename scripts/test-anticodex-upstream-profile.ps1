@@ -60,7 +60,7 @@ try {
         throw "Missing target script: $ScriptPath"
     }
     New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
-    $storedFields = @("schemaVersion", "mode", "protocol", "baseUrl", "model", "lastTestStatus", "lastTestAt", "capabilities")
+    $storedFields = @("schemaVersion", "mode", "protocol", "baseUrl", "model", "contextWindow", "antigravityModel", "lastTestStatus", "lastTestAt", "capabilities")
     $publicFields = @($storedFields + @("keyConfigured", "keyHint"))
     $runtimeFields = @($storedFields + @("apiKey"))
     $historyPath = Join-Path $StateRoot "response-history.json"
@@ -70,6 +70,8 @@ try {
     # 1. Default Public Profile check
     $public = Invoke-ProfileJson -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
     Assert-Equal $public.mode "antigravity" "default mode"
+    Assert-Equal $public.contextWindow 272000 "default context window"
+    Assert-Equal $public.antigravityModel "" "default Antigravity model"
     Assert-Equal $public.keyConfigured $false "default keyConfigured"
     Assert-Equal $public.keyHint "" "default keyHint"
     Assert-OnlyProperties $public $publicFields "default public profile"
@@ -83,10 +85,12 @@ try {
 
     $publicFromOld = Invoke-ProfileJson -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
     Assert-Equal $publicFromOld.mode "antigravity" "public mode from old profile"
+    Assert-Equal $publicFromOld.contextWindow 272000 "old profile receives default context window"
     Assert-OnlyProperties $publicFromOld $publicFields "GetPublic from old profile"
 
     $runtimeFromOld = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
     Assert-Equal $runtimeFromOld.mode "antigravity" "runtime mode from old profile"
+    Assert-Equal $runtimeFromOld.contextWindow 272000 "old runtime profile receives default context window"
     Assert-OnlyProperties $runtimeFromOld $runtimeFields "GetRuntime from old profile"
 
     $corruptStateRoot = Join-Path $StateRoot "corrupt-profile"
@@ -107,6 +111,7 @@ try {
         Protocol = "openai-compatible"
         BaseUrl = "https://api.custom.example/v1/"
         Model = "custom-gpt"
+        ContextWindow = 128000
         ApiKey = "sk-proj-mysecretkey1234"
         TestStatus = "success"
         CapabilitiesJson = '{"stream":true,"toolCalls":true}'
@@ -115,6 +120,8 @@ try {
     Assert-Equal $saved.protocol "openai-compatible" "saved protocol"
     Assert-Equal $saved.baseUrl "https://api.custom.example/v1" "saved baseUrl trims slash"
     Assert-Equal $saved.model "custom-gpt" "saved model"
+    Assert-Equal $saved.contextWindow 128000 "saved context window"
+    Assert-Equal $saved.antigravityModel "" "third-party save preserves default Antigravity model"
     Assert-Equal $saved.lastTestStatus "success" "saved lastTestStatus"
     Assert-Equal $saved.keyConfigured $true "saved keyConfigured"
     Assert-Equal $saved.keyHint "sk-...1234" "saved keyHint"
@@ -125,7 +132,9 @@ try {
     if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) { Fail-Test "encrypted key was not written" }
 
     $jsonText = Get-Content -LiteralPath $profilePath -Raw
-    Assert-OnlyProperties ($jsonText | ConvertFrom-Json) $storedFields "saved profile json on disk"
+    $storedProfile = $jsonText | ConvertFrom-Json
+    Assert-OnlyProperties $storedProfile $storedFields "saved profile json on disk"
+    Assert-Equal $storedProfile.contextWindow 128000 "stored context window"
     if ($jsonText -match "sk-proj-mysecretkey1234") { Fail-Test "plain API key leaked to profile json" }
 
     $publicTextAfterSave = Invoke-Profile -Parameters @{ Action = "GetPublic"; StateRoot = $StateRoot }
@@ -136,6 +145,7 @@ try {
     $runtime = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
     Assert-Equal $runtime.mode "third-party" "runtime mode"
     Assert-Equal $runtime.apiKey "sk-proj-mysecretkey1234" "runtime apiKey"
+    Assert-Equal $runtime.contextWindow 128000 "runtime context window"
     Assert-OnlyProperties $runtime $runtimeFields "runtime profile after SaveThirdParty"
 
     # DPAPI corrupt / fail closed tests
@@ -188,6 +198,19 @@ try {
         TestStatus = "pending"
     })) { Fail-Test "Anthropic protocol must be rejected" }
 
+    foreach ($badContextWindow in @(15999, 4000001)) {
+        if (-not (Test-ProfileFails @{
+            Action = "SaveThirdParty"
+            StateRoot = $StateRoot
+            Protocol = "openai-compatible"
+            BaseUrl = "https://api.context.example/v1"
+            Model = "context-model"
+            ContextWindow = $badContextWindow
+            ApiKey = "sk-test"
+            TestStatus = "success"
+        })) { Fail-Test "invalid context window should fail: $badContextWindow" }
+    }
+
     $emptyStateRoot = Join-Path $StateRoot "empty"
     if (-not (Test-ProfileFails @{
         Action = "SaveThirdParty"
@@ -224,13 +247,17 @@ try {
         Assert-Equal $result.baseUrl $goodUrl "valid URL should save"
     }
 
-    $back = Invoke-ProfileJson -Parameters @{ Action = "UseAntigravity"; StateRoot = $StateRoot }
+    $back = Invoke-ProfileJson -Parameters @{ Action = "UseAntigravity"; StateRoot = $StateRoot; AntigravityModel = "claude-sonnet-4-6" }
     Assert-Equal $back.mode "antigravity" "UseAntigravity mode"
+    Assert-Equal $back.antigravityModel "claude-sonnet-4-6" "UseAntigravity persists selected model"
     Assert-Equal $back.protocol "openai-compatible" "UseAntigravity preserves protocol"
     Assert-Equal $back.baseUrl "http://[::1]:8080" "UseAntigravity preserves baseUrl"
     Assert-Equal $back.model "m" "UseAntigravity preserves model"
     Assert-Equal $back.keyConfigured $true "UseAntigravity preserves key state"
     Assert-OnlyProperties $back $publicFields "UseAntigravity profile preserves third-party info"
+
+    $runtimeBack = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
+    Assert-Equal $runtimeBack.antigravityModel "claude-sonnet-4-6" "runtime exposes selected Antigravity model"
 
     Assert-Equal (Get-Content -LiteralPath $historyPath -Raw) $historyMarker "provider switching preserves response history"
 

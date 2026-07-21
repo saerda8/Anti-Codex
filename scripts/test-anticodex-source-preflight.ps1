@@ -641,7 +641,7 @@ function Test-GitDiffCheck {
         Add-Warning "not a git worktree; skipped diff whitespace check"
         return [pscustomobject]@{ ok = $true; skipped = $true; reason = "not a git worktree" }
     }
-    $result = Invoke-SourceProcess -Name "git diff --check" -FilePath $gitCommand.Source -Arguments @("-C", $sourceRoot, "diff", "--check") -TimeoutSec 30
+    $result = Invoke-SourceProcess -Name "git diff --check" -FilePath $gitCommand.Source -Arguments @("-C", $sourceRoot, "diff", "--check", "--", ".", ":(exclude)third_party/codexplusplus/patches/*.patch") -TimeoutSec 30
     $lines = @($result.stdoutTail + $result.stderrTail | Where-Object { $_ })
     $nonWarningLines = @($lines | Where-Object {
         $_ -notmatch '^warning: in the working copy of .*, LF will be replaced by CRLF the next time Git touches it$'

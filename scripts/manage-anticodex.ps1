@@ -99,7 +99,7 @@ function Start-AntiCodexGatewayAndWait {
 
     try {
         Start-Process -FilePath $powerShell `
-            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $launcher, "-SkipUpdateCheck") `
+            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $launcher, "-SkipUpdateCheck", "-InlineSupervisor") `
             -WindowStyle Hidden | Out-Null
     } catch {
         $script:LastManagerGatewayError = " 正式启动路线恢复失败：$($_.Exception.Message)"
@@ -115,7 +115,7 @@ function Start-AntiCodexAndWait {
     )
     $health = Get-ManagerHealthSnapshot -BaseUrl $BaseUrl -TimeoutSec 2
     if ($health -and $health.ok -eq $true) { return $health }
-    Start-ManagerScript "start-anticodex.ps1"
+    Start-ManagerScript "start-anticodex.ps1" -Arguments @("-InlineSupervisor")
     return Wait-ManagerHealth -BaseUrl $BaseUrl -TimeoutSeconds $TimeoutSeconds
 }
 
@@ -659,7 +659,7 @@ function Open-AntiCodexManagerPanel {
     $port = Get-AntiCodexDebugPort
     if (-not $port -and $health -and $health.ok -eq $true) {
         # Gateway is healthy; launch the full desktop window for CDP injection
-        Start-ManagerScript "start-anticodex.ps1"
+        Start-ManagerScript "start-anticodex.ps1" -Arguments @("-InlineSupervisor")
         $port = Wait-AntiCodexDebugPort
     } elseif (-not $port) {
         $port = Wait-AntiCodexDebugPort
@@ -673,7 +673,7 @@ function Open-AntiCodexManagerPanel {
             if ((Test-Path -LiteralPath $injector -PathType Leaf) -and (Test-Path -LiteralPath $managerInject -PathType Leaf) -and (Test-Path -LiteralPath $opener -PathType Leaf)) {
                 $previousManagerApi = $env:ANTICODEX_MANAGER_API
                 $env:ANTICODEX_MANAGER_API = $baseUrl
-                    # Step 1: inject the latest native-panel-v105 manager script
+                    # Step 1: inject the latest native-panel-v107 manager script
                 $installOutput = @(& $node $injector "$port" $managerInject 2>&1)
                 $installExitCode = $LASTEXITCODE
                 if ($installExitCode -eq 0) {
@@ -872,7 +872,7 @@ Add-ManagerButton "打开 Anti-Codex" 24 202 {
     # Bounded gateway recovery: start only the translator, then launch the full desktop
     $health = Start-AntiCodexGatewayAndWait -BaseUrl $baseUrl -TimeoutSeconds 25
     if ($health -and $health.ok -eq $true) {
-        Start-ManagerScript "start-anticodex.ps1"
+        Start-ManagerScript "start-anticodex.ps1" -Arguments @("-InlineSupervisor")
         return "Anti-Codex 已打开，本地网关已就绪。"
     }
     return "Anti-Codex 已启动，但本地网关还没就绪。请稍等后点刷新状态。$script:LastManagerGatewayError"

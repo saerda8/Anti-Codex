@@ -9,6 +9,44 @@ import { resolve } from "node:path";
 const projectRoot = resolve(import.meta.dirname, "../..");
 const targetModule = resolve(projectRoot, "scripts", "anticodex-update-status.psm1");
 const updateChecker = resolve(projectRoot, "scripts", "check-anticodex-update.ps1");
+const installer = resolve(projectRoot, "scripts", "install-anticodex.ps1");
+const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
+
+test("installer and host sync delegate Appx work when hosted by PowerShell Core", () => {
+  for (const scriptPath of [installer, hostSync]) {
+    const script = fs.readFileSync(scriptPath, "utf8");
+    assert.match(script, /\$PSVersionTable\.PSEdition\s+-eq\s+["']Core["']/);
+    assert.match(script, /\[Environment\]::SystemDirectory/);
+    assert.match(script, /WindowsPowerShell\\v1\.0\\powershell\.exe/);
+    assert.match(script, /\$PSCommandPath/);
+    assert.match(script, /\$delegateExitCode\s+-ne\s+0/);
+  }
+});
+
+test("update checker delegates Appx discovery when hosted by PowerShell Core", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  assert.match(checker, /\$PSVersionTable\.PSEdition\s+-eq\s+["']Core["']/);
+  assert.match(checker, /\[Environment\]::SystemDirectory/);
+  assert.match(checker, /WindowsPowerShell\\v1\.0\\powershell\.exe/);
+  assert.match(checker, /\$PSCommandPath/);
+  assert.match(checker, /-NoPersist/);
+});
+
+test("update checker hashes files without PowerShell module autoloading", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  assert.match(checker, /\[Security\.Cryptography\.SHA256\]::Create\(\)/);
+  assert.match(checker, /\[BitConverter\]::ToString\(\$hash\)\.Replace\("-", ""\)/);
+  assert.doesNotMatch(checker, /Get-FileHash/);
+});
+
+test("official package version drift forces a shell sync even when host hashes match", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  assert.match(checker, /Get-AppxPackage[\s\S]{0,180}Sort-Object\s+Version\s+-Descending/);
+  assert.match(checker, /\$packageVersionChanged\s*=\s*\[bool\]/);
+  assert.match(checker, /\$updateNeeded[\s\S]{0,220}\$packageVersionChanged/);
+  assert.match(checker, /"source_package_version_changed"/);
+  assert.match(checker, /\$sourceFingerprint[\s\S]{0,220}\$source\.packageVersion/);
+});
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex").toUpperCase();
@@ -357,7 +395,7 @@ test("RED: cached up-to-date update check still depends on active manifest, bran
   assert.match(cachedGate, /\$cachedStatus/);
   assert.match(cachedGate, /\$activeGuardrails\.ok\s+-eq\s+\$true/);
   assert.match(checker, /\$guardrailDrift\s*=\s*\[bool\]\(\$source\s+-and\s+\$comparable\s+-and\s+\$activeGuardrails\.ok\s+-ne\s+\$true\)/);
-  assert.match(checker, /\$updateNeeded\s*=\s*\[bool\]\(\$comparable\s+-and\s+\(\$hostChanged\s+-or\s+\$cliChanged\s+-or\s+\$guardrailDrift\)\)/);
+  assert.match(checker, /\$updateNeeded\s*=\s*\[bool\]\(\$comparable\s+-and\s+\(\$hostChanged\s+-or\s+\$cliChanged\s+-or\s+\$packageVersionChanged\s+-or\s+\$guardrailDrift\s+-or\s+\$componentDrift\)\)/);
 
   const guardrailStart = checker.indexOf("function Test-ActiveHostGuardrails");
   assert.notEqual(guardrailStart, -1, "active guardrail function must exist");
@@ -417,12 +455,20 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
 test("RED: sync script records persistent lifecycle stages and terminal states", () => {
   const syncScript = fs.readFileSync(resolve(projectRoot, "scripts", "sync-anticodex.ps1"), "utf8");
   assert.match(syncScript, /Import-Module[^\r\n]*anticodex-update-status\.psm1/);
-  for (const stage of ["candidate_build", "candidate_validation", "stopping_host", "activation", "feature_refresh", "restart", "acceptance"]) {
+  for (const stage of ["candidate_build", "component_candidate", "candidate_validation", "stopping_host", "activation", "feature_refresh", "restart", "acceptance"]) {
     assert.match(syncScript, new RegExp(`Set-AntiCodexUpdateOperation[^\\r\\n]*-Stage ["']${stage}["']`));
   }
   for (const state of ["succeeded", "failed", "rolled_back"]) {
     assert.match(syncScript, new RegExp(`Set-AntiCodexUpdateOperation[^\\r\\n]*-State ["']${state}["']`));
   }
+});
+
+test("host sync has an explicit no-restart maintenance mode with offline acceptance", () => {
+  const syncScript = fs.readFileSync(resolve(projectRoot, "scripts", "sync-anticodex.ps1"), "utf8");
+  assert.match(syncScript, /\[switch\]\$NoRestart/);
+  assert.match(syncScript, /if\s*\(\$NoRestart\)\s*\{[\s\S]*?\$updateChecker[\s\S]*?-NoPersist/);
+  assert.match(syncScript, /if\s*\(-not\s+\$NoRestart\)\s*\{[\s\S]*?Start-AntiCodexAfterSync/);
+  assert.match(syncScript, /synced_without_restart/);
 });
 
 test("RED: rollback script records persistent lifecycle and terminal states", () => {

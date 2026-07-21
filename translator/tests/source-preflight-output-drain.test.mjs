@@ -10,3 +10,9 @@ test("source preflight drains redirected process output before reading report ta
   assert.ok(waitForExit >= 0, "external process output is not drained");
   assert.ok(readStdout > waitForExit, "redirected output is read before WaitForExit drains it");
 });
+
+test("source preflight leaves patch-format whitespace to hash and replay verification", async () => {
+  const source = await readFile(new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url), "utf8");
+
+  assert.match(source, /diff", "--check", "--", "\.", ":\(exclude\)third_party\/codexplusplus\/patches\/\*\.patch"/);
+});

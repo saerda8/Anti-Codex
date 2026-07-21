@@ -44,7 +44,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 Options:
   --allow-real-traffic  Run real desktop journeys (default: dry-run)
   --journey <ids>       Comma-separated journey ids (default: all)
-  --model <id>          Antigravity model override (default: current fixed-route model)
+  --model <id>          Model override (default: current fixed-route model)
   --timeout-ms <ms>     Per desktop turn timeout (default: 300000)
   --report-root <path>  Report directory
   --revalidate-report <path>  Recompute derived checks from one signed retained report; no model traffic
@@ -78,6 +78,7 @@ const timeoutMs = Math.max(60_000, Number(args.get("--timeout-ms") || 300_000));
 const startedAt = Date.now();
 const runId = Date.now();
 const allJourneyIds = ["messy-inventory-four-turn", "interrupted-migration-three-turn", "greenfield-project-three-turn"];
+const supportedFixedRouteProviders = new Set(["antigravity", "third-party"]);
 const requestedJourneyIds = String(args.get("--journey") || "")
   .split(",")
   .map((value) => value.trim())
@@ -87,6 +88,7 @@ const unknownJourneyIds = journeyIds.filter((id) => !allJourneyIds.includes(id))
 if (unknownJourneyIds.length > 0) throw new Error(`unknown journey id(s): ${unknownJourneyIds.join(", ")}`);
 const terminalProviderGate = createTerminalProviderStopGate();
 const observedTurnsByJourney = new Map();
+let noTrafficStop = null;
 
 function compactText(value, max = 1800) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
@@ -449,6 +451,17 @@ function runUiTurn({
     retainJourneyTurnEvidence(observedTurnsByJourney.get(journeyId) || [], turn),
   );
   terminalProviderGate.observe(turn);
+  if (turn.usedRealTraffic !== true) {
+    noTrafficStop = {
+      journeyId,
+      turnId,
+      failures: turn.failures,
+      reason: "desktop turn stopped before a model request was proven",
+    };
+    const error = new Error(`${turnId} stopped before real traffic; refusing automatic repair turns`);
+    error.noTrafficStop = noTrafficStop;
+    throw error;
+  }
   return turn;
 }
 
@@ -2052,6 +2065,7 @@ let matrixRoot = "";
 let journeys = [];
 let workspaceStateSnapshotPath = "";
 let workspaceRestore = null;
+let fixedRouteProvider = "";
 
 async function runHumanLongJourney() {
   const fixedRouteHealth = await fetchJsonWithRetry(
@@ -2059,9 +2073,9 @@ async function runHumanLongJourney() {
     "http://127.0.0.1:18487/anticodex/fixed-route/health",
     { attempts: 3, delayMs: 300, timeoutMs: 8_000 },
   );
-  const fixedRouteProvider = String(fixedRouteHealth?.route?.provider || fixedRouteHealth?.provider || "");
-  if (fixedRouteHealth?.ok !== true || fixedRouteHealth?.state !== "ready" || fixedRouteProvider !== "antigravity") {
-    throw new Error("fixed Antigravity route is not ready for a real human journey");
+  fixedRouteProvider = String(fixedRouteHealth?.route?.provider || fixedRouteHealth?.provider || "");
+  if (fixedRouteHealth?.ok !== true || fixedRouteHealth?.state !== "ready" || !supportedFixedRouteProviders.has(fixedRouteProvider)) {
+    throw new Error("supported fixed route is not ready for a real human journey");
   }
   model = resolveFixedRouteModel(fixedRouteHealth, model);
 
@@ -2107,7 +2121,7 @@ async function runHumanLongJourney() {
           terminalProviderStop: terminalProviderStop || null,
         });
       }
-      if (terminalProviderGate.failure) break;
+      if (terminalProviderGate.failure || noTrafficStop) break;
     }
   } finally {
     humanPhase = "workspace-state-restore";
@@ -2133,6 +2147,7 @@ async function runHumanLongJourney() {
     behaviorCovered: ok,
     coverageKind: "desktop-ui-real-human-long-journey",
     model,
+    fixedRouteProvider,
     elapsedMs: Date.now() - startedAt,
     failures,
     journeyIds,
@@ -2143,6 +2158,8 @@ async function runHumanLongJourney() {
     resultValidatedJourneyCount: journeys.filter((journey) => journey.ok && journey.artifactEvidence).length,
     stoppedAfterTerminalProviderFailure: terminalProviderGate.failure !== null,
     terminalProviderStop: terminalProviderGate.failure,
+    stoppedAfterNoTrafficFailure: noTrafficStop !== null,
+    noTrafficStop,
     journeys,
     fixtureRoot: matrixRoot,
     workspaceRestore,
@@ -2170,6 +2187,7 @@ try {
     behaviorCovered: false,
     coverageKind: "desktop-ui-real-human-long-journey",
     model,
+    fixedRouteProvider,
     elapsedMs: Date.now() - startedAt,
     failureStage: humanPhase,
     failures: [failureMessage],
@@ -2181,6 +2199,8 @@ try {
     resultValidatedJourneyCount: 0,
     stoppedAfterTerminalProviderFailure: terminalProviderGate.failure !== null,
     terminalProviderStop: terminalProviderGate.failure,
+    stoppedAfterNoTrafficFailure: noTrafficStop !== null,
+    noTrafficStop,
     journeys,
     fixtureRoot: matrixRoot,
     workspaceRestore,

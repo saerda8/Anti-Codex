@@ -5,6 +5,109 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const repairScript = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
+const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
+const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+const launchTask = readFileSync(resolve(root, "scripts", "start-anticodex-task.mjs"), "utf8");
+const consoleHideScript = readFileSync(resolve(root, "scripts", "hide-anticodex-console.ps1"), "utf8");
+
+test("shortcut repair resolves PowerShell without relying on a populated WINDIR", () => {
+  assert.match(repairScript, /\[Environment\]::SystemDirectory/);
+  assert.doesNotMatch(repairScript, /\$env:WINDIR/);
+});
+
+test("interactive Anti-Codex shortcuts use an isolated Windows task broker", () => {
+  const mainSpecs = repairScript.match(/\$shortcutSpecs\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  const interactiveSpecs = mainSpecs.split(/\r?\n/).filter((entry) => /-UseLaunchTask\b/.test(entry));
+  assert.equal(interactiveSpecs.length, 2);
+  assert.ok(interactiveSpecs.every((entry) => /-UseLaunchTask\b/.test(entry)));
+  assert.doesNotMatch(mainSpecs, /KeepLauncherAlive|Anti-Codex Launcher\.exe/);
+  assert.doesNotMatch(repairScript, /Register-ScheduledTask/);
+  assert.match(repairScript, /\/Create[\s\S]*\/XML[\s\S]*\/F/);
+  assert.match(repairScript, /Remove-Item -LiteralPath \$taskXmlPath -Force/);
+  assert.match(repairScript, /<LogonType>InteractiveToken<\/LogonType>/);
+  assert.match(repairScript, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
+  assert.match(repairScript, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
+  assert.match(repairScript, /<RestartOnFailure>[\s\S]*?<Interval>PT1M<\/Interval>[\s\S]*?<Count>1<\/Count>[\s\S]*?<\/RestartOnFailure>/);
+  assert.match(repairScript, /\$task\.Settings\.RestartCount\s+-eq\s+1/);
+  assert.match(repairScript, /\[string\]\$task\.Settings\.RestartInterval\s+-eq\s+"PT1M"/);
+  assert.match(repairScript, /<Command>\$nodeXml<\/Command>/);
+  assert.match(repairScript, /\$launchTaskActionArguments\s*=\s*"`"\$launchTaskScript`" --hide-console"/);
+  assert.doesNotMatch(repairScript, /New-ScheduledTaskAction/);
+  assert.match(repairScript, /\$shortcut\.TargetPath\s*=\s*\[string\]\$Spec\.expectedTarget/);
+  assert.match(repairScript, /schtasks\.exe/);
+  assert.match(repairScript, /Start-ScheduledTask -TaskName/);
+  assert.match(repairScript, /-WindowStyle Hidden/);
+  assert.doesNotMatch(repairScript, /\/Run \/TN/);
+  assert.match(repairScript, /expectedArguments/);
+  assert.match(launchTask, /start-anticodex-fixed-route\.mjs/);
+  assert.match(launchTask, /spawn\(process\.execPath, plan\.supervisorArgs/);
+  assert.doesNotMatch(repairScript, /<Command>\$powershell/);
+  assert.match(launchTask, /hide-anticodex-console\.ps1/);
+  assert.match(launchTask, /spawnSync\(powershell/);
+  assert.match(consoleHideScript, /AttachConsole/);
+  assert.match(consoleHideScript, /ShowWindow/);
+  assert.match(repairScript, /mode = "scheduled-task-broker"/);
+});
+
+test("interactive startup rejects only a verified Codex-owned parent chain", () => {
+  assert.match(startScript, /IsProcessInJob\(GetCurrentProcess\(\), IntPtr\.Zero, out result\)/);
+  assert.match(startScript, /Get-CimInstance Win32_Process/);
+  assert.match(startScript, /OpenAI\\\.Codex_/);
+  assert.match(startScript, /\$processName -ieq "codex\.exe"/);
+  assert.match(startScript, /\$inspectedAncestorCount\s*=\s*0/);
+  assert.match(startScript, /if \(\$lookupFailed -and \$inspectedAncestorCount -eq 0\)[\s\S]*IsCurrentProcessInJob/);
+  assert.match(startScript, /if \(Test-AntiCodexManagedLaunchBoundary\)/);
+  assert.doesNotMatch(startScript, /-not \$InlineSupervisor -and \(Test-AntiCodexManagedLaunchBoundary\)/);
+  assert.match(startScript, /Use the Anti-Codex desktop shortcut so it cannot share Codex process ownership/);
+});
+
+test("shortcut refresh stages a unique link before replacing the visible entry", () => {
+  assert.match(repairScript, /Get-AntiCodexShortcutEvidence -Spec \$Spec/);
+  assert.match(repairScript, /if \(\$existingEvidence -and \$existingEvidence\.ok\) \{ return \$existingEvidence \}/);
+  assert.match(repairScript, /\$pendingShortcut\s*=\s*Join-Path \$parent/);
+  assert.match(repairScript, /\.pending\." \+ \[Guid\]::NewGuid\(\)\.ToString\("N"\)/);
+  assert.match(repairScript, /\[IO\.File\]::Copy\(\$pendingShortcut, \$shortcutPath, \$true\)/);
+  assert.match(repairScript, /for \(\$attempt = 0; \$attempt -lt 10/);
+  assert.match(repairScript, /FinalReleaseComObject\(\$shortcut\)/);
+});
+
+test("sync readiness verifies the isolated task broker for interactive shortcuts", () => {
+  assert.doesNotMatch(syncReadiness, /ExpectedNativeLauncher|Anti-Codex Launcher\.exe/);
+  assert.match(syncReadiness, /Get-ScheduledTask/);
+  assert.match(syncReadiness, /\$actualExecute\s+-ieq\s+\$node/);
+  assert.match(syncReadiness, /expectedTarget = \$powershell/);
+  assert.match(syncReadiness, /launchMode = if \(\$UseLaunchTask\) \{ "scheduled-task" \}/);
+  assert.match(syncReadiness, /expectedLauncherTarget = \$ExpectedScript/);
+  assert.match(syncReadiness, /expectedArguments/);
+  assert.match(syncReadiness, /argumentsMatches/);
+  assert.match(syncReadiness, /-InlineSupervisor/);
+  assert.match(syncReadiness, /\$target -ieq \[string\]\$Spec\.expectedTarget/);
+  assert.match(syncReadiness, /\$actualLauncherTarget\s+-ieq\s+\[string\]\$Spec\.expectedLauncherTarget/);
+});
+test("runtime sync removes the retired native bootstrap source", () => {
+  const requiredList = runtimeSync.match(/\$requiredSourceFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  assert.doesNotMatch(requiredList, /AntiCodexLauncher\.cs/);
+  const legacyList = runtimeSync.match(/\$legacyRuntimeFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  assert.match(legacyList, /scripts\\AntiCodexLauncher\.cs/);
+  assert.match(legacyList, /scripts\\start-anticodex-task-hidden\.vbs/);
+  assert.match(legacyList, /scripts\\start-anticodex-task-hidden\.ps1/);
+  assert.match(requiredList, /scripts\\repair-anticodex-shortcuts\.ps1/);
+  assert.match(requiredList, /scripts\\hide-anticodex-console\.ps1/);
+  assert.match(requiredList, /scripts\\start-anticodex-task\.mjs/);
+});
+
+test("install and runtime sync both rebuild shortcuts through the canonical repair script", () => {
+  assert.match(installer, /repair-anticodex-shortcuts\.ps1/);
+  assert.match(installer, /hide-anticodex-console\.ps1/);
+  assert.match(runtimeSync, /repair-anticodex-shortcuts\.ps1/);
+  assert.match(runtimeSync, /shortcutRepairResult\.ok/);
+
+  const installShortcutBlock = installer.match(/if \(-not \$HostOnly\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.doesNotMatch(installShortcutBlock, /CreateShortcut/);
+  assert.doesNotMatch(installShortcutBlock, /TargetPath\s*=\s*\$powershell/);
+});
 
 function extractPowerShellStringArray(source, variableName) {
   const marker = `$${variableName} = @(`;
@@ -18,14 +121,23 @@ function extractPowerShellStringArray(source, variableName) {
 test("shortcut repair searches known Codex and DeepCodex residual shortcut names", () => {
   const names = extractPowerShellStringArray(repairScript, "residualShortcutNames");
 
+  assert.ok(names.includes("Anti-Codex.lnk"));
   assert.ok(names.includes("Codex.lnk"));
   assert.ok(names.includes("Codex Desktop.lnk"));
   assert.ok(names.includes("DeepCodex.lnk"));
   assert.ok(names.includes("DeepCodex Desktop.lnk"));
-  assert.ok(!names.includes("Anti-Codex.lnk"));
   assert.ok(!names.includes("Sync Anti-Codex with Codex.lnk"));
   assert.ok(!names.includes("Rollback Anti-Codex.lnk"));
   assert.ok(!names.includes("Manage Anti-Codex.lnk"));
+});
+
+test("shortcut repair removes the unprotected root Start Menu Anti-Codex bypass only with ownership evidence", () => {
+  assert.match(
+    repairScript,
+    /\[pscustomobject\]@\{ path = \$programs; location = "start-menu-root"; removeCodexByName = \$false \}/,
+  );
+  assert.match(repairScript, /"Anti-Codex\.lnk"/);
+  assert.match(repairScript, /\[bool\]\$info\.ownedByAntiCodexOrDeepCodex/);
 });
 
 test("shortcut repair protects official Anti-Codex entries before deleting residual shortcuts", () => {
