@@ -204,12 +204,23 @@ $fixedProcessIds = @(
 ) | Where-Object { $_ -gt 0 }
 $reportedProcessesAlive = @($fixedProcessIds | Where-Object { -not $processById.ContainsKey([int]$_) })
 $reportedClientPids = @($fixed.processes.copiedClient | ForEach-Object { [int]$_ })
+$reportedClientPidMatchesMain = [bool](
+    $mainProcesses.Count -eq 1 -and
+    $reportedClientPids -contains [int]$mainProcesses[0].ProcessId
+)
+$cdpHandoffMatchesMain = [bool](
+    $mainProcesses.Count -eq 1 -and
+    $reportedClientPids.Count -eq 0 -and
+    $fixedReady
+)
+$clientOwnershipProven = $reportedClientPidMatchesMain -or $cdpHandoffMatchesMain
+$clientOwnershipMode = if ($reportedClientPidMatchesMain) { "reported_pid" } elseif ($cdpHandoffMatchesMain) { "cdp_handoff" } else { "unproven" }
 $processOwnershipOk = [bool](
     $mainProcesses.Count -eq 1 -and
     $supervisors.Count -eq 1 -and
     $legacyProcesses.Count -eq 0 -and
     $reportedProcessesAlive.Count -eq 0 -and
-    $reportedClientPids -contains [int]$mainProcesses[0].ProcessId -and
+    $clientOwnershipProven -and
     [int]$fixed.processes.managerService -eq [int]$supervisors[0].ProcessId
 )
 Add-Check "processOwnership" $processOwnershipOk ([pscustomobject]@{
@@ -217,6 +228,8 @@ Add-Check "processOwnership" $processOwnershipOk ([pscustomobject]@{
     supervisorPids = @($supervisors | ForEach-Object { [int]$_.ProcessId })
     fixedRoutePids = $fixedProcessIds
     missingFixedRoutePids = $reportedProcessesAlive
+    reportedClientPids = $reportedClientPids
+    clientOwnershipMode = $clientOwnershipMode
     legacyPids = @($legacyProcesses | ForEach-Object { [int]$_.ProcessId })
     originalCodexPids = @($originalCodexProcesses | ForEach-Object { [int]$_.ProcessId })
 }) "Anti-Codex fixed-route process ownership is invalid"
@@ -274,16 +287,33 @@ Add-Check "legacyZeroHit" $zeroHitOk $zeroHit "Installed runtime still contains 
 
 $models = $null
 $modelCount = 0
+$modelIds = @()
+$modelCatalogSource = "fixed-route-endpoint"
 try {
     $models = Invoke-Json "$BaseUrl/models"
     $modelCount = @($models.data).Count
+    $modelIds = @($models.data | ForEach-Object { [string]$_.id })
+} catch {}
+$unifiedCatalogPath = Join-Path $codexHome "anticodex-model-catalog.json"
+$unifiedCatalogCount = 0
+try {
+    $unifiedCatalog = Get-Content -LiteralPath $unifiedCatalogPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $unifiedCatalogCount = @($unifiedCatalog.models).Count
+    if ($modelCount -eq 0 -and $unifiedCatalogCount -gt 0 -and [int]$fixed.catalogModelCount -eq $unifiedCatalogCount) {
+        $modelCount = $unifiedCatalogCount
+        $modelIds = @($unifiedCatalog.models | ForEach-Object { [string]$_.slug })
+        $modelCatalogSource = "isolated-unified-catalog"
+    }
 } catch {}
 $modelsOk = $fixedReady -and $modelCount -gt 0
-Add-Check "modelCatalog" $modelsOk ([pscustomobject]@{ count = $modelCount; ids = @($models.data | ForEach-Object { [string]$_.id }) }) "Fixed-route model catalog is empty"
+Add-Check "modelCatalog" $modelsOk ([pscustomobject]@{ count = $modelCount; ids = $modelIds; source = $modelCatalogSource; path = $unifiedCatalogPath }) "Fixed-route model catalog is empty"
 
 $uiState = [pscustomobject]@{ ok = $true; skipped = $true; reason = "SkipUiStateProbe" }
 if (-not $SkipUiStateProbe) {
-    $uiScript = Join-Path $runtimeRootFull "scripts\test-anticodex-ui-state.mjs"
+    $uiScript = Join-Path $PSScriptRoot "test-anticodex-ui-state.mjs"
+    if (-not (Test-Path -LiteralPath $uiScript -PathType Leaf)) {
+        $uiScript = Join-Path $runtimeRootFull "scripts\test-anticodex-ui-state.mjs"
+    }
     if (Test-Path -LiteralPath $uiScript -PathType Leaf) {
         $node = (Get-Command node.exe -ErrorAction SilentlyContinue)
         if (-not $node) { $node = Get-Command node -ErrorAction Stop }

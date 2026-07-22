@@ -3254,13 +3254,17 @@ function currentModelProbeExpression(requiredValues = [], { clickSelected = fals
           : 0;
         const composerDistance = composerRect ? Math.hypot(horizontalGap, verticalGap) : 0;
         const nearComposer = composerRect ? Math.max(0, 180 - Math.round(composerDistance / 3)) : 0;
+        const isMenuTrigger = element.getAttribute('aria-haspopup') === 'menu' || element.getAttribute('role') === 'menu';
+        const outsideHistorySidebar = !composerRect || rect.right > composerRect.left;
         const score = (matches(label) ? 400 : 0)
           + (modelish(label) ? 140 : 0)
+          + (isMenuTrigger ? 260 : 0)
           + nearComposer
           - Math.min(label.length, 100);
-        return { element, index, label, score, composerDistance };
+        return { element, index, label, score, composerDistance, outsideHistorySidebar };
       });
     const candidates = inspectedCandidates
+      .filter((item) => item.outsideHistorySidebar)
       .filter((item) => (!composerRect || item.composerDistance <= 360) && (modelish(item.label) || matches(item.label)))
       .sort((a, b) => b.score - a.score);
     const selected = candidates[0] || null;

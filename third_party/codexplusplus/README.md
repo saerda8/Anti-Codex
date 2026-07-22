@@ -27,7 +27,7 @@ The second patch changes only plain-HTTP loopback model transport. It uses a one
 
 The third patch removes tools only from exact official Codex title and task-suggestion helper requests. Ordinary user turns and all upstream conversion behavior remain unchanged.
 
-The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, a stale request model is aligned to the current model selected in isolated Anti-Codex state before the same relay selection runs. Directed Anti-Codex requests fail closed instead of rotating to the other provider; ordinary requests and unmarked user turns retain upstream CodexPlusPlus selection.
+The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, an explicit routable request model remains authoritative; isolated config is only a fallback for a missing or unknown request model. Directed Anti-Codex requests fail closed instead of rotating to the other provider; ordinary requests and unmarked user turns retain upstream CodexPlusPlus selection.
 
 The fifth patch changes only image-bearing tool output conversion. It keeps ordinary tool output unchanged, replaces textual JSON/Base64 image payloads with standard Chat `image_url` content parts, and preserves the original tool call association. This prevents valid local image results from being counted as hundreds of thousands of text tokens by Chat-only providers.
 
@@ -39,7 +39,7 @@ The eighth patch records only native/converted tool counts, names and types for 
 
 The ninth patch raises the decoded loopback helper request limit from 32 MiB to 128 MiB and the encoded bound from 64 MiB to 256 MiB. Requests above the new explicit bound still return 413; routing, conversion, retries, history and task control are unchanged.
 
-None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, and align only a canonically marked native compaction request to a known current Anti-Codex selection. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. None may add retries or task-control behavior.
+None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. None may add retries or task-control behavior.
 
 ## Replay
 
@@ -63,14 +63,14 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 
 ## Current Verification Boundary
 
-- All nine patches replay on the pinned commit to accepted source head `8ac882f55daf80c406e31c9d01803032f4e5daf1`.
+- All nine patches replay on the pinned commit to accepted source head `cbea7671be790b907df8ee311de244d9e5a02636`, tree `5596c525d9adfa25e908de1a2f921e28156f3677`.
 - Repository isolation audit: 9/9 checks passed.
 - Component regression tests: 16/16 passed.
 - Targeted `rustfmt --check` passed for the changed protocol source and test; the pre-existing watcher import-order difference remains outside the protocol patch.
 - Pinned `messense/cargo-xwin:0.23.0` Windows cross-check: core and Manager passed.
-- Regression tests: the seven-patch baseline passed 190/190 core tests and 54/54 protocol proxy tests; patch 0008 passed its focused no-secret diagnostic test and patch 0009 passed 5/5 decoded/encoded body-boundary tests.
+- Regression tests: current compaction routing passes 9/9 focused core tests and the protocol proxy suite passes 54/54; retained earlier evidence covers patch 0008's no-secret diagnostic test and patch 0009's 5/5 decoded/encoded body-boundary tests.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- Release launcher build: passed; 16,943,616 bytes; SHA-256 `9ae04c69b65ead219053974a38b4ffa29475a3e9c6f36fd9b032df86556587ce`.
+- Release launcher build: passed; 16,937,472 bytes; SHA-256 `23c23ca7e4960b2c9351fa15f62bccd89fda671acdef39cc26fef005c105e73b`.
 - Runtime isolation proof: 20/20 checks passed against copied Codex `26.715.4045.0`; invalid executable selection failed closed, original Codex and the active Anti-Codex stayed unchanged, and all test processes were removed.
 - Installed real-mouse model switching preserves the copied client, CodexPlusPlus process, original Codex process and current visible task. Repeated approximately 35 MiB same-task multimodal third-party requests now pass above the former 32 MiB limit, and the accepted task completed a real 50.342-second live-action video plus a hash-bound 19-entry package without 413 or reconnect.
 

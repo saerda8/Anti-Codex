@@ -27,6 +27,8 @@ $activeComponent = Join-Path $installRoot "components\codexplusplus"
 $rollbackComponent = Join-Path $installRoot "rollback-codexplusplus"
 $swapComponent = Join-Path $installRoot "rollback-swap-codexplusplus"
 $startAntiCodex = Join-Path $sourceRoot "scripts\start-anticodex.ps1"
+$launchTaskName = "Anti-Codex Launcher"
+$launchTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-task.mjs"
 $baseUrlResolver = Join-Path $sourceRoot "scripts\resolve-anticodex-base-url.ps1"
 $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) { $env:ANTICODEX_HOST_SYNC_MARKER } else { Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock" }
 $env:ANTICODEX_HOST_SYNC_MARKER = $hostSyncMarker
@@ -332,12 +334,123 @@ function Stop-AntiCodexLaunchers {
     foreach ($launcher in $launchers) { Stop-Process -Id $launcher.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
-function Start-AntiCodexDetached {
-    if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
-        throw "Anti-Codex start script is missing after rollback: $startAntiCodex"
+function Invoke-AntiCodexFixedRouteShutdown {
+    $authPath = Join-Path $stateRoot "codex-home-deepseek-app\auth.json"
+    $controlToken = "anticodex-local-proxy-key"
+    try {
+        if (Test-Path -LiteralPath $authPath -PathType Leaf) {
+            $auth = Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if (-not [string]::IsNullOrWhiteSpace([string]$auth.OPENAI_API_KEY)) {
+                $controlToken = [string]$auth.OPENAI_API_KEY
+            }
+        }
+        $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:18487/anticodex/fixed-route/shutdown")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = 3000
+        $request.ReadWriteTimeout = 3000
+        $request.ContentLength = 0
+        $request.Headers[[Net.HttpRequestHeader]::Authorization] = "Bearer $controlToken"
+        $response = $request.GetResponse()
+        try { return [int]$response.StatusCode -eq 202 } finally { $response.Dispose() }
+    } catch {
+        return $false
     }
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
-    Start-Process -FilePath $powershell -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $startAntiCodex, "-InlineSupervisor") -WindowStyle Hidden | Out-Null
+}
+
+function Wait-AntiCodexLaunchTaskStopped {
+    param([int]$TimeoutSeconds = 30)
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        try {
+            $task = Get-AntiCodexRegisteredTask -TaskName $launchTaskName
+            if ([int]$task.State -ne 4) { return $true }
+        } catch {
+            return $false
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
+$script:antiCodexScheduleService = $null
+$script:antiCodexScheduleRoot = $null
+
+function Get-AntiCodexScheduleRoot {
+    if ($null -eq $script:antiCodexScheduleService -or $null -eq $script:antiCodexScheduleRoot) {
+        $service = New-Object -ComObject "Schedule.Service"
+        $service.Connect()
+        $script:antiCodexScheduleService = $service
+        $script:antiCodexScheduleRoot = $service.GetFolder("\")
+    }
+    return $script:antiCodexScheduleRoot
+}
+
+function Get-AntiCodexRegisteredTask {
+    param([Parameter(Mandatory = $true)][string]$TaskName)
+
+    return (Get-AntiCodexScheduleRoot).GetTask("\$TaskName")
+}
+
+function Get-AntiCodexLaunchTaskEvidence {
+    $task = Get-AntiCodexRegisteredTask -TaskName $launchTaskName
+    $definition = $task.Definition
+    $actionCount = [int]$definition.Actions.Count
+    $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
+    $node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
+    $expectedArguments = "`"$launchTaskScript`" --hide-console"
+    $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentShortUserName = ($currentUserName -split "\\")[-1]
+    $taskUserName = [string]$definition.Principal.UserId
+    $ok = (
+        $actionCount -eq 1 -and
+        $task.Enabled -and
+        $action -and
+        [string]$action.Path -ieq $node -and
+        [string]$action.Arguments -ceq $expectedArguments -and
+        [string]$action.WorkingDirectory -ieq $installRoot -and
+        ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
+        [int]$definition.Principal.LogonType -eq 3 -and
+        [int]$definition.Principal.RunLevel -eq 0 -and
+        [int]$definition.Triggers.Count -eq 0 -and
+        [int]$definition.Settings.MultipleInstances -eq 2 -and
+        [bool]$definition.Settings.AllowDemandStart -and
+        [bool]$definition.Settings.AllowHardTerminate -and
+        -not [bool]$definition.Settings.RunOnlyIfIdle -and
+        -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
+        -not [bool]$definition.Settings.DisallowStartIfOnBatteries -and
+        -not [bool]$definition.Settings.StopIfGoingOnBatteries -and
+        [int]$definition.Settings.RestartCount -eq 1 -and
+        [string]$definition.Settings.RestartInterval -eq "PT1M" -and
+        [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
+    )
+    return [pscustomobject]@{ ok = $ok; state = [int]$task.State; task = $task }
+}
+
+function Stop-AntiCodexLaunchTaskForMaintenance {
+    $evidence = Get-AntiCodexLaunchTaskEvidence
+    if (-not $evidence.ok) { throw "The isolated Anti-Codex launch task is missing or stale." }
+
+    $null = Invoke-AntiCodexFixedRouteShutdown
+    if (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 20) { return }
+    $evidence = Get-AntiCodexLaunchTaskEvidence
+    if (-not $evidence.ok) { throw "The isolated Anti-Codex launch task is missing or stale." }
+    $evidence.task.Stop(0)
+    if (-not (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 10)) {
+        throw "The isolated Anti-Codex launch task did not stop before rollback."
+    }
+}
+
+function Start-AntiCodexThroughTask {
+    $evidence = Get-AntiCodexLaunchTaskEvidence
+    if (-not $evidence.ok) { throw "The isolated Anti-Codex launch task is missing or stale." }
+    if (-not (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 30)) {
+        throw "The isolated Anti-Codex launch task did not stop before rollback restart."
+    }
+    $evidence = Get-AntiCodexLaunchTaskEvidence
+    if (-not $evidence.ok) { throw "The isolated Anti-Codex launch task is missing or stale." }
+    [void]$evidence.task.Run($null)
 }
 
 function Wait-AntiCodexPostRollbackReady {
@@ -397,6 +510,7 @@ try {
         New-Item -ItemType Directory -Path (Split-Path -Parent $hostSyncMarker) -Force | Out-Null
         "Host rollback marker $(Get-Date -Format o)" | Set-Content -LiteralPath $hostSyncMarker -Encoding ASCII
         $restartAfterRollback = $true
+        Stop-AntiCodexLaunchTaskForMaintenance
         Stop-AntiCodexLaunchers
         if (-not (Wait-AntiCodexHostRelease -TimeoutSeconds 20)) { throw "Anti-Codex host processes did not exit before the rollback timeout. Anti-Codex was not changed." }
         if (-not (Wait-AntiCodexComponentRelease -TimeoutSeconds 20)) { throw "CodexPlusPlus processes did not exit before the rollback timeout. Anti-Codex was not changed." }
@@ -438,7 +552,7 @@ try {
 if ($restartAfterRollback -and (Test-Path -LiteralPath $startAntiCodex)) {
     $rollbackStage = "rollback_restart"
     Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_restart" -Message "Restarting Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
-    Start-AntiCodexDetached
+    Start-AntiCodexThroughTask
 }
 
 if ($rollbackError) {

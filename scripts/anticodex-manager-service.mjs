@@ -83,9 +83,7 @@ const MANAGER_ACTIONS = Object.freeze({
         script: "sync-anticodex-launcher.ps1",
         args: [],
         timeoutMs: 10000,
-        background: true,
-        singletonProcessPattern: "(sync-anticodex-launcher|sync-anticodex)\\.ps1",
-        backgroundLockMaxMs: 30 * 60000,
+        foregroundSingleton: true,
     },
     mcpSkills: {
         label: "检查 MCP/Skill",

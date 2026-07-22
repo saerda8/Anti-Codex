@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [switch]$NoRestart
+    [switch]$NoRestart,
+    [switch]$FromUpdateTask
 )
 
 if ($PSVersionTable.PSEdition -eq "Core") {
@@ -16,6 +17,7 @@ if ($PSVersionTable.PSEdition -eq "Core") {
         "-File", $PSCommandPath
     )
     if ($NoRestart) { $delegateArgs += "-NoRestart" }
+    if ($FromUpdateTask) { $delegateArgs += "-FromUpdateTask" }
     $delegateOutput = & $windowsPowerShell @delegateArgs
     $delegateExitCode = $LASTEXITCODE
     if ($delegateExitCode -ne 0) {
@@ -60,7 +62,8 @@ $refreshFeaturesDuringSync = [string]$env:ANTICODEX_REFRESH_LOCAL_FEATURES_DURIN
 $postSyncVerifier = Join-Path $sourceRoot "scripts\test-anticodex-installed-overall.ps1"
 $updateChecker = Join-Path $sourceRoot "scripts\check-anticodex-update.ps1"
 $updateStatusModule = Join-Path $sourceRoot "scripts\anticodex-update-status.psm1"
-foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule)) {
+$updateTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-update-task.mjs"
+foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule, $updateTaskScript)) {
     if (-not (Test-Path -LiteralPath $requiredScript)) {
         throw "Anti-Codex update component is missing: $requiredScript"
     }
@@ -86,6 +89,71 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
 $env:ANTICODEX_HOST_SYNC_MARKER = $hostSyncMarker
 $stateRoot = if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }
 $iconSource = Join-Path $sourceRoot "assets\anticodex.ico"
+$launchTaskName = "Anti-Codex Launcher"
+$launchTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-task.mjs"
+$updateTaskName = "Anti-Codex Updater"
+$syncLauncherScript = Join-Path $sourceRoot "scripts\sync-anticodex-launcher.ps1"
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+$node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
+$expectedUpdateTaskArguments = "`"$updateTaskScript`" --hide-console"
+$script:antiCodexScheduleService = $null
+$script:antiCodexScheduleRoot = $null
+
+function Get-AntiCodexScheduleRoot {
+    if ($null -eq $script:antiCodexScheduleService -or $null -eq $script:antiCodexScheduleRoot) {
+        $service = New-Object -ComObject "Schedule.Service"
+        $service.Connect()
+        $script:antiCodexScheduleService = $service
+        $script:antiCodexScheduleRoot = $service.GetFolder("\")
+    }
+    return $script:antiCodexScheduleRoot
+}
+
+function Get-AntiCodexRegisteredTask {
+    param([Parameter(Mandatory = $true)][string]$TaskName)
+
+    return (Get-AntiCodexScheduleRoot).GetTask("\$TaskName")
+}
+
+function Assert-AntiCodexUpdateTaskContext {
+    $task = Get-AntiCodexRegisteredTask -TaskName $updateTaskName
+    $definition = $task.Definition
+    $actionCount = [int]$definition.Actions.Count
+    $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
+    $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentShortUserName = ($currentUserName -split "\\")[-1]
+    $taskUserName = [string]$definition.Principal.UserId
+    if ($actionCount -ne 1 -or
+        [int]$task.State -ne 4 -or
+        -not $task.Enabled -or
+        -not $action -or
+        [string]$action.Path -ine $node -or
+        [string]$action.Arguments -cne $expectedUpdateTaskArguments -or
+        [string]$action.WorkingDirectory -ine $installRoot -or
+        ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or
+        [int]$definition.Principal.LogonType -ne 3 -or
+        [int]$definition.Principal.RunLevel -ne 0 -or
+        [int]$definition.Triggers.Count -ne 0 -or
+        [int]$definition.Settings.MultipleInstances -ne 2 -or
+        -not [bool]$definition.Settings.AllowDemandStart -or
+        -not [bool]$definition.Settings.AllowHardTerminate -or
+        [bool]$definition.Settings.RunOnlyIfIdle -or
+        [bool]$definition.Settings.RunOnlyIfNetworkAvailable -or
+        [bool]$definition.Settings.DisallowStartIfOnBatteries -or
+        [bool]$definition.Settings.StopIfGoingOnBatteries -or
+        [int]$definition.Settings.RestartCount -ne 0 -or
+        [string]$definition.Settings.ExecutionTimeLimit -ne "PT0S") {
+        throw "Anti-Codex sync refused an unverified updater-task context."
+    }
+}
+
+if (-not $NoRestart) {
+    if (-not $FromUpdateTask) {
+        throw "Restarting Anti-Codex sync may only run through the isolated Anti-Codex Updater task."
+    }
+    Assert-AntiCodexUpdateTaskContext
+}
 
 $global:LASTEXITCODE = 0
 & $sourcePreflight -SkipFullRegression | Out-Null
@@ -252,49 +320,172 @@ function Stop-AntiCodexLaunchers {
     }
 }
 
-function Start-AntiCodexAfterSync {
-    param([Parameter(Mandatory = $true)][string]$StartScript)
-
-    $powershell = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+function Invoke-AntiCodexFixedRouteShutdown {
+    $authPath = Join-Path $stateRoot "codex-home-deepseek-app\auth.json"
+    $controlToken = "anticodex-local-proxy-key"
     try {
-        Start-Process -FilePath $powershell `
-            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $StartScript, "-InlineSupervisor") `
-            -WindowStyle Hidden -ErrorAction Stop | Out-Null
-        return
+        if (Test-Path -LiteralPath $authPath -PathType Leaf) {
+            $auth = Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if (-not [string]::IsNullOrWhiteSpace([string]$auth.OPENAI_API_KEY)) {
+                $controlToken = [string]$auth.OPENAI_API_KEY
+            }
+        }
+        $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:18487/anticodex/fixed-route/shutdown")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = 3000
+        $request.ReadWriteTimeout = 3000
+        $request.ContentLength = 0
+        $request.Headers[[Net.HttpRequestHeader]::Authorization] = "Bearer $controlToken"
+        $response = $request.GetResponse()
+        try {
+            return [int]$response.StatusCode -eq 202
+        } finally {
+            $response.Dispose()
+        }
     } catch {
-        Write-Warning "Background PowerShell restart was denied: $($_.Exception.Message)"
-        Write-Warning "Retrying Anti-Codex restart through cmd.exe start fallback."
-    }
-
-    $cmdArgs = @(
-        "/d", "/c", "start", '""', "/min",
-        "powershell.exe",
-        "-NoProfile", "-ExecutionPolicy", "Bypass",
-        "-File", "`"$StartScript`"", "-InlineSupervisor"
-    )
-    & cmd.exe @cmdArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "cmd fallback could not restart Anti-Codex (exit code $LASTEXITCODE)."
+        return $false
     }
 }
 
+function Wait-AntiCodexLaunchTaskStopped {
+    param([int]$TimeoutSeconds = 30)
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        try {
+            $task = Get-AntiCodexRegisteredTask -TaskName $launchTaskName
+            if ([int]$task.State -ne 4) { return $true }
+        } catch {
+            return $false
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    return $false
+}
+
+function Assert-AntiCodexLaunchTaskContract {
+    $task = Get-AntiCodexRegisteredTask -TaskName $launchTaskName
+    $definition = $task.Definition
+    $actionCount = [int]$definition.Actions.Count
+    $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
+    $node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
+    $expectedArguments = "`"$launchTaskScript`" --hide-console"
+    $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $currentShortUserName = ($currentUserName -split "\\")[-1]
+    $taskUserName = [string]$definition.Principal.UserId
+    if ($actionCount -ne 1 -or
+        -not $task.Enabled -or
+        -not $action -or
+        [string]$action.Path -ine $node -or
+        [string]$action.Arguments -cne $expectedArguments -or
+        [string]$action.WorkingDirectory -ine $installRoot -or
+        ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or
+        [int]$definition.Principal.LogonType -ne 3 -or
+        [int]$definition.Principal.RunLevel -ne 0 -or
+        [int]$definition.Triggers.Count -ne 0 -or
+        [int]$definition.Settings.MultipleInstances -ne 2 -or
+        -not [bool]$definition.Settings.AllowDemandStart -or
+        -not [bool]$definition.Settings.AllowHardTerminate -or
+        [bool]$definition.Settings.RunOnlyIfIdle -or
+        [bool]$definition.Settings.RunOnlyIfNetworkAvailable -or
+        [bool]$definition.Settings.DisallowStartIfOnBatteries -or
+        [bool]$definition.Settings.StopIfGoingOnBatteries -or
+        [int]$definition.Settings.RestartCount -ne 1 -or
+        [string]$definition.Settings.RestartInterval -ne "PT1M" -or
+        [string]$definition.Settings.ExecutionTimeLimit -ne "PT0S") {
+        throw "The isolated Anti-Codex launch task is missing or does not match the installed runtime."
+    }
+    return $task
+}
+
+function Stop-AntiCodexLaunchTaskForMaintenance {
+    $null = Invoke-AntiCodexFixedRouteShutdown
+    if (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 20) { return }
+
+    $task = Assert-AntiCodexLaunchTaskContract
+    $task.Stop(0)
+    if (-not (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 10)) {
+        throw "The isolated Anti-Codex launch task did not stop before maintenance."
+    }
+}
+
+function Start-AntiCodexAfterSync {
+    param([Parameter(Mandatory = $true)][string]$StartScript)
+
+    $launchTaskName = "Anti-Codex Launcher"
+    $taskLauncher = Join-Path (Split-Path -Parent $StartScript) "start-anticodex-task.mjs"
+    if (-not (Test-Path -LiteralPath $taskLauncher -PathType Leaf)) {
+        throw "The isolated Anti-Codex task launcher is missing: $taskLauncher"
+    }
+    if (-not (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 30)) {
+        throw "The previous isolated Anti-Codex launch task did not stop before restart."
+    }
+    $task = Assert-AntiCodexLaunchTaskContract
+    [void]$task.Run($null)
+}
+
+function Get-OriginalCodexProcessSnapshot {
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($process in @(Get-Process -Name "ChatGPT", "Codex" -ErrorAction SilentlyContinue)) {
+        try {
+            if ($process.MainWindowHandle -eq 0) { continue }
+            $path = [IO.Path]::GetFullPath([string]$process.Path)
+            if ($path -notmatch '\\WindowsApps\\OpenAI\.Codex_[^\\]+\\app\\(?:ChatGPT|Codex)\.exe$') { continue }
+            $rows.Add([pscustomobject]@{
+                processId = [int]$process.Id
+                executablePath = $path
+                startedAtUtc = $process.StartTime.ToUniversalTime().ToString("o")
+            })
+        } catch {}
+    }
+    return @($rows | Sort-Object executablePath, processId)
+}
+
+function Test-OriginalCodexProcessesUnchanged {
+    param([AllowEmptyCollection()][object[]]$Expected = @())
+
+    $current = @(Get-OriginalCodexProcessSnapshot)
+    $expectedJson = ConvertTo-Json -InputObject @($Expected) -Depth 4 -Compress
+    $currentJson = ConvertTo-Json -InputObject @($current) -Depth 4 -Compress
+    return $expectedJson -eq $currentJson
+}
+
 function Wait-AntiCodexPostSyncReady {
-    param([int]$TimeoutSeconds = 60)
+    param(
+        [int]$TimeoutSeconds = 60,
+        [int]$StableSeconds = 20,
+        [AllowEmptyCollection()][object[]]$OriginalCodexBefore = @()
+    )
 
     $baseUrl = if ($env:TRANSLATOR_URL) { [string]$env:TRANSLATOR_URL } else { [string](& $baseUrlResolver) }
     $mainExecutable = [IO.Path]::GetFullPath((Join-Path $activeHost "Anti-Codex.exe"))
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $stableSince = $null
     do {
-        $mainReady = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            if (-not $_.ExecutablePath -or ([string]$_.CommandLine) -match "\s--type=") { return $false }
-            try { return ([IO.Path]::GetFullPath([string]$_.ExecutablePath)) -eq $mainExecutable } catch { return $false }
-        }).Count -gt 0
+        $mainReady = @(Get-Process -Name "Anti-Codex" -ErrorAction SilentlyContinue | Where-Object {
+            if ($_.MainWindowHandle -eq 0) { return $false }
+            try { return ([IO.Path]::GetFullPath([string]$_.Path)) -eq $mainExecutable } catch { return $false }
+        }).Count -eq 1
+        $taskRunning = try {
+            [int](Get-AntiCodexRegisteredTask -TaskName $launchTaskName).State -eq 4
+        } catch {
+            $false
+        }
         $gatewayReady = $false
         try {
             $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
             $gatewayReady = $health.ok -eq $true
         } catch {}
-        if ($mainReady -and $gatewayReady) { return $true }
+        if (-not (Test-OriginalCodexProcessesUnchanged -Expected $OriginalCodexBefore)) {
+            return $false
+        }
+        if ($mainReady -and $taskRunning -and $gatewayReady) {
+            if ($null -eq $stableSince) { $stableSince = [DateTime]::UtcNow }
+            if (([DateTime]::UtcNow - $stableSince).TotalSeconds -ge $StableSeconds) { return $true }
+        } else {
+            $stableSince = $null
+        }
         Start-Sleep -Seconds 1
     } while ([DateTime]::UtcNow -lt $deadline)
     return $false
@@ -401,6 +592,7 @@ $syncCompleted = $false
 $restartAfterSync = $false
 $rollbackAvailable = $false
 $activationRestored = $false
+$originalCodexBeforeSync = @()
 $updateStage = "candidate_build"
 try {
     try {
@@ -432,11 +624,13 @@ try {
 
         $updateStage = "stopping_host"
         Set-AntiCodexUpdateOperation -State "running" -Stage "stopping_host" -Message "Stopping Anti-Codex before activating both release components." -StateRoot $stateRoot
+        $originalCodexBeforeSync = @(Get-OriginalCodexProcessSnapshot)
         New-Item -ItemType Directory -Path (Split-Path -Parent $hostSyncMarker) -Force | Out-Null
         "Host sync marker $(Get-Date -Format o)" | Set-Content -LiteralPath $hostSyncMarker -Encoding ASCII
         Write-Host "Host sync marker created; stopping Anti-Codex before activation."
         $restartAfterSync = $true
 
+        Stop-AntiCodexLaunchTaskForMaintenance
         Stop-AntiCodexLaunchers
         if (-not (Wait-AntiCodexHostRelease -TimeoutSeconds 20)) {
             throw "Anti-Codex host processes did not exit before the sync timeout. The active host was not changed."
@@ -444,7 +638,6 @@ try {
         if (-not (Wait-AntiCodexComponentRelease -TimeoutSeconds 20)) {
             throw "CodexPlusPlus processes did not exit before the sync timeout. The active release was not changed."
         }
-
         $activationStarted = $false
         $activeHostChanged = $false
         $activeComponentChanged = $false
@@ -528,6 +721,21 @@ try {
 }
 
 if ($syncError) {
+    $recoveryRestartError = ""
+    if (-not $NoRestart -and $restartAfterSync) {
+        try {
+            $activeExecutable = Join-Path $activeHost "Anti-Codex.exe"
+            if ((Test-Path -LiteralPath $activeExecutable -PathType Leaf) -and
+                (Test-Path -LiteralPath $activeMarker -PathType Leaf) -and
+                (Test-Path -LiteralPath (Join-Path $activeComponent "codex-plus-plus.exe") -PathType Leaf)) {
+                Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
+                Start-AntiCodexAfterSync -StartScript $startAntiCodex
+            }
+        } catch {
+            $recoveryRestartError = $_.Exception.Message
+            $syncError.Exception.Data["AntiCodexRecoveryRestartError"] = $recoveryRestartError
+        }
+    }
     if ($activationRestored) {
         Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $true -StateRoot $stateRoot
     } else {
@@ -576,7 +784,10 @@ if ($syncCompleted) {
         }
     } else {
         Set-AntiCodexUpdateOperation -State "running" -Stage "acceptance" -Message "Running post-sync readiness and compatibility checks." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
-        $postSyncReady = Wait-AntiCodexPostSyncReady -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC
+        $postSyncReady = Wait-AntiCodexPostSyncReady `
+            -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC `
+            -StableSeconds 20 `
+            -OriginalCodexBefore $originalCodexBeforeSync
         $postSyncAcceptance = if ($postSyncReady) {
             Invoke-AntiCodexPostSyncAcceptance -TimeoutSeconds 35
         } else {

@@ -378,7 +378,7 @@ export async function runProcess(file, args, options = {}) {
       else killProcessTree(child);
       child.stdout.destroy();
       child.stderr.destroy();
-      forcedSettleTimer = setTimeout(() => settle(child.exitCode, child.signalCode), 2_000);
+      forcedSettleTimer = setTimeout(() => settle(child.exitCode, child.signalCode), 1_000);
     }, positiveInteger(options.timeoutMs, 600_000));
     child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
@@ -621,45 +621,11 @@ async function waitFor(check, options = {}) {
 function killProcessTree(child) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   if (process.platform === "win32") {
-    const script = [
-      `$root = ${Number(child.pid)}`,
-      "$parents = @{}",
-      "Get-Process -ErrorAction SilentlyContinue | ForEach-Object {",
-      "  $parentId = 0",
-      "  try { if ($_.Parent) { $parentId = [int]$_.Parent.Id } } catch {}",
-      "  $parents[[int]$_.Id] = $parentId",
-      "}",
-      "$known = [Collections.Generic.HashSet[int]]::new()",
-      "$null = $known.Add($root)",
-      "$descendants = [Collections.Generic.List[int]]::new()",
-      "do {",
-      "  $added = $false",
-      "  foreach ($entry in $parents.GetEnumerator()) {",
-      "    $processId = [int]$entry.Key",
-      "    if (-not $known.Contains($processId) -and $known.Contains([int]$entry.Value)) {",
-      "      $null = $known.Add($processId)",
-      "      $descendants.Add($processId)",
-      "      $added = $true",
-      "    }",
-      "  }",
-      "} while ($added)",
-      "for ($index = $descendants.Count - 1; $index -ge 0; $index -= 1) {",
-      "  Stop-Process -Id $descendants[$index] -Force -ErrorAction SilentlyContinue",
-      "}",
-      "Stop-Process -Id $root -Force -ErrorAction SilentlyContinue",
-    ].join("\n");
-    const treeKill = spawnSync("pwsh.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
+    spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
       windowsHide: true,
       timeout: 6_000,
       stdio: "ignore",
     });
-    if (treeKill.status !== 0) {
-      spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-        windowsHide: true,
-        timeout: 4_000,
-        stdio: "ignore",
-      });
-    }
     try { child.kill("SIGKILL"); } catch {}
   } else {
     child.kill("SIGKILL");

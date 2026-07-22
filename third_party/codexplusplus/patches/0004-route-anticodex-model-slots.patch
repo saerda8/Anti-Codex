@@ -1,11 +1,14 @@
-From 166a7da2503df7edb776ec1f3578e1e3995599a5 Mon Sep 17 00:00:00 2001
+From 52a0e4311124dde7706a060070d7755bc2286ecb Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
-Subject: [PATCH 4/7] fix: route Anti-Codex model slots
+Subject: [PATCH 4/9] fix: route Anti-Codex model slots
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs | 357 ++++++++++++++++++-
+ 1 file changed, 346 insertions(+), 11 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241c099c5ca 100644
+index e6eee3c..337a5c5 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
@@ -31,7 +34,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -563,12 +570,298 @@ pub async fn open_responses_proxy_request_with_settings(
+@@ -563,12 +570,325 @@ pub async fn open_responses_proxy_request_with_settings(
      open_responses_proxy_request_with_settings_and_user_agent(body, settings, None).await
  }
  
@@ -96,6 +99,13 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
 +    selected_model: Option<&str>,
 +) -> bool {
 +    if !request_is_codex_compaction(request_json) {
++        return false;
++    }
++    if request_json
++        .get("model")
++        .and_then(Value::as_str)
++        .is_some_and(|model| anticodex_model_is_routable(settings, model.trim()))
++    {
 +        return false;
 +    }
 +    let Some(selected_model) = selected_model
@@ -193,7 +203,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
 +                    id: ANTICODEX_ANTIGRAVITY_RELAY_ID.to_string(),
 +                    test_model: "gemini-3.1-pro-low".to_string(),
 +                    model_list: format!(
-+                        "{}\ngemini-3.1-pro-low\nclaude-sonnet-4-6",
++                        "{}\ngemini-3.1-pro-low\ngemini-3.5-flash-extra-low\nclaude-sonnet-4-6",
 +                        ANTICODEX_ANTIGRAVITY_MODEL_SLOT
 +                    ),
 +                    ..RelayProfile::default()
@@ -262,9 +272,9 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
 +    }
 +
 +    #[test]
-+    fn stale_compaction_model_uses_current_third_party_selection() {
++    fn unknown_compaction_model_uses_current_third_party_selection() {
 +        let mut request = json!({
-+            "model": "claude-sonnet-4-6",
++            "model": "stale-native-model",
 +            "client_metadata": {
 +                "x-codex-turn-metadata": r#"{"request_kind":"compaction"}"#
 +            }
@@ -279,6 +289,26 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
 +            .unwrap();
 +        assert_eq!(relay.id, ANTICODEX_THIRD_PARTY_RELAY_ID);
 +        assert_eq!(request["model"], "gpt-5.6-sol");
++    }
++
++    #[test]
++    fn explicit_current_compaction_model_beats_stale_config_selection() {
++        let mut request = json!({
++            "model": "gemini-3.5-flash-extra-low",
++            "client_metadata": {
++                "x-codex-turn-metadata": r#"{"request_kind":"compaction"}"#
++            }
++        });
++        assert!(!align_codex_compaction_model_with_selected(
++            &settings(),
++            &mut request,
++            Some("anticodex/third-party/gpt-5.6-sol"),
++        ));
++        let relay = select_anticodex_relay_for_model(&settings(), &mut request)
++            .unwrap()
++            .unwrap();
++        assert_eq!(relay.id, ANTICODEX_ANTIGRAVITY_RELAY_ID);
++        assert_eq!(request["model"], "gemini-3.5-flash-extra-low");
 +    }
 +
 +    #[test]
@@ -331,7 +361,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -576,11 +869,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -576,11 +896,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
@@ -352,7 +382,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
      let relay_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -598,6 +896,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -598,6 +923,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
@@ -360,7 +390,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
                  "headerTimeoutSeconds": header_timeout.as_secs()
              }),
          );
-@@ -706,7 +1005,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -706,7 +1032,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      body: &str,
      original_user_agent: Option<&str>,
  ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
@@ -369,7 +399,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -716,14 +1015,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -716,14 +1042,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
@@ -396,7 +426,7 @@ index e6eee3c5bb258ad62c76053d393d425f4e46bbd1..44172a0174bc3e120791348493cf9241
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -745,6 +1052,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -745,6 +1079,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,

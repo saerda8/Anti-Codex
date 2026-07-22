@@ -43,6 +43,21 @@ test("discovers the current Antigravity connection from official desktop logs", 
   );
 });
 
+test("official desktop logs override an older Anti-Codex launch log", async () => {
+  const source = await readFile(new URL("../provider/antigravity-cascade-client.mjs", import.meta.url), "utf8");
+  const pathsStart = source.indexOf("const mainLogPaths = [");
+  const pathsEnd = source.indexOf("].filter(Boolean);", pathsStart);
+  const pathsBlock = source.slice(pathsStart, pathsEnd);
+
+  assert.ok(pathsBlock.indexOf('join(stateRoot, "antigravity-desktop.out.log")') >= 0);
+  assert.ok(pathsBlock.indexOf('join(appData, "Antigravity", "logs", "main.log")') >= 0);
+  assert.ok(
+    pathsBlock.indexOf('join(stateRoot, "antigravity-desktop.out.log")')
+      < pathsBlock.indexOf('join(appData, "Antigravity", "logs", "main.log")'),
+    "the current official desktop token must be parsed after the stale launcher log",
+  );
+});
+
 test("discovers standard model metadata and account readiness through the local service", async () => {
   const service = fakeService({
     GetAvailableModels: () => jsonResponse(modelPayload()),

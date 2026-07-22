@@ -1,11 +1,15 @@
-From c36233d1113bba55ca02e22bc3cb6ac03e03c7c9 Mon Sep 17 00:00:00 2001
+From 707f56f4d9c6969350ebfa9efbe931eedb4728b8 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:35:15 +0800
-Subject: [PATCH 3/7] fix: keep native helper requests text-only
+Subject: [PATCH 3/9] fix: keep native helper requests text-only
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs  | 105 ++++++++++++++---
+ .../codex-plus-core/tests/protocol_proxy.rs   | 109 ++++++++++++++++++
+ 2 files changed, 197 insertions(+), 17 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index aedd23149d0c0f7f5da824d3dc42977d2b942a5f..e6eee3c5bb258ad62c76053d393d425f4e46bbd1 100644
+index aedd231..e6eee3c 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -217,25 +217,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
@@ -130,7 +134,7 @@ index aedd23149d0c0f7f5da824d3dc42977d2b942a5f..e6eee3c5bb258ad62c76053d393d425f
      match value {
          Value::String(text) => normalize_chat_tool_arguments_string(text),
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 852dee997706c01660b5c538967d6485f661e668..6ae97de41eb4450dadafa52420351a792120db72 100644
+index 852dee9..6ae97de 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -408,6 +408,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {

@@ -155,6 +155,40 @@ test("returns a terminal quota status before opening an empty stream", async () 
   }
 });
 
+test("maps an upstream AbortError before headers without crashing the server", async () => {
+  let streamCalls = 0;
+  const adapter = {
+    async models() {
+      return { object: "list", data: [] };
+    },
+    async complete() {
+      throw new DOMException("upstream aborted", "AbortError");
+    },
+    stream() {
+      streamCalls += 1;
+      return (async function* () {
+        throw new DOMException("upstream aborted", "AbortError");
+      }());
+    },
+  };
+  const server = await createAntigravityChatServer({ adapter });
+  try {
+    const response = await fetch(`${server.url}/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body({ stream: true })),
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, "upstream_error");
+    assert.equal(streamCalls, 1);
+
+    const health = await fetch(`${server.url}/models`);
+    assert.equal(health.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
 test("malformed native tool arguments return a structured 502 and cancel the continuation", async () => {
   const continuation = { cascadeId: "malformed-http" };
   const cancels = [];

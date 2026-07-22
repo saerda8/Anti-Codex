@@ -7,6 +7,18 @@ const root = resolve(import.meta.dirname, "..", "..");
 const uiSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
 const uiState = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
 const uiStateWrapper = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.ps1"), "utf8");
+const autonomousCompletionPrompt = readFileSync(
+  resolve(root, "docs", "prompts", "2026-07-21-lipsync-stage7-autonomous-completion.md"),
+  "utf8",
+);
+
+test("autonomous completion contract requires model-owned planning and forbids milestone finalization", () => {
+  assert.match(autonomousCompletionPrompt, /update_plan/);
+  assert.match(autonomousCompletionPrompt, /顶层计划/);
+  assert.match(autonomousCompletionPrompt, /中间阶段.*BLOCKED.*不是任务终点/);
+  assert.match(autonomousCompletionPrompt, /每完成一个步骤.*更新计划.*自动进入下一项/);
+  assert.match(autonomousCompletionPrompt, /仍有未完成项.*不得输出最终回复/);
+});
 
 test("exact-marker submit closes model overlays before probing the send button", () => {
   assert.match(
@@ -95,6 +107,13 @@ test("model confirmation measures controls from the composer edge for long promp
   assert.match(uiSmoke, /const composerDistance = composerRect \? Math\.hypot\(horizontalGap, verticalGap\) : 0/);
 });
 
+test("model picker prefers a menu trigger beside the composer over modelish history rows", () => {
+  assert.match(uiSmoke, /const isMenuTrigger = element\.getAttribute\('aria-haspopup'\) === 'menu' \|\| element\.getAttribute\('role'\) === 'menu'/);
+  assert.match(uiSmoke, /const outsideHistorySidebar = !composerRect \|\| rect\.right > composerRect\.left/);
+  assert.match(uiSmoke, /\+ \(isMenuTrigger \? 260 : 0\)/);
+  assert.match(uiSmoke, /\.filter\(\(item\) => item\.outsideHistorySidebar/);
+});
+
 test("history-only UI probe never submits model traffic", () => {
   assert.match(uiSmoke, /--history-probe-only/);
   assert.match(uiSmoke, /async function runHistoryProbeOnly\(\)/);
@@ -165,4 +184,16 @@ test("UI state recognizes third-party model controls and no-task screens", () =>
   assert.match(uiState, /composerPresent: Boolean\(document\.querySelector/);
   assert.match(uiState, /selectedContextProbe\?\.composerPresent === false/);
   assert.match(uiState, /else if \(!matchedModelText\)/);
+});
+
+test("UI state falls back to the isolated unified catalog when the selected upstream cannot list models", () => {
+  assert.match(uiState, /anticodex-model-catalog\.json/);
+  assert.match(uiState, /if \(modelCount < 1 && isolatedCatalogModels\.length > 0\)/);
+  assert.match(uiState, /modelCatalogSource = "isolated-unified-catalog"/);
+});
+
+test("UI state ignores modelish history text and reads the control beside the composer", () => {
+  assert.match(uiState, /const modelControlCandidates = Array\.from\(document\.querySelectorAll/);
+  assert.match(uiState, /rect\.right > composerRect\.left/);
+  assert.match(uiState, /element\.getAttribute\("aria-haspopup"\) === "menu" \? 260 : 0/);
 });

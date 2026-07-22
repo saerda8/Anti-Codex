@@ -49,6 +49,14 @@ test("runtime isolation probe verifies real process ownership and fails closed",
   }
 });
 
+test("runtime isolation probe avoids an unbounded WMI process-table scan", async () => {
+  const text = await source();
+
+  assert.match(text, /Get-Process -ErrorAction SilentlyContinue/);
+  assert.doesNotMatch(text, /Get-CimInstance\s+Win32_Process\s+-ErrorAction\s+Stop/);
+  assert.match(text, /Get-CimInstance\s+Win32_Process\s+-Filter\s+"ProcessId=/);
+});
+
 test("runtime isolation probe never reads or hashes Codex credentials", async () => {
   const text = await source();
 

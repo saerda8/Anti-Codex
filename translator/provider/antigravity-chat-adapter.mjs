@@ -928,7 +928,7 @@ function invalidRequest(message, code = "invalid_request") {
 }
 
 export function mapAntigravityError(error) {
-  if (error instanceof ChatAdapterError || isAbortError(error)) return error;
+  if (error instanceof ChatAdapterError) return error;
   const message = String(error?.message ?? error ?? "Antigravity request failed.");
   const statusCode = Number(error?.statusCode ?? error?.status ?? 0);
   if (statusCode === 401 || statusCode === 403 || /(?:login|sign[ -]?in|unauthori[sz]ed|forbidden)/i.test(message)) {

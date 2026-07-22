@@ -93,19 +93,43 @@ function Get-UniquePorts {
 function Get-ProcessRows {
     param([Parameter(Mandatory = $true)][scriptblock]$Predicate)
     $rows = @()
-    foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction Stop)) {
-        if (& $Predicate $process) {
-            $created = $null
-            if ($process.CreationDate) {
-                try { $created = ([DateTime]$process.CreationDate).ToUniversalTime().ToString('o') } catch { $created = [string]$process.CreationDate }
+    foreach ($process in @(Get-Process -ErrorAction SilentlyContinue)) {
+        $path = $null
+        try { $path = [string]$process.Path } catch {}
+        $name = if ($path) { [IO.Path]::GetFileName($path) } else { [string]$process.ProcessName + '.exe' }
+        $row = [pscustomobject]@{
+            ProcessId = [int]$process.Id
+            ParentProcessId = 0
+            Name = $name
+            ExecutablePath = $path
+            CreationDate = $null
+        }
+        if (-not (& $Predicate $row)) { continue }
+
+        try { $row.CreationDate = $process.StartTime } catch {}
+        try {
+            $parentProperty = $process.PSObject.Properties['Parent']
+            if ($parentProperty -and $parentProperty.Value) {
+                $row.ParentProcessId = [int]$parentProperty.Value.Id
             }
-            $rows += [pscustomobject]@{
-                processId = [int]$process.ProcessId
-                parentProcessId = [int]$process.ParentProcessId
-                name = [string]$process.Name
-                executablePath = [string]$process.ExecutablePath
-                createdAtUtc = $created
-            }
+        } catch {}
+        if ($row.ParentProcessId -eq 0) {
+            try {
+                $cim = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.Id)" -ErrorAction Stop
+                $row.ParentProcessId = [int]$cim.ParentProcessId
+            } catch {}
+        }
+
+        $created = $null
+        if ($row.CreationDate) {
+            try { $created = ([DateTime]$row.CreationDate).ToUniversalTime().ToString('o') } catch { $created = [string]$row.CreationDate }
+        }
+        $rows += [pscustomobject]@{
+            processId = [int]$row.ProcessId
+            parentProcessId = [int]$row.ParentProcessId
+            name = [string]$row.Name
+            executablePath = [string]$row.ExecutablePath
+            createdAtUtc = $created
         }
     }
     return @($rows | Sort-Object executablePath, processId)

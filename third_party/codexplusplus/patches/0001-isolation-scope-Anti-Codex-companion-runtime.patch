@@ -1,11 +1,23 @@
-From c5e10b1f8e67603c37740655c4b5ef6b2de2997b Mon Sep 17 00:00:00 2001
+From cd98d4ac846876311234af583737d629306e8c91 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Tue, 14 Jul 2026 20:11:29 +0800
-Subject: [PATCH 1/7] isolation: scope Anti-Codex companion runtime
+Subject: [PATCH 1/9] isolation: scope Anti-Codex companion runtime
 
+---
+ apps/codex-plus-launcher/src/main.rs          |  56 +++++-
+ .../src-tauri/src/commands.rs                 |  65 ++++++-
+ apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 ++++
+ crates/codex-plus-core/src/app_paths.rs       |  77 +++++++-
+ crates/codex-plus-core/src/launcher.rs        |  12 +-
+ crates/codex-plus-core/src/paths.rs           |  29 +++
+ crates/codex-plus-core/src/protocol_proxy.rs  |  34 ++++
+ crates/codex-plus-core/src/relay_config.rs    |  10 +-
+ crates/codex-plus-core/src/watcher.rs         | 167 +++++++++++++++---
+ crates/codex-plus-core/tests/watcher.rs       | 127 +++++++++++++
+ 10 files changed, 565 insertions(+), 45 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 81b9bb134a2924c6e23cbaed5f1de3cb51383fa3..57e5ea06dc8298066301b14581daf352499b16f2 100644
+index 81b9bb1..57e5ea0 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -43,7 +43,11 @@ async fn main() -> Result<()> {
@@ -119,7 +131,7 @@ index 81b9bb134a2924c6e23cbaed5f1de3cb51383fa3..57e5ea06dc8298066301b14581daf352
          assert!(source.contains("launcher.already_running"));
      }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index ea115d4203f5714642bb6d2c47109aba6934d65f..7c1224f08129fa9d23d2b4dfae83ea2f4b51f7ae 100644
+index ea115d4..7c1224f 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
 @@ -508,11 +508,42 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
@@ -250,7 +262,7 @@ index ea115d4203f5714642bb6d2c47109aba6934d65f..7c1224f08129fa9d23d2b4dfae83ea2f
      fn backend_version_returns_structured_payload() {
          let result = backend_version();
 diff --git a/apps/codex-plus-manager/src-tauri/src/lib.rs b/apps/codex-plus-manager/src-tauri/src/lib.rs
-index 60a385b3a3dbe9c9e4b801a18bf465c616ce5d47..ef02f5549b2791874f1a1b642ad0fa55da61b773 100644
+index 60a385b..ef02f55 100644
 --- a/apps/codex-plus-manager/src-tauri/src/lib.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/lib.rs
 @@ -322,6 +322,16 @@ fn show_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
@@ -312,14 +324,14 @@ index 60a385b3a3dbe9c9e4b801a18bf465c616ce5d47..ef02f5549b2791874f1a1b642ad0fa55
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
-index 3d571a1e9144500a5cc48af03f285005768d6aed..8e282d973dc4f13c2a025bea41d37e14d65b9abc 100644
+index 3d571a1..8e282d9 100644
 --- a/crates/codex-plus-core/src/app_paths.rs
 +++ b/crates/codex-plus-core/src/app_paths.rs
 @@ -1,4 +1,4 @@
 -use std::ffi::OsStr;
 +use std::ffi::{OsStr, OsString};
  use std::path::{Path, PathBuf};
-
+ 
  #[cfg(windows)]
 @@ -14,6 +14,7 @@ struct AppPackageSpec {
  
@@ -425,7 +437,7 @@ index 3d571a1e9144500a5cc48af03f285005768d6aed..8e282d973dc4f13c2a025bea41d37e14
      for spec in APP_PACKAGE_SPECS {
          let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index c1256532e2366c8bd532f3bb252685815e62de50..393f7336a063072918c43eb114b4b91bf14f0ffe 100644
+index c125653..393f733 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -306,7 +306,7 @@ where
@@ -462,7 +474,7 @@ index c1256532e2366c8bd532f3bb252685815e62de50..393f7336a063072918c43eb114b4b91b
                  if empty_streak >= 3 {
                      break;
 diff --git a/crates/codex-plus-core/src/paths.rs b/crates/codex-plus-core/src/paths.rs
-index 36cc88e2ee24dab22e387ead9c9e20d959205fb1..240e2b8bfe0ec3706c9b1047181ae9a5f3f7cad7 100644
+index 36cc88e..240e2b8 100644
 --- a/crates/codex-plus-core/src/paths.rs
 +++ b/crates/codex-plus-core/src/paths.rs
 @@ -6,8 +6,25 @@ const SETTINGS_FILE: &str = "settings.json";
@@ -509,7 +521,7 @@ index 36cc88e2ee24dab22e387ead9c9e20d959205fb1..240e2b8bfe0ec3706c9b1047181ae9a5
 +    }
  }
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index ada6885c7eae9bd054a0a580a9f666b3e96aba5f..e7a4faa3fa97200fd3e461c19c7a339c2c7cf3f4 100644
+index ada6885..e7a4faa 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -13,6 +13,7 @@ use crate::relay_rotation::{RotationContext, RotationEvent};
@@ -561,7 +573,7 @@ index ada6885c7eae9bd054a0a580a9f666b3e96aba5f..e7a4faa3fa97200fd3e461c19c7a339c
  enum ChatReasoningStyle {
      Default,
 diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
-index 2463a6d9cadc7d33bd0d29b069c2fde40bad343e..a999c01f8b2b9d8f7f39f3f0353e11a0e58ab344 100644
+index 2463a6d..a999c01 100644
 --- a/crates/codex-plus-core/src/relay_config.rs
 +++ b/crates/codex-plus-core/src/relay_config.rs
 @@ -250,7 +250,7 @@ pub fn apply_relay_config_to_home(
@@ -610,7 +622,7 @@ index 2463a6d9cadc7d33bd0d29b069c2fde40bad343e..a999c01f8b2b9d8f7f39f3f0353e11a0
      if !provider_base_url.trim().is_empty() {
          provider["base_url"] = toml_edit::value(provider_base_url.trim());
 diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
-index f11acc1554cb5aba0a91a68fbc3fabe1f0f4831b..bb7b7c3db75d36919ef2c7f6c4681d8f50db278d 100644
+index f11acc1..bb7b7c3 100644
 --- a/crates/codex-plus-core/src/watcher.rs
 +++ b/crates/codex-plus-core/src/watcher.rs
 @@ -16,7 +16,6 @@ const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
@@ -862,7 +874,7 @@ index f11acc1554cb5aba0a91a68fbc3fabe1f0f4831b..bb7b7c3db75d36919ef2c7f6c4681d8f
  fn terminate_and_wait_for_exit(process_ids: Vec<u32>, timeout_ms: u64, interval_ms: u64) {
      if process_ids.is_empty() {
 diff --git a/crates/codex-plus-core/tests/watcher.rs b/crates/codex-plus-core/tests/watcher.rs
-index 03feecd24d4f49bea0e6a794dc2aa89f1928e559..78bd4849b7f978704cc03ef4710142b9b3ddce2d 100644
+index 03feecd..78bd484 100644
 --- a/crates/codex-plus-core/tests/watcher.rs
 +++ b/crates/codex-plus-core/tests/watcher.rs
 @@ -8,6 +8,8 @@ use codex_plus_core::watcher::{
@@ -1008,3 +1020,4 @@ index 03feecd24d4f49bea0e6a794dc2aa89f1928e559..78bd4849b7f978704cc03ef4710142b9
  fn find_codex_processes_ignores_lowercase_local_cli_binary() {
 -- 
 2.55.0.windows.3
+

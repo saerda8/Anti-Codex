@@ -622,13 +622,13 @@ function discoverAntigravityDesktopConnectionFromFiles(env) {
   if (!appData) return null;
   const stateRoot = String(env.DEEPCODEX_STATE_ROOT || join(appData, "anticodex")).trim();
   const mainLogPaths = [
-    env.ANTIGRAVITY_MAIN_LOG_PATH,
-    join(appData, "Antigravity", "logs", "main.log"),
     join(stateRoot, "antigravity-desktop.out.log"),
+    join(appData, "Antigravity", "logs", "main.log"),
+    env.ANTIGRAVITY_MAIN_LOG_PATH,
   ].filter(Boolean);
   const languageServerLogPaths = [
-    env.ANTIGRAVITY_LANGUAGE_SERVER_LOG_PATH,
     join(appData, "Antigravity", "logs", "language_server.log"),
+    env.ANTIGRAVITY_LANGUAGE_SERVER_LOG_PATH,
   ].filter(Boolean);
   const readLogs = (paths) => paths.map((file) => {
     try { return readFileSync(file, "utf8"); } catch { return ""; }

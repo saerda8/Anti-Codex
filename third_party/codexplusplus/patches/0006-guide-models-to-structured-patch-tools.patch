@@ -1,11 +1,15 @@
-From 7c2df288b7baf45c612a637756993c4234df75da Mon Sep 17 00:00:00 2001
+From 308e75c4256c148d04fcc785ce7ae3e169b33e02 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
-Subject: [PATCH 6/7] guide models to structured patch tools
+Subject: [PATCH 6/9] guide models to structured patch tools
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs  | 101 +++++++++++++++--
+ .../codex-plus-core/tests/protocol_proxy.rs   | 106 +++++++++++++++++-
+ 2 files changed, 192 insertions(+), 15 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378ed25f029a 100644
+index e71ac17..f9f51d5 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -190,6 +190,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
@@ -35,7 +39,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
      if !suppress_tools {
          let tool_context = build_codex_tool_context(body.get("tools"));
          let mut has_chat_tools = false;
-@@ -3089,6 +3094,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
+@@ -3116,6 +3121,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
  
  fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) -> Vec<Value> {
      let mut converted = Vec::new();
@@ -43,7 +47,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
      for tool in tools {
          if let Some(name) = tool.as_str().filter(|name| !name.is_empty()) {
              converted.push(generic_custom_proxy_tool(name, ""));
-@@ -3112,7 +3118,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3139,7 +3145,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
                      .and_then(Value::as_str)
                      .unwrap_or("");
                  if detect_codex_custom_tool_kind(tool, name) == CodexCustomToolKind::ApplyPatch {
@@ -52,7 +56,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
                  } else {
                      converted.push(generic_custom_proxy_tool(name, description));
                  }
-@@ -3121,7 +3127,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3148,7 +3154,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
              _ => {}
          }
      }
@@ -111,7 +115,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
  }
  
  fn detect_codex_custom_tool_kind(tool: &Value, name: &str) -> CodexCustomToolKind {
-@@ -3285,6 +3341,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
+@@ -3312,6 +3368,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
  
  fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      vec![
@@ -127,7 +131,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
          function_tool(
              &format!("{name}_add_file"),
              &patch_proxy_description(
-@@ -3333,6 +3398,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
+@@ -3360,6 +3425,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      ]
  }
  
@@ -148,7 +152,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
  fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
      json!({
          "type": "function",
-@@ -3345,11 +3424,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
+@@ -3372,11 +3451,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
  }
  
  fn patch_proxy_description(description: &str, action: &str, default_description: &str) -> String {
@@ -164,7 +168,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
  }
  
  fn apply_patch_add_file_schema() -> Value {
-@@ -3531,7 +3612,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
+@@ -3558,7 +3639,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
              let name = object.get("name").and_then(Value::as_str)?;
              let spec = context.custom_tools.get(name)?;
              let upstream_name = if spec.kind == CodexCustomToolKind::ApplyPatch {
@@ -176,7 +180,7 @@ index fd8856e718c04dc71d841da3c4cb69c833a6c439..9cb1bbc424272c4c73ba27d24b35378e
                  spec.openai_name.clone()
              };
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 75420c6c7596b6cc2add0d6abcf495f5f8b7b8af..83308987b752ef78bce5dd2d77ee247c8cf3b495 100644
+index 75420c6..8330898 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -605,9 +605,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {

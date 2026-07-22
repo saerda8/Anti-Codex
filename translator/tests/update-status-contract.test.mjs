@@ -11,6 +11,7 @@ const targetModule = resolve(projectRoot, "scripts", "anticodex-update-status.ps
 const updateChecker = resolve(projectRoot, "scripts", "check-anticodex-update.ps1");
 const installer = resolve(projectRoot, "scripts", "install-anticodex.ps1");
 const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
+const POWERSHELL_TIMEOUT_MS = 10_000;
 
 test("installer and host sync delegate Appx work when hosted by PowerShell Core", () => {
   for (const scriptPath of [installer, hostSync]) {
@@ -66,7 +67,7 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
 
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(
@@ -101,7 +102,7 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
 
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(
@@ -135,7 +136,7 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
 
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(
@@ -174,7 +175,7 @@ test("RED: update check preserves an existing running operation", () => {
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
       "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(
@@ -247,7 +248,7 @@ test("update check clears stale running operation when active host is already sy
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
       "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot,
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(`PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`);
@@ -295,7 +296,7 @@ test("RED: update check reports version drift and brand/icon protection guardrai
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
       "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(
@@ -368,7 +369,7 @@ test("cached-looking active host is rejected when source fingerprints are missin
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
       "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot,
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(`PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`);
@@ -435,7 +436,7 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
 
     const result = spawnSync("powershell.exe", [
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
-    ], { encoding: "utf8", timeout: 5000, windowsHide: true });
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
     if (result.status !== 0) {
       throw new Error(

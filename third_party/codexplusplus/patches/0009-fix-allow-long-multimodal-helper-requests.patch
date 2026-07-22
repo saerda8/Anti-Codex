@@ -1,7 +1,7 @@
-From 8ac882f55daf80c406e31c9d01803032f4e5daf1 Mon Sep 17 00:00:00 2001
+From cbea7671be790b907df8ee311de244d9e5a02636 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 09:04:01 +0800
-Subject: [PATCH] fix: allow long multimodal helper requests
+Subject: [PATCH 9/9] fix: allow long multimodal helper requests
 
 ---
  crates/codex-plus-core/src/launcher.rs | 10 ++++++++--

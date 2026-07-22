@@ -14,6 +14,10 @@ const postVerification = readFileSync(resolve(root, "scripts", "test-anticodex-p
 const modelRefresh = readFileSync(resolve(root, "scripts", "refresh-anticodex-models.ps1"), "utf8");
 const conversationCleanup = readFileSync(resolve(root, "scripts", "clear-anticodex-conversations.ps1"), "utf8");
 const hostSync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+const syncLauncher = readFileSync(resolve(root, "scripts", "sync-anticodex-launcher.ps1"), "utf8");
+const updateTaskBroker = readFileSync(resolve(root, "scripts", "start-anticodex-update-task.mjs"), "utf8");
+const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
+const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
 
 test("formal launcher uses the fixed CodexPlusPlus route as the only model path", () => {
@@ -61,8 +65,137 @@ test("every production relaunch keeps the fixed-route supervisor attached", () =
   assert.match(managerGatewayStart, /-InlineSupervisor/);
   assert.match(modelRefresh, /-File[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
   assert.match(conversationCleanup, /"-SkipUpdateCheck"[\s\S]*?"-InlineSupervisor"/);
-  assert.match(hostSync, /-File[^\r\n]*\$StartScript[^\r\n]*-InlineSupervisor/);
-  assert.match(rollback, /-File[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
+  assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
+});
+
+test("host sync restarts outside native Codex process ownership", () => {
+  const start = hostSync.indexOf("function Start-AntiCodexAfterSync");
+  const end = hostSync.indexOf("function Wait-AntiCodexPostSyncReady", start);
+  const restart = start >= 0 && end > start ? hostSync.slice(start, end) : "";
+
+  assert.match(restart, /Anti-Codex Launcher/);
+  assert.match(restart, /Assert-AntiCodexLaunchTaskContract/);
+  assert.match(hostSync, /Schedule\.Service/);
+  assert.equal([...hostSync.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
+  assert.match(hostSync, /\$script:antiCodexScheduleService/);
+  assert.match(restart, /\.Run\(\$null\)/);
+  assert.doesNotMatch(restart, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.doesNotMatch(restart, /Start-Process -FilePath \$powershell|cmd\.exe/);
+});
+
+test("the built-in Manager sync delegates to an independent updater task", () => {
+  const syncAction = managerService.match(/syncHost:\s*\{[\s\S]*?\n\s*\},/)?.[0] ?? "";
+  assert.match(managerService, /syncHost:[\s\S]*?script:\s*"sync-anticodex-launcher\.ps1"/);
+  assert.match(syncAction, /foregroundSingleton:\s*true/);
+  assert.doesNotMatch(syncAction, /background:\s*true|singletonProcessPattern/);
+  assert.match(syncLauncher, /param\([\s\S]*?\[switch\]\$FromUpdateTask/);
+  assert.match(syncLauncher, /Anti-Codex Updater/);
+  assert.match(syncLauncher, /if \(-not \$FromUpdateTask\)/);
+  assert.match(syncLauncher, /Schedule\.Service/);
+  assert.equal([...syncLauncher.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
+  assert.match(syncLauncher, /\$script:antiCodexScheduleService/);
+  assert.match(syncLauncher, /\.Run\(\$null\)/);
+  assert.doesNotMatch(syncLauncher, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.match(syncLauncher, /function Get-AntiCodexUpdateTaskEvidence/);
+  assert.match(syncLauncher, /function Wait-AntiCodexUpdateTaskRunning/);
+  assert.match(syncLauncher, /if \(\$FromUpdateTask\)[\s\S]*?Get-AntiCodexUpdateTaskEvidence[\s\S]*?stateCode -ne 4[\s\S]*?& \$syncScript -FromUpdateTask/);
+  assert.match(hostSync, /\[switch\]\$FromUpdateTask/);
+  assert.match(hostSync, /if \(-not \$NoRestart\)[\s\S]*?Assert-AntiCodexUpdateTaskContext/);
+  assert.match(shortcutRepair, /\$updateTaskName\s*=\s*"Anti-Codex Updater"/);
+  assert.match(shortcutRepair, /Update Anti-Codex outside the running Anti-Codex process job/);
+  assert.match(shortcutRepair, /start-anticodex-update-task\.mjs/);
+  assert.match(syncLauncher, /start-anticodex-update-task\.mjs/);
+  assert.match(hostSync, /start-anticodex-update-task\.mjs/);
+  assert.match(updateTaskBroker, /spawnSync\(powershell/);
+  assert.match(updateTaskBroker, /sync-anticodex-launcher\.ps1/);
+  assert.match(updateTaskBroker, /"-FromUpdateTask"/);
+  assert.match(updateTaskBroker, /windowsHide:\s*true/);
+  assert.match(updateTaskBroker, /anticodex-updater\.(?:out|err)\.log/);
+  assert.match(updateTaskBroker, /process\.exitCode\s*=\s*exitCode/);
+  assert.match(syncLauncher, /\$definition\.Triggers\.Count\s+-eq\s+0/);
+  assert.match(syncLauncher, /\$definition\.Settings\.AllowDemandStart/);
+});
+
+test("host sync gracefully releases the old launch task before starting the new host", () => {
+  const stopHelperStart = hostSync.indexOf("function Stop-AntiCodexLaunchTaskForMaintenance");
+  const stopHelperEnd = hostSync.indexOf("function Start-AntiCodexAfterSync", stopHelperStart);
+  const stopHelper = stopHelperStart >= 0 && stopHelperEnd > stopHelperStart
+    ? hostSync.slice(stopHelperStart, stopHelperEnd)
+    : "";
+  const stoppingStart = hostSync.indexOf('$updateStage = "stopping_host"');
+  const activationStart = hostSync.indexOf('$updateStage = "activation"', stoppingStart);
+  const stopping = stoppingStart >= 0 && activationStart > stoppingStart
+    ? hostSync.slice(stoppingStart, activationStart)
+    : "";
+
+  const graceful = stopHelper.indexOf("Invoke-AntiCodexFixedRouteShutdown");
+  const gracefulWait = stopHelper.indexOf("Wait-AntiCodexLaunchTaskStopped", graceful);
+  const taskContract = stopHelper.indexOf("Assert-AntiCodexLaunchTaskContract", gracefulWait);
+  const forcedStop = stopHelper.indexOf(".Stop(0)", gracefulWait);
+  assert.ok(graceful >= 0, "missing graceful fixed-route shutdown");
+  assert.ok(gracefulWait > graceful, "launcher wait must follow graceful shutdown");
+  assert.ok(taskContract > gracefulWait, "forced task stop must validate the Launcher contract first");
+  assert.ok(forcedStop > taskContract, "forced task stop must follow Launcher contract validation");
+  assert.match(stopping, /Stop-AntiCodexLaunchTaskForMaintenance[\s\S]*?Wait-AntiCodexHostRelease[\s\S]*?Wait-AntiCodexComponentRelease/);
+  assert.match(hostSync, /function Wait-AntiCodexLaunchTaskStopped/);
+  assert.match(hostSync, /\.Run\(\$null\)/);
+  const restartStart = hostSync.indexOf("function Start-AntiCodexAfterSync");
+  const restartEnd = hostSync.indexOf("function Get-OriginalCodexProcessSnapshot", restartStart);
+  const restart = restartStart >= 0 && restartEnd > restartStart ? hostSync.slice(restartStart, restartEnd) : "";
+  const contractStart = hostSync.indexOf("function Assert-AntiCodexLaunchTaskContract");
+  const contractEnd = hostSync.indexOf("function Stop-AntiCodexLaunchTaskForMaintenance", contractStart);
+  const contract = contractStart >= 0 && contractEnd > contractStart ? hostSync.slice(contractStart, contractEnd) : "";
+  assert.match(restart, /Assert-AntiCodexLaunchTaskContract/);
+  assert.match(contract, /action\.Path[\s\S]*?\$node/);
+  assert.match(contract, /Principal\.LogonType[\s\S]*?-ne 3/);
+  assert.match(contract, /Settings\.MultipleInstances[\s\S]*?-ne 2/);
+  assert.match(contract, /Triggers\.Count[\s\S]*?-ne 0/);
+  assert.match(contract, /Settings\.AllowDemandStart/);
+});
+
+test("automatic rollback stops and restarts only through the isolated Launcher task", () => {
+  assert.match(rollback, /fixed-route\/shutdown/);
+  assert.match(rollback, /function Stop-AntiCodexLaunchTaskForMaintenance/);
+  assert.match(rollback, /Schedule\.Service/);
+  assert.equal([...rollback.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
+  assert.match(rollback, /\$script:antiCodexScheduleService/);
+  assert.match(rollback, /\.Stop\(0\)/);
+  assert.match(rollback, /Wait-AntiCodexLaunchTaskStopped/);
+  assert.match(rollback, /\.Run\(\$null\)/);
+  assert.doesNotMatch(rollback, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
+});
+
+test("a failed host sync restores a valid active release before surfacing the error", () => {
+  const errorStart = hostSync.indexOf("if ($syncError) {");
+  const errorEnd = hostSync.indexOf("\ntry {", errorStart);
+  const errorBlock = errorStart >= 0 && errorEnd > errorStart ? hostSync.slice(errorStart, errorEnd) : "";
+  const restart = errorBlock.indexOf("Start-AntiCodexAfterSync");
+  const rethrow = errorBlock.indexOf("throw $syncError");
+  assert.ok(restart >= 0, "sync errors after shutdown must attempt a task-broker recovery restart");
+  assert.ok(rethrow > restart, "the original sync error must be surfaced only after the recovery restart attempt");
+});
+
+test("host sync accepts only a stable visible Anti-Codex while native Codex is unchanged", () => {
+  const snapshotStart = hostSync.indexOf("function Get-OriginalCodexProcessSnapshot");
+  const snapshotEnd = hostSync.indexOf("function Test-OriginalCodexProcessesUnchanged", snapshotStart);
+  const snapshot = snapshotStart >= 0 && snapshotEnd > snapshotStart
+    ? hostSync.slice(snapshotStart, snapshotEnd)
+    : "";
+  const start = hostSync.indexOf("function Wait-AntiCodexPostSyncReady");
+  const end = hostSync.indexOf("function Wait-AntiCodexChildProcess", start);
+  const readiness = start >= 0 && end > start ? hostSync.slice(start, end) : "";
+
+  assert.match(hostSync, /function Get-OriginalCodexProcessSnapshot/);
+  assert.match(snapshot, /MainWindowHandle/);
+  assert.ok(snapshot.includes("\\\\app\\\\(?:ChatGPT|Codex)\\.exe$"));
+  assert.match(hostSync, /\$originalCodexBeforeSync\s*=\s*@\(Get-OriginalCodexProcessSnapshot\)/);
+  assert.match(readiness, /\[int\]\$StableSeconds/);
+  assert.match(readiness, /Get-AntiCodexRegisteredTask/);
+  assert.doesNotMatch(readiness, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.match(readiness, /MainWindowHandle/);
+  assert.match(readiness, /Test-OriginalCodexProcessesUnchanged/);
+  assert.match(readiness, /stableSince/);
 });
 
 test("launcher gives an auto-started Antigravity desktop durable output handles", () => {
@@ -143,6 +276,7 @@ test("install and runtime sync require every fixed-route production module", () 
     "scripts\\antigravity-desktop.ps1",
     "scripts\\apply-anticodex-upstream.ps1",
     "scripts\\start-anticodex-task.mjs",
+    "scripts\\start-anticodex-update-task.mjs",
     "scripts\\start-anticodex-fixed-route.mjs",
     "scripts\\anticodex-manager-service.mjs",
     "scripts\\install-codexplusplus-component.ps1",
@@ -177,6 +311,8 @@ test("install and runtime sync require every fixed-route production module", () 
 test("runtime sync restarts only the fixed three-layer supervisor", () => {
   const requiredList = runtimeSync.match(/\$requiredSourceFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   const syntaxList = runtimeSync.match(/\$syntaxCheckedJavaScriptFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  assert.match(requiredList, /scripts\\start-anticodex-update-task\.mjs/);
+  assert.match(syntaxList, /scripts\\start-anticodex-update-task\.mjs/);
   for (const legacy of [
     "translator\\adaptive-server.mjs",
     "translator\\antigravity-upstream.mjs",
@@ -235,6 +371,7 @@ test("standalone Manager recovery uses the formal fixed-route launcher", () => {
 
 test("installer requires fixed-route modules and removes legacy runtime files", () => {
   const requiredRuntimeList = installer.match(/foreach \(\$requiredRuntimePath in @\(([\s\S]*?)\n\s*\)\)/)?.[1] ?? "";
+  assert.match(requiredRuntimeList, /scripts\\start-anticodex-update-task\.mjs/);
   for (const legacy of [
     "translator\\adaptive-server.mjs",
     "translator\\codex-native-compact.mjs",

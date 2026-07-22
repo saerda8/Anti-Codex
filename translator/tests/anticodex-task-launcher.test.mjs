@@ -38,7 +38,7 @@ test("task launcher keeps Antigravity on the existing thin fixed route", () => {
   assert.equal(plan.model, "gemini-3-flash-agent");
   assert.match(plan.supervisorScript, /start-anticodex-fixed-route\.mjs$/);
   assert.deepEqual(plan.supervisorArgs.slice(0, 3), [plan.supervisorScript, "--install-root", plan.installRoot]);
-  assert.ok(plan.supervisorArgs.includes("--disable-gpu"));
+  assert.equal(plan.supervisorArgs.includes("--disable-gpu"), false);
   assert.equal(plan.publicProfile.apiKeyConfigured, false);
 
   const childEnv = buildTaskLauncherEnvironment(plan, baseEnv);
@@ -47,6 +47,26 @@ test("task launcher keeps Antigravity on the existing thin fixed route", () => {
   assert.equal(childEnv.CODEX_HOME, plan.codexHome);
   assert.equal(childEnv.GLOBAL_CODEX_HOME, "C:\\Users\\XD\\.codex");
   assert.equal(childEnv.UPSTREAM_API_KEY, undefined);
+  assert.equal(childEnv.ANTICODEX_DISABLE_GPU, undefined);
+  assert.equal(childEnv.DEEPCODEX_DISABLE_GPU, undefined);
+});
+
+test("task launcher keeps software rendering as an explicit recovery fallback", () => {
+  const plan = buildTaskLaunchPlan({
+    env: {
+      ...baseEnv,
+      ANTICODEX_DISABLE_GPU: "1",
+    },
+    profile: {
+      mode: "antigravity",
+      antigravityModel: "gemini-3-flash-agent",
+    },
+  });
+
+  assert.ok(plan.supervisorArgs.includes("--disable-gpu"));
+  const childEnv = buildTaskLauncherEnvironment(plan, baseEnv);
+  assert.equal(childEnv.ANTICODEX_DISABLE_GPU, "1");
+  assert.equal(childEnv.DEEPCODEX_DISABLE_GPU, "1");
 });
 
 test("task launcher preserves third-party CodexPlusPlus routing without exposing the key in its plan", () => {

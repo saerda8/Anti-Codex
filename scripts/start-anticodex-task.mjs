@@ -59,6 +59,10 @@ function text(value) {
   return normalized || undefined;
 }
 
+function truthy(value) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
 function normalizeProfile(profile = {}) {
   const mode = String(profile.mode ?? "antigravity").trim().toLowerCase();
   if (!["antigravity", "third-party"].includes(mode)) {
@@ -169,6 +173,7 @@ export function buildTaskLaunchPlan(options = {}) {
   const model = provider === "third-party" ? profile.model : profile.antigravityModel;
   const supervisorScript = resolve(join(scriptRoot, "start-anticodex-fixed-route.mjs"));
   const codexHome = join(stateRoot, "codex-home-deepseek-app");
+  const disableGpu = truthy(env.ANTICODEX_DISABLE_GPU ?? env.DEEPCODEX_DISABLE_GPU);
   const supervisorArgs = [
     supervisorScript,
     "--install-root", installRoot,
@@ -176,8 +181,8 @@ export function buildTaskLaunchPlan(options = {}) {
     "--provider", provider,
     "--model", model,
     "--manager-base-url", "http://127.0.0.1:8484",
-    "--disable-gpu",
   ];
+  if (disableGpu) supervisorArgs.push("--disable-gpu");
   if (provider === "third-party") {
     supervisorArgs.push("--context-window", String(profile.contextWindow));
   }
@@ -190,6 +195,7 @@ export function buildTaskLaunchPlan(options = {}) {
     codexHome,
     provider,
     model,
+    disableGpu,
     profile,
     supervisorScript,
     supervisorArgs,
@@ -221,6 +227,8 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     "UPSTREAM_MODEL",
     "UPSTREAM_API_KEY",
     "UPSTREAM_CONTEXT_WINDOW",
+    "DEEPCODEX_DISABLE_GPU",
+    "ANTICODEX_DISABLE_GPU",
   ]) delete env[key];
 
   Object.assign(env, {
@@ -230,8 +238,6 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     GLOBAL_CODEX_HOME: join(plan.userProfile, ".codex"),
     DEEPCODEX_SHARED_CODEX_HOME: join(plan.userProfile, ".codex"),
     DEEPCODEX_CDP_PORT: "18318",
-    DEEPCODEX_DISABLE_GPU: "1",
-    ANTICODEX_DISABLE_GPU: "1",
     DEEPCODEX_DISPLAY_NAME: "Anti-Codex",
     DEEPCODEX_SKIP_PLUGIN_SYNC: "1",
     ANTICODEX_MANAGER_API: "http://127.0.0.1:8484",
@@ -239,6 +245,10 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     ANTICODEX_PROVIDER: plan.provider,
     ANTICODEX_MODEL: plan.model,
   });
+  if (plan.disableGpu) {
+    env.DEEPCODEX_DISABLE_GPU = "1";
+    env.ANTICODEX_DISABLE_GPU = "1";
+  }
 
   const thirdPartyConfigured = Boolean(
     text(runtimeProfile.protocol)

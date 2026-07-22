@@ -1,5 +1,13 @@
 # Anti-Codex 当前长任务目标与验收清单
 
+## Accepted Result - 2026-07-22 13:48
+
+The sole remaining autonomous long-task acceptance is complete in the original native task `019f7379-c051-7de1-b2eb-cd2e333bf8f9`. Gemini and Claude Sonnet 4.6 were used in that priority order and each ended with an explicit 429; only then did third-party `gpt-5.6-sol` finish the unchanged total objective in turn `019f8813-df4a-7d71-99b7-8b26b83ce551`. That final turn contains exactly one total-goal user input, 12 model-owned plan updates, the visible production/rework/verification tool history and native `task_complete`; the host sent no intermediate plan, stage or implementation prompt. Independent host verification passed the final live-action master, visible Chinese speaking/lip-sync evidence, subtitles, audio, full decode, black/silence checks, deterministic rebuild receipts, hashes, manifest and readable release package. W01 passes 5/5 at `+0.1s` and W03 passes 4/5 at `0.0s`; W02 remains the honest 3/5 failed control and is delivered only as an eye-area live-action narration shot with the mouth excluded.
+
+Final artifacts are `stage10-autonomous-production/outputs/final-master.mp4` and `stage10-autonomous-production/release/stage10-live-action-release.zip`. The master is 50.160 seconds, 1080x1920 H.264/yuv420p at 25 fps with AAC mono 48 kHz audio; host measurements are `-16.51 LUFS`, `-1.70 dBTP`, zero black events and zero silence events of at least 1.5 seconds. The final ZIP is 95,112,120 bytes with 48 safe/nonempty entries and 47/47 hashed payloads matching. Master SHA-256 is `04916DB3BE7AE942B52E3274EAA5FBA5EF70B1754B62DF7466E3A28641AC2221`; ZIP SHA-256 is `D5DF54ACF2E8505D874985503689A35E7A7723AEC92BA4F2B52A7E05D412389A`. Future provider priority remains Gemini first, Claude Sonnet 4.6 second after explicit Gemini failure, and third-party only after both are explicitly unavailable. This acceptance closure does not change passive product progress: shell 88%, CodexPlusPlus 94%, Antigravity 94%, overall 90%, not 100%.
+
+> 2026-07-21 23:12 现场状态：路由、CSRF、错误 cwd 均已修正，但原任务仍有 75 个历史回合，最近 40 个被宿主 Stage 4A-4O 微提示占据；Extra Low 和 Pro Low 都会继续遵守旧“只审计、不改媒体、BLOCKED 后结束”的同级指令。完整 118,516,621 字节 rollout 已备份后，使用原生 `thread/rollback` 清除 75 个可见旧回合，保留同一任务 ID 和全部工程文件。干净回合 `019f853b-ce2c-79b2-8f66-4207b7596761` 只接收同一自主总目标，绑定正确 Stage 7 根目录和 Gemini 3.1 Pro Low；首个真实计划已覆盖现状诊断、代码修复、口型重做、媒体/口型 QA、最终 1080x1920 成片与发布包审计，并开始读取真实工程。当前只是首次有效自主启动，尚未通过持续执行与最终验收。壳当前版本门禁已绿，整体仍按 90% 记账。
+
 更新时间：2026-07-20
 
 ## 唯一目标
@@ -113,3 +121,22 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 3. 长任务必须保留原任务、多回合工具记录、可打开的实物成果和独立主机验收。文字报告只能作为证据，不能代替成果。
 4. 长任务不得自行创建盘符映射、挂载点、计划任务或开机启动项；确有必要时必须先获得用户明确同意，并在同一操作中自动清理。
 5. 核对本轮是否仍由一份总目标驱动；发现逐阶段喂提示词时立即停止并恢复为自主执行，不得把主机代管误记为产品通过。
+
+## 2026-07-23 当前运行与继续规则
+
+- 官方 Codex 与 Anti-Codex 活跃版本均为 `26.715.10079.0`，更新检测为 `up_to_date`。内置更新器已经真实完成一次候选验证、切换和验收；原生 Codex 全程保持运行。
+- Anti-Codex 恢复窗口闪烁的根因是强制软件渲染，现已改为默认使用 NVIDIA D3D11 硬件合成。当前一个可见 Anti-Codex 在三次最小化/恢复中保持同一 PID、窗口句柄和页面目标。
+- 离线验收已通过：Gate 1 为 `497/497`，完整同步就绪、已安装 Gate 7 和 legacy-zero-hit 均为绿色，且 `usedRealTraffic=false`。这些只证明三层产品与更新链路当前稳定，不替代真人口型同步成片验收。
+- 唯一生产任务仍是 `019f7379-c051-7de1-b2eb-cd2e333bf8f9`。若任务因更新或客户端中断而停下，只能重开同一任务并发送一次 `继续`；不得再次发送总目标、阶段提示、实现办法或另建任务。
+- 模型优先级固定为 Gemini、Claude、第三方。运行中的完整回合不得中途切换；提供方明确报错时才换下一条可用通道。主机只监控、修产品故障和独立验收，不替 Anti-Codex 规划生产步骤。
+- 当前仍不得标记整体 100%。只有连续真人画面、真实开口对白、音乐、中文字幕、逐句口型证据、完整媒体 QA、哈希、发布包、同一任务工具记录和最终跨提供方审计全部通过，才可关闭本验收。
+
+## 2026-07-23 Stage 10 最终真人口型同步验收
+
+- 唯一任务 `019f7379-c051-7de1-b2eb-cd2e333bf8f9` 已在正确 Stage 7 根目录自然完成，最后回合为 `019f8813-df4a-7d71-99b7-8b26b83ce551`。同一任务保留 Gemini 3.1 Pro Low、Claude Sonnet 4.6 与第三方 `gpt-5.6-sol` 的真实回合和工具证据；任务已终止完成，因此主机没有再发送 `继续` 或任何新提示。
+- 最终成片 `stage10-autonomous-production/outputs/final-master.mp4` 为 50.160 秒、1080x1920、H.264/yuv420p 25 fps、AAC mono 48 kHz，45,034,278 字节，SHA-256 `04916db3be7ae942b52e3274eaa5fba5ef70b1754b62df7466e3a28641ac2221`。画面为连续真人护肤/带货风格内容，开头和结尾真人清晰开口，包含中文对白、音乐和连续中文字幕，不是动画、PPT 或静帧朗读。
+- 独立媒体验收通过：外部成片和包内成片均完整解码；综合响度 -16.51 LUFS、真峰值 -1.70 dBTP；黑场、1.5 秒以上长静音和冻结事件均为 0。12 条中文字幕从 0.000 秒连续覆盖到 50.127 秒。
+- 严格内嵌音频口型复算通过可见说话段：W01 为 5/5、聚合偏移 +0.1 秒；W03 为 4/5、聚合偏移 0.0 秒。W02 为 3/5，明确保留失败，但最终画面不显示其嘴部，只作为画外音，不能拿它冒充口型通过，也不构成可见说话验收项。
+- 最终发布包 `stage10-autonomous-production/release/stage10-live-action-release.zip` 为 95,112,120 字节，SHA-256 `d5df54acf2e8505d874985503689a35e7a7723aec92ba4f2b52a7e05d412389a`。48 个条目无危险路径、空文件和重复路径，47 项清单哈希零不一致，包内成片与外部成片逐字节一致并完整解码。
+- 素材与许可记录通过：六段 Mixkit 真人素材页均明确标注可在 Stock Video Free License 下用于商业或个人用途；本地素材哈希、对白来源、口型衍生关系及本地生成音乐/环境声均写入 `source-license.json`。
+- 结论：自主真人口型同步长任务已完成并通过最终内容验收，不再启动生产回合。当前补丁提交的 Gate 1 已通过受控单窗口切换完成 20/20 隔离检查；随后源码预检 `498/498`、完整同步就绪、已安装 Gate 7 与 legacy-zero-hit 全部通过。发布总门现为壳 100%、CodexPlusPlus 100%、Antigravity 薄适配 100%、整体 100%，Gate 1-8 全部完成，`releaseReady:true`。

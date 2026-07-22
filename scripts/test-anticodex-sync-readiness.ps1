@@ -164,9 +164,13 @@ $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
 $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
 $launchTaskName = "Anti-Codex Launcher"
+$updateTaskName = "Anti-Codex Updater"
 $launchTaskScript = Join-Path $scriptsRoot "start-anticodex-task.mjs"
 $launchTaskActionArguments = "`"$launchTaskScript`" --hide-console"
-$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"Start-ScheduledTask -TaskName '$launchTaskName'`""
+$updateTaskScript = Join-Path $scriptsRoot "start-anticodex-update-task.mjs"
+$launchTaskShortcutCommand = "`$service = New-Object -ComObject 'Schedule.Service'; `$service.Connect(); `$task = `$service.GetFolder('\').GetTask('\$launchTaskName'); [void]`$task.Run(`$null)"
+$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$launchTaskShortcutCommand`""
+$updateTaskActionArguments = "`"$updateTaskScript`" --hide-console"
 $programsPath = [Environment]::GetFolderPath("Programs")
 if (-not $programsPath) {
     $programsPath = if ($env:APPDATA) { Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" } else { Join-Path $env:USERPROFILE "AppData\Roaming\Microsoft\Windows\Start Menu\Programs" }
@@ -211,7 +215,7 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
     Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock"
 }
 
-foreach ($path in @($syncScript, $syncLauncherScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
+foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure "sync readiness missing required path: $path"
     }
@@ -443,13 +447,45 @@ function Get-AntiCodexShortcutLauncherTarget {
     try { return [IO.Path]::GetFullPath($target) } catch { return $target }
 }
 
+$script:antiCodexScheduleService = $null
+$script:antiCodexScheduleRoot = $null
+
+function Get-AntiCodexScheduleRoot {
+    if ($null -eq $script:antiCodexScheduleService -or $null -eq $script:antiCodexScheduleRoot) {
+        $service = New-Object -ComObject "Schedule.Service"
+        $service.Connect()
+        $script:antiCodexScheduleService = $service
+        $script:antiCodexScheduleRoot = $service.GetFolder("\")
+    }
+    return $script:antiCodexScheduleRoot
+}
+
+function Get-AntiCodexRegisteredTask {
+    param([Parameter(Mandatory = $true)][string]$TaskName)
+
+    return (Get-AntiCodexScheduleRoot).GetTask("\$TaskName")
+}
+
+function Get-AntiCodexTaskStateName {
+    param([int]$State)
+    switch ($State) {
+        1 { return "Disabled" }
+        2 { return "Queued" }
+        3 { return "Ready" }
+        4 { return "Running" }
+        default { return "Unknown" }
+    }
+}
+
 function Get-AntiCodexLaunchTaskEvidence {
     try {
-        $task = Get-ScheduledTask -TaskName $launchTaskName -ErrorAction Stop | Select-Object -First 1
-        $action = @($task.Actions | Select-Object -First 1)[0]
-        $actualExecute = [string]$action.Execute
-        $actualArguments = [string]$action.Arguments
-        $actualWorkingDirectory = [string]$action.WorkingDirectory
+        $task = Get-AntiCodexRegisteredTask -TaskName $launchTaskName
+        $definition = $task.Definition
+        $actionCount = [int]$definition.Actions.Count
+        $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
+        $actualExecute = if ($action) { [string]$action.Path } else { "" }
+        $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
+        $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
         $argumentMatch = [regex]::Match($actualArguments, '^"([^"]+)"\s+--hide-console$')
         $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
         try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
@@ -461,18 +497,27 @@ function Get-AntiCodexLaunchTaskEvidence {
         )
         $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         $currentShortUserName = ($currentUserName -split "\\")[-1]
-        $taskUserName = [string]$task.Principal.UserId
+        $taskUserName = [string]$definition.Principal.UserId
         $principalMatches = (
             ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
-            [string]$task.Principal.LogonType -eq "Interactive" -and
-            [string]$task.Principal.RunLevel -eq "Limited"
+            [int]$definition.Principal.LogonType -eq 3 -and
+            [int]$definition.Principal.RunLevel -eq 0
         )
         $settingsMatch = (
-            [string]$task.Settings.MultipleInstances -eq "IgnoreNew" -and
-            $task.Settings.DisallowStartIfOnBatteries -eq $false -and
-            $task.Settings.StopIfGoingOnBatteries -eq $false -and
-            [string]$task.Settings.ExecutionTimeLimit -eq "PT0S"
+            [bool]$task.Enabled -and
+            [int]$definition.Triggers.Count -eq 0 -and
+            [int]$definition.Settings.MultipleInstances -eq 2 -and
+            [bool]$definition.Settings.AllowDemandStart -and
+            [bool]$definition.Settings.AllowHardTerminate -and
+            -not [bool]$definition.Settings.RunOnlyIfIdle -and
+            -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
+            [bool]$definition.Settings.DisallowStartIfOnBatteries -eq $false -and
+            [bool]$definition.Settings.StopIfGoingOnBatteries -eq $false -and
+            [int]$definition.Settings.RestartCount -eq 1 -and
+            [string]$definition.Settings.RestartInterval -eq "PT1M" -and
+            [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
         )
+        $stateCode = [int]$task.State
         return [pscustomobject]@{
             ok = ($actionMatches -and $principalMatches -and $settingsMatch)
             exists = $true
@@ -486,7 +531,8 @@ function Get-AntiCodexLaunchTaskEvidence {
             actionMatches = $actionMatches
             principalMatches = $principalMatches
             settingsMatch = $settingsMatch
-            state = [string]$task.State
+            state = (Get-AntiCodexTaskStateName -State $stateCode)
+            stateCode = $stateCode
             error = ""
         }
     } catch {
@@ -504,6 +550,77 @@ function Get-AntiCodexLaunchTaskEvidence {
 $launchTaskEvidence = Get-AntiCodexLaunchTaskEvidence
 if (-not $launchTaskEvidence.ok) {
     Add-Failure "Anti-Codex launch task is missing or stale: $($launchTaskEvidence.error)"
+}
+
+function Get-AntiCodexUpdateTaskEvidence {
+    try {
+        $task = Get-AntiCodexRegisteredTask -TaskName $updateTaskName
+        $definition = $task.Definition
+        $actionCount = [int]$definition.Actions.Count
+        $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
+        $actualExecute = if ($action) { [string]$action.Path } else { "" }
+        $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
+        $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
+        $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $currentShortUserName = ($currentUserName -split "\\")[-1]
+        $taskUserName = [string]$definition.Principal.UserId
+        $actionMatches = (
+            $actionCount -eq 1 -and
+            $actualExecute -ieq $node -and
+            $actualArguments -ceq $updateTaskActionArguments -and
+            $actualWorkingDirectory -ieq $installRoot
+        )
+        $principalMatches = (
+            ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
+            [int]$definition.Principal.LogonType -eq 3 -and
+            [int]$definition.Principal.RunLevel -eq 0
+        )
+        $settingsMatch = (
+            [bool]$task.Enabled -and
+            [int]$definition.Triggers.Count -eq 0 -and
+            [int]$definition.Settings.MultipleInstances -eq 2 -and
+            [bool]$definition.Settings.AllowDemandStart -and
+            [bool]$definition.Settings.AllowHardTerminate -and
+            -not [bool]$definition.Settings.RunOnlyIfIdle -and
+            -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
+            [bool]$definition.Settings.DisallowStartIfOnBatteries -eq $false -and
+            [bool]$definition.Settings.StopIfGoingOnBatteries -eq $false -and
+            [int]$definition.Settings.RestartCount -eq 0 -and
+            [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
+        )
+        $stateCode = [int]$task.State
+        return [pscustomobject]@{
+            ok = ($actionMatches -and $principalMatches -and $settingsMatch)
+            exists = $true
+            taskName = $updateTaskName
+            expectedExecute = $node
+            actualExecute = $actualExecute
+            expectedArguments = $updateTaskActionArguments
+            actualArguments = $actualArguments
+            expectedWorkingDirectory = $installRoot
+            actualWorkingDirectory = $actualWorkingDirectory
+            expectedScript = $updateTaskScript
+            actionMatches = $actionMatches
+            principalMatches = $principalMatches
+            settingsMatch = $settingsMatch
+            state = (Get-AntiCodexTaskStateName -State $stateCode)
+            stateCode = $stateCode
+            error = ""
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            exists = $false
+            taskName = $updateTaskName
+            expectedScript = $updateTaskScript
+            error = $_.Exception.Message
+        }
+    }
+}
+
+$updateTaskEvidence = Get-AntiCodexUpdateTaskEvidence
+if (-not $updateTaskEvidence.ok) {
+    Add-Failure "Anti-Codex update task is missing or stale: $($updateTaskEvidence.error)"
 }
 
 function New-AntiCodexShortcutSpec {
@@ -994,6 +1111,7 @@ $result = [pscustomobject]@{
     sync = [pscustomobject]@{
         scriptExists = (Test-Path -LiteralPath $syncScript)
         launcherExists = (Test-Path -LiteralPath $syncLauncherScript)
+        updateTaskBrokerExists = (Test-Path -LiteralPath $updateTaskScript)
         rollbackScriptExists = (Test-Path -LiteralPath $rollbackScript)
         rollbackLauncherExists = (Test-Path -LiteralPath $rollbackLauncherScript)
         updateCheckExists = (Test-Path -LiteralPath $updateCheckScript)
@@ -1004,6 +1122,7 @@ $result = [pscustomobject]@{
         installerExists = (Test-Path -LiteralPath $installScript)
         startScriptExists = (Test-Path -LiteralPath $startScript)
         launchTask = $launchTaskEvidence
+        updateTask = $updateTaskEvidence
         startMenuMainShortcutExists = $startMenuMainShortcutExists
         startMenuMainShortcutTarget = $startMenuMainShortcutTarget
         startMenuMainShortcutArguments = $startMenuMainShortcutArguments

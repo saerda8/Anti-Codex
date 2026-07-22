@@ -28,6 +28,7 @@ $requiredSourceFiles = @(
     "scripts\start-anticodex.ps1",
     "scripts\hide-anticodex-console.ps1",
     "scripts\start-anticodex-task.mjs",
+    "scripts\start-anticodex-update-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
     "scripts\anticodex-manager-service.mjs",
     "scripts\install-codexplusplus-component.ps1",
@@ -506,6 +507,7 @@ function Invoke-AntiCodexFixedRouteLauncher {
 
 $syntaxCheckedJavaScriptFiles = @(
     "scripts\start-anticodex-task.mjs",
+    "scripts\start-anticodex-update-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
     "scripts\anticodex-manager-service.mjs",
     "scripts\lib\anticodex-fixed-route.mjs",

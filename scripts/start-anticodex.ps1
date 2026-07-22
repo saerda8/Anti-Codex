@@ -436,8 +436,19 @@ $resolvedUserProfile = if ($UserProfilePath) {
 $env:GLOBAL_CODEX_HOME = Join-Path $resolvedUserProfile ".codex"
 $env:DEEPCODEX_SHARED_CODEX_HOME = $env:GLOBAL_CODEX_HOME
 $env:DEEPCODEX_CDP_PORT = "18318"
-$env:DEEPCODEX_DISABLE_GPU = "1"
-$env:ANTICODEX_DISABLE_GPU = "1"
+$disableGpuRaw = if (Test-Path Env:ANTICODEX_DISABLE_GPU) {
+    [string]$env:ANTICODEX_DISABLE_GPU
+} else {
+    [string]$env:DEEPCODEX_DISABLE_GPU
+}
+$disableGpu = @("1", "true", "yes", "on") -contains $disableGpuRaw.Trim().ToLowerInvariant()
+if ($disableGpu) {
+    $env:DEEPCODEX_DISABLE_GPU = "1"
+    $env:ANTICODEX_DISABLE_GPU = "1"
+} else {
+    Remove-Item Env:DEEPCODEX_DISABLE_GPU -ErrorAction SilentlyContinue
+    Remove-Item Env:ANTICODEX_DISABLE_GPU -ErrorAction SilentlyContinue
+}
 $env:DEEPCODEX_DISPLAY_NAME = "Anti-Codex"
 $env:DEEPCODEX_SKIP_PLUGIN_SYNC = "1"
 $env:ANTICODEX_MANAGER_API = "http://127.0.0.1:8484"
@@ -560,9 +571,9 @@ $supervisorArgs = @(
     "--state-root", "`"$stateRoot`"",
     "--provider", $selection.provider,
     "--model", $selection.model,
-    "--manager-base-url", $env:ANTICODEX_MANAGER_API,
-    "--disable-gpu"
+    "--manager-base-url", $env:ANTICODEX_MANAGER_API
 )
+if ($disableGpu) { $supervisorArgs += "--disable-gpu" }
 
 if ($InlineSupervisor) {
     $inlineSupervisorArgs = @(
@@ -571,9 +582,9 @@ if ($InlineSupervisor) {
         "--state-root", $stateRoot,
         "--provider", $selection.provider,
         "--model", $selection.model,
-        "--manager-base-url", $env:ANTICODEX_MANAGER_API,
-        "--disable-gpu"
+        "--manager-base-url", $env:ANTICODEX_MANAGER_API
     )
+    if ($disableGpu) { $inlineSupervisorArgs += "--disable-gpu" }
     Write-AntiCodexLauncherState -Stage "supervising-fixed-route"
     $savedErrorActionPreference = $ErrorActionPreference
     $inlineExitCode = -1

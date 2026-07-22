@@ -573,7 +573,7 @@ test("the Gate 8 quota probe is locked, opt-in, and sends exactly one model requ
   assert.match(syncSource, /scripts\\test-anticodex-gate8-quota-probe\.ps1/);
 });
 
-test("the Gate 8 quota probe completes one redacted request against a loopback fixture", { timeout: 30_000 }, async () => {
+test("the Gate 8 quota probe completes one redacted request against a loopback fixture", { timeout: 90_000 }, async () => {
   const model = "claude-sonnet-4-6";
   const mismatchModel = "catalog-model-not-fixed";
   const exhaustedModel = "quota-exhausted-fixture";

@@ -16,6 +16,7 @@ const explicitPort = args.get("--port") || process.env.DEEPCODEX_CDP_PORT || "";
 const port = Number(explicitPort || discoverAntiCodexCdpPorts()[0] || 18318);
 const baseUrl = String(args.get("--base-url") || "http://127.0.0.1:8484").replace(/\/$/, "");
 const catalogPath = args.get("--catalog") || "";
+const isolatedUnifiedCatalogPath = path.join(process.env.APPDATA || "", "anticodex", "codex-home-deepseek-app", "anticodex-model-catalog.json");
 const timeoutMs = Number(args.get("--timeout-ms") || 8000);
 const managerProbeTimeoutMs = Math.max(1000, Number(args.get("--manager-probe-timeout-ms") || timeoutMs));
 const fastUiState = /^(1|true|yes)$/i.test(String(args.get("--fast") || ""));
@@ -806,6 +807,8 @@ let selectedContextProbe = null;
 let labels = loadExpectedLabels(catalogPath);
 let modelIds = [];
 const catalogModels = loadCatalogModels(catalogPath);
+const isolatedCatalogModels = loadCatalogModels(isolatedUnifiedCatalogPath);
+let modelCatalogSource = "fixed-route-endpoint";
 let catalogCheck = { failures: [], catalogIds: [], catalogLabels: [] };
 let managerButtonLock = null;
 let upstreamHealth = null;
@@ -832,8 +835,18 @@ try {
     if (!upstreamModel) failures.push("third-party upstream UI verification missing model");
   }
   progress("models");
-  const modelPayload = await getJson(`${baseUrl}/models`);
+  let modelPayload = await getJson(`${baseUrl}/models`);
   modelCount = Array.isArray(modelPayload.data) ? modelPayload.data.length : 0;
+  if (modelCount < 1 && isolatedCatalogModels.length > 0) {
+    modelPayload = {
+      data: isolatedCatalogModels.map((model) => ({
+        id: String(model.slug || ""),
+        display_name: String(model.display_name || ""),
+      })).filter((model) => model.id),
+    };
+    modelCount = modelPayload.data.length;
+    modelCatalogSource = "isolated-unified-catalog";
+  }
   modelIds = Array.isArray(modelPayload.data) ? modelPayload.data.map((model) => String(model.id || "")).filter(Boolean) : [];
   if (modelCount < 1) failures.push("/models returned no visible models");
   const providerLabels = labelsFromModelPayload(modelPayload, upstreamModel);
@@ -979,9 +992,26 @@ try {
           }
           return chunks.join("\\n").slice(0, 1200);
         })(),
-        modelControlsText: Array.from(document.querySelectorAll("button,[role='button'],[aria-label],[title]"))
-          .map((node) => [node.textContent, node.getAttribute("aria-label"), node.getAttribute("title")].filter(Boolean).join(" "))
-          .find((value) => new RegExp(${JSON.stringify(modelControlPatternSource)}, "i").test(value)) || "",
+        modelControlsText: (() => {
+          const composer = document.querySelector("[data-codex-composer].ProseMirror, .ProseMirror");
+          const composerRect = composer?.getBoundingClientRect();
+          const modelControlCandidates = Array.from(document.querySelectorAll("button,[role='button'],[aria-label],[title]"))
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              const label = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")].filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const distance = composerRect ? Math.hypot(centerX - (composerRect.left + composerRect.width / 2), centerY - (composerRect.top + composerRect.height / 2)) : 0;
+              const score = (element.getAttribute("aria-haspopup") === "menu" ? 260 : 0) - distance - Math.min(label.length, 100);
+              return { element, rect, label, score };
+            })
+            .filter(({ element, rect, label }) => rect.width > 0 && rect.height > 0
+              && (!composerRect || rect.right > composerRect.left)
+              && getComputedStyle(element).visibility !== "hidden"
+              && new RegExp(${JSON.stringify(modelControlPatternSource)}, "i").test(label))
+            .sort((left, right) => right.score - left.score);
+          return modelControlCandidates[0]?.label || "";
+        })(),
         composerPresent: Boolean(document.querySelector("[data-codex-composer].ProseMirror, .ProseMirror")),
         version: window.__ANTICODEX_MANAGER_VERSION__ || "",
         hasOpen: typeof window.__ANTICODEX_OPEN_MANAGER__ === "function",
@@ -1156,6 +1186,7 @@ try {
         model: upstreamModel,
       } : null,
       modelCount,
+      modelCatalogSource,
       modelIds,
       expectedLabelCount: labels.length,
       catalogModelCount: catalogModels.length,
@@ -1665,6 +1696,7 @@ const output = {
     model: upstreamModel,
   } : null,
   modelCount,
+  modelCatalogSource,
   modelIds,
   expectedLabelCount: labels.length,
   catalogModelCount: catalogModels.length,

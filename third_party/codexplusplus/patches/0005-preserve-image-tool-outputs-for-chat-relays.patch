@@ -1,14 +1,18 @@
-From 16847861cfc180a761ac74f3d3fd2d885e8c2471 Mon Sep 17 00:00:00 2001
+From dc65896e20b34aceb5c99075bebdfe5161bcded1 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 5/7] fix: preserve image tool outputs for chat relays
+Subject: [PATCH 5/9] fix: preserve image tool outputs for chat relays
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs  | 152 +++++++++++++++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   |  67 ++++++++
+ 2 files changed, 215 insertions(+), 4 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c833a6c439 100644
+index 337a5c5..e71ac17 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -2559,7 +2559,7 @@ fn append_responses_item(
+@@ -2586,7 +2586,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -17,7 +21,7 @@ index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c8
              }));
          }
          Some("custom_tool_call") => {
-@@ -2605,7 +2605,7 @@ fn append_responses_item(
+@@ -2632,7 +2632,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -26,7 +30,7 @@ index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c8
              }));
          }
          Some("tool_call") => {
-@@ -2651,7 +2651,7 @@ fn append_responses_item(
+@@ -2678,7 +2678,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -35,7 +39,7 @@ index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c8
              }));
          }
          Some("reasoning") => {
-@@ -2688,11 +2688,26 @@ fn append_responses_item(
+@@ -2715,11 +2715,26 @@ fn append_responses_item(
  }
  
  fn orphan_tool_output_message(call_id: &str, output: &Value) -> Value {
@@ -63,7 +67,7 @@ index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c8
          )
      })
  }
-@@ -4077,6 +4092,135 @@ fn response_output_text(value: &Value) -> String {
+@@ -4104,6 +4119,135 @@ fn response_output_text(value: &Value) -> String {
      }
  }
  
@@ -200,7 +204,7 @@ index 44172a0174bc3e120791348493cf9241c099c5ca..fd8856e718c04dc71d841da3c4cb69c8
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 6ae97de41eb4450dadafa52420351a792120db72..75420c6c7596b6cc2add0d6abcf495f5f8b7b8af 100644
+index 6ae97de..75420c6 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -834,6 +834,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {

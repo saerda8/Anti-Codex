@@ -19,6 +19,13 @@ Read it before every worker task. Update it after every worker failure before re
 12. Treat MiMo with the same autonomy risk as DeepSeek. Either give it an isolated worktree and explicit permission to complete the task, or give it a narrow writable scope with one observable output; do not rely on a shared-worktree "read-only" prompt as a safety boundary.
 13. Xiaoqiang is now four expected MCP workers: `xiaoqiang1`, `xiaoqiang2`, `xiaoqiang3`, and `xiaoqiang4`. If the current Codex channel exposes only the first three, classify `xiaoqiang4` as a channel/tool exposure reload issue, not as nonexistent. Do not rewrite historical 3/3 Xiaoqiang evidence as 4/4; run fresh four-worker evidence after the tool is visible.
 
+## Docker Build Rules
+
+1. Host agents and workers must run CodexPlusPlus cargo-xwin builds through `scripts\invoke-anticodex-cargo-xwin.ps1`; the runner forces `docker run --rm`, labels the exact ephemeral container, and removes that exact container again in `finally` if needed.
+2. 禁止直接使用 `docker create` 加 `sleep infinity` 建立常驻编译壳，也禁止给一次性 cargo-xwin build 指定名称却省略 `--rm`。
+3. Never reuse, stop, or remove an existing Docker container by a broad name filter. Build cleanup may target only the exact generated `anticodex-cpp-build-*` name owned by the current invocation.
+4. Before final handoff after any Docker build, run `scripts\test-anticodex-docker-build-hygiene.ps1` and verify that `docker ps -a` contains no Anti-Codex build container. Existing business containers, images, volumes, Redis, Postgres and Sub2API are out of scope.
+
 ## Time Rules
 
 1. Check status after about 30 seconds without a file change.
