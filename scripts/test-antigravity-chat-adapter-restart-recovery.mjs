@@ -122,7 +122,7 @@ if (!allowRealTraffic) {
       tools,
       tool_choice: { type: "function", function: { name: "restart_probe" } },
     };
-    first = await postJson(`${provider1.url}/chat/completions`, firstBody, timeoutMs);
+    first = await postJson(`${provider1.url}/chat/completions`, firstBody, timeoutMs, provider1.authToken);
     const toolCalls = first.body?.choices?.[0]?.message?.tool_calls ?? [];
     call = toolCalls[0] ?? null;
     try {
@@ -171,7 +171,7 @@ if (!allowRealTraffic) {
       tools,
       tool_choice: "none",
     };
-    second = await postJson(`${provider2.url}/chat/completions`, secondBody, timeoutMs);
+    second = await postJson(`${provider2.url}/chat/completions`, secondBody, timeoutMs, provider2.authToken);
     const finalMessage = second.body?.choices?.[0]?.message ?? {};
     const finalText = String(finalMessage.content ?? "").trim();
     const repeatedToolCalls = Array.isArray(finalMessage.tool_calls) ? finalMessage.tool_calls.length : 0;
@@ -295,10 +295,11 @@ function instrumentClient(label) {
   };
 }
 
-async function postJson(url, body, requestTimeoutMs) {
+async function postJson(url, body, requestTimeoutMs, authToken) {
   const response = await fetch(url, {
     method: "POST",
     headers: {
+      authorization: `Bearer ${authToken}`,
       "content-type": "application/json",
       connection: "close",
     },

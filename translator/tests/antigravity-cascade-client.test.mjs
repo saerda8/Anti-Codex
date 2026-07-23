@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   createAntigravityCascadeClient,
@@ -20,6 +22,121 @@ test("extracts only loopback listening ports owned by the Antigravity process", 
 
   assert.equal(typeof cascadeClientModule.extractListeningPortsForProcess, "function");
   assert.deepEqual(cascadeClientModule.extractListeningPortsForProcess(netstat, 33752), [57882, 57883, 57884]);
+});
+
+test("accepts only canonical loopback address forms with a valid port", () => {
+  const cases = [
+    ["127.0.0.1:43210", "127.0.0.1:43210"],
+    ["localhost:43210", "127.0.0.1:43210"],
+    ["http://127.0.0.1:43210", "127.0.0.1:43210"],
+    ["https://localhost:43210/", "127.0.0.1:43210"],
+    ["[::1]:43210", "[::1]:43210"],
+    ["::1:43210", "[::1]:43210"],
+    ["http://[::1]:43210/", "[::1]:43210"],
+  ];
+
+  for (const [input, expected] of cases) {
+    assert.deepEqual(
+      cascadeClientModule.discoverAntigravityDesktopConnection({
+        ANTIGRAVITY_LS_ADDRESS: input,
+        ANTIGRAVITY_CSRF_TOKEN: "csrf",
+      }),
+      {
+        lsAddress: expected,
+        agentApiAddress: expected,
+        csrfToken: "csrf",
+      },
+      input,
+    );
+  }
+});
+
+test("rejects non-loopback and ambiguous explicit addresses before a CSRF-bearing request", async () => {
+  const rejected = [
+    "0.0.0.0:43210",
+    "10.0.0.1:43210",
+    "192.168.1.1:43210",
+    "8.8.8.8:43210",
+    "localhost.evil.test:43210",
+    "127.0.0.1.evil.test:43210",
+    "user@localhost:43210",
+    "http://user@localhost:43210",
+    "http://localhost:43210/path",
+    "http://localhost:43210?next=evil.test",
+    "http://localhost:43210/#fragment",
+    "file://localhost:43210",
+    "127.0.0.1",
+    "127.0.0.1:0",
+    "127.0.0.1:65536",
+    "127.0.0.1:not-a-port",
+  ];
+
+  for (const address of rejected) {
+    assert.throws(
+      () => cascadeClientModule.discoverAntigravityDesktopConnection({
+        ANTIGRAVITY_LS_ADDRESS: address,
+        ANTIGRAVITY_CSRF_TOKEN: "must-not-leak",
+      }),
+      /loopback host with a valid port/i,
+      address,
+    );
+
+    let requests = 0;
+    const client = createAntigravityCascadeClient({
+      connection: {
+        lsAddress: address,
+        agentApiAddress: address,
+        csrfToken: "must-not-leak",
+      },
+      fetchImpl: async () => {
+        requests += 1;
+        return jsonResponse(modelPayload());
+      },
+    });
+
+    await assert.rejects(
+      client.listModels(),
+      /loopback host with a valid port/i,
+      address,
+    );
+    assert.equal(requests, 0, address);
+  }
+
+  assert.throws(
+    () => cascadeClientModule.discoverAntigravityDesktopConnection({
+      ANTIGRAVITY_LS_ADDRESS: "127.0.0.1:43210",
+      ANTIGRAVITY_AGENTAPI_ADDRESS: "192.168.1.10:43211",
+      ANTIGRAVITY_CSRF_TOKEN: "must-not-leak",
+    }),
+    /loopback host with a valid port/i,
+  );
+});
+
+test("selects the language-server endpoint by protocol proof instead of port order", () => {
+  const attempts = [];
+  const selected = cascadeClientModule.selectAntigravityLanguageServerPort(
+    [65001, 41001, 55001],
+    (port) => {
+      attempts.push(port);
+      return port === 41001;
+    },
+  );
+  assert.equal(selected, 41001);
+  assert.deepEqual(attempts, [65001, 41001]);
+});
+
+test("reads only a bounded tail from desktop log files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "anticodex-antigravity-log-"));
+  const file = join(root, "language_server.log");
+  try {
+    await writeFile(file, `${"old-line\n".repeat(100)}current-tail`, "utf8");
+    const tail = cascadeClientModule.readBoundedLogTail(file, 64);
+    assert.ok(Buffer.byteLength(tail, "utf8") <= 64);
+    assert.match(tail, /current-tail$/);
+    assert.doesNotMatch(tail, /^old-line/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("discovers the current Antigravity connection from official desktop logs", () => {
@@ -76,8 +193,8 @@ test("discovers standard model metadata and account readiness through the local 
     "gemini-flash-agent",
   ]);
   assert.deepEqual(await client.listModels(), [
-    { id: "gemini-pro-agent", displayName: "Gemini Pro", internalModel: "MODEL_PRO" },
-    { id: "gemini-flash-agent", displayName: "Gemini Flash", internalModel: "MODEL_FLASH" },
+    { id: "gemini-pro-agent", model: "MODEL_PRO", displayName: "Gemini Pro", internalModel: "MODEL_PRO" },
+    { id: "gemini-flash-agent", model: "MODEL_FLASH", displayName: "Gemini Flash", internalModel: "MODEL_FLASH" },
   ]);
   const readiness = await client.getReadiness();
   assert.equal(readiness.signedIn, true);
@@ -85,6 +202,40 @@ test("discovers standard model metadata and account readiness through the local 
   assert.equal(readiness.tierName, "pro");
   assert.match(readiness.accountFingerprint, /^sha256:[a-f0-9]{64}$/);
   assert.deepEqual(service.calls.map((call) => call.method), ["GetAvailableModels", "GetUserStatus"]);
+});
+
+test("model normalization retains native capability fields", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse({
+      response: {
+        models: {
+          "gemini-pro-agent": {
+            model: "MODEL_PRO",
+            displayName: "Gemini Pro",
+            maxTokens: 1_048_576,
+            supportsImages: true,
+            supportsThinking: true,
+            thinkingBudget: 8192,
+            minThinkingBudget: 32,
+          },
+        },
+        agentModelSorts: [{ groups: [{ modelIds: ["gemini-pro-agent"] }] }],
+      },
+    }),
+  });
+  const client = clientFor(service.fetch);
+
+  assert.deepEqual(await client.listModels(), [{
+    id: "gemini-pro-agent",
+    model: "MODEL_PRO",
+    displayName: "Gemini Pro",
+    maxTokens: 1_048_576,
+    supportsImages: true,
+    supportsThinking: true,
+    thinkingBudget: 8192,
+    minThinkingBudget: 32,
+    internalModel: "MODEL_PRO",
+  }]);
 });
 
 test("starts a workspace-blind Cascade and returns one text terminal outcome", async () => {
@@ -235,6 +386,7 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
   assert.equal(firstEvents[0].continuation.cascadeId, "cascade_tool");
   assert.equal(bridge.closed, false);
   assert.equal(bridgeOptions.systemPromptSections[0].content, "use tools");
+  assert.ok(bridgeOptions.pendingCallTimeoutMs > 10 * 60 * 1000);
   const compatibility = bridgeOptions.systemPromptSections.at(-1);
   assert.equal(compatibility.title, "Anti-Codex Antigravity tool compatibility");
   assert.match(compatibility.content, /first visible progress sentence of every turn must be Chinese/u);
@@ -314,6 +466,110 @@ test("returns the canonical Codex name for an Antigravity native tool alias", as
     name: "shell_command",
     arguments: { command: "npm test" },
   }]);
+});
+
+test("pairs parallel native calls by call identity instead of arrival order", async () => {
+  let approvals = 0;
+  const queued = [
+    { callId: "bridge_b", nativeCallId: "rpc_b", name: "tool_b", arguments: { value: "B" } },
+    { callId: "bridge_a", nativeCallId: "rpc_a", name: "tool_a", arguments: { value: "A" } },
+  ];
+  const bridge = {
+    ...fakeBridge(),
+    tools: [
+      { name: "tool_a", description: "A", inputSchema: { type: "object" } },
+      { name: "tool_b", description: "B", inputSchema: { type: "object" } },
+    ],
+    async waitForCall() {
+      assert.equal(approvals, 2, "all parallel interactions must be approved before awaiting calls");
+      return queued.shift();
+    },
+  };
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_parallel_identity" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: ({ signal }) => abortableResponse(signal),
+    GetCascadeTrajectory: () => jsonResponse({
+      trajectory: {
+        trajectoryId: "trajectory_parallel_identity",
+        steps: [
+          waitingToolStep("native_a", "tool_a", { value: "A" }, 1),
+          waitingToolStep("native_b", "tool_b", { value: "B" }, 2),
+        ],
+      },
+    }),
+    HandleCascadeUserInteraction: () => {
+      approvals += 1;
+      return jsonResponse({});
+    },
+    CancelCascadeInvocation: () => jsonResponse({}),
+  });
+  const client = clientFor(service.fetch, { createToolBridge: async () => bridge });
+  const iterator = client.start({
+    model: "gemini-pro-agent",
+    userText: "run both",
+    tools: [
+      { type: "function", function: { name: "tool_a", parameters: { type: "object" } } },
+      { type: "function", function: { name: "tool_b", parameters: { type: "object" } } },
+    ],
+  })[Symbol.asyncIterator]();
+
+  const first = await iterator.next();
+  await iterator.return();
+  assert.deepEqual(first.value.calls, [
+    { callId: "bridge_a", name: "tool_a", arguments: { value: "A" } },
+    { callId: "bridge_b", name: "tool_b", arguments: { value: "B" } },
+  ]);
+});
+
+test("exact native IDs disambiguate identical parallel calls", async () => {
+  let approvals = 0;
+  const queued = [
+    { callId: "bridge_b", nativeCallId: "native_b", name: "same_tool", arguments: { value: 1 } },
+    { callId: "bridge_a", nativeCallId: "native_a", name: "same_tool", arguments: { value: 1 } },
+  ];
+  const bridge = {
+    ...fakeBridge(),
+    tools: [{ name: "same_tool", description: "Same", inputSchema: { type: "object" } }],
+    async waitForCall() {
+      assert.equal(approvals, 2);
+      return queued.shift();
+    },
+  };
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_identical_parallel" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: ({ signal }) => abortableResponse(signal),
+    GetCascadeTrajectory: () => jsonResponse({
+      trajectory: {
+        trajectoryId: "trajectory_identical_parallel",
+        steps: [
+          waitingToolStep("native_a", "same_tool", { value: 1 }, 1),
+          waitingToolStep("native_b", "same_tool", { value: 1 }, 2),
+        ],
+      },
+    }),
+    HandleCascadeUserInteraction: () => {
+      approvals += 1;
+      return jsonResponse({});
+    },
+    CancelCascadeInvocation: () => jsonResponse({}),
+  });
+  const client = clientFor(service.fetch, { createToolBridge: async () => bridge });
+  const iterator = client.start({
+    model: "gemini-pro-agent",
+    userText: "run identical calls",
+    tools: [{ type: "function", function: { name: "same_tool", parameters: { type: "object" } } }],
+  })[Symbol.asyncIterator]();
+
+  const first = await iterator.next();
+  await iterator.return();
+  assert.deepEqual(first.value.calls, [
+    { callId: "bridge_a", name: "same_tool", arguments: { value: 1 } },
+    { callId: "bridge_b", name: "same_tool", arguments: { value: 1 } },
+  ]);
 });
 
 test("retries a transient empty-trajectory idle race without replaying the tool result", async () => {
@@ -553,6 +809,27 @@ function waitingToolTrajectory() {
         },
       ],
     },
+  };
+}
+
+function waitingToolStep(id, name, argumentsValue, stepIndex) {
+  return {
+    type: "CORTEX_STEP_TYPE_MCP_TOOL",
+    status: "CORTEX_STEP_STATUS_WAITING",
+    mcpTool: {
+      toolCall: {
+        id,
+        name,
+        argumentsJson: JSON.stringify(argumentsValue),
+      },
+    },
+    metadata: {
+      sourceTrajectoryStepInfo: {
+        trajectoryId: "trajectory_parallel_identity",
+        stepIndex,
+      },
+    },
+    requestedInteraction: { interaction: { case: "mcp" } },
   };
 }
 

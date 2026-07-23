@@ -6,10 +6,40 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { classifyCdpRendererSnapshot } from "./start-anticodex-fixed-route.mjs";
+
+const fatalClientPhrasePattern = /(?:ChatGPT\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed))/i;
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
   args.set(process.argv[i], process.argv[i + 1]);
+}
+
+function hasFatalClientPage(page) {
+  return classifyCdpRendererSnapshot({
+    readyState: page?.readyState || "complete",
+    hasBody: page?.hasBody !== false,
+    text: String(page?.textSample ?? page?.text ?? ""),
+    hasInteractive: page?.hasInteractive !== false,
+    hasComposer: page?.hasComposer ?? page?.composerPresent,
+    primaryHeading: page?.primaryHeading,
+    buttonLabels: page?.buttonLabels,
+  }).fatal;
+}
+
+const pageStateJson = args.get("--page-state-json");
+if (pageStateJson) {
+  let page = null;
+  const failures = [];
+  try {
+    page = JSON.parse(pageStateJson);
+    if (hasFatalClientPage(page)) failures.push("page contains fatal client page text");
+  } catch (error) {
+    failures.push(`page-state JSON is invalid: ${String(error?.message ?? error)}`);
+  }
+  const output = { ok: failures.length === 0, failures, page };
+  console.log(JSON.stringify(output));
+  process.exit(output.ok ? 0 : 1);
 }
 
 const explicitPort = args.get("--port") || process.env.DEEPCODEX_CDP_PORT || "";
@@ -76,6 +106,20 @@ const pageStateProbeExpression = `(() => {
     return chunks.join("\n").slice(0, 6000);
   };
   const text = shortUiText();
+  const fatalClientTextPattern = /(?:ChatGPT\\s*)?(?:已意外停止|unexpectedly\\s+(?:stopped|quit|closed)|has\\s+unexpectedly\\s+(?:stopped|crashed))/i;
+  const composer = document.querySelector('[data-codex-composer], .ProseMirror');
+  const isVisible = (element) => {
+    const rect = element?.getBoundingClientRect?.();
+    const style = element ? getComputedStyle(element) : null;
+    return Boolean(rect && rect.width > 0 && rect.height > 0 && style?.display !== 'none' && style?.visibility !== 'hidden');
+  };
+  const primaryHeadingElement = Array.from(document.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]')).find(isVisible);
+  const primaryHeading = String(primaryHeadingElement?.textContent || '').replace(/\\s+/g, ' ').trim();
+  const buttonLabels = Array.from(document.querySelectorAll('button, [role="button"]'))
+    .filter(isVisible)
+    .map((button) => String(button.textContent || button.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, 40);
   const reconnectPattern = /(?:Reconnecting\\.\\.\\.|reconnecting|正在重新连接|重新连接|正在重连|重连中)/i;
   const staleTranscriptPattern = /(?:UI_WEB_SEARCH_SMOKE|UI_SMOKE_|已完成真实 web_search|translator_direct_web_search|https?:\\/\\/|Reply with exactly|你在 \\d+[^\\n]{0,20}后停止了|已处理 \\d)/i;
   const reconnectEvidence = [];
@@ -100,6 +144,10 @@ const pageStateProbeExpression = `(() => {
     textLength: text.length,
     textSample: text.slice(0, 6000),
     hasLoginText: !!document.querySelector("a[href*='auth/login'], form[action*='auth/login']"),
+    hasFatalText: fatalClientTextPattern.test(text),
+    hasComposer: Boolean(composer),
+    primaryHeading,
+    buttonLabels,
     hasReconnectText: reconnectEvidence.length > 0,
     reconnectEvidence,
     historicalReconnectEvidence: historicalReconnectEvidence.slice(0, 8)
@@ -787,6 +835,10 @@ function pageStateFromContextProbe(probe, error = null) {
     textLength: text.length,
     textSample: text,
     hasLoginText: /auth\/login|鐧诲綍 ChatGPT|Sign in to ChatGPT/i.test(text),
+    hasFatalText: fatalClientPhrasePattern.test(text),
+    hasComposer: probe?.composerPresent,
+    primaryHeading: String(probe?.primaryHeading || ""),
+    buttonLabels: Array.isArray(probe?.buttonLabels) ? probe.buttonLabels : [],
     hasReconnectText: reconnectEvidence.length > 0,
     reconnectEvidence,
     historicalReconnectEvidence,
@@ -992,6 +1044,23 @@ try {
           }
           return chunks.join("\\n").slice(0, 1200);
         })(),
+        primaryHeading: (() => {
+          const element = Array.from(document.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]')).find((candidate) => {
+            const rect = candidate.getBoundingClientRect();
+            const style = getComputedStyle(candidate);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          });
+          return String(element?.textContent || '').replace(/\\s+/g, ' ').trim();
+        })(),
+        buttonLabels: Array.from(document.querySelectorAll('button, [role="button"]'))
+          .filter((button) => {
+            const rect = button.getBoundingClientRect();
+            const style = getComputedStyle(button);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          })
+          .map((button) => String(button.textContent || button.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
+          .filter(Boolean)
+          .slice(0, 40),
         modelControlsText: (() => {
           const composer = document.querySelector("[data-codex-composer].ProseMirror, .ProseMirror");
           const composerRect = composer?.getBoundingClientRect();
@@ -1150,6 +1219,7 @@ try {
     } else {
       if (evaluated.title !== "Anti-Codex") failures.push(`page title is '${evaluated.title}'`);
       if (evaluated.hasLoginText) failures.push("page contains ChatGPT login text");
+      if (hasFatalClientPage(evaluated)) failures.push("page contains fatal client page text");
       if (evaluated.hasReconnectText) failures.push("page contains reconnect text");
       const pageMojibake = mojibakeMatch(evaluated.textSample);
       if (pageMojibake) failures.push(`main page rendered mojibake text: ${pageMojibake}`);
@@ -1649,6 +1719,7 @@ try {
   } else {
     if (evaluated.title !== "Anti-Codex") failures.push(`page title is '${evaluated.title}'`);
     if (evaluated.hasLoginText) failures.push("page contains ChatGPT login text");
+    if (hasFatalClientPage(evaluated)) failures.push("page contains fatal client page text");
     if (evaluated.hasReconnectText) failures.push("page contains reconnect text");
     const pageMojibake = mojibakeMatch(evaluated.textSample);
     if (pageMojibake) failures.push(`main page rendered mojibake text: ${pageMojibake}`);

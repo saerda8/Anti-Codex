@@ -1,4 +1,4 @@
-From 707f56f4d9c6969350ebfa9efbe931eedb4728b8 Mon Sep 17 00:00:00 2001
+From cb5a35b8ae63f2fb7227bb53cf7aeb90a8cc2f89 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:35:15 +0800
 Subject: [PATCH 3/9] fix: keep native helper requests text-only
@@ -9,10 +9,10 @@ Subject: [PATCH 3/9] fix: keep native helper requests text-only
  2 files changed, 197 insertions(+), 17 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index aedd231..e6eee3c 100644
+index 1c01aa7..3a89da5 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -217,25 +217,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -236,25 +236,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
  
      apply_chat_reasoning_options(&mut result, &body, model);
  
@@ -62,7 +62,7 @@ index aedd231..e6eee3c 100644
          }
      }
  
-@@ -4120,6 +4127,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
+@@ -4141,6 +4148,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
      }
  }
  

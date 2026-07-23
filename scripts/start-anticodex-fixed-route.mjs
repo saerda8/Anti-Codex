@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync, execFileSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -41,7 +41,134 @@ const COMPONENT_SCHEMA = "codexplusplus-component-manifest-v1";
 const STATUS_SCHEMA = "anticodex-fixed-route-status-v1";
 const DEFAULT_THIRD_PARTY_CONTEXT_WINDOW = 272_000;
 const CLIENT_EXIT_GRACE_MS = 10_000;
+const CLIENT_RECOVERY_BACKOFF_MS = 1_000;
 const OWNED_PROCESS_STOP_WAIT_MS = 5_000;
+const FATAL_CLIENT_HEADING_PATTERN = /^(?:ChatGPT\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed)|(?:quit|stopped|closed)\s+unexpectedly)[.!。！]?$/i;
+const FATAL_CLIENT_RECOVERY_BUTTON_PATTERN = /(?:重试|重新加载|重新启动|重启|再试一次|retry|reload|restart)/i;
+const FATAL_CLIENT_MAX_TEXT_LENGTH = 1_600;
+const WINDOWS_EXACT_PROCESS_TERMINATOR = String.raw`
+$ErrorActionPreference = "Stop"
+$source = @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace AntiCodex.Native
+{
+    public static class ExactProcessTermination
+    {
+        private const uint ProcessTerminate = 0x0001;
+        private const uint ProcessQueryLimitedInformation = 0x1000;
+        private const uint Synchronize = 0x00100000;
+        private const uint WaitObject0 = 0x00000000;
+        private const uint WaitTimeout = 0x00000102;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FileTime
+        {
+            public uint Low;
+            public uint High;
+            public long ToInt64()
+            {
+                return ((long)High << 32) | Low;
+            }
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint access, bool inheritHandle, int processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr value);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint GetProcessId(IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetProcessTimes(
+            IntPtr process,
+            out FileTime creation,
+            out FileTime exit,
+            out FileTime kernel,
+            out FileTime user);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(
+            IntPtr process,
+            uint flags,
+            StringBuilder executablePath,
+            ref int size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObject(IntPtr value, uint milliseconds);
+
+        public static int TerminateExact(
+            int expectedProcessId,
+            long expectedCreationFileTimeUtcTicks,
+            string expectedExecutablePath,
+            int timeoutMilliseconds)
+        {
+            IntPtr process = OpenProcess(
+                ProcessTerminate | ProcessQueryLimitedInformation | Synchronize,
+                false,
+                expectedProcessId);
+            if (process == IntPtr.Zero)
+            {
+                int openError = Marshal.GetLastWin32Error();
+                if (openError == 87 || openError == 1168) return 3;
+                throw new Win32Exception(openError, "Could not open the exact process.");
+            }
+            try
+            {
+                FileTime creation;
+                FileTime exit;
+                FileTime kernel;
+                FileTime user;
+                if (GetProcessId(process) != (uint)expectedProcessId)
+                    return 42;
+                if (!GetProcessTimes(process, out creation, out exit, out kernel, out user))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query creation time through the bound handle.");
+                StringBuilder executablePath = new StringBuilder(32768);
+                int size = executablePath.Capacity;
+                if (!QueryFullProcessImageName(process, 0, executablePath, ref size))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query the executable through the bound handle.");
+                if (creation.ToInt64() != expectedCreationFileTimeUtcTicks
+                    || !String.Equals(executablePath.ToString(), expectedExecutablePath, StringComparison.OrdinalIgnoreCase))
+                    return 42;
+                if (WaitForSingleObject(process, 0) == WaitObject0)
+                    return 3;
+                if (!TerminateProcess(process, 1))
+                {
+                    if (WaitForSingleObject(process, 0) == WaitObject0)
+                        return 3;
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not terminate the bound process.");
+                }
+                uint waitResult = WaitForSingleObject(process, checked((uint)timeoutMilliseconds));
+                if (waitResult == WaitObject0)
+                    return 0;
+                if (waitResult == WaitTimeout)
+                    throw new TimeoutException("The bound process did not exit before the timeout.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not wait on the bound process.");
+            }
+            finally
+            {
+                CloseHandle(process);
+            }
+        }
+    }
+}
+'@
+Add-Type -TypeDefinition $source
+$result = [AntiCodex.Native.ExactProcessTermination]::TerminateExact(
+    [int]$env:ANTICODEX_TERMINATE_PID,
+    [long]$env:ANTICODEX_TERMINATE_CREATION_FILETIME,
+    [string]$env:ANTICODEX_TERMINATE_EXECUTABLE,
+    3000)
+[Console]::Out.Write([string]$result)
+`;
 const DEFAULT_PORTS = Object.freeze({
   cdp: 18318,
   proxy: 18484,
@@ -194,7 +321,8 @@ export function sanitizeFixedRoutePlan(plan) {
       headlessProtocolProxy: true,
       codexPlusPlusOwnsClient: false,
       clientOwner: plan.headless ? null : "fixed-route-supervisor",
-      automaticallyRelaunchesClient: false,
+      automaticallyRelaunchesClient: !plan.headless,
+      automaticClientRecoveryLimit: plan.headless ? 0 : 1,
       ownsTaskControl: false,
       cleansOnlyOwnedChildren: true,
     },
@@ -248,21 +376,97 @@ async function runSupervisor(plan) {
   let managerService = null;
   let managerWatcher = null;
   let managerBridge = null;
+  let launcherIdentity = null;
+  let copiedClientIdentity = null;
+  let managerWatcherIdentity = null;
+  let managerBridgeIdentity = null;
+  let refreshModelsInFlight = null;
+  let refreshModelsCallback = async () => {
+    const error = new Error("Anti-Codex model refresh is not ready.");
+    error.statusCode = 503;
+    throw error;
+  };
   const ownedClients = new Set();
+  let clientOwnership = null;
+  let clientRecoveryAttempted = false;
   let closing = false;
   let shutdownReason = "unknown";
   let launcherLog = null;
   let launcherErrorLog = null;
 
+  const refreshOwnedClientIdentities = () => {
+    const processScan = scanClientProcessTableSafely();
+    if (!processScan.ok || !clientOwnership) {
+      return { ...processScan, clients: [] };
+    }
+    const clients = selectVerifiedOwnedClientProcessRows(processScan.processes, {
+      rootPid: clientOwnership.rootPid,
+      rootStartedAtMs: clientOwnership.rootStartedAtMs,
+      expectedExecutablePath: plan.paths.appExecutable,
+      knownIdentities: clientOwnership.identities,
+    });
+    clientOwnership.identities = clients;
+    ownedClients.clear();
+    if (copiedClient && copiedClient.exitCode === null && copiedClient.signalCode === null) {
+      ownedClients.add(copiedClient.pid);
+    }
+    for (const row of clients) ownedClients.add(row.processId);
+    return { ...processScan, clients };
+  };
+
+  const stopOwnedClientSession = async () => {
+    const beforeStop = refreshOwnedClientIdentities();
+    const identities = [
+      ...(beforeStop.ok && clientOwnership ? clientOwnership.identities : []),
+      copiedClientIdentity,
+    ].filter(Boolean);
+    const verifiedPids = beforeStop.ok
+      ? revalidatedOwnedClientPids(beforeStop.processes, identities, plan.paths.appExecutable)
+      : [];
+    const targets = [...new Set([copiedClient?.pid, ...verifiedPids]
+      .map(Number)
+      .filter((pid) => Number.isInteger(pid) && pid > 0))];
+
+    const stopResults = [stopOwnedProcess(copiedClient, copiedClientIdentity)];
+    for (const identity of identities) {
+      if (
+        identity.processId !== Number(copiedClient?.pid)
+        && verifiedPids.includes(identity.processId)
+      ) {
+        stopResults.push(stopExactProcess(identity));
+      }
+    }
+    await waitForOwnedProcessExit(targets);
+
+    const afterStop = scanClientProcessTableSafely();
+    const survivors = afterStop.ok
+      ? revalidatedOwnedClientPids(afterStop.processes, identities, plan.paths.appExecutable)
+      : targets.filter((pid) => ownerProcessIsAlive(pid));
+    ownedClients.clear();
+    for (const pid of survivors) ownedClients.add(pid);
+    return {
+      survivors,
+      scanError: beforeStop.ok && afterStop.ok
+        && stopResults.every((result) => result.stopped || result.reason === "already_exited")
+        ? null
+        : [
+            beforeStop.error,
+            afterStop.error,
+            ...stopResults
+              .filter((result) => !result.stopped && result.reason !== "already_exited")
+              .map((result) => `${result.processId || "unknown PID"}: ${result.reason}`),
+          ].filter(Boolean).join("; ") || "process termination could not be proven safe",
+    };
+  };
+
   const cleanup = async (reason, options = {}) => {
     if (closing) return;
     closing = true;
     shutdownReason = reason;
-    const stoppedNormally = ["client_exited", "control_shutdown", "signal_sigint", "signal_sigterm"].includes(reason);
+    const stoppedNormally = ["client_exited", "client_unhealthy", "control_shutdown", "signal_sigint", "signal_sigterm"].includes(reason);
     const shutdownPids = [...new Set([
       managerWatcher?.pid,
       managerBridge?.pid,
-      ...(options.stopClient === true ? [copiedClient?.pid, ...ownedClients] : []),
       launcher?.pid,
     ].map(Number).filter((pid) => Number.isInteger(pid) && pid > 0))];
     status = {
@@ -274,18 +478,20 @@ async function runSupervisor(plan) {
     };
     writeStatus(plan.paths.statusFile, status);
     await provider?.close?.().catch(() => {});
-    stopOwnedProcess(managerWatcher);
-    stopOwnedProcess(managerBridge);
-    if (options.stopClient === true) {
-      stopOwnedProcess(copiedClient);
-      for (const pid of ownedClients) stopProcessTree(pid);
-    }
-    stopOwnedProcess(launcher);
+    stopOwnedProcess(managerWatcher, managerWatcherIdentity);
+    stopOwnedProcess(managerBridge, managerBridgeIdentity);
+    const clientStop = options.stopClient === true
+      ? await stopOwnedClientSession()
+      : { survivors: [], scanError: null };
+    stopOwnedProcess(launcher, launcherIdentity);
     await managerService?.close?.().catch(() => {});
-    const shutdownSurvivors = await waitForOwnedProcessExit(shutdownPids);
+    const shutdownSurvivors = [...new Set([
+      ...clientStop.survivors,
+      ...await waitForOwnedProcessExit(shutdownPids),
+    ])];
     if (launcherLog !== null) closeSync(launcherLog);
     if (launcherErrorLog !== null) closeSync(launcherErrorLog);
-    const fullyStopped = shutdownSurvivors.length === 0;
+    const fullyStopped = shutdownSurvivors.length === 0 && !clientStop.scanError;
     status = {
       ...status,
       ok: stoppedNormally && fullyStopped,
@@ -295,7 +501,7 @@ async function runSupervisor(plan) {
       shutdownSurvivors,
       error: fullyStopped
         ? status.error
-        : `Owned Anti-Codex processes did not stop: ${shutdownSurvivors.join(", ")}`,
+        : (clientStop.scanError || `Owned Anti-Codex processes did not stop: ${shutdownSurvivors.join(", ")}`),
     };
     writeStatus(plan.paths.statusFile, status);
     await health.close().catch(() => {});
@@ -317,6 +523,8 @@ async function runSupervisor(plan) {
       port: Number(managerUrl.port || 80),
       stateRoot: plan.paths.stateRoot,
       fixedHealthUrl: `http://127.0.0.1:${plan.ports.health}/anticodex/fixed-route/health`,
+      adapterAuthToken: plan.route.localProxyKey,
+      refreshModels: () => refreshModelsCallback(),
     });
     await managerService.listen();
     status.processes.managerService = process.pid;
@@ -327,13 +535,15 @@ async function runSupervisor(plan) {
     const unifiedCatalogPath = join(plan.paths.codexHome, "anticodex-model-catalog.json");
     const antigravityClient = createAntigravityCascadeClient();
     let antigravityReady = false;
-    let antigravityCatalog = readCatalogSafely(antigravityCatalogPath) ?? { ...bundledCatalog, models: [] };
+    const previousAntigravityCatalog = readCatalogSafely(antigravityCatalogPath) ?? { ...bundledCatalog, models: [] };
+    let antigravityCatalog = previousAntigravityCatalog;
     try {
       const readiness = await antigravityClient.getReadiness();
       antigravityReady = readiness?.signedIn === true;
       if (antigravityReady) {
         const availableModels = await antigravityClient.listModels();
-        antigravityCatalog = buildRuntimeCatalogFromBundled(bundledCatalog, availableModels);
+        const currentAntigravityCatalog = buildRuntimeCatalogFromBundled(bundledCatalog, availableModels);
+        antigravityCatalog = preserveHiddenCompatibilityModels(currentAntigravityCatalog, previousAntigravityCatalog);
         writeTextAtomic(antigravityCatalogPath, `${JSON.stringify(antigravityCatalog, null, 2)}\n`);
       }
     } catch (error) {
@@ -350,10 +560,11 @@ async function runSupervisor(plan) {
       client: antigravityClient,
       host: "127.0.0.1",
       port: plan.ports.adapter,
+      authToken: plan.route.localProxyKey,
     });
 
     const thirdPartyRoute = plan.relayRoutes.find((entry) => entry.profileId === THIRD_PARTY_RELAY_ID) ?? null;
-    const catalog = buildUnifiedModelCatalog(bundledCatalog, {
+    let catalog = buildUnifiedModelCatalog(bundledCatalog, {
       antigravityCatalog,
       thirdPartyModel: thirdPartyRoute?.model,
       thirdPartyModels: thirdPartyRoute?.model ? [thirdPartyRoute.model] : [],
@@ -361,18 +572,21 @@ async function runSupervisor(plan) {
     });
     writeTextAtomic(unifiedCatalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
 
-    const antigravityModelIds = antigravityCatalog.models
-      .map((entry) => String(entry?.slug ?? "").trim())
-      .filter(Boolean);
-    const runtimeRelayRoutes = plan.relayRoutes.map((entry) => {
-      if (entry.profileId === ANTIGRAVITY_RELAY_ID) {
-        return { ...entry, relayModelList: [ANTIGRAVITY_MODEL_SLOT, ...antigravityModelIds] };
-      }
-      return {
-        ...entry,
-        relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(entry.model)],
-      };
-    });
+    const runtimeRelayRoutesForCatalog = (runtimeCatalog) => {
+      const antigravityModelIds = runtimeCatalog.models
+        .map((entry) => String(entry?.slug ?? "").trim())
+        .filter(Boolean);
+      return plan.relayRoutes.map((entry) => {
+        if (entry.profileId === ANTIGRAVITY_RELAY_ID) {
+          return { ...entry, relayModelList: [ANTIGRAVITY_MODEL_SLOT, ...antigravityModelIds] };
+        }
+        return {
+          ...entry,
+          relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(entry.model)],
+        };
+      });
+    };
+    const runtimeRelayRoutes = runtimeRelayRoutesForCatalog(antigravityCatalog);
     const runtimeRoute = runtimeRelayRoutes.find((entry) => entry.profileId === plan.route.profileId);
 
     const configPath = join(plan.paths.codexHome, "config.toml");
@@ -388,16 +602,84 @@ async function runSupervisor(plan) {
     writeTextAtomic(join(plan.paths.codexHome, "auth.json"), runtimeRoute.authContents);
     writeTextAtomic(join(plan.paths.codexPlusPlusState, "settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
 
+    refreshModelsCallback = async () => {
+      if (refreshModelsInFlight) return refreshModelsInFlight;
+      refreshModelsInFlight = (async () => {
+        const readiness = await antigravityClient.getReadiness();
+        if (readiness?.signedIn !== true) {
+          const error = new Error("Antigravity Desktop is not signed in; the existing model catalog was preserved.");
+          error.statusCode = 503;
+          throw error;
+        }
+        const availableModels = await antigravityClient.listModels();
+        if (!Array.isArray(availableModels) || availableModels.length === 0) {
+          const error = new Error("Antigravity returned no models; the existing model catalog was preserved.");
+          error.statusCode = 503;
+          throw error;
+        }
+        const currentAntigravityCatalog = buildRuntimeCatalogFromBundled(bundledCatalog, availableModels);
+        const refreshedAntigravityCatalog = preserveHiddenCompatibilityModels(
+          currentAntigravityCatalog,
+          antigravityCatalog,
+        );
+        const refreshedCatalog = buildUnifiedModelCatalog(bundledCatalog, {
+          antigravityCatalog: refreshedAntigravityCatalog,
+          thirdPartyModel: thirdPartyRoute?.model,
+          thirdPartyModels: thirdPartyRoute?.model ? [thirdPartyRoute.model] : [],
+          thirdPartyContextWindow: thirdPartyRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+        });
+        const liveSettings = JSON.parse(readFileSync(join(plan.paths.codexPlusPlusState, "settings.json"), "utf8"));
+        const refreshedSettings = refreshAntigravityRelayModelList(liveSettings, refreshedAntigravityCatalog);
+
+        writeTextAtomic(antigravityCatalogPath, `${JSON.stringify(refreshedAntigravityCatalog, null, 2)}\n`);
+        writeTextAtomic(unifiedCatalogPath, `${JSON.stringify(refreshedCatalog, null, 2)}\n`);
+        writeTextAtomic(join(plan.paths.codexPlusPlusState, "settings.json"), `${JSON.stringify(refreshedSettings, null, 2)}\n`);
+
+        antigravityCatalog = refreshedAntigravityCatalog;
+        catalog = refreshedCatalog;
+        antigravityReady = true;
+        status = {
+          ...status,
+          antigravityReady: true,
+          catalogModelCount: refreshedCatalog.models.length,
+          modelCatalogRefreshedAt: new Date().toISOString(),
+        };
+        writeStatus(plan.paths.statusFile, status);
+        const models = refreshedAntigravityCatalog.models
+          .filter((entry) => String(entry?.visibility || "").toLowerCase() !== "hide")
+          .map((entry) => String(entry?.slug || "").trim())
+          .filter(Boolean);
+        return {
+          ok: true,
+          refreshed: true,
+          source: "antigravity-cascade",
+          modelCount: models.length,
+          models,
+        };
+      })();
+      try {
+        return await refreshModelsInFlight;
+      } finally {
+        refreshModelsInFlight = null;
+      }
+    };
+
     const childEnvironment = buildSupervisorChildEnvironment(plan, process.env);
     const launcherLogPath = join(plan.paths.logs, "codexplusplus-launcher.log");
     const launcherErrorPath = join(plan.paths.logs, "codexplusplus-launcher.err.log");
     launcherLog = openSync(launcherLogPath, "a");
     launcherErrorLog = openSync(launcherErrorPath, "a");
+    const launcherStartedAtMs = Date.now();
     launcher = spawn(plan.paths.codexPlusPlusBinary, plan.launcherArgs, {
       cwd: plan.paths.appDir,
       env: childEnvironment,
       windowsHide: true,
       stdio: ["ignore", launcherLog, launcherErrorLog],
+    });
+    launcherIdentity = await captureSpawnedProcessIdentity(launcher, {
+      expectedExecutablePath: plan.paths.codexPlusPlusBinary,
+      expectedParentProcessId: process.pid,
+      startedAtMs: launcherStartedAtMs,
     });
     status.processes.codexPlusPlus = launcher.pid;
     writeStatus(plan.paths.statusFile, status);
@@ -444,44 +726,76 @@ async function runSupervisor(plan) {
       return { shutdownReason };
     }
 
-    copiedClient = spawn(plan.paths.appExecutable, plan.clientArgs, {
-      cwd: plan.paths.appDir,
-      env: childEnvironment,
-      windowsHide: false,
-      stdio: "ignore",
-    });
-    ownedClients.add(copiedClient.pid);
-    status.processes.copiedClient = [copiedClient.pid];
-    writeStatus(plan.paths.statusFile, status);
+    const spawnCopiedClient = async () => {
+      const rootStartedAtMs = Date.now();
+      const child = spawn(plan.paths.appExecutable, plan.clientArgs, {
+        cwd: plan.paths.appDir,
+        env: childEnvironment,
+        windowsHide: false,
+        stdio: "ignore",
+      });
+      const rootIdentity = await captureSpawnedProcessIdentity(child, {
+        expectedExecutablePath: plan.paths.appExecutable,
+        expectedParentProcessId: process.pid,
+        startedAtMs: rootStartedAtMs,
+      });
+      copiedClient = child;
+      copiedClientIdentity = rootIdentity;
+      clientOwnership = {
+        rootPid: child.pid,
+        rootStartedAtMs,
+        identities: [rootIdentity],
+      };
+      ownedClients.clear();
+      ownedClients.add(child.pid);
+      status.processes.copiedClient = [child.pid];
+      writeStatus(plan.paths.statusFile, status);
+      return child;
+    };
 
-    const ready = await waitFor(async () => {
-      const processScan = scanCopiedClientProcessesSafely();
-      const clients = processScan.processes;
+    const waitForCopiedClientReady = (child, description) => waitFor(async () => {
+      const processScan = refreshOwnedClientIdentities();
+      const clients = processScan.clients;
       if (launcher.exitCode !== null) {
         throw new Error(`CodexPlusPlus protocol proxy exited during client startup: ${launcher.exitCode}`);
       }
-      if (copiedClient.exitCode !== null && processScan.ok && !clients.length) {
-        throw new Error(`Anti-Codex exited before readiness: ${copiedClient.exitCode}`);
+      if (child.exitCode !== null && processScan.ok && !clients.length) {
+        throw new Error(`Anti-Codex exited before readiness: ${child.exitCode}`);
       }
-      for (const row of clients) ownedClients.add(row.processId);
       const cdpReady = await cdpPageReady(plan.ports.cdp);
       return cdpReady ? { clients, processScan } : null;
-    }, { timeoutMs: 90_000, intervalMs: 1_000, description: "fixed-route Anti-Codex" });
+    }, { timeoutMs: 90_000, intervalMs: 1_000, description });
+
+    const initialClient = await spawnCopiedClient();
+    const ready = await waitForCopiedClientReady(initialClient, "fixed-route Anti-Codex");
 
     const management = startManagerSupport(plan, childEnvironment);
     managerWatcher = management.watcher;
     managerBridge = management.bridge;
+    [managerWatcherIdentity, managerBridgeIdentity] = await Promise.all([
+      captureSpawnedProcessIdentity(managerWatcher, {
+        expectedExecutablePath: process.execPath,
+        expectedParentProcessId: process.pid,
+        startedAtMs: management.watcherStartedAtMs,
+      }),
+      captureSpawnedProcessIdentity(managerBridge, {
+        expectedExecutablePath: process.execPath,
+        expectedParentProcessId: process.pid,
+        startedAtMs: management.bridgeStartedAtMs,
+      }),
+    ]);
     status = {
       ...status,
       ok: true,
       state: "ready",
+      clientUiReady: true,
       readyAt: new Date().toISOString(),
       antigravityReady,
       catalogModelCount: catalog?.models?.length ?? null,
       processes: {
         managerService: process.pid,
         codexPlusPlus: launcher.pid,
-        copiedClient: ready.clients.map((row) => row.processId),
+        copiedClient: [...ownedClients],
         managerWatcher: managerWatcher?.pid ?? null,
         managerBridge: managerBridge?.pid ?? null,
       },
@@ -494,16 +808,111 @@ async function runSupervisor(plan) {
         throw new Error(`CodexPlusPlus protocol proxy exited while Anti-Codex was running: ${launcher.exitCode}`);
       }
       const clientSession = await observeCopiedClientSession(ownedClients, {
-        isCdpReady: () => cdpPageReady(plan.ports.cdp),
+        isCdpReady: () => cdpPageReady(plan.ports.cdp, { returnStatus: true }),
       });
-      const exitGrace = updateClientExitGrace(clientMissingSince, clientSession.ready);
+      const exitGrace = updateClientExitGrace(
+        clientMissingSince,
+        !clientSessionRequiresShutdown(clientSession),
+      );
       clientMissingSince = exitGrace.missingSince;
+      if (
+        !clientSession.ready
+        && (status.state !== "degraded" || status.clientFailureReason !== clientSession.source)
+      ) {
+        status = {
+          ...status,
+          ok: false,
+          state: "degraded",
+          clientUiReady: false,
+          clientFailureReason: clientSession.source,
+          degradedAt: status.degradedAt || new Date().toISOString(),
+        };
+        writeStatus(plan.paths.statusFile, status);
+      } else if (clientSession.ready && status.state === "degraded") {
+        status = {
+          ...status,
+          ok: true,
+          state: "ready",
+          clientUiReady: true,
+          clientFailureReason: null,
+          recoveredAt: new Date().toISOString(),
+        };
+        writeStatus(plan.paths.statusFile, status);
+      }
       if (clientSession.ownershipChanged) {
         status.processes.copiedClient = clientSession.livePids;
         writeStatus(plan.paths.statusFile, status);
       }
       if (exitGrace.expired) {
-        await cleanup("client_exited");
+        if (clientSession.fatal) {
+          status = {
+            ...status,
+            ok: false,
+            state: "recovering",
+            clientUiReady: false,
+            clientFailureReason: "fatal_renderer",
+            clientRecovery: {
+              attempt: clientRecoveryAttempted ? 2 : 1,
+              limit: 1,
+              startedAt: new Date().toISOString(),
+            },
+          };
+          writeStatus(plan.paths.statusFile, status);
+          const recovery = await recoverCopiedClientOnce({
+            alreadyAttempted: clientRecoveryAttempted,
+            stopOwned: stopOwnedClientSession,
+            assertLaunchSafe: async () => {
+              const processScan = scanClientProcessTableSafely();
+              if (!processScan.ok) return false;
+              return recoveryLaunchIsSafe(processScan.processes, plan.paths.appExecutable);
+            },
+            spawnClient: async () => spawnCopiedClient(),
+            waitUntilReady: (child) => waitForCopiedClientReady(child, "recovered fixed-route Anti-Codex"),
+          });
+          clientRecoveryAttempted = true;
+          if (!recovery.ok) {
+            status = {
+              ...status,
+              ok: false,
+              state: "error",
+              clientUiReady: false,
+              clientFailureReason: "fatal_renderer",
+              error: recovery.error || `Fatal renderer recovery failed: ${recovery.code}`,
+              clientRecovery: {
+                ...status.clientRecovery,
+                ok: false,
+                code: recovery.code,
+                failedAt: new Date().toISOString(),
+                survivors: recovery.survivors ?? [],
+              },
+            };
+            writeStatus(plan.paths.statusFile, status);
+            await cleanup(`client_${recovery.code}`, { stopClient: true });
+            break;
+          }
+          clientMissingSince = null;
+          status = {
+            ...status,
+            ok: true,
+            state: "ready",
+            clientUiReady: true,
+            clientFailureReason: null,
+            recoveredAt: new Date().toISOString(),
+            processes: {
+              ...status.processes,
+              copiedClient: [...ownedClients],
+            },
+            clientRecovery: {
+              ...status.clientRecovery,
+              ok: true,
+              code: recovery.code,
+              recoveredAt: new Date().toISOString(),
+            },
+          };
+          writeStatus(plan.paths.statusFile, status);
+          continue;
+        }
+        await cleanup("client_unhealthy", { stopClient: true });
         break;
       }
       await sleep(1_000);
@@ -645,7 +1054,7 @@ export function runtimeRouteStatus(baseStatus, plan) {
         profileName: profile.name,
         relayProtocol: profile.protocol,
         codexPlusPlusUpstreamUrl: profile.upstreamBaseUrl,
-        adapterEnabled: true,
+        adapterEnabled: provider === "antigravity",
         requestModelOverride: null,
       },
     };
@@ -874,21 +1283,23 @@ export function buildUnifiedModelCatalog(bundled, options = {}) {
 
   const visibleModels = [];
   const seenSlugs = new Set();
-  const add = (entry) => {
+  const add = (entry, visibility = "list") => {
     const slug = String(entry?.slug ?? "").trim();
     if (!slug || seenSlugs.has(slug)) return;
     seenSlugs.add(slug);
     visibleModels.push({
       ...entry,
       slug,
-      visibility: "list",
+      visibility,
       supported_in_api: true,
       upgrade: null,
       availability_nux: null,
       priority: visibleModels.length,
     });
   };
-  for (const entry of antigravityModels) add(entry);
+  for (const entry of antigravityModels) {
+    add(entry, entry?.visibility === "hide" ? "hide" : "list");
+  }
   for (const model of thirdPartyModels) {
     add({
       ...template,
@@ -926,6 +1337,55 @@ function readCatalogSafely(catalogPath) {
   } catch {
     return null;
   }
+}
+
+export function preserveHiddenCompatibilityModels(currentCatalog, previousCatalog) {
+  const currentModels = Array.isArray(currentCatalog?.models) ? currentCatalog.models : [];
+  const previousModels = Array.isArray(previousCatalog?.models) ? previousCatalog.models : [];
+  const models = currentModels.map((entry) => ({ ...entry }));
+  const seen = new Set(models.map((entry) => String(entry?.slug ?? "").trim()).filter(Boolean));
+  for (const entry of previousModels) {
+    const slug = String(entry?.slug ?? "").trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    models.push({
+      ...entry,
+      slug,
+      visibility: "hide",
+      supported_in_api: true,
+      upgrade: null,
+      availability_nux: null,
+      priority: 10_000 + models.length,
+    });
+  }
+  return { ...currentCatalog, models };
+}
+
+export function refreshAntigravityRelayModelList(settings, antigravityCatalog) {
+  const profiles = Array.isArray(settings?.relayProfiles) ? settings.relayProfiles : [];
+  const modelIds = [];
+  const seen = new Set();
+  for (const value of [
+    ANTIGRAVITY_MODEL_SLOT,
+    ...(Array.isArray(antigravityCatalog?.models)
+      ? antigravityCatalog.models.map((entry) => entry?.slug)
+      : []),
+  ]) {
+    const modelId = String(value ?? "").trim();
+    if (!modelId || seen.has(modelId)) continue;
+    seen.add(modelId);
+    modelIds.push(modelId);
+  }
+  let updated = false;
+  const relayProfiles = profiles.map((profile) => {
+    if (String(profile?.id || "") !== ANTIGRAVITY_RELAY_ID) return { ...profile };
+    updated = true;
+    return { ...profile, modelList: modelIds.join("\n") };
+  });
+  if (!updated) {
+    throw new Error("The live CodexPlusPlus Antigravity profile is unavailable; model refresh was not applied.");
+  }
+  return { ...settings, relayProfiles };
 }
 
 function buildRuntimeCatalogFromBundled(bundled, availableModels) {
@@ -987,12 +1447,14 @@ function startManagerSupport(plan, childEnvironment) {
     DEEPCODEX_CDP_MANAGER_WATCH: "1",
     ANTICODEX_SUPERVISOR_PID: String(process.pid),
   };
+  const watcherStartedAtMs = Date.now();
   const watcher = spawn(process.execPath, [injector, String(plan.ports.cdp), managerScript, "--watch"], {
     cwd: root,
     env: managerEnvironment,
     windowsHide: true,
     stdio: ["ignore", watcherLog, watcherErrorLog],
   });
+  const bridgeStartedAtMs = Date.now();
   const bridge = spawn(process.execPath, [
     bridgeScript,
     "--port", String(plan.ports.cdp),
@@ -1005,7 +1467,7 @@ function startManagerSupport(plan, childEnvironment) {
   });
   watcher.once("close", () => { closeSync(watcherLog); closeSync(watcherErrorLog); });
   bridge.once("close", () => { closeSync(bridgeLog); closeSync(bridgeErrorLog); });
-  return { watcher, bridge };
+  return { watcher, bridge, watcherStartedAtMs, bridgeStartedAtMs };
 }
 
 export function parseTasklistAntiCodexProcesses(output) {
@@ -1031,6 +1493,257 @@ export function scanCopiedClientProcessesSafely(scan = getCopiedClientProcesses)
   }
 }
 
+function normalizedExecutablePath(value) {
+  return String(value ?? "")
+    .trim()
+    .replaceAll("/", "\\")
+    .replace(/\\+$/, "")
+    .toLowerCase();
+}
+
+function normalizedProcessRow(row) {
+  const processId = Number(row?.processId ?? row?.ProcessId);
+  const parentProcessId = Number(row?.parentProcessId ?? row?.ParentProcessId);
+  const executablePath = String(row?.executablePath ?? row?.ExecutablePath ?? "").trim();
+  const name = String(row?.name ?? row?.Name ?? "").trim();
+  const creationFileTimeUtcTicks = String(
+    row?.creationFileTimeUtcTicks ?? row?.CreationFileTimeUtcTicks ?? "",
+  ).trim();
+  const createdAtValue = row?.createdAtMs ?? row?.CreatedAtMs ?? row?.creationDate ?? row?.CreationDate;
+  const createdAtMs = Number.isFinite(Number(createdAtValue))
+    ? Number(createdAtValue)
+    : Date.parse(String(createdAtValue ?? ""));
+  if (!Number.isInteger(processId) || processId <= 0) return null;
+  if (!Number.isInteger(parentProcessId) || parentProcessId < 0) return null;
+  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return null;
+  if (creationFileTimeUtcTicks && !/^\d+$/.test(creationFileTimeUtcTicks)) return null;
+  return {
+    processId,
+    parentProcessId,
+    executablePath,
+    createdAtMs,
+    creationFileTimeUtcTicks,
+    name,
+  };
+}
+
+export function recoveryLaunchIsSafe(processRows = [], expectedExecutablePath = "") {
+  const expectedPath = normalizedExecutablePath(expectedExecutablePath);
+  if (!expectedPath) return false;
+  for (const row of processRows) {
+    const name = String(row?.name ?? row?.Name ?? "").trim().toLowerCase();
+    const executablePath = normalizedExecutablePath(row?.executablePath ?? row?.ExecutablePath);
+    if (executablePath === expectedPath) return false;
+    if (name === "anti-codex.exe" && !executablePath) return false;
+  }
+  return true;
+}
+
+function exactProcessIdentityMatches(row, identity, expectedExecutablePath = "") {
+  const current = normalizedProcessRow(row);
+  const expected = normalizedProcessRow({
+    ...identity,
+    parentProcessId: identity?.parentProcessId ?? row?.parentProcessId ?? row?.ParentProcessId ?? 0,
+  });
+  const expectedPath = normalizedExecutablePath(expectedExecutablePath || identity?.executablePath);
+  return Boolean(current && expected
+    && current.processId === expected.processId
+    && current.parentProcessId === expected.parentProcessId
+    && current.createdAtMs === expected.createdAtMs
+    && (!expected.creationFileTimeUtcTicks
+      || current.creationFileTimeUtcTicks === expected.creationFileTimeUtcTicks)
+    && normalizedExecutablePath(current.executablePath) === expectedPath);
+}
+
+export function revalidatedOwnedClientPids(processRows = [], identities = [], expectedExecutablePath = "") {
+  const rowsByPid = new Map(processRows
+    .map(normalizedProcessRow)
+    .filter(Boolean)
+    .map((row) => [row.processId, row]));
+  return [...new Set(identities
+    .map((identity) => normalizedProcessRow({ ...identity, parentProcessId: identity?.parentProcessId ?? 0 }))
+    .filter(Boolean)
+    .filter((identity) => {
+      const current = rowsByPid.get(identity.processId);
+      return current && exactProcessIdentityMatches(current, identity, expectedExecutablePath);
+    })
+    .map((identity) => identity.processId))];
+}
+
+export function selectVerifiedOwnedClientProcessRows(processRows = [], options = {}) {
+  const expectedExecutablePath = normalizedExecutablePath(options.expectedExecutablePath);
+  const rootPid = Number(options.rootPid);
+  const rootStartedAtMs = Number(options.rootStartedAtMs);
+  const nowMs = Number(options.nowMs ?? Date.now());
+  if (!expectedExecutablePath || !Number.isInteger(rootPid) || rootPid <= 0 || !Number.isFinite(rootStartedAtMs)) {
+    return [];
+  }
+
+  const rows = processRows.map(normalizedProcessRow).filter(Boolean);
+  const rowsByPid = new Map(rows.map((row) => [row.processId, row]));
+  const knownIdentities = (Array.isArray(options.knownIdentities) ? options.knownIdentities : [])
+    .map((identity) => normalizedProcessRow({
+      ...identity,
+      parentProcessId: identity?.parentProcessId ?? 0,
+    }))
+    .filter(Boolean);
+  const selected = new Map();
+  const root = rowsByPid.get(rootPid);
+  const capturedRoot = knownIdentities.find((identity) => identity.processId === rootPid);
+  if (root
+    && normalizedExecutablePath(root.executablePath) === expectedExecutablePath
+    && root.createdAtMs >= rootStartedAtMs - 2_000
+    && root.createdAtMs <= nowMs + 2_000
+    && (!capturedRoot || exactProcessIdentityMatches(root, capturedRoot, expectedExecutablePath))) {
+    selected.set(root.processId, root);
+  }
+
+  for (const normalizedIdentity of knownIdentities) {
+    const current = rowsByPid.get(normalizedIdentity.processId);
+    if (current && exactProcessIdentityMatches(current, normalizedIdentity, expectedExecutablePath)) {
+      selected.set(current.processId, current);
+    }
+  }
+
+  const reachesVerifiedAncestor = (candidate) => {
+    let child = candidate;
+    const visited = new Set([candidate.processId]);
+    for (let depth = 0; depth < 64; depth += 1) {
+      const parentId = child.parentProcessId;
+      if (!Number.isInteger(parentId) || parentId <= 0 || visited.has(parentId)) return false;
+      const verifiedParent = selected.get(parentId);
+      if (verifiedParent) return verifiedParent.createdAtMs <= child.createdAtMs;
+      const parent = rowsByPid.get(parentId);
+      if (!parent || parent.createdAtMs > child.createdAtMs) return false;
+      visited.add(parentId);
+      child = parent;
+    }
+    return false;
+  };
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      if (selected.has(row.processId)) continue;
+      if (normalizedExecutablePath(row.executablePath) !== expectedExecutablePath) continue;
+      if (row.createdAtMs < rootStartedAtMs - 2_000 || row.createdAtMs > nowMs + 2_000) continue;
+      if (!reachesVerifiedAncestor(row)) continue;
+      selected.set(row.processId, row);
+      changed = true;
+    }
+  }
+
+  return [...selected.values()].sort((left, right) => left.createdAtMs - right.createdAtMs || left.processId - right.processId);
+}
+
+export function scanClientProcessTableSafely(scan = getClientProcessTableRows) {
+  try {
+    return { ok: true, processes: scan(), error: null };
+  } catch (error) {
+    return { ok: false, processes: [], error: String(error?.message ?? error) };
+  }
+}
+
+function getClientProcessTableRows() {
+  if (process.platform !== "win32") return [];
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    "$rows = @(Get-CimInstance Win32_Process | ForEach-Object {",
+    "  $created = if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } else { 0 }",
+    "  $creationFileTime = if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).UtcDateTime.ToFileTimeUtc() } else { 0 }",
+    "  [pscustomobject]@{ processId = [int]$_.ProcessId; parentProcessId = [int]$_.ParentProcessId; executablePath = [string]$_.ExecutablePath; createdAtMs = [long]$created; creationFileTimeUtcTicks = [string]$creationFileTime; name = [string]$_.Name }",
+    "})",
+    "@($rows) | ConvertTo-Json -Compress",
+  ].join("; ");
+  const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 5_000,
+  }).trim();
+  if (!output) return [];
+  const parsed = JSON.parse(output);
+  return (Array.isArray(parsed) ? parsed : [parsed]).map(normalizedProcessRow).filter(Boolean);
+}
+
+export async function captureSpawnedProcessIdentity(child, options = {}) {
+  const processId = Number(child?.pid);
+  const expectedExecutablePath = normalizedExecutablePath(options.expectedExecutablePath);
+  const expectedParentProcessId = Number(options.expectedParentProcessId ?? process.pid);
+  const startedAtMs = Number(options.startedAtMs ?? Date.now());
+  const scan = options.scan ?? getClientProcessTableRows;
+  if (!Number.isInteger(processId) || processId <= 0 || !expectedExecutablePath) {
+    throw new TypeError("A spawned process PID and exact executable path are required.");
+  }
+  if (!Number.isInteger(expectedParentProcessId) || expectedParentProcessId <= 0) {
+    throw new TypeError("A spawned process must have an exact owning parent PID.");
+  }
+  return waitFor(() => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Owned process ${processId} exited before its identity could be captured.`);
+    }
+    const rows = scan();
+    const current = rows
+      .map(normalizedProcessRow)
+      .find((row) => row?.processId === processId);
+    if (!current) return null;
+    if (
+      current.parentProcessId !== expectedParentProcessId
+      || normalizedExecutablePath(current.executablePath) !== expectedExecutablePath
+      || current.createdAtMs < startedAtMs - 2_000
+      || current.createdAtMs > Date.now() + 2_000
+      || !current.creationFileTimeUtcTicks
+    ) {
+      throw new Error(`Owned process ${processId} identity did not match its spawn.`);
+    }
+    return current;
+  }, {
+    timeoutMs: Math.max(100, Number(options.timeoutMs ?? 5_000)),
+    intervalMs: Math.max(10, Number(options.intervalMs ?? 50)),
+    description: `owned process ${processId} identity`,
+  });
+}
+
+export async function recoverCopiedClientOnce(options = {}) {
+  if (options.alreadyAttempted === true) {
+    return { ok: false, attempted: false, code: "recovery_exhausted", error: "Fatal renderer recovery was already attempted." };
+  }
+  const stopOwned = options.stopOwned;
+  const assertLaunchSafe = options.assertLaunchSafe;
+  const spawnClient = options.spawnClient;
+  const waitUntilReady = options.waitUntilReady;
+  if (![stopOwned, assertLaunchSafe, spawnClient, waitUntilReady].every((value) => typeof value === "function")) {
+    throw new TypeError("Fatal renderer recovery requires stopOwned, assertLaunchSafe, spawnClient, and waitUntilReady callbacks.");
+  }
+  let child = null;
+  try {
+    const stopped = await stopOwned();
+    const survivors = Array.isArray(stopped?.survivors) ? stopped.survivors : [];
+    if (survivors.length > 0) {
+      return { ok: false, attempted: true, code: "owned_processes_survived", survivors };
+    }
+    const sleepFn = typeof options.sleep === "function" ? options.sleep : sleep;
+    await sleepFn(Math.max(0, Number(options.backoffMs ?? CLIENT_RECOVERY_BACKOFF_MS)));
+    if (await assertLaunchSafe() !== true) {
+      return { ok: false, attempted: true, code: "launch_not_safe", error: "A single-window recovery launch could not be proven safe." };
+    }
+    child = await spawnClient();
+    const ready = await waitUntilReady(child);
+    if (!ready) {
+      return { ok: false, attempted: true, code: "recovery_not_ready", child, error: "The recovered client did not become ready." };
+    }
+    return { ok: true, attempted: true, code: "recovered", child, ready };
+  } catch (error) {
+    return {
+      ok: false,
+      attempted: true,
+      code: "recovery_failed",
+      child,
+      error: String(error?.message ?? error),
+    };
+  }
+}
+
 function getCopiedClientProcesses() {
   if (process.platform !== "win32") return [];
   const output = execFileSync("tasklist.exe", [
@@ -1047,13 +1760,32 @@ function getCopiedClientProcesses() {
 
 function assertNoExistingClient() {
   const scan = scanCopiedClientProcessesSafely();
-  if (scan.ok) assertNoExistingClientProcesses(scan.processes);
+  return assertSafeStartupClientScan(scan);
+}
+
+export function assertSafeStartupClientScan(scan) {
+  if (scan?.ok !== true) {
+    throw new Error(
+      `Cannot prove that no Anti-Codex client is already running: ${scan?.error || "process scan failed"}`,
+    );
+  }
+  assertNoExistingClientProcesses(scan.processes);
   return scan;
 }
 
 export function liveOwnedClientPids(processIds = [], isAlive = ownerProcessIsAlive) {
   return [...new Set([...processIds].map(Number))]
     .filter((pid) => Number.isInteger(pid) && pid > 0 && isAlive(pid));
+}
+
+function normalizeCdpProbeStatus(value) {
+  if (value && typeof value === "object") {
+    return {
+      ready: value.ready === true,
+      fatal: value.fatal === true,
+    };
+  }
+  return { ready: value === true, fatal: false };
 }
 
 export async function observeCopiedClientSession(ownedClients, options = {}) {
@@ -1066,17 +1798,23 @@ export async function observeCopiedClientSession(ownedClients, options = {}) {
   for (const pid of [...ownedClients]) {
     if (!liveOwned.includes(Number(pid))) ownedClients.delete(pid);
   }
-  if (liveOwned.length > 0) {
-    return { ready: true, livePids: liveOwned, ownershipChanged, source: "owned" };
-  }
-
-  const cdpReady = await isCdpReady();
+  const cdpStatus = normalizeCdpProbeStatus(await isCdpReady());
   return {
-    ready: cdpReady === true,
-    livePids: [],
+    ready: cdpStatus.ready,
+    fatal: cdpStatus.fatal,
+    livePids: liveOwned,
     ownershipChanged,
-    source: cdpReady === true ? "cdp" : "missing",
+    source: cdpStatus.fatal
+      ? "fatal_renderer"
+      : cdpStatus.ready
+      ? (liveOwned.length > 0 ? "owned+cdp" : "cdp")
+      : (liveOwned.length > 0 ? "renderer" : "missing"),
   };
+}
+
+export function clientSessionRequiresShutdown(clientSession) {
+  const livePids = Array.isArray(clientSession?.livePids) ? clientSession.livePids : [];
+  return clientSession?.fatal === true || (livePids.length === 0 && clientSession?.ready !== true);
 }
 
 export function updateClientExitGrace(missingSince, clientReady, now = Date.now(), graceMs = CLIENT_EXIT_GRACE_MS) {
@@ -1267,22 +2005,65 @@ class CdpProbeSocket {
   }
 }
 
+export function classifyCdpRendererSnapshot(snapshot) {
+  const text = String(snapshot?.text ?? "").trim();
+  const primaryHeading = String(snapshot?.primaryHeading ?? "").replace(/\s+/g, " ").trim();
+  const buttonLabels = Array.isArray(snapshot?.buttonLabels)
+    ? snapshot.buttonLabels.map((value) => String(value ?? "").replace(/\s+/g, " ").trim()).filter(Boolean)
+    : [];
+  const hasDocument = snapshot?.readyState !== "loading" && snapshot?.hasBody === true;
+  const fatal = hasDocument
+    && snapshot?.hasComposer === false
+    && text.length > 0
+    && text.length <= FATAL_CLIENT_MAX_TEXT_LENGTH
+    && primaryHeading.length > 0
+    && primaryHeading.length <= 160
+    && FATAL_CLIENT_HEADING_PATTERN.test(primaryHeading)
+    && buttonLabels.some((label) => FATAL_CLIENT_RECOVERY_BUTTON_PATTERN.test(label));
+  return {
+    ready: hasDocument && !fatal && text.length >= 8 && snapshot?.hasInteractive === true,
+    fatal,
+  };
+}
+
+export function isCdpRendererSnapshotReady(snapshot) {
+  return classifyCdpRendererSnapshot(snapshot).ready;
+}
+
 async function cdpRendererReady(webSocketDebuggerUrl) {
   const socket = new CdpProbeSocket(webSocketDebuggerUrl);
   try {
     await socket.open();
     const result = await socket.call(1, "Runtime.evaluate", {
       expression: `(() => {
-        if (document.readyState === "loading" || !document.body) return false;
-        const text = String(document.body.innerText || document.body.textContent || "").trim();
-        const interactive = document.body.querySelector('textarea, [contenteditable="true"], button, a, [role="button"], [role="link"]');
-        return text.length >= 8 && Boolean(interactive);
+        const body = document.body;
+        const text = String(body?.innerText || body?.textContent || "").trim().slice(0, 8000);
+        const isVisible = (element) => {
+          const rect = element?.getBoundingClientRect?.();
+          const style = element ? getComputedStyle(element) : null;
+          return Boolean(rect && rect.width > 0 && rect.height > 0 && style?.display !== 'none' && style?.visibility !== 'hidden');
+        };
+        const primaryHeadingElement = Array.from(body?.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]') || [])
+          .find(isVisible);
+        return {
+          readyState: document.readyState,
+          hasBody: Boolean(body),
+          text,
+          hasInteractive: Boolean(body?.querySelector('textarea, [contenteditable="true"], button, a, [role="button"], [role="link"]')),
+          hasComposer: Boolean(body?.querySelector('[data-codex-composer], .ProseMirror')),
+          primaryHeading: String(primaryHeadingElement?.textContent || '').replace(/\\s+/g, ' ').trim(),
+          buttonLabels: Array.from(body?.querySelectorAll('button, [role="button"]') || [])
+            .filter(isVisible)
+            .map((button) => String(button.textContent || button.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
+            .filter(Boolean)
+            .slice(0, 40),
+        };
       })()`,
       returnByValue: true,
     });
-    return result?.result?.result?.value === true;
+    return classifyCdpRendererSnapshot(result?.result?.result?.value);
   } catch {
-    return false;
+    return { ready: false, fatal: false };
   } finally {
     socket.close();
   }
@@ -1291,17 +2072,22 @@ async function cdpRendererReady(webSocketDebuggerUrl) {
 export async function cdpPageReady(cdpPort, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const rendererProbe = options.rendererProbe ?? cdpRendererReady;
+  const returnStatus = options.returnStatus === true;
+  const finish = (status) => returnStatus ? status : status.ready;
   try {
     const response = await fetchImpl(`http://127.0.0.1:${cdpPort}/json`, { signal: AbortSignal.timeout(1_500) });
-    if (!response.ok) return false;
+    if (!response.ok) return finish({ ready: false, fatal: false });
     const targets = await response.json();
     const pages = targets.filter((target) => target?.type === "page" && target?.webSocketDebuggerUrl);
+    let fatal = false;
     for (const page of pages) {
-      if (await rendererProbe(page.webSocketDebuggerUrl)) return true;
+      const status = normalizeCdpProbeStatus(await rendererProbe(page.webSocketDebuggerUrl));
+      if (status.ready) return finish({ ready: true, fatal: false });
+      fatal ||= status.fatal;
     }
-    return false;
+    return finish({ ready: false, fatal });
   } catch {
-    return false;
+    return finish({ ready: false, fatal: false });
   }
 }
 
@@ -1349,24 +2135,97 @@ async function waitFor(check, options = {}) {
   throw new Error(`Timed out waiting for ${options.description ?? "condition"}.${lastError ? ` ${lastError.message}` : ""}`);
 }
 
-function stopOwnedProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  stopProcessTree(child.pid);
+export function stopOwnedProcess(child, identity, options = {}) {
+  const processId = Number(child?.pid);
+  if (!child) return { stopped: false, processId: null, reason: "missing_process" };
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return { stopped: false, processId, reason: "already_exited" };
+  }
+  if (Number(identity?.processId ?? identity?.ProcessId) !== processId) {
+    return { stopped: false, processId, reason: "missing_identity" };
+  }
+  return stopExactProcess(identity, options);
 }
 
-function stopProcessTree(pid) {
-  if (!Number.isInteger(Number(pid)) || Number(pid) <= 0) return;
-  if (process.platform === "win32") {
-    const result = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      timeout: 5_000,
-      stdio: "ignore",
-    });
-    if (result.status !== 0) {
-      try { process.kill(Number(pid), "SIGKILL"); } catch {}
+export function stopExactProcess(identity, options = {}) {
+  const expected = normalizedProcessRow({
+    ...identity,
+    parentProcessId: identity?.parentProcessId ?? identity?.ParentProcessId,
+  });
+  if (
+    !expected
+    || !normalizedExecutablePath(expected.executablePath)
+    || !expected.creationFileTimeUtcTicks
+  ) {
+    return {
+      stopped: false,
+      processId: Number(identity?.processId ?? identity?.ProcessId) || null,
+      reason: "missing_identity",
+    };
+  }
+  try {
+    const terminate = options.terminate ?? terminateExactWindowsProcessWithHandle;
+    const result = terminate(expected);
+    if (result?.status === "terminated") {
+      return { stopped: true, processId: expected.processId, reason: "killed" };
     }
-  } else {
-    try { process.kill(Number(pid), "SIGTERM"); } catch {}
+    if (result?.status === "already_exited") {
+      return { stopped: false, processId: expected.processId, reason: "already_exited" };
+    }
+    if (result?.status === "identity_changed") {
+      return { stopped: false, processId: expected.processId, reason: "identity_changed" };
+    }
+    return {
+      stopped: false,
+      processId: expected.processId,
+      reason: result?.status === "unsupported" ? "termination_unsupported" : "kill_failed",
+      error: result?.error ?? "The exact process could not be terminated through a bound Windows handle.",
+    };
+  } catch (error) {
+    return {
+      stopped: false,
+      processId: expected.processId,
+      reason: "kill_failed",
+      error: String(error?.message ?? error),
+    };
+  }
+}
+
+function terminateExactWindowsProcessWithHandle(identity) {
+  if (process.platform !== "win32") {
+    return {
+      status: "unsupported",
+      error: "Exact process termination requires a Windows process handle.",
+    };
+  }
+  try {
+    const output = execFileSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_EXACT_PROCESS_TERMINATOR],
+      {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 10_000,
+        env: {
+          ...process.env,
+          ANTICODEX_TERMINATE_PID: String(identity.processId),
+          ANTICODEX_TERMINATE_CREATION_FILETIME: identity.creationFileTimeUtcTicks,
+          ANTICODEX_TERMINATE_EXECUTABLE: identity.executablePath,
+        },
+      },
+    ).trim();
+    if (output === "0") return { status: "terminated" };
+    if (output === "3") return { status: "already_exited" };
+    if (output === "42") return { status: "identity_changed" };
+    return {
+      status: "termination_failed",
+      error: `Unexpected exact-process helper result: ${output || "empty"}`,
+    };
+  } catch (error) {
+    return {
+      status: "termination_failed",
+      error: String(error?.stderr || error?.message || error),
+    };
   }
 }
 

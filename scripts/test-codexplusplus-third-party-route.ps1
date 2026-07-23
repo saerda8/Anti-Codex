@@ -420,6 +420,13 @@ $candidateCli = Get-FullPath (Join-Path $script:CandidateAppDir 'resources\codex
 $fixturePath = Get-FullPath (Join-Path $repoRoot 'scripts\fixtures\codexplusplus-gate2\fake-chat-server.mjs')
 $probePath = Get-FullPath (Join-Path $repoRoot 'scripts\lib\codexplusplus-gate2-probe.mjs')
 $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
+$releaseReportRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'anticodex\reports'
+$releaseBindingHelper = Join-Path $repoRoot 'scripts\lib\anticodex-release-binding.mjs'
+$releaseBindingJson = & $nodePath $releaseBindingHelper --source-root $repoRoot --report-root $releaseReportRoot
+if ($LASTEXITCODE -ne 0 -or -not $releaseBindingJson) {
+    throw 'Gate 2 could not derive the current Anti-Codex release binding.'
+}
+$releaseBinding = $releaseBindingJson | ConvertFrom-Json
 if (-not $ReportPath) {
     $ReportPath = Join-Path $repoRoot 'docs\audits\2026-07-14-codexplusplus-third-party-route.json'
 }
@@ -434,6 +441,8 @@ $cleanupLauncherAlive = $false
 $cleanupFakeAlive = $false
 
 try {
+    Add-Check 'current_release_binding_available' ($releaseBinding.valid -eq $true) $releaseBinding
+    if ($releaseBinding.valid -ne $true) { throw 'Current Anti-Codex release binding is invalid.' }
     Add-Check 'launcher_exists' (Test-Path -LiteralPath $script:LauncherExecutable -PathType Leaf) $script:LauncherExecutable
     Add-Check 'candidate_exists' (Test-Path -LiteralPath $script:CandidateExe -PathType Leaf) $script:CandidateExe
     Add-Check 'candidate_cli_exists' (Test-Path -LiteralPath $candidateCli -PathType Leaf) $candidateCli
@@ -645,12 +654,19 @@ remote_plugin = false
         nativeCli = $script:NativeCliResult
         failure = $script:Failure
         artifactRoot = if ($KeepArtifacts) { $script:RunRoot } else { $null }
+        releaseBinding = $releaseBinding
     }
     $reportDirectory = Split-Path -Parent $reportFull
     if (-not (Test-Path -LiteralPath $reportDirectory -PathType Container)) {
         New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
     }
     Write-Utf8NoBom $reportFull ($report | ConvertTo-Json -Depth 20)
+    if ($report.ok -eq $true) {
+        $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
+    } elseif (Test-Path -LiteralPath "$reportFull.sha256") {
+        Remove-Item -LiteralPath "$reportFull.sha256" -Force
+    }
     if (-not $KeepArtifacts -and $script:RunRoot -and (Test-Path -LiteralPath $script:RunRoot -PathType Container)) {
         $tempRoot = Get-FullPath $env:TEMP
         if (Test-PathUnderRoot $script:RunRoot $tempRoot) {

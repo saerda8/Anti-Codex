@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-15T02:22:11.016Z",
-  "gate": "Gate 6 preparatory edge evidence (Gate 5 remains open)",
+  "generatedAtUtc": "2026-07-23T03:21:04.616Z",
+  "gate": "Gate 6 preparatory edge evidence",
   "ok": true,
   "failedIds": [],
   "modelTraffic": "none; consumes existing accepted real reports",
   "formalGateAdvanced": false,
-  "blockedBy": "Gate 5 coordinated visible-client proof",
+  "blockedBy": "formal mode not requested",
   "checks": [
     {
       "id": "changed_boundary_syntax",
@@ -43,8 +43,9 @@
       "id": "provider_edge_regression_suite",
       "ok": true,
       "exitCode": 0,
-      "tests": 43,
-      "pass": 43,
+      "missingTestPaths": [],
+      "tests": 68,
+      "pass": 68,
       "fail": 0,
       "stderr": ""
     },
@@ -141,5 +142,10 @@
       },
       "failedIds": []
     }
-  ]
+  ],
+  "report": {
+    "audit": "G:\\Trae-Project\\Anti-Codex\\deepcodex\\docs\\audits\\2026-07-15-gate6-preparatory-edge-matrix.json",
+    "latest": null,
+    "history": null
+  }
 }

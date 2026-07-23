@@ -1,18 +1,18 @@
-From 308e75c4256c148d04fcc785ce7ae3e169b33e02 Mon Sep 17 00:00:00 2001
+From 748805b3b3587daad6238d3e10242b04018661e8 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
 Subject: [PATCH 6/9] guide models to structured patch tools
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 101 +++++++++++++++--
- .../codex-plus-core/tests/protocol_proxy.rs   | 106 +++++++++++++++++-
- 2 files changed, 192 insertions(+), 15 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--
+ .../codex-plus-core/tests/protocol_proxy.rs   | 240 +++++++++++++++++-
+ 2 files changed, 353 insertions(+), 27 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e71ac17..f9f51d5 100644
+index 8c8830d..6b397fa 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -190,6 +190,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -209,6 +209,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
          append_responses_input(input, &mut messages);
      }
      normalize_chat_messages(&mut messages);
@@ -28,7 +28,7 @@ index e71ac17..f9f51d5 100644
      let messages = collapse_system_messages_to_head(messages);
      result["messages"] = json!(messages);
  
-@@ -225,10 +234,6 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -244,10 +253,6 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
      apply_chat_reasoning_options(&mut result, &body, model);
  
      // Native title and task-suggestion helpers are text-only background requests.
@@ -39,7 +39,55 @@ index e71ac17..f9f51d5 100644
      if !suppress_tools {
          let tool_context = build_codex_tool_context(body.get("tools"));
          let mut has_chat_tools = false;
-@@ -3116,6 +3121,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
+@@ -2065,19 +2070,23 @@ impl ChatSseState {
+ 
+         {
+             let state = self.tools.entry(chat_index).or_default();
+-            if let Some(id) = id_delta {
+-                state.call_id = id;
+-            }
+-            if let Some(name) = name_delta {
+-                if !name.is_empty() {
+-                    state.name = name;
++            if !state.added {
++                if let Some(id) = id_delta {
++                    accumulate_streamed_identity(&mut state.call_id, &id);
++                }
++                if let Some(name) = name_delta {
++                    accumulate_streamed_identity(&mut state.name, &name);
+                 }
+             }
+             if !args_delta.is_empty() {
+                 state.arguments.push_str(&args_delta);
+             }
+ 
+-            if !state.added && (!state.call_id.is_empty() || !state.name.is_empty()) {
++            if !state.added
++                && !state.call_id.is_empty()
++                && !state.name.is_empty()
++                && !state.arguments.is_empty()
++            {
+                 should_add = true;
+                 pending_arguments = state.arguments.clone();
+             } else if state.added {
+@@ -2346,6 +2355,16 @@ impl ChatSseState {
+     }
+ }
+ 
++fn accumulate_streamed_identity(current: &mut String, fragment: &str) {
++    if fragment.is_empty() || fragment == current {
++        return;
++    }
++    if fragment.starts_with(current.as_str()) {
++        current.clear();
++    }
++    current.push_str(fragment);
++}
++
+ fn take_sse_block(buffer: &mut String) -> Option<String> {
+     let lf = buffer.find("\n\n").map(|index| (index, 2));
+     let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
+@@ -3137,6 +3156,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
  
  fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) -> Vec<Value> {
      let mut converted = Vec::new();
@@ -47,7 +95,7 @@ index e71ac17..f9f51d5 100644
      for tool in tools {
          if let Some(name) = tool.as_str().filter(|name| !name.is_empty()) {
              converted.push(generic_custom_proxy_tool(name, ""));
-@@ -3139,7 +3145,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3160,7 +3180,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
                      .and_then(Value::as_str)
                      .unwrap_or("");
                  if detect_codex_custom_tool_kind(tool, name) == CodexCustomToolKind::ApplyPatch {
@@ -56,7 +104,7 @@ index e71ac17..f9f51d5 100644
                  } else {
                      converted.push(generic_custom_proxy_tool(name, description));
                  }
-@@ -3148,7 +3154,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3169,7 +3189,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
              _ => {}
          }
      }
@@ -115,7 +163,7 @@ index e71ac17..f9f51d5 100644
  }
  
  fn detect_codex_custom_tool_kind(tool: &Value, name: &str) -> CodexCustomToolKind {
-@@ -3312,6 +3368,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
+@@ -3333,6 +3403,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
  
  fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      vec![
@@ -131,7 +179,7 @@ index e71ac17..f9f51d5 100644
          function_tool(
              &format!("{name}_add_file"),
              &patch_proxy_description(
-@@ -3360,6 +3425,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
+@@ -3381,6 +3460,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      ]
  }
  
@@ -152,7 +200,7 @@ index e71ac17..f9f51d5 100644
  fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
      json!({
          "type": "function",
-@@ -3372,11 +3451,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
+@@ -3393,11 +3486,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
  }
  
  fn patch_proxy_description(description: &str, action: &str, default_description: &str) -> String {
@@ -168,7 +216,29 @@ index e71ac17..f9f51d5 100644
  }
  
  fn apply_patch_add_file_schema() -> Value {
-@@ -3558,7 +3639,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
+@@ -3502,15 +3597,16 @@ fn apply_patch_hunks_schema() -> Value {
+ }
+ 
+ fn proxy_action_from_upstream_name(name: &str) -> Option<CodexPatchProxyAction> {
+-    if name.ends_with("_add_file") {
++    let action = name.strip_prefix("apply_patch_")?;
++    if action == "add_file" {
+         Some(CodexPatchProxyAction::AddFile)
+-    } else if name.ends_with("_delete_file") {
++    } else if action == "delete_file" {
+         Some(CodexPatchProxyAction::DeleteFile)
+-    } else if name.ends_with("_update_file") {
++    } else if action == "update_file" {
+         Some(CodexPatchProxyAction::UpdateFile)
+-    } else if name.ends_with("_replace_file") {
++    } else if action == "replace_file" {
+         Some(CodexPatchProxyAction::ReplaceFile)
+-    } else if name.ends_with("_batch") {
++    } else if action == "batch" {
+         Some(CodexPatchProxyAction::Batch)
+     } else {
+         None
+@@ -3579,7 +3675,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
              let name = object.get("name").and_then(Value::as_str)?;
              let spec = context.custom_tools.get(name)?;
              let upstream_name = if spec.kind == CodexCustomToolKind::ApplyPatch {
@@ -180,7 +250,7 @@ index e71ac17..f9f51d5 100644
                  spec.openai_name.clone()
              };
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 75420c6..8330898 100644
+index 75420c6..6682ebe 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -605,9 +605,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
@@ -342,6 +412,154 @@ index 75420c6..8330898 100644
  #[test]
  fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      let converted = chat_completion_to_response_with_request(
+@@ -1222,6 +1316,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
+     );
+ }
+ 
++#[test]
++fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
++    let converted = chat_completion_to_response_with_request(
++        json!({
++            "id": "chatcmpl_ordinary_suffix_tools",
++            "created": 123,
++            "model": "gpt-5-mini",
++            "choices": [{
++                "finish_reason": "tool_calls",
++                "message": {
++                    "role": "assistant",
++                    "tool_calls": [
++                        {
++                            "id": "call_artifact",
++                            "type": "function",
++                            "function": {
++                                "name": "artifact_delete_file",
++                                "arguments": "{\"input\":\"artifact-42\"}"
++                            }
++                        },
++                        {
++                            "id": "call_database",
++                            "type": "function",
++                            "function": {
++                                "name": "database_batch",
++                                "arguments": "{\"input\":\"rows 1-5\"}"
++                            }
++                        }
++                    ]
++                }
++            }]
++        }),
++        &json!({
++            "model": "gpt-5-mini",
++            "tools": ["artifact_delete_file", "database_batch"]
++        }),
++    )
++    .unwrap();
++
++    assert_eq!(converted["output"][0]["type"], "custom_tool_call");
++    assert_eq!(converted["output"][0]["name"], "artifact_delete_file");
++    assert_eq!(converted["output"][0]["input"], "artifact-42");
++    assert_eq!(converted["output"][1]["type"], "custom_tool_call");
++    assert_eq!(converted["output"][1]["name"], "database_batch");
++    assert_eq!(converted["output"][1]["input"], "rows 1-5");
++}
++
+ #[test]
+ fn chat_completion_response_maps_gemini_and_claude_cache_usage_like_ccx() {
+     let gemini = chat_completion_to_response(json!({
+@@ -1401,6 +1542,93 @@ data: [DONE]
+     assert!(converted.contains("data: [DONE]"));
+ }
+ 
++#[test]
++fn chat_sse_accumulates_fragmented_tool_identity_before_emitting_added() {
++    let assert_identity = |converted: &str, expected_call_id: &str, expected_name: &str| {
++        let events = converted
++            .lines()
++            .filter_map(|line| line.strip_prefix("data: "))
++            .filter(|data| *data != "[DONE]")
++            .map(|data| serde_json::from_str::<serde_json::Value>(data).unwrap())
++            .collect::<Vec<_>>();
++        let added = events
++            .iter()
++            .find(|event| event["type"] == "response.output_item.added")
++            .unwrap();
++        let done = events
++            .iter()
++            .find(|event| event["type"] == "response.output_item.done")
++            .unwrap();
++        let expected_item_id = format!("fc_{expected_call_id}");
++
++        assert_eq!(added["item"]["id"], expected_item_id);
++        assert_eq!(added["item"]["call_id"], expected_call_id);
++        assert_eq!(added["item"]["name"], expected_name);
++        assert_eq!(done["item"]["id"], expected_item_id);
++        assert_eq!(done["item"]["call_id"], expected_call_id);
++        assert_eq!(done["item"]["name"], expected_name);
++        for delta in events
++            .iter()
++            .filter(|event| event["type"] == "response.function_call_arguments.delta")
++        {
++            assert_eq!(delta["item_id"], expected_item_id);
++        }
++        assert_eq!(
++            events
++                .iter()
++                .filter(|event| event["type"] == "response.output_item.added")
++                .count(),
++            1
++        );
++    };
++
++    let id_first = chat_sse_to_responses_sse_with_request(
++        r#"data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_"}]}}]}
++
++data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"weather"}]}}]}
++
++data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"get_"}}]}}]}
++
++data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"weather"}}]}}]}
++
++data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":"}}]}}]}
++
++data: {"id":"chatcmpl_id_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Tokyo\"}"}}]},"finish_reason":"tool_calls"}]}
++
++data: [DONE]
++
++"#,
++        &json!({
++            "model": "gpt-5.4",
++            "tools": [{ "type": "function", "name": "get_weather", "parameters": {} }]
++        }),
++    );
++    assert_identity(&id_first, "call_weather", "get_weather");
++
++    let name_first = chat_sse_to_responses_sse_with_request(
++        r#"data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"data"}}]}}]}
++
++data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"base_"}}]}}]}
++
++data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"batch"}}]}}]}
++
++data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_"}]}}]}
++
++data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"db"}]}}]}
++
++data: {"id":"chatcmpl_name_first","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
++
++data: [DONE]
++
++"#,
++        &json!({
++            "model": "gpt-5.4",
++            "tools": [{ "type": "function", "name": "database_batch", "parameters": {} }]
++        }),
++    );
++    assert_identity(&name_first, "call_db", "database_batch");
++}
++
+ #[test]
+ fn chat_sse_converter_handles_partial_chunks_and_utf8_boundaries() {
+     let sse = "data: {\"id\":\"chatcmpl_utf8\",\"created\":123,\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":\"stop\"}]}\r\n\r\n";
 -- 
 2.55.0.windows.3
 

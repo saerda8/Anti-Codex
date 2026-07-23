@@ -385,6 +385,39 @@ test("returns stable structured tool calls and resumes the same opaque Cascade w
   await adapter.close();
 });
 
+test("resumes the same Cascade with text and data-image tool result parts", async () => {
+  const continuation = { cascadeId: "cascade-multimodal" };
+  const client = fakeClient({
+    startEvents: [{
+      type: "tool_calls",
+      calls: [{ callId: "call_image", name: "view_image", arguments: { path: "shot.png" } }],
+      continuation,
+    }],
+    resumeEvents: [{ type: "text_delta", delta: "image accepted" }, { type: "done" }],
+  });
+  const adapter = createAdapter(client);
+  const first = await adapter.complete(baseBody());
+  const output = [
+    { type: "text", text: "Rendered frame" },
+    { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } },
+  ];
+
+  const completed = await adapter.complete(baseBody({ messages: [
+    { role: "user", content: "inspect the frame" },
+    { role: "assistant", content: null, tool_calls: first.choices[0].message.tool_calls },
+    { role: "tool", tool_call_id: "call_image", content: output },
+  ] }));
+
+  assert.equal(completed.choices[0].message.content, "image accepted");
+  assert.deepEqual(client.resumes, [{
+    continuation,
+    results: [{ callId: "call_image", output, isError: false }],
+    request: client.resumes[0].request,
+  }]);
+  assert.equal(adapter.sessionCount, 0);
+  await adapter.close();
+});
+
 test("parallel tool continuation requires every result from one pending Cascade", async () => {
   const client = fakeClient({
     startEvents: [{
@@ -666,6 +699,38 @@ test("session TTL and max-size eviction cancel retained Cascades", async () => {
   await adapter.close();
 });
 
+test("default continuation retention safely exceeds a ten-minute tool result", async () => {
+  const timers = manualTimers();
+  const continuation = { cascadeId: "cascade-ten-minute-tool" };
+  const client = fakeClient({
+    startEvents: [{
+      type: "tool_calls",
+      calls: [{ callId: "call_slow", name: "shell_command", arguments: { command: "slow" } }],
+      continuation,
+    }],
+    resumeEvents: [{ type: "text_delta", delta: "continued once" }, { type: "done" }],
+  });
+  const adapter = createAntigravityChatAdapter({
+    client,
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    idFactory: sequentialId(),
+    now: () => 1_700_000_000_000,
+  });
+  const first = await adapter.complete(baseBody());
+
+  assert.ok(timers.delays.some((delay) => delay > 10 * 60 * 1000));
+  const continued = await adapter.complete(baseBody({ messages: [
+    { role: "user", content: "run the slow tool" },
+    { role: "assistant", content: null, tool_calls: first.choices[0].message.tool_calls },
+    { role: "tool", tool_call_id: "call_slow", content: "late result" },
+  ] }));
+  assert.equal(continued.choices[0].message.content, "continued once");
+  assert.equal(client.resumes.length, 1);
+  assert.equal(client.resumes[0].continuation, continuation);
+  await adapter.close();
+});
+
 test("maps authentication, quota, network and timeout failures without retrying", async () => {
   for (const [input, expected] of [
     [Object.assign(new Error("login required"), { statusCode: 401 }), [401, "authentication_error"]],
@@ -791,9 +856,12 @@ function sequentialId() {
 
 function manualTimers() {
   const active = new Set();
+  const delays = [];
   return {
-    setTimer(callback) {
-      const timer = { callback };
+    delays,
+    setTimer(callback, delay) {
+      delays.push(delay);
+      const timer = { callback, delay };
       active.add(timer);
       return timer;
     },

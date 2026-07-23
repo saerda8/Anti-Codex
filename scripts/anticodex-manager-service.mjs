@@ -239,6 +239,21 @@ function isTrustedOrigin(originOrReferer) {
   return false;
 }
 
+function isTrustedManagerSource(originOrReferer, hostHeader) {
+  if (!originOrReferer || !isLoopbackHost(hostHeader)) return false;
+  try {
+    const url = new URL(originOrReferer);
+    if (url.protocol === "app:") {
+      return url.hostname === "-";
+    }
+    if (url.protocol !== "http:") return false;
+    const requestHost = String(hostHeader || "").trim().toLowerCase();
+    return requestHost !== "" && url.host.toLowerCase() === requestHost;
+  } catch {
+    return false;
+  }
+}
+
 // Global request origin/host validation
 function validateLoopbackAndTrusted(req, res) {
   const hostHeader = req.headers.host;
@@ -270,7 +285,16 @@ function validateManagerSourceRequest(req, res, subject = "manager") {
     res.end(JSON.stringify({ ok: false, status: 403, message: `Anti-Codex ${subject} source is not trusted.` }));
     return false;
   }
-  return validateLoopbackAndTrusted(req, res);
+  if (!validateLoopbackAndTrusted(req, res)) return false;
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  if ((origin && !isTrustedManagerSource(origin, req.headers.host))
+      || (referer && !isTrustedManagerSource(referer, req.headers.host))) {
+    res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: false, status: 403, message: `Anti-Codex ${subject} must come from the copied client or this Manager origin.` }));
+    return false;
+  }
+  return true;
 }
 
 function validateManagerActionRequest(req, res, expectedToken) {
@@ -285,8 +309,8 @@ function validateManagerActionRequest(req, res, expectedToken) {
 
 function respondToPreflight(req, res) {
   const origin = req.headers.origin;
-  if (!origin || !isTrustedOrigin(origin)) {
-    return jsonResponse(res, 403, { ok: false, error: "Origin must be trusted loopback or app" }, req);
+  if (!origin || !isTrustedManagerSource(origin, req.headers.host)) {
+    return jsonResponse(res, 403, { ok: false, error: "Origin must be the copied client or this Manager origin" }, req);
   }
   res.writeHead(204, {
     "access-control-allow-origin": origin,
@@ -546,7 +570,7 @@ async function runManagerAction(actionName, stateRoot, scriptsRoot) {
     }
 }
 
-async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot) {
+async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot, callbacks = {}) {
     if (actionName === "refreshStatus") {
         return { ok: true, action: actionName, result: { ok: true } };
     }
@@ -557,15 +581,14 @@ async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot) {
         return { ok: true, action: actionName, result: latestManagerReportsPayload(stateRoot) };
     }
     if (actionName === "refreshModels") {
+        if (typeof callbacks.refreshModels !== "function") {
+            throw { statusCode: 503, message: "Anti-Codex model refresh is not ready." };
+        }
+        const result = await callbacks.refreshModels();
         return {
-            ok: true,
+            ok: result?.ok !== false,
             action: actionName,
-            result: {
-                ok: true,
-                upstream: "third-party",
-                modelCount: 0,
-                models: [],
-            },
+            result,
         };
     }
     return runManagerAction(actionName, stateRoot, scriptsRoot);
@@ -813,12 +836,17 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
         antigravityModel,
         ...(Array.isArray(options.antigravityModels) ? options.antigravityModels : []),
     ]);
+    const existingAntigravityProfile = byId.get(ANTIGRAVITY_RELAY_ID) || {};
+    const antigravityApiKey = String(existingAntigravityProfile.apiKey || "");
+    if (!antigravityApiKey) {
+        throw new Error("The authenticated Antigravity adapter profile is unavailable for an in-place switch.");
+    }
     const antigravityProfile = {
-        ...(byId.get(ANTIGRAVITY_RELAY_ID) || {}),
+        ...existingAntigravityProfile,
         id: ANTIGRAVITY_RELAY_ID,
         name: "Anti-Codex Antigravity",
         upstreamBaseUrl: `http://127.0.0.1:${adapterPort}/v1`,
-        apiKey: "",
+        apiKey: antigravityApiKey,
         protocol: "chatCompletions",
         relayMode: "pureApi",
         testModel: antigravityModel,
@@ -910,6 +938,7 @@ function antigravityModelsFromCatalog(stateRoot = "") {
     try {
         const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
         return (Array.isArray(parsed?.models) ? parsed.models : [])
+            .filter((entry) => entry?.visibility !== "hide")
             .slice(0, 256)
             .map((entry) => ({
                 id: String(entry?.slug || entry?.id || "").trim().slice(0, 200),
@@ -1028,8 +1057,10 @@ function unavailableAccountSnapshot(state = "unavailable", provider = "antigravi
     };
 }
 
-async function fixedRouteAccountSnapshot(fixedRoute) {
-    if (fixedRoute?.provider === "third-party") {
+async function fixedRouteAccountSnapshot(fixedRoute, options = {}) {
+    const forceAntigravity = options.forceAntigravity === true;
+    const authToken = String(options.authToken || "");
+    if (fixedRoute?.provider === "third-party" && !forceAntigravity) {
         return {
             ok: true,
             provider: "third-party",
@@ -1041,12 +1072,16 @@ async function fixedRouteAccountSnapshot(fixedRoute) {
             tierName: "",
         };
     }
-    if (fixedRoute?.provider !== "antigravity" || fixedRoute.ready !== true || !fixedRoute.adapterPort) {
+    if ((!forceAntigravity && fixedRoute?.provider !== "antigravity")
+        || fixedRoute.ready !== true || !fixedRoute.adapterPort) {
         return unavailableAccountSnapshot();
     }
     try {
         const response = await fetch(`http://127.0.0.1:${fixedRoute.adapterPort}/v1/account`, {
-            headers: { accept: "application/json" },
+            headers: {
+                accept: "application/json",
+                ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+            },
             signal: AbortSignal.timeout(2000),
         });
         if (!response.ok) return unavailableAccountSnapshot("adapter_unavailable");
@@ -1069,6 +1104,49 @@ async function fixedRouteAccountSnapshot(fixedRoute) {
     } catch {
         return unavailableAccountSnapshot("adapter_unavailable");
     }
+}
+
+async function ensureAntigravityDesktopReady(options = {}) {
+    const { fixedRoute, scriptsRoot, stateRoot, adapterAuthToken } = options;
+    if (fixedRoute?.ready !== true || !fixedRoute.adapterPort) {
+        throw new Error("Anti-Codex 固定线路未就绪，不能切换到 Antigravity。");
+    }
+    let account = await fixedRouteAccountSnapshot(fixedRoute, {
+        forceAntigravity: true,
+        authToken: adapterAuthToken,
+    });
+    if (account.signedIn === true && account.identityAvailable === true) return account;
+
+    const desktopHelper = managerScriptPath({ script: "antigravity-desktop.ps1" }, scriptsRoot);
+    const command = [
+        `$helper = ${psSingleQuoted(desktopHelper)}`,
+        `. $helper`,
+        "$desktop = Get-AntigravityMainProcess",
+        "if (-not $desktop) {",
+        "  $desktopPath = Resolve-AntigravityDesktopPath",
+        "  if (-not $desktopPath) { throw 'Antigravity Desktop is not installed.' }",
+        `  $desktop = Start-AntigravityDesktop -ExecutablePath $desktopPath -StateRoot ${psSingleQuoted(stateRoot)}`,
+        "  $stable = Wait-AntigravityDesktopStable -ExecutablePath $desktopPath -TimeoutSeconds 30 -StableSeconds 3",
+        "  if (-not $stable.Stable) { throw 'Antigravity Desktop did not become stable.' }",
+        "}",
+    ].join("\n");
+    await execFileAsync(powershellPath(), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
+        cwd: scriptsRoot,
+        timeout: 45_000,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+    });
+
+    const deadline = Date.now() + 30_000;
+    do {
+        account = await fixedRouteAccountSnapshot(fixedRoute, {
+            forceAntigravity: true,
+            authToken: adapterAuthToken,
+        });
+        if (account.signedIn === true && account.identityAvailable === true) return account;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 500));
+    } while (Date.now() < deadline);
+    throw new Error("Antigravity Desktop 已启动，但登录状态尚未就绪，模型没有切换。");
 }
 
 function isAntigravityUpstreamMode(mode) {
@@ -1334,9 +1412,9 @@ function validateLocalConnectorIds(connectorIds, stateRoot) {
 }
 
 // Diagnostics helper
-async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl) {
+async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken = "") {
     const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
-    const account = await fixedRouteAccountSnapshot(fixedRoute);
+    const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
     const fixedStatus = readJsonIfPresent(stateRoot ? path.join(stateRoot, "fixed-route-status.json") : "");
     const updateStatus = readJsonIfPresent(stateRoot ? path.join(stateRoot, "update-status.json") : "") || {
         ok: false,
@@ -1581,6 +1659,10 @@ export function createAntiCodexManagerService(options = {}) {
   const stateRoot = options.stateRoot ? path.resolve(options.stateRoot) : (process.env.DEEPCODEX_STATE_ROOT || path.join(process.env.APPDATA || "", "anticodex"));
   const fixedHealthUrl = options.fixedHealthUrl || process.env.ANTICODEX_FIXED_ROUTE_HEALTH_URL || "http://127.0.0.1:18487/anticodex/fixed-route/health";
   const scriptsRoot = __dirname;
+  const adapterAuthToken = String(options.adapterAuthToken || "");
+  const refreshModels = options.refreshModels;
+  const ensureAntigravityReady = options.ensureAntigravityReady
+    ?? ((context) => ensureAntigravityDesktopReady(context));
 
   const server = http.createServer(async (req, res) => {
     if (!validateLoopbackAndTrusted(req, res)) {
@@ -1596,7 +1678,7 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/health") {
       const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
-      const account = await fixedRouteAccountSnapshot(fixedRoute);
+      const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
       const upstreamMode = fixedRoute.provider === "third-party"
         ? "third-party"
         : fixedRoute.provider === "antigravity"
@@ -1605,13 +1687,14 @@ export function createAntiCodexManagerService(options = {}) {
       const upstreamProtocol = upstreamMode === "third-party"
         ? (fixedRoute.relayProtocol === "responses" ? "responses" : "openai-compatible")
         : "";
-      return jsonResponse(res, 200, {
+      const routeReady = fixedRoute.ready === true;
+      return jsonResponse(res, routeReady ? 200 : 503, {
         schema: "anticodex-manager-service-v1",
-        ok: true,
+        ok: routeReady,
         role: "launcher-management-only",
         upstream: fixedRoute.provider === "antigravity" ? "antigravity-desktop" : (fixedRoute.provider === "third-party" ? "codexplusplus-third-party" : "offline"),
         state: fixedRoute.state,
-        routeReady: fixedRoute.ready,
+        routeReady,
         provider: fixedRoute.provider,
         model: fixedRoute.model,
         modelCount: Number(fixedRoute.catalogModelCount ?? 0),
@@ -1634,7 +1717,7 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/anticodex/account") {
       const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
-      const account = await fixedRouteAccountSnapshot(fixedRoute);
+      const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
       return jsonResponse(res, account.ok ? 200 : 503, account, req);
     }
 
@@ -1662,7 +1745,7 @@ export function createAntiCodexManagerService(options = {}) {
       }
       try {
         const action = String(body.action || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot);
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels });
         return jsonResponse(res, 200, payload, req);
       } catch (err) {
         return jsonResponse(res, err.statusCode || 500, { ok: false, message: err.message }, req);
@@ -1680,7 +1763,7 @@ export function createAntiCodexManagerService(options = {}) {
       if (!validateManagerSourceRequest(req, res, "manager action")) return;
       try {
         const action = String(url.searchParams.get("action") || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot);
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels });
         return javascriptResponse(res, 200, managerActionScriptResponse(callbackName, payload));
       } catch (err) {
         const payload = {
@@ -1812,13 +1895,25 @@ export function createAntiCodexManagerService(options = {}) {
               && !availableModels.some((entry) => entry.id === antigravityModel)) {
             return jsonResponse(res, 400, { ok: false, message: "所选 Antigravity 模型不在当前模型目录中。" }, req);
           }
+          const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
+          const account = await ensureAntigravityReady({
+            fixedRoute,
+            scriptsRoot,
+            stateRoot,
+            adapterAuthToken,
+          });
           const saved = await runUpstreamProfileScript("UseAntigravity", { antigravityModel }, stateRoot, scriptsRoot);
           const switched = await applySavedProfileHotSwitch("antigravity", {
             stateRoot,
             scriptsRoot,
             fixedHealthUrl,
           });
-          return jsonResponse(res, 200, { ok: true, saved, ...switched }, req);
+          return jsonResponse(res, 200, {
+            ok: true,
+            saved,
+            accountReady: account?.signedIn === true && account?.identityAvailable === true,
+            ...switched,
+          }, req);
         }
         let apiKey = String(body.apiKey || "");
         if (!apiKey) {
@@ -1863,7 +1958,7 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/anticodex/diagnostics") {
       const fast = url.searchParams.get("fast") === "1";
-      return jsonResponse(res, 200, await diagnosticsPayload(stateRoot, fast, fixedHealthUrl), req);
+      return jsonResponse(res, 200, await diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken), req);
     }
 
     if (req.method === "GET" && pathname === "/anticodex/model-routes") {

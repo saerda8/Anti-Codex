@@ -72,20 +72,20 @@ function Resolve-CodexSource {
             desktopHostName = $desktopHost
         }
     }
-    foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
-        $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue |
-            Sort-Object Version -Descending |
-            Select-Object -First 1
-        if ($pkg) {
-            $root = Join-Path $pkg.InstallLocation "app"
-            $desktopHost = Resolve-CodexDesktopHost -AppRoot $root
-            if ($desktopHost) {
-                return [pscustomobject]@{
-                    root = [IO.Path]::GetFullPath($root)
-                    packageVersion = [string]$pkg.Version
-                    packageName = [string]$pkg.Name
-                    desktopHostName = $desktopHost
-                }
+    $packages = @(
+        foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
+            Get-AppxPackage -Name $name -ErrorAction SilentlyContinue
+        }
+    ) | Sort-Object Version -Descending
+    foreach ($pkg in $packages) {
+        $root = Join-Path $pkg.InstallLocation "app"
+        $desktopHost = Resolve-CodexDesktopHost -AppRoot $root
+        if ($desktopHost) {
+            return [pscustomobject]@{
+                root = [IO.Path]::GetFullPath($root)
+                packageVersion = [string]$pkg.Version
+                packageName = [string]$pkg.Name
+                desktopHostName = $desktopHost
             }
         }
     }

@@ -18,6 +18,14 @@ import { fileURLToPath } from "node:url";
 import { createAntigravityCascadeClient } from "../translator/provider/antigravity-cascade-client.mjs";
 import { startAntigravityChatProvider } from "../translator/provider/start-antigravity-chat-provider.mjs";
 import { buildAntigravityModelCatalog } from "../translator/antigravity-model-catalog.mjs";
+import { createCurrentReleaseBinding } from "./lib/anticodex-release-binding.mjs";
+import {
+  assertRouteAuditUnchanged,
+  fetchModelCatalog,
+  observeChild,
+  startLoopbackRequestAudit,
+  waitForCondition,
+} from "./lib/anticodex-gate4-runtime.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const parsedArgs = parseArgs(process.argv.slice(2));
@@ -32,11 +40,18 @@ const reportPath = resolve(
   parsedArgs.get("--report")
     ?? join(repoRoot, "docs", "audits", "2026-07-14-gate4-isolated-route-switch.json"),
 );
+const releaseReportRoot = resolve(
+  parsedArgs.get("--release-report-root")
+    ?? join(process.env.APPDATA ?? ".", "anticodex", "reports"),
+);
+const releaseBinding = createCurrentReleaseBinding({
+  sourceRoot: repoRoot,
+  reportRoot: releaseReportRoot,
+});
 
 const candidateAppDir = resolve(candidateRoot, "codex-patched-app");
 const candidateExe = resolve(candidateAppDir, "Anti-Codex.exe");
 const candidateCli = resolve(candidateAppDir, "resources", "codex.exe");
-const oldTranslatorRoutesUrl = "http://127.0.0.1:8484/anticodex/model-routes";
 const startedAt = new Date();
 const marker = `GATE4_ROUTE_SWITCH_${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 
@@ -46,12 +61,15 @@ const providerObserved = { startCalls: [], resumeCalls: [] };
 let failure = null;
 let layout = null;
 let provider = null;
+let routeAudit = null;
 let launcherProcess = null;
+let launcherObservation = null;
 let cliProcess = null;
 let baselineProcesses = null;
 let routeBefore = null;
 let routeAfter = null;
 let cliEvidence = null;
+let launcherEvidence = null;
 
 function parseArgs(values) {
   const result = new Map();
@@ -161,49 +179,12 @@ async function getUniquePorts(count) {
   return [...ports];
 }
 
-async function fetchRouteFingerprint() {
-  const response = await fetch(oldTranslatorRoutesUrl, {
-    signal: AbortSignal.timeout(5_000),
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`Old translator route audit returned HTTP ${response.status}.`);
-  const body = JSON.parse(text);
-  const entries = Array.isArray(body.entries) ? body.entries : [];
-  const normalizedEntries = entries.map((entry) => ({
-    at: String(entry?.at ?? ""),
-    requestId: String(entry?.requestId ?? ""),
-    transport: String(entry?.transport ?? ""),
-    requestedModel: String(entry?.requestedModel ?? ""),
-    resolvedModel: String(entry?.resolvedModel ?? ""),
-    cascadeId: String(entry?.cascadeId ?? ""),
-    status: String(entry?.status ?? ""),
-  }));
-  return {
-    count: Number(body.count ?? entries.length),
-    entryCount: entries.length,
-    latestAt: String(body.latest?.at ?? ""),
-    latestRequestId: String(body.latest?.requestId ?? ""),
-    entriesSha256: sha256(JSON.stringify(normalizedEntries)),
-  };
-}
-
 function sameRouteFingerprint(left, right) {
   return Boolean(left && right) && JSON.stringify(left) === JSON.stringify(right);
 }
 
 async function waitFor(check, { timeout = timeoutMs, interval = 200, description = "condition" } = {}) {
-  const deadline = Date.now() + timeout;
-  let lastError = null;
-  while (Date.now() < deadline) {
-    try {
-      const value = await check();
-      if (value) return value;
-    } catch (error) {
-      lastError = error;
-    }
-    await new Promise((resolveWait) => setTimeout(resolveWait, interval));
-  }
-  throw new Error(`Timed out waiting for ${description}.${lastError ? ` Last error: ${lastError.message}` : ""}`);
+  return waitForCondition(check, { timeout, interval, description });
 }
 
 function killProcessTree(child) {
@@ -292,6 +273,8 @@ function safeRemoveRunRoot(root) {
 
 async function main() {
   try {
+    addCheck("current_release_binding_available", releaseBinding.valid === true, { releaseBinding });
+    if (!releaseBinding.valid) throw new Error("Current Anti-Codex release binding is invalid.");
     const pathChecks = [
       ["launcher_exists", launcherPath && existsSync(launcherPath), launcherPath],
       ["candidate_executable_exists", existsSync(candidateExe), candidateExe],
@@ -308,9 +291,6 @@ async function main() {
       throw new Error("A copied candidate process was already running before Gate 4.");
     }
 
-    routeBefore = await fetchRouteFingerprint();
-    addCheck("old_route_baseline_captured", true, routeBefore);
-
     const runId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const root = resolve(os.tmpdir(), `AntiCodex-Gate4-${runId}`);
     layout = {
@@ -325,6 +305,14 @@ async function main() {
       workspace: join(root, "workspace"),
     };
     for (const path of Object.values(layout)) mkdirSync(path, { recursive: true });
+
+    routeAudit = await startLoopbackRequestAudit();
+    routeBefore = routeAudit.snapshot();
+    addCheck("old_route_baseline_captured", routeBefore.count === 0, {
+      source: "self-owned-loopback-forbidden-route",
+      url: routeAudit.url,
+      ...routeBefore,
+    });
 
     const [cdpPort, protocolProxyPort, launcherGuardPort, managerGuardPort] = await getUniquePorts(4);
     const rawClient = createAntigravityCascadeClient();
@@ -369,9 +357,8 @@ async function main() {
     const modelCatalog = buildAntigravityModelCatalog(
       { ...bundledCatalog, models: [catalogTemplate] },
       availableModels.map((entry) => ({
-        id: entry.id,
-        model: entry.internalModel,
-        displayName: entry.displayName,
+        ...entry,
+        model: entry.internalModel ?? entry.model,
       })),
     );
     const catalogPath = join(layout.codexHome, "antigravity-model-catalog.json");
@@ -422,13 +409,26 @@ async function main() {
         id: "gate4-antigravity",
         name: "Gate 4 Antigravity",
         upstreamBaseUrl: provider.url,
+        apiKey: provider.authToken,
         protocol: "chatCompletions",
         relayMode: "pureApi",
         testModel: model,
         configContents: config,
-        authContents: `${JSON.stringify({ OPENAI_API_KEY: "gate4-local-key" }, null, 2)}\n`,
+        authContents: `${JSON.stringify({ OPENAI_API_KEY: provider.authToken }, null, 2)}\n`,
         useCommonConfig: false,
         modelList: model,
+      }, {
+        id: "gate4-forbidden-old-route",
+        name: "Gate 4 forbidden inactive route",
+        upstreamBaseUrl: routeAudit.url,
+        apiKey: "gate4-forbidden-route-key",
+        protocol: "chatCompletions",
+        relayMode: "pureApi",
+        testModel: "gate4-forbidden-old-route-model",
+        configContents: "",
+        authContents: "",
+        useCommonConfig: false,
+        modelList: "gate4-forbidden-old-route-model",
       }],
       activeRelayId: "gate4-antigravity",
       relayTestModel: model,
@@ -471,32 +471,52 @@ async function main() {
       throw new Error("Codex did not load the generated Antigravity model metadata.");
     }
 
-    let launcherError = null;
     launcherProcess = spawn(launcherPath, ["--helper-only", "--helper-port", String(protocolProxyPort)], {
       cwd: candidateAppDir,
       env: childEnvironment,
       windowsHide: true,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    launcherProcess.once("error", (error) => { launcherError = error; });
+    launcherObservation = observeChild(launcherProcess, {
+      redactValues: [
+        provider.authToken,
+        "gate4-local-key",
+        "gate4-forbidden-route-key",
+      ],
+    });
     const models = await waitFor(async () => {
-      if (launcherError) throw launcherError;
-      if (launcherProcess.exitCode !== null) {
-        throw new Error(`CodexPlusPlus helper exited with code ${launcherProcess.exitCode}.`);
-      }
-      const response = await fetch(`${proxyBase}/models`, {
-        headers: { Authorization: "Bearer gate4-local-key" },
-        signal: AbortSignal.timeout(2_000),
+      launcherObservation.throwIfTerminated("CodexPlusPlus helper");
+      return fetchModelCatalog({
+        url: `${proxyBase}/models`,
+        token: "gate4-local-key",
+        model,
+        timeout: 2_000,
       });
-      if (!response.ok) return null;
-      const body = await response.json();
-      return body.data?.some((entry) => entry.id === model) ? body : null;
-    }, { description: "CodexPlusPlus Antigravity model proxy" });
+    }, {
+      timeout: Math.min(timeoutMs, 60_000),
+      description: "CodexPlusPlus Antigravity model proxy",
+    });
+    launcherEvidence = launcherObservation.snapshot();
     addCheck("protocol_proxy_model_ready", models.data.some((entry) => entry.id === model), {
       model,
       providerUrl: provider.url,
       protocolProxyPort,
+      launcher: launcherEvidence,
     });
+    const routeAtProxyReady = routeAudit.snapshot();
+    addCheck("forbidden_route_unused_before_model_task", sameRouteFingerprint(
+      routeBefore,
+      routeAtProxyReady,
+    ), {
+      source: "self-owned-loopback-forbidden-route",
+      before: routeBefore,
+      after: routeAtProxyReady,
+    });
+    assertRouteAuditUnchanged(
+      routeBefore,
+      routeAtProxyReady,
+      "Gate 4 inactive forbidden route",
+    );
 
     const prompt = [
       "This is a bounded route verification.",
@@ -570,8 +590,10 @@ async function main() {
       counters.start === 1 && counters.resume === 1 && counters.cancel === 0
     ), { ...counters });
 
-    routeAfter = await fetchRouteFingerprint();
+    routeAfter = routeAudit.snapshot();
     addCheck("old_mixed_route_received_zero_requests", sameRouteFingerprint(routeBefore, routeAfter), {
+      source: "self-owned-loopback-forbidden-route",
+      url: routeAudit.url,
       before: routeBefore,
       after: routeAfter,
     });
@@ -585,6 +607,7 @@ async function main() {
       processesAfter.antiCodexRoots,
     ), { before: baselineProcesses.antiCodexRoots, after: processesAfter.antiCodexRoots });
   } catch (error) {
+    launcherEvidence = error?.evidence ?? launcherObservation?.snapshot?.() ?? launcherEvidence;
     failure = {
       name: error?.name ?? "Error",
       message: error?.message ?? String(error),
@@ -614,17 +637,16 @@ async function main() {
       ), { before: baselineProcesses.antiCodexRoots, after: cleanupSnapshot.antiCodexRoots });
     }
 
-    if (routeBefore && !routeAfter) {
-      try {
-        routeAfter = await fetchRouteFingerprint();
-        addCheck("old_mixed_route_received_zero_requests_after_failure", sameRouteFingerprint(routeBefore, routeAfter), {
-          before: routeBefore,
-          after: routeAfter,
-        });
-      } catch (error) {
-        addCheck("old_route_after_failure_captured", false, { error: error.message });
-      }
+    if (routeAudit && routeBefore && !routeAfter) {
+      routeAfter = routeAudit.snapshot();
+      addCheck("old_mixed_route_received_zero_requests_after_failure", sameRouteFingerprint(routeBefore, routeAfter), {
+        source: "self-owned-loopback-forbidden-route",
+        url: routeAudit.url,
+        before: routeBefore,
+        after: routeAfter,
+      });
     }
+    await routeAudit?.close?.().catch(() => {});
 
     if (layout?.root) {
       try {
@@ -651,13 +673,21 @@ async function main() {
       counters: { ...counters },
       providerObserved,
       oldRoute: { before: routeBefore, after: routeAfter },
+      launcher: launcherEvidence,
       cli: cliEvidence,
       checks,
       failure,
+      releaseBinding,
     };
     try {
       mkdirSync(dirname(reportPath), { recursive: true });
-      writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      const reportBody = `${JSON.stringify(report, null, 2)}\n`;
+      writeFileSync(reportPath, reportBody, "utf8");
+      if (report.ok) {
+        writeFileSync(`${reportPath}.sha256`, `sha256:${sha256(reportBody)}`, "ascii");
+      } else {
+        rmSync(`${reportPath}.sha256`, { force: true });
+      }
     } catch (error) {
       process.stderr.write(`Failed to write Gate 4 report: ${error.message}\n`);
       process.exitCode = 1;

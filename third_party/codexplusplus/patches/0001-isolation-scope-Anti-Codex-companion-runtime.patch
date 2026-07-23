@@ -1,23 +1,23 @@
-From cd98d4ac846876311234af583737d629306e8c91 Mon Sep 17 00:00:00 2001
+From 3618eb9de45c16fcad63054e99032c411f1d3829 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Tue, 14 Jul 2026 20:11:29 +0800
 Subject: [PATCH 1/9] isolation: scope Anti-Codex companion runtime
 
 ---
- apps/codex-plus-launcher/src/main.rs          |  56 +++++-
- .../src-tauri/src/commands.rs                 |  65 ++++++-
- apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 ++++
- crates/codex-plus-core/src/app_paths.rs       |  77 +++++++-
+ apps/codex-plus-launcher/src/main.rs          |  51 ++++-
+ .../src-tauri/src/commands.rs                 |  96 +++++++-
+ apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 +++
+ crates/codex-plus-core/src/app_paths.rs       | 211 +++++++++++++++++-
  crates/codex-plus-core/src/launcher.rs        |  12 +-
  crates/codex-plus-core/src/paths.rs           |  29 +++
- crates/codex-plus-core/src/protocol_proxy.rs  |  34 ++++
+ crates/codex-plus-core/src/protocol_proxy.rs  |  34 +++
  crates/codex-plus-core/src/relay_config.rs    |  10 +-
- crates/codex-plus-core/src/watcher.rs         | 167 +++++++++++++++---
- crates/codex-plus-core/tests/watcher.rs       | 127 +++++++++++++
- 10 files changed, 565 insertions(+), 45 deletions(-)
+ crates/codex-plus-core/src/watcher.rs         | 167 ++++++++++++--
+ crates/codex-plus-core/tests/watcher.rs       | 127 +++++++++++
+ 10 files changed, 725 insertions(+), 45 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 81b9bb1..57e5ea0 100644
+index 81b9bb1..bb3fa59 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -43,7 +43,11 @@ async fn main() -> Result<()> {
@@ -33,7 +33,7 @@ index 81b9bb1..57e5ea0 100644
          activate_existing_codex_app(&options).await?;
          return Ok(());
      };
-@@ -56,14 +60,31 @@ async fn main() -> Result<()> {
+@@ -56,14 +60,29 @@ async fn main() -> Result<()> {
      Ok(())
  }
  
@@ -47,9 +47,7 @@ index 81b9bb1..57e5ea0 100644
 +    let Some(app_path) = app_path else {
 +        anyhow::bail!("isolated CodexPlusPlus requires an explicit --app-path");
 +    };
-+    if app_path.as_os_str().is_empty() || !app_path.is_absolute() {
-+        anyhow::bail!("isolated CodexPlusPlus requires an absolute non-empty --app-path");
-+    }
++    codex_plus_core::app_paths::validate_isolated_copied_app_dir(app_path)?;
 +    Ok(())
 +}
 +
@@ -67,7 +65,7 @@ index 81b9bb1..57e5ea0 100644
      allow_stale_recovery: bool,
  ) -> anyhow::Result<Option<codex_plus_core::ports::LoopbackPortGuard>> {
      match try_acquire_single_instance_guard() {
-@@ -79,10 +100,14 @@ fn acquire_single_instance_guard_with_retry(
+@@ -79,10 +98,14 @@ fn acquire_single_instance_guard_with_retry(
          }
          Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
              log_launcher_already_running(debug_port);
@@ -84,7 +82,7 @@ index 81b9bb1..57e5ea0 100644
              }
              Ok(None)
          }
-@@ -114,8 +139,11 @@ fn log_launcher_guard_fallback(fallback_lock_path: &Path) {
+@@ -114,8 +137,11 @@ fn log_launcher_guard_fallback(fallback_lock_path: &Path) {
      );
  }
  
@@ -98,7 +96,7 @@ index 81b9bb1..57e5ea0 100644
      let cdp_listening = codex_plus_core::watcher::cdp_listening(debug_port);
      let recover =
          codex_plus_core::watcher::should_recover_stale_launcher(has_codex_process, cdp_listening);
-@@ -146,7 +174,7 @@ async fn activate_existing_codex_app(options: &LaunchOptions) -> anyhow::Result<
+@@ -146,7 +172,7 @@ async fn activate_existing_codex_app(options: &LaunchOptions) -> anyhow::Result<
      if settings.enhancements_enabled {
          hooks.start_helper(options.helper_port).await?;
      }
@@ -107,15 +105,12 @@ index 81b9bb1..57e5ea0 100644
      let mut activated = false;
      #[cfg(windows)]
      {
-@@ -790,11 +818,21 @@ mod tests {
+@@ -790,11 +816,18 @@ mod tests {
          assert_eq!(options.helper_port, LaunchOptions::default().helper_port);
      }
  
 +    #[test]
 +    fn isolated_launch_requires_an_absolute_explicit_app_path() {
-+        let absolute_app_path = std::env::current_dir().unwrap().join("copied-codex");
-+
-+        assert!(validate_isolated_app_path(true, Some(&absolute_app_path)).is_ok());
 +        assert!(validate_isolated_app_path(true, None).is_err());
 +        assert!(validate_isolated_app_path(true, Some(Path::new("relative"))).is_err());
 +        assert!(validate_isolated_app_path(false, None).is_ok());
@@ -131,18 +126,21 @@ index 81b9bb1..57e5ea0 100644
          assert!(source.contains("launcher.already_running"));
      }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index ea115d4..7c1224f 100644
+index ea115d4..d5e232f 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
-@@ -508,11 +508,42 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+@@ -508,11 +508,57 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
  
  #[tauri::command]
  pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
 -    codex_plus_core::watcher::stop_launcher_processes_and_wait();
 -    codex_plus_core::watcher::stop_codex_processes_and_wait();
-+    if let Err(error) = validate_isolated_launch_app_path(
++    if let Err(error) = stop_validated_restart_targets(
 +        codex_plus_core::paths::isolated_instance_mode(),
 +        request.app_path.trim(),
++        validate_isolated_launch_app_path,
++        codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path,
++        codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path,
 +    ) {
 +        return failed(
 +            &format!("拒绝重启隔离实例：{error}"),
@@ -152,26 +150,38 @@ index ea115d4..7c1224f 100644
 +            }),
 +        );
 +    }
-+    let launcher_path = codex_plus_core::install::companion_binary_path(SILENT_BINARY);
-+    codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(&launcher_path);
-+    if !request.app_path.trim().is_empty() {
-+        codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path(Path::new(
-+            request.app_path.trim(),
-+        ));
-+    }
      spawn_codex_plus_launch(request, "Codex 已请求重启，启动任务正在后台运行。")
  }
  
 +fn validate_isolated_launch_app_path(
 +    isolated_instance: bool,
 +    app_path: &str,
-+) -> anyhow::Result<()> {
++) -> anyhow::Result<Option<PathBuf>> {
 +    if !isolated_instance {
-+        return Ok(());
++        return Ok((!app_path.trim().is_empty()).then(|| PathBuf::from(app_path.trim())));
 +    }
 +    let app_path = Path::new(app_path);
-+    if app_path.as_os_str().is_empty() || !app_path.is_absolute() {
-+        anyhow::bail!("必须提供复制版 Codex 的绝对 appPath");
++    let validated = codex_plus_core::app_paths::validate_isolated_copied_app_dir(app_path)?;
++    Ok(Some(validated))
++}
++
++fn stop_validated_restart_targets<Validate, StopLauncher, StopCodex>(
++    isolated_instance: bool,
++    app_path: &str,
++    validate: Validate,
++    stop_launcher: StopLauncher,
++    stop_codex: StopCodex,
++) -> anyhow::Result<()>
++where
++    Validate: FnOnce(bool, &str) -> anyhow::Result<Option<PathBuf>>,
++    StopLauncher: FnOnce(&Path),
++    StopCodex: FnOnce(&Path),
++{
++    let validated_app_path = validate(isolated_instance, app_path)?;
++    let launcher_path = codex_plus_core::install::companion_binary_path(SILENT_BINARY);
++    stop_launcher(&launcher_path);
++    if let Some(app_path) = validated_app_path.as_deref() {
++        stop_codex(app_path);
 +    }
 +    Ok(())
 +}
@@ -179,7 +189,7 @@ index ea115d4..7c1224f 100644
  fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> CommandResult<Value> {
      let debug_port = request.debug_port;
      let helper_port = request.helper_port;
-@@ -544,6 +575,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+@@ -544,6 +590,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
  }
  
  fn spawn_silent_launcher(request: &LaunchRequest) -> anyhow::Result<()> {
@@ -190,7 +200,7 @@ index ea115d4..7c1224f 100644
      let mut args = Vec::new();
      if !request.app_path.trim().is_empty() {
          args.push("--app-path".to_string());
-@@ -3425,7 +3460,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
+@@ -3425,7 +3475,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -199,7 +209,7 @@ index ea115d4..7c1224f 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -3466,11 +3501,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
+@@ -3466,11 +3516,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
      match codex_plus_core::relay_config::apply_relay_config_to_home_with_protocol(
          home,
          &codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
@@ -213,7 +223,7 @@ index ea115d4..7c1224f 100644
      ) {
          Ok(result) => {
              let status = codex_plus_core::relay_config::relay_status_from_home(home);
-@@ -3559,7 +3594,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
+@@ -3559,7 +3609,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -222,7 +232,7 @@ index ea115d4..7c1224f 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -3672,6 +3707,10 @@ fn log_relay_apply_request(
+@@ -3672,6 +3722,10 @@ fn log_relay_apply_request(
      settings: &BackendSettings,
      relay: &codex_plus_core::settings::RelayProfile,
  ) {
@@ -233,7 +243,7 @@ index ea115d4..7c1224f 100644
      let _ = codex_plus_core::diagnostic_log::append_diagnostic_log(
          event,
          json!({
-@@ -3683,7 +3722,7 @@ fn log_relay_apply_request(
+@@ -3683,7 +3737,7 @@ fn log_relay_apply_request(
              "baseUrl": relay.base_url,
              "hasConfigContents": !relay.config_contents.trim().is_empty(),
              "hasAuthContents": !relay.auth_contents.trim().is_empty(),
@@ -242,20 +252,36 @@ index ea115d4..7c1224f 100644
          }),
      );
  }
-@@ -4250,6 +4289,18 @@ mod tests {
+@@ -4250,6 +4304,34 @@ mod tests {
          );
      }
  
 +    #[test]
 +    fn isolated_manager_launch_requires_an_absolute_explicit_app_path() {
-+        let absolute_app_path = std::env::current_dir().unwrap().join("copied-codex");
-+
-+        assert!(
-+            validate_isolated_launch_app_path(true, absolute_app_path.to_str().unwrap()).is_ok()
-+        );
 +        assert!(validate_isolated_launch_app_path(true, "").is_err());
 +        assert!(validate_isolated_launch_app_path(true, "relative").is_err());
 +        assert!(validate_isolated_launch_app_path(false, "").is_ok());
++    }
++
++    #[test]
++    fn native_or_outside_restart_path_performs_zero_stops() {
++        use std::sync::atomic::{AtomicUsize, Ordering};
++
++        let stops = AtomicUsize::new(0);
++        let result = stop_validated_restart_targets(
++            true,
++            r"C:\Program Files\WindowsApps\OpenAI.Codex_native\app",
++            |_isolated, _app_path| anyhow::bail!("not the configured copied app"),
++            |_launcher| {
++                stops.fetch_add(1, Ordering::SeqCst);
++            },
++            |_app| {
++                stops.fetch_add(1, Ordering::SeqCst);
++            },
++        );
++
++        assert!(result.is_err());
++        assert_eq!(stops.load(Ordering::SeqCst), 0);
 +    }
 +
      #[test]
@@ -324,7 +350,7 @@ index 60a385b..ef02f55 100644
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
-index 3d571a1..8e282d9 100644
+index 3d571a1..20ece6b 100644
 --- a/crates/codex-plus-core/src/app_paths.rs
 +++ b/crates/codex-plus-core/src/app_paths.rs
 @@ -1,4 +1,4 @@
@@ -351,7 +377,7 @@ index 3d571a1..8e282d9 100644
      if let Some(executable) = executable_in_dir(app_dir) {
          return executable;
      }
-@@ -429,6 +433,35 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+@@ -429,6 +433,119 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
      app_dir.join("Codex.exe")
  }
  
@@ -384,16 +410,103 @@ index 3d571a1..8e282d9 100644
 +    configured_codex_executable_from_value(app_dir, std::env::var_os(APP_EXECUTABLE_ENV))
 +}
 +
++pub fn validate_isolated_copied_app_dir(app_dir: &Path) -> anyhow::Result<PathBuf> {
++    let configured_executable = std::env::var_os(APP_EXECUTABLE_ENV)
++        .map(PathBuf::from)
++        .ok_or_else(|| anyhow::anyhow!("{APP_EXECUTABLE_ENV} is required for an isolated app"))?;
++    validate_isolated_copied_app_dir_against(app_dir, &configured_executable)
++}
++
++fn validate_isolated_copied_app_dir_against(
++    app_dir: &Path,
++    configured_executable: &Path,
++) -> anyhow::Result<PathBuf> {
++    if app_dir.as_os_str().is_empty() || !app_dir.is_absolute() || !app_dir.is_dir() {
++        anyhow::bail!("copied app path must be an existing absolute directory");
++    }
++    if configured_executable.as_os_str().is_empty()
++        || !configured_executable.is_absolute()
++        || !configured_executable.is_file()
++        || !configured_executable
++            .extension()
++            .and_then(OsStr::to_str)
++            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
++    {
++        anyhow::bail!("configured copied app executable is invalid");
++    }
++    let configured_app_dir = configured_executable
++        .parent()
++        .ok_or_else(|| anyhow::anyhow!("configured copied app executable has no parent"))?;
++    if !exact_app_path_matches(app_dir, configured_app_dir) {
++        anyhow::bail!("app path is not the exact configured Anti-Codex copied-app root");
++    }
++    reject_symlink_components(app_dir)?;
++    reject_symlink_components(configured_executable)?;
++    let canonical_app_dir = std::fs::canonicalize(app_dir)?;
++    let canonical_executable = std::fs::canonicalize(configured_executable)?;
++    if canonical_executable.parent() != Some(canonical_app_dir.as_path()) {
++        anyhow::bail!("app path is not the exact configured Anti-Codex copied-app root");
++    }
++    Ok(canonical_app_dir)
++}
++
++fn exact_app_path_matches(left: &Path, right: &Path) -> bool {
++    #[cfg(windows)]
++    {
++        let normalize = |path: &Path| {
++            path.to_string_lossy()
++                .trim_start_matches(r"\\?\")
++                .replace('/', "\\")
++                .trim_end_matches('\\')
++                .to_ascii_lowercase()
++        };
++        normalize(left) == normalize(right)
++    }
++    #[cfg(not(windows))]
++    {
++        left == right
++    }
++}
++
++fn reject_symlink_components(path: &Path) -> anyhow::Result<()> {
++    let mut current = PathBuf::new();
++    for component in path.components() {
++        current.push(component.as_os_str());
++        if matches!(
++            component,
++            std::path::Component::Prefix(_) | std::path::Component::RootDir
++        ) {
++            continue;
++        }
++        let metadata = std::fs::symlink_metadata(&current)?;
++        if metadata.file_type().is_symlink() {
++            anyhow::bail!("symlinked copied app paths are not allowed");
++        }
++        #[cfg(windows)]
++        {
++            use std::os::windows::fs::MetadataExt;
++            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
++            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
++                anyhow::bail!("reparse-point copied app paths are not allowed");
++            }
++        }
++    }
++    Ok(())
++}
++
  pub fn codex_app_version(app_dir: &Path) -> Option<String> {
      if app_dir.extension() == Some(OsStr::new("app")) {
          return macos_app_version(app_dir);
-@@ -646,6 +679,48 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
+@@ -646,6 +763,98 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
      None
  }
  
 +#[cfg(test)]
 +mod isolation_tests {
-+    use super::{configured_codex_executable_from_value, explicit_codex_executable};
++    use super::{
++        configured_codex_executable_from_value, explicit_codex_executable,
++        validate_isolated_copied_app_dir_against,
++    };
 +
 +    #[test]
 +    fn explicit_copied_executable_must_be_an_exe_inside_the_selected_app_directory() {
@@ -430,6 +543,53 @@ index 3d571a1..8e282d9 100644
 +            configured_codex_executable_from_value(&app_dir, Some("relative.exe".into())),
 +            Some(std::path::PathBuf::new())
 +        );
++    }
++
++    #[test]
++    fn isolated_copied_app_validation_rejects_native_and_outside_roots() {
++        let temp = tempfile::tempdir().unwrap();
++        let copied_dir = temp.path().join("copied-app");
++        let native_dir = temp.path().join("native-codex");
++        let outside_dir = temp.path().join("outside");
++        std::fs::create_dir_all(&copied_dir).unwrap();
++        std::fs::create_dir_all(&native_dir).unwrap();
++        std::fs::create_dir_all(&outside_dir).unwrap();
++        let copied_executable = copied_dir.join("Anti-Codex.exe");
++        std::fs::write(&copied_executable, "copied").unwrap();
++
++        assert_eq!(
++            validate_isolated_copied_app_dir_against(&copied_dir, &copied_executable).unwrap(),
++            copied_dir.canonicalize().unwrap()
++        );
++        assert!(validate_isolated_copied_app_dir_against(&native_dir, &copied_executable).is_err());
++        assert!(
++            validate_isolated_copied_app_dir_against(&outside_dir, &copied_executable).is_err()
++        );
++        assert!(
++            validate_isolated_copied_app_dir_against(
++                &copied_dir,
++                &outside_dir.join("Anti-Codex.exe"),
++            )
++            .is_err()
++        );
++    }
++
++    #[cfg(windows)]
++    #[test]
++    fn isolated_copied_app_validation_rejects_symlink_aliases() {
++        use std::os::windows::fs::symlink_dir;
++
++        let temp = tempfile::tempdir().unwrap();
++        let copied_dir = temp.path().join("copied-app");
++        let alias_dir = temp.path().join("copied-app-alias");
++        std::fs::create_dir_all(&copied_dir).unwrap();
++        let copied_executable = copied_dir.join("Anti-Codex.exe");
++        std::fs::write(&copied_executable, "copied").unwrap();
++        if symlink_dir(&copied_dir, &alias_dir).is_err() {
++            return;
++        }
++
++        assert!(validate_isolated_copied_app_dir_against(&alias_dir, &copied_executable).is_err());
 +    }
 +}
 +

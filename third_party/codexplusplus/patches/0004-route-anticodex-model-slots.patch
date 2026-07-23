@@ -1,4 +1,4 @@
-From 52a0e4311124dde7706a060070d7755bc2286ecb Mon Sep 17 00:00:00 2001
+From 037569375e2cb9900e42e0ecd9b33566113ede5f Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
 Subject: [PATCH 4/9] fix: route Anti-Codex model slots
@@ -8,7 +8,7 @@ Subject: [PATCH 4/9] fix: route Anti-Codex model slots
  1 file changed, 346 insertions(+), 11 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e6eee3c..337a5c5 100644
+index 3a89da5..0184adc 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
@@ -20,9 +20,9 @@ index e6eee3c..337a5c5 100644
  
  pub const DEFAULT_PROTOCOL_PROXY_PORT: u16 = 57321;
  const PROTOCOL_PROXY_PORT_ENV: &str = "CODEX_PLUS_PROTOCOL_PROXY_PORT";
-@@ -35,6 +35,13 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
-     "user",
- ];
+@@ -54,6 +54,13 @@ mod direct_chat_timeout_contract_tests {
+     }
+ }
  const ERROR_BODY_PREVIEW_LIMIT: usize = 1024;
 +const ANTICODEX_ANTIGRAVITY_RELAY_ID: &str = "anticodex-antigravity";
 +const ANTICODEX_THIRD_PARTY_RELAY_ID: &str = "anticodex-third-party";
@@ -34,7 +34,7 @@ index e6eee3c..337a5c5 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -563,12 +570,325 @@ pub async fn open_responses_proxy_request_with_settings(
+@@ -582,12 +589,325 @@ pub async fn open_responses_proxy_request_with_settings(
      open_responses_proxy_request_with_settings_and_user_agent(body, settings, None).await
  }
  
@@ -361,7 +361,7 @@ index e6eee3c..337a5c5 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -576,11 +896,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -595,11 +915,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
@@ -382,7 +382,7 @@ index e6eee3c..337a5c5 100644
      let relay_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -598,6 +923,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -617,6 +942,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
@@ -390,7 +390,7 @@ index e6eee3c..337a5c5 100644
                  "headerTimeoutSeconds": header_timeout.as_secs()
              }),
          );
-@@ -706,7 +1032,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -725,7 +1051,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      body: &str,
      original_user_agent: Option<&str>,
  ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
@@ -399,7 +399,7 @@ index e6eee3c..337a5c5 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -716,14 +1042,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -735,14 +1061,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
@@ -426,7 +426,7 @@ index e6eee3c..337a5c5 100644
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -745,6 +1079,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -764,6 +1098,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,

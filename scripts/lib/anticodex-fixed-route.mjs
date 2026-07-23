@@ -70,6 +70,7 @@ export function generateRouteConfig(options = {}) {
     adapterEnabled = true;
     relayProtocol = "chatCompletions";
     codexPlusPlusUpstreamUrl = `http://127.0.0.1:${adapterPort}/v1`;
+    upstreamApiKey = localProxyKey;
     profileId = ANTIGRAVITY_RELAY_ID;
     profileName = "Anti-Codex Antigravity";
   } else if (provider === "third-party") {

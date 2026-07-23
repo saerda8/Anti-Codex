@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-const DEFAULT_SESSION_TTL_MS = 10 * 60 * 1000;
+import { DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS } from "../antigravity-contract.mjs";
+
+const DEFAULT_SESSION_TTL_MS = DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS;
 const DEFAULT_MAX_SESSIONS = 128;
 const NATIVE_CODEX_TITLE_PROMPT_PREFIX = "You are a helpful assistant. You will be presented with a user prompt, and your job is to provide a short title for a task that will be created from that prompt.";
 const NATIVE_CODEX_TASK_SUGGESTIONS_PROMPT_PREFIX = "# Overview\n\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project:";
@@ -625,7 +627,7 @@ function trailingToolContinuation(messages) {
     if (!callId || results.has(callId)) {
       throw invalidRequest("Tool results require unique tool_call_id values.", "invalid_tool_results");
     }
-    results.set(callId, messageText(message.content, { allowEmpty: true }));
+    results.set(callId, normalizeToolResultContent(message.content));
   }
   return { callIds, results };
 }
@@ -633,7 +635,12 @@ function trailingToolContinuation(messages) {
 function normalizeHistoryMessage(message) {
   const role = String(message?.role ?? "").toLowerCase();
   if (!role) throw invalidRequest("Every message requires a role.");
-  const normalized = { role, content: messageText(message?.content, { allowEmpty: true }) };
+  const normalized = {
+    role,
+    content: role === "tool"
+      ? normalizeToolResultContent(message?.content)
+      : messageText(message?.content, { allowEmpty: true }),
+  };
   if (role === "assistant" && Array.isArray(message?.tool_calls)) {
     normalized.tool_calls = message.tool_calls.map((call) => ({
       id: String(call?.id ?? ""),
@@ -646,6 +653,38 @@ function normalizeHistoryMessage(message) {
   }
   if (role === "tool") normalized.tool_call_id = String(message?.tool_call_id ?? "");
   return normalized;
+}
+
+function normalizeToolResultContent(content) {
+  if (content === null || content === undefined) return "";
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) {
+    throw invalidRequest("Tool result content must be text or text/image parts.", "unsupported_tool_result_content");
+  }
+  return content.map((part) => {
+    const type = String(part?.type ?? "");
+    if (type === "text" || type === "input_text") {
+      return { type: "text", text: String(part?.text ?? "") };
+    }
+    if (type === "image_url") {
+      const source = typeof part?.image_url === "string" ? part.image_url : part?.image_url?.url;
+      const url = String(source ?? "");
+      if (!/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+$/i.test(url)) {
+        throw invalidRequest(
+          "Tool result image_url must be a base64 data image.",
+          "unsupported_tool_result_image",
+        );
+      }
+      return {
+        type: "image_url",
+        image_url: {
+          url,
+          ...(part?.image_url?.detail ? { detail: String(part.image_url.detail) } : {}),
+        },
+      };
+    }
+    throw invalidRequest(`Unsupported tool result content part: ${type || "missing"}`, "unsupported_tool_result_content");
+  });
 }
 
 function messageText(content, options = {}) {
@@ -843,7 +882,7 @@ function createSessionStore({ client, maxSessions, ttlMs, setTimer, clearTimer }
     }
     const sameResults = record.claimedResults instanceof Map
       && record.claimedResults.size === results.size
-      && [...record.claimedResults].every(([id, value]) => results.get(id) === value);
+      && [...record.claimedResults].every(([id, value]) => toolResultEqual(results.get(id), value));
     if (!sameResults) {
       throw new ChatAdapterError("The same tool call IDs were continued with different results.", {
         statusCode: 409,
@@ -903,6 +942,15 @@ function createSessionStore({ client, maxSessions, ttlMs, setTimer, clearTimer }
       return [...records.values()].filter((record) => record.state !== "completed").length;
     },
   };
+}
+
+function toolResultEqual(left, right) {
+  if (left === right) return true;
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
 }
 
 function createDeferred() {

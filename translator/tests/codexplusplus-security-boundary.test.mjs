@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+
+const root = join(import.meta.dirname, "..", "..");
+const patch1 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0001-isolation-scope-Anti-Codex-companion-runtime.patch"), "utf8");
+const patch2 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0002-cancel-loopback-streams-without-resets.patch"), "utf8");
+const patch2AddedLines = patch2
+  .split("\n")
+  .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+  .join("\n");
+
+test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
+  const componentRoot = join(root, "third_party", "codexplusplus");
+  const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
+
+  assert.equal(metadata.patches.length, 9);
+  for (const patch of metadata.patches) {
+    const actualHash = createHash("sha256")
+      .update(readFileSync(join(componentRoot, patch.file)))
+      .digest("hex");
+    assert.equal(actualHash, patch.sha256, patch.file);
+  }
+  assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
+  assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
+  assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("isolated restart validates the exact configured copied app before any stop", () => {
+  assert.match(patch1, /validate_isolated_copied_app_dir/);
+  assert.match(patch1, /CODEX_PLUS_APP_EXECUTABLE/);
+  assert.match(patch1, /symlink_metadata/);
+  assert.match(patch1, /stop_validated_restart_targets/);
+  assert.match(patch1, /native_or_outside_restart_path_performs_zero_stops/);
+});
+
+test("local protocol proxy is loopback-only, authenticated, bounded, and timeout-aware", () => {
+  assert.doesNotMatch(patch2AddedLines, /CODEX_PLUS_HELPER_BIND/);
+  assert.match(patch2AddedLines, /LOCAL_HELPER_BIND_HOST[^\n]*127\.0\.0\.1/);
+  assert.match(patch2, /authorize_local_proxy_request/);
+  assert.match(patch2, /experimental_bearer_token/);
+  assert.match(patch2, /401 Unauthorized/);
+  assert.match(patch2, /403 Forbidden/);
+  assert.match(patch2, /MAX_HELPER_CONNECTIONS/);
+  assert.match(patch2, /Semaphore/);
+  assert.match(patch2, /HELPER_HEADER_IDLE_TIMEOUT/);
+  assert.match(patch2, /HELPER_BODY_IDLE_TIMEOUT/);
+  assert.match(patch2, /send_upstream_request_for_responses/);
+  assert.match(patch2, /unauthorized_proxy_request_never_reaches_upstream/);
+});
+
+test("proxy bearer auth is enforced after bounded headers but before any body read", () => {
+  const headerRead = patch2.indexOf("read_http_request_headers(&mut stream)");
+  const authorization = patch2.indexOf("authorize_local_proxy_request(&request_headers, &expected_token)");
+  const bodyRead = patch2.indexOf("read_http_request_body(&mut stream, request_head)");
+
+  assert.ok(headerRead >= 0, "the helper must read only a bounded header first");
+  assert.ok(authorization > headerRead, "the helper must authorize the parsed proxy route");
+  assert.ok(bodyRead > authorization, "the helper must not read a proxy body before bearer auth");
+  assert.match(patch2, /MAX_HTTP_HEADER_BYTES: usize = 64 \* 1024/);
+  assert.match(patch2, /if buffer\.len\(\) > MAX_HTTP_HEADER_BYTES/);
+  assert.match(patch2, /ContentLength\(length\) if \*length > MAX_HTTP_BODY_BYTES/);
+  assert.match(patch2, /helper_header_and_body_reads_have_distinct_idle_timeouts/);
+  assert.match(patch2, /unauthorized_proxy_headers_are_rejected_before_large_body_is_read/);
+  assert.match(patch2, /concurrent_unauthorized_slow_bodies_release_all_helper_permits/);
+});

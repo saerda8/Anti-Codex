@@ -41,6 +41,33 @@ test("native MCP bridge installs Codex instructions as trusted Custom Agent sect
   }
 });
 
+test("native MCP bridge uses a fresh unguessable URL secret and rejects other paths", async () => {
+  const first = await createAntigravityNativeMcpBridge({ tools: [] });
+  const second = await createAntigravityNativeMcpBridge({ tools: [] });
+  try {
+    assert.notEqual(first.secret, second.secret);
+    assert.ok(first.secret.length >= 32);
+    assert.match(first.url, new RegExp(`/${first.secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+
+    const origin = new URL(first.url).origin;
+    const missing = await fetch(origin, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    assert.equal(missing.status, 401);
+    const wrong = await fetch(`${origin}/wrong-secret`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "initialize", params: {} }),
+    });
+    assert.equal(wrong.status, 401);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
 test("native MCP bridge lists tools, captures a call, and returns its result", async () => {
   const bridge = await createAntigravityNativeMcpBridge({
     tools: [{
@@ -68,12 +95,52 @@ test("native MCP bridge lists tools, captures a call, and returns its result", a
     });
     const call = await bridge.waitForCall({ timeoutMs: 1000 });
     assert.equal(call.name, "read_file");
+    assert.equal(call.nativeCallId, "3");
     assert.deepEqual(call.arguments, { path: "README.md" });
     assert.equal(bridge.pendingCount, 1);
     assert.equal(bridge.completeCall(call.callId, "file contents"), true);
     const completed = await callResponse;
     assert.equal(completed.result.content[0].text, "file contents");
     assert.equal(completed.result.isError, false);
+  } finally {
+    await bridge.close();
+  }
+});
+
+test("native MCP bridge preserves text and image tool result parts", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    tools: [{ name: "view_image", parameters: { type: "object" } }],
+  });
+  try {
+    const responsePromise = rpc(bridge.url, "native-image-call", "tools/call", {
+      name: "view_image",
+      arguments: { path: "frame.png" },
+    });
+    const call = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(bridge.completeCall(call.callId, [
+      { type: "text", text: "frame" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } },
+    ]), true);
+    const response = await responsePromise;
+    assert.deepEqual(response.result.content, [
+      { type: "text", text: "frame" },
+      { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+    ]);
+  } finally {
+    await bridge.close();
+  }
+});
+
+test("native MCP bridge bounds request bodies and retains results beyond ten minutes by default", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({ maxBodyBytes: 128, tools: [] });
+  try {
+    assert.ok(bridge.pendingCallTimeoutMs > 10 * 60 * 1000);
+    const response = await fetch(bridge.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { padding: "x".repeat(256) } }),
+    });
+    assert.equal(response.status, 413);
   } finally {
     await bridge.close();
   }

@@ -135,6 +135,111 @@ function Get-ProcessRows {
     return @($rows | Sort-Object executablePath, processId)
 }
 
+function Remove-IsolationRunRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$RunRoot,
+        [Parameter(Mandatory = $true)][string]$TempRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedRunId,
+        [int]$MaxAttempts = 5,
+        [int]$QuiescenceMilliseconds = 1000
+    )
+
+    $runRootFull = Get-FullPath $RunRoot
+    $tempRootFull = Get-FullPath $TempRoot
+    if ($ExpectedRunId -notmatch '^r\d{13}-[0-9a-f]{8}$') {
+        throw "Gate 1 artifact cleanup refused an invalid run ID."
+    }
+    $expectedRunRoot = Get-FullPath (Join-Path $tempRootFull $ExpectedRunId)
+    if (-not (Test-SamePath $runRootFull $expectedRunRoot) -or -not (Test-SamePath (Split-Path -Parent $runRootFull) $tempRootFull)) {
+        throw "Gate 1 artifact cleanup refused anything except the exact current run root."
+    }
+    if ($MaxAttempts -lt 1 -or $MaxAttempts -gt 10) {
+        throw "Gate 1 artifact cleanup requires between 1 and 10 bounded attempts."
+    }
+    if ($QuiescenceMilliseconds -lt 25 -or $QuiescenceMilliseconds -gt 5000) {
+        throw "Gate 1 artifact cleanup requires a bounded quiescence interval."
+    }
+
+    function Get-CleanupItemOrNull {
+        param([Parameter(Mandatory = $true)][string]$Path)
+        try {
+            return Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        } catch {
+            if ($_.FullyQualifiedErrorId -match 'ItemNotFound|PathNotFound') { return $null }
+            throw
+        }
+    }
+
+    function Assert-CleanupTarget {
+        $runItem = Get-CleanupItemOrNull -Path $runRootFull
+        if ($null -eq $runItem) { return $null }
+        $tempItem = Get-CleanupItemOrNull -Path $tempRootFull
+        if ($null -eq $tempItem -or -not $tempItem.PSIsContainer) {
+            throw "Gate 1 artifact cleanup refused a missing or non-directory isolation temp root."
+        }
+        foreach ($item in @($tempItem, $runItem)) {
+            if (-not $item.PSIsContainer) {
+                throw "Gate 1 artifact cleanup refused a non-directory target: $($item.FullName)"
+            }
+            if (-not (Test-SamePath $item.FullName $(if ($item -eq $tempItem) { $tempRootFull } else { $expectedRunRoot }))) {
+                throw "Gate 1 artifact cleanup refused a changed target path: $($item.FullName)"
+            }
+        }
+        foreach ($item in @($tempItem, $runItem)) {
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Gate 1 artifact cleanup refused reparse-point path: $($item.FullName)"
+            }
+        }
+        return $runItem
+    }
+
+    function ConvertTo-ExtendedLengthPath {
+        param([Parameter(Mandatory = $true)][string]$Path)
+        $full = Get-FullPath $Path
+        if ($full.StartsWith('\\?\', [StringComparison]::Ordinal)) { return $full }
+        if ($full.StartsWith('\\', [StringComparison]::Ordinal)) {
+            return '\\?\UNC\' + $full.Substring(2)
+        }
+        return '\\?\' + $full
+    }
+
+    function Test-CleanupTargetGoneStable {
+        if ($null -ne (Assert-CleanupTarget)) { return $false }
+        Start-Sleep -Milliseconds $QuiescenceMilliseconds
+        return ($null -eq (Assert-CleanupTarget))
+    }
+
+    $lastError = ""
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if (Test-CleanupTargetGoneStable) {
+            return [pscustomobject]@{ removed=$true; attempts=($attempt - 1); lastError=$lastError }
+        }
+        try {
+            Remove-Item -LiteralPath $runRootFull -Recurse -Force -ErrorAction Stop
+            $lastError = ""
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        if (Test-CleanupTargetGoneStable) {
+            return [pscustomobject]@{ removed=$true; attempts=$attempt; lastError=$lastError }
+        }
+        try {
+            [IO.Directory]::Delete((ConvertTo-ExtendedLengthPath $runRootFull), $true)
+            $lastError = ""
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        if (Test-CleanupTargetGoneStable) {
+            return [pscustomobject]@{ removed=$true; attempts=$attempt; lastError=$lastError }
+        }
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Milliseconds (100 * $attempt)
+        }
+    }
+
+    throw "Gate 1 artifact cleanup failed after $MaxAttempts bounded attempts: $lastError"
+}
+
 function Get-OriginalCodexProcesses {
     return @(Get-ProcessRows {
         param($process)
@@ -353,20 +458,75 @@ function Test-CdpReady {
     }
 }
 
-function Stop-TestProcesses {
-    $candidate = @(Get-CandidateProcesses | Sort-Object processId -Descending)
-    foreach ($process in $candidate) {
-        Stop-Process -Id $process.processId -Force -ErrorAction SilentlyContinue
+function Stop-TestProcessVerified {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$ExpectedExecutablePath,
+        [Parameter(Mandatory = $true)][string]$ExpectedCreatedAtUtc,
+        [string]$AllowedRoot = ""
+    )
+
+    try {
+        $live = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction Stop
+    } catch {
+        return
     }
-    foreach ($process in @($script:InvalidLauncherProcess, $script:LauncherProcess)) {
-        if ($process -and -not $process.HasExited) {
-            try {
-                $live = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.Id)" -ErrorAction Stop
-                if (Test-SamePath ([string]$live.ExecutablePath) $script:LauncherPath) {
-                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-                }
-            } catch {}
+    if ($null -eq $live) { return }
+    $actualPath = [string]$live.ExecutablePath
+    $actualCreatedAtUtc = ([DateTime]$live.CreationDate).ToUniversalTime().ToString('o')
+    $expectedCreated = [DateTime]::Parse($ExpectedCreatedAtUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $actualCreated = [DateTime]::Parse($actualCreatedAtUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $expectedCreatedMicrosecondTicks = $expectedCreated.Ticks - ($expectedCreated.Ticks % 10)
+    $actualCreatedMicrosecondTicks = $actualCreated.Ticks - ($actualCreated.Ticks % 10)
+    if ($actualCreatedMicrosecondTicks -ne $expectedCreatedMicrosecondTicks) {
+        throw "Gate 1 cleanup refused reused PID $ProcessId; no broader target was attempted."
+    }
+    if ($AllowedRoot) {
+        if (-not (Test-PathUnderRoot $actualPath $AllowedRoot)) {
+            throw "Gate 1 cleanup refused PID $ProcessId outside the candidate root."
         }
+    } elseif (-not (Test-SamePath $actualPath $ExpectedExecutablePath)) {
+        throw "Gate 1 cleanup refused PID $ProcessId after its executable path changed."
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+}
+
+function Stop-TestProcesses {
+    $candidate = @(Get-CandidateProcesses)
+    $candidateIds = @($candidate | ForEach-Object { [int]$_.processId })
+    foreach ($rootProcess in @($candidate | Where-Object { $candidateIds -notcontains [int]$_.parentProcessId })) {
+        try {
+            $process = Get-Process -Id $rootProcess.processId -ErrorAction Stop
+            if ($process.MainWindowHandle -ne 0) {
+                [void]$process.CloseMainWindow()
+            }
+        } catch {
+            if (Get-CimInstance Win32_Process -Filter "ProcessId=$($rootProcess.processId)" -ErrorAction SilentlyContinue) {
+                throw
+            }
+        }
+    }
+    $gracefulDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while (@(Get-CandidateProcesses).Count -gt 0 -and [DateTime]::UtcNow -lt $gracefulDeadline) {
+        Start-Sleep -Milliseconds 100
+    }
+    foreach ($process in @(Get-CandidateProcesses | Sort-Object processId -Descending)) {
+        Stop-TestProcessVerified `
+            -ProcessId ([int]$process.processId) `
+            -ExpectedExecutablePath ([string]$process.executablePath) `
+            -ExpectedCreatedAtUtc ([string]$process.createdAtUtc) `
+            -AllowedRoot $script:CandidateAppDir
+    }
+
+    foreach ($process in @($script:InvalidLauncherProcess, $script:LauncherProcess)) {
+        if (-not $process) { continue }
+        try { $process.Refresh() } catch {}
+        if ($process.HasExited) { continue }
+        $expectedCreatedAtUtc = $process.StartTime.ToUniversalTime().ToString('o')
+        Stop-TestProcessVerified `
+            -ProcessId ([int]$process.Id) `
+            -ExpectedExecutablePath $script:LauncherPath `
+            -ExpectedCreatedAtUtc $expectedCreatedAtUtc
     }
     Start-Sleep -Milliseconds 750
 }
@@ -382,6 +542,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $candidateRootFull 'codex-patched-ap
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $upstream = Get-Content -LiteralPath (Join-Path $repoRoot 'third_party\codexplusplus\upstream.json') -Raw | ConvertFrom-Json
+$releaseReportRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'anticodex\reports'
+$releaseBindingHelper = Join-Path $repoRoot 'scripts\lib\anticodex-release-binding.mjs'
+$releaseBindingJson = & node $releaseBindingHelper --source-root $repoRoot --report-root $releaseReportRoot
+if ($LASTEXITCODE -ne 0 -or -not $releaseBindingJson) {
+    throw 'Gate 1 could not derive the current Anti-Codex release binding.'
+}
+$releaseBinding = $releaseBindingJson | ConvertFrom-Json
 $actualLauncherHash = (Get-FileHash -LiteralPath $script:LauncherPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $expectedLauncherHash = ([string]$upstream.verification.launcherReleaseBuild).Replace('sha256:', '').ToLowerInvariant()
 if ($actualLauncherHash -ne $expectedLauncherHash) { throw "Launcher hash does not match the sealed build." }
@@ -396,6 +563,7 @@ $preflightCandidate = @(Get-CandidateProcesses)
 if ($PreflightOnly) {
     $preflightChecks = @(
         [pscustomobject]@{ id='sealed_launcher_hash'; ok=($actualLauncherHash -eq $expectedLauncherHash); evidence=$actualLauncherHash }
+        [pscustomobject]@{ id='current_release_binding_available'; ok=($releaseBinding.valid -eq $true); evidence=$releaseBinding }
         [pscustomobject]@{ id='candidate_executable_present'; ok=(Test-Path -LiteralPath $script:CandidateExe -PathType Leaf); evidence=$script:CandidateExe }
         [pscustomobject]@{ id='candidate_not_running'; ok=($preflightCandidate.Count -eq 0); evidence=$preflightCandidate }
         [pscustomobject]@{ id='original_codex_detected'; ok=($preflightOriginal.Count -gt 0); evidence=$preflightOriginal }
@@ -405,6 +573,7 @@ if ($PreflightOnly) {
     $preflightReport = [ordered]@{
         schema = 'anticodex-codexplusplus-runtime-isolation-preflight-v1'
         runId = $runId
+        generatedAtUtc = [DateTime]::UtcNow.ToString('o')
         startedAtUtc = $startedAtUtc.ToString('o')
         finishedAtUtc = [DateTime]::UtcNow.ToString('o')
         preflightOnly = $true
@@ -414,18 +583,44 @@ if ($PreflightOnly) {
         candidate = [ordered]@{ root=$candidateRootFull; appDir=$script:CandidateAppDir; executable=$script:CandidateExe }
         checks = $preflightChecks
         failedCheckIds = @($preflightFailed | ForEach-Object { $_.id })
+        releaseBinding = $releaseBinding
     }
     $reportDirectory = Split-Path -Parent $reportFull
     New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllText($reportFull, ($preflightReport | ConvertTo-Json -Depth 12), $utf8)
+    if ($preflightReport.ok -eq $true) {
+        $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+        [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
+    } elseif (Test-Path -LiteralPath "$reportFull.sha256") {
+        Remove-Item -LiteralPath "$reportFull.sha256" -Force
+    }
     [pscustomobject]@{ ok=$preflightReport.ok; preflightOnly=$true; reportPath=$reportFull; checkCount=$preflightChecks.Count; failedCheckIds=$preflightReport.failedCheckIds } | ConvertTo-Json -Compress
     if ($preflightReport.ok -ne $true) { exit 1 }
     exit 0
 }
 
-$script:RunRoot = Get-FullPath (Join-Path $env:TEMP "AntiCodex-CodexPlusPlus-Isolation\$runId")
-New-Item -ItemType Directory -Path $script:RunRoot -Force | Out-Null
+$script:IsolationTempRoot = Get-FullPath (Join-Path $env:TEMP 'AntiCodex-CodexPlusPlus-Isolation')
+if (Test-Path -LiteralPath $script:IsolationTempRoot) {
+    $tempRootItem = Get-Item -LiteralPath $script:IsolationTempRoot -Force -ErrorAction Stop
+    if (-not $tempRootItem.PSIsContainer -or ($tempRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Gate 1 refused a non-directory or reparse-point isolation temp root."
+    }
+} else {
+    New-Item -ItemType Directory -Path $script:IsolationTempRoot -ErrorAction Stop | Out-Null
+}
+$script:RunRoot = Get-FullPath (Join-Path $script:IsolationTempRoot $runId)
+if (-not $KeepArtifacts -and (Test-PathUnderRoot $reportFull $script:RunRoot)) {
+    throw "Gate 1 report path must remain outside the disposable run root."
+}
+if (Test-Path -LiteralPath $script:RunRoot) {
+    throw "Gate 1 refused a pre-existing run root."
+}
+New-Item -ItemType Directory -Path $script:RunRoot -ErrorAction Stop | Out-Null
+$createdRunRoot = Get-Item -LiteralPath $script:RunRoot -Force -ErrorAction Stop
+if (-not $createdRunRoot.PSIsContainer -or ($createdRunRoot.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Gate 1 failed to create an owned ordinary run directory."
+}
 
 $ports = Get-UniquePorts -Count 5
 $invalidLayout = New-IsolatedLayout -Root (Join-Path $script:RunRoot 'invalid-selector')
@@ -441,6 +636,8 @@ $existingAntiAfter = @()
 $stableAfter = $null
 
 try {
+    Add-Check -Id 'current_release_binding_available' -Ok ($releaseBinding.valid -eq $true) -Evidence $releaseBinding
+    if ($releaseBinding.valid -ne $true) { throw 'Current Anti-Codex release binding is invalid.' }
     $preexistingCandidate = @(Get-CandidateProcesses)
     Add-Check -Id 'candidate_not_running_before_test' -Ok ($preexistingCandidate.Count -eq 0) -Evidence $preexistingCandidate
 
@@ -494,22 +691,45 @@ try {
 } catch {
     $script:Failure = $_.Exception.Message
 } finally {
-    Stop-TestProcesses
+    $cleanupError = ""
+    try {
+        Stop-TestProcesses
+    } catch {
+        $cleanupError = $_.Exception.Message
+    }
     $originalAfter = @(Get-OriginalCodexProcesses)
     $existingAntiAfter = @(Get-ExistingAntiCodexProcesses)
     $stableAfter = Get-StableOriginalSnapshot
     $candidateAfter = @(Get-CandidateProcesses)
-    $cleanupOk = $candidateAfter.Count -eq 0
-    $script:Checks.Add([pscustomobject]@{ id='test_processes_cleaned'; ok=$cleanupOk; evidence=$candidateAfter })
+    $cleanupOk = $candidateAfter.Count -eq 0 -and -not $cleanupError
+    $script:Checks.Add([pscustomobject]@{ id='test_processes_cleaned'; ok=$cleanupOk; evidence=[pscustomobject]@{ remaining=$candidateAfter; error=$cleanupError } })
     $script:Checks.Add([pscustomobject]@{ id='original_processes_unchanged_after_cleanup'; ok=((ConvertTo-StableJson $script:OriginalBefore) -eq (ConvertTo-StableJson $originalAfter)); evidence=$originalAfter })
     $script:Checks.Add([pscustomobject]@{ id='existing_anticodex_unchanged_after_cleanup'; ok=((ConvertTo-StableJson $script:ExistingAntiBefore) -eq (ConvertTo-StableJson $existingAntiAfter)); evidence=$existingAntiAfter })
     $script:Checks.Add([pscustomobject]@{ id='stable_original_state_unchanged_after_cleanup'; ok=((ConvertTo-StableJson $script:StableBefore) -eq (ConvertTo-StableJson $stableAfter)); evidence=$null })
 }
 
+$artifactCleanupError = ""
+$artifactCleanupEvidence = [pscustomobject]@{ kept=[bool]$KeepArtifacts; runRoot=$script:RunRoot; attempts=0; lastError="" }
+if (-not $KeepArtifacts) {
+    try {
+        $artifactCleanupEvidence = Remove-IsolationRunRoot -RunRoot $script:RunRoot -TempRoot $script:IsolationTempRoot -ExpectedRunId $runId
+    } catch {
+        $artifactCleanupError = $_.Exception.Message
+        $artifactCleanupEvidence = [pscustomobject]@{ removed=$false; runRoot=$script:RunRoot; lastError=$artifactCleanupError }
+    }
+}
+$artifactCleanupOk = [bool]$KeepArtifacts -or (-not $artifactCleanupError -and -not (Test-Path -LiteralPath $script:RunRoot))
+$script:Checks.Add([pscustomobject]@{
+    id = if ($KeepArtifacts) { 'run_artifacts_retained_by_request' } else { 'run_artifacts_cleaned' }
+    ok = $artifactCleanupOk
+    evidence = $artifactCleanupEvidence
+})
+
 $failedChecks = @($script:Checks | Where-Object { $_.ok -ne $true })
 $report = [ordered]@{
     schema = 'anticodex-codexplusplus-runtime-isolation-v1'
     runId = $runId
+    generatedAtUtc = [DateTime]::UtcNow.ToString('o')
     startedAtUtc = $startedAtUtc.ToString('o')
     finishedAtUtc = [DateTime]::UtcNow.ToString('o')
     ok = (-not $script:Failure -and $failedChecks.Count -eq 0)
@@ -522,6 +742,7 @@ $report = [ordered]@{
     checks = $script:Checks
     failedCheckIds = @($failedChecks | ForEach-Object { $_.id })
     failure = $script:Failure
+    releaseBinding = $releaseBinding
     processEvidence = [ordered]@{
         originalBefore = $script:OriginalBefore
         originalDuring = $originalDuring
@@ -537,12 +758,11 @@ $reportDirectory = Split-Path -Parent $reportFull
 New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($reportFull, ($report | ConvertTo-Json -Depth 16), $utf8)
-
-if (-not $KeepArtifacts -and $report.ok -eq $true -and (Test-Path -LiteralPath $script:RunRoot -PathType Container)) {
-    $tempRoot = Get-FullPath (Join-Path $env:TEMP 'AntiCodex-CodexPlusPlus-Isolation')
-    if (Test-PathUnderRoot $script:RunRoot $tempRoot) {
-        Remove-Item -LiteralPath $script:RunRoot -Recurse -Force
-    }
+if ($report.ok -eq $true) {
+    $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
+} elseif (Test-Path -LiteralPath "$reportFull.sha256") {
+    Remove-Item -LiteralPath "$reportFull.sha256" -Force
 }
 
 [pscustomobject]@{ ok=$report.ok; reportPath=$reportFull; checkCount=$script:Checks.Count; failedCheckIds=$report.failedCheckIds; failure=$report.failure } | ConvertTo-Json -Compress

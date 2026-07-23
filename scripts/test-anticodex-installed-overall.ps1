@@ -128,6 +128,7 @@ $requiredRuntimeFiles = @(
     "scripts\test-anticodex-legacy-zero-hit.mjs",
     "translator\antigravity-agentapi.mjs",
     "translator\antigravity-model-catalog.mjs",
+    "translator\antigravity-contract.mjs",
     "translator\antigravity-native-mcp-bridge.mjs",
     "translator\provider\antigravity-cascade-client.mjs",
     "translator\provider\antigravity-chat-adapter.mjs",

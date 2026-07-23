@@ -1,6 +1,7 @@
 #Requires -Version 5.1
 param(
     [string]$InstallTarget = (Join-Path $env:LOCALAPPDATA "Anti-Codex"),
+    [string]$SourceRoot = "",
     [switch]$HostOnly
 )
 
@@ -16,6 +17,7 @@ if ($PSVersionTable.PSEdition -eq "Core") {
         "-File", $PSCommandPath,
         "-InstallTarget", $InstallTarget
     )
+    if ($SourceRoot) { $delegateArgs += @("-SourceRoot", $SourceRoot) }
     if ($HostOnly) { $delegateArgs += "-HostOnly" }
     $delegateOutput = & $windowsPowerShell @delegateArgs
     $delegateExitCode = $LASTEXITCODE
@@ -79,13 +81,15 @@ function Resolve-CodexDesktopHost {
 }
 
 function Find-CodexAppRoot {
-    foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
-        $pkg = Get-AppxPackage -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($pkg) {
-            $appRoot = Join-Path $pkg.InstallLocation "app"
-            $hostName = Resolve-CodexDesktopHost -AppRoot $appRoot
-            if ($hostName) { return $appRoot }
+    $packages = @(
+        foreach ($name in @("OpenAI.Codex", "OpenAI.Codex_8wekyb3d8bbwe")) {
+            Get-AppxPackage -Name $name -ErrorAction SilentlyContinue
         }
+    ) | Sort-Object Version -Descending
+    foreach ($pkg in $packages) {
+        $appRoot = Join-Path $pkg.InstallLocation "app"
+        $hostName = Resolve-CodexDesktopHost -AppRoot $appRoot
+        if ($hostName) { return [IO.Path]::GetFullPath($appRoot) }
     }
     throw "Codex Desktop was not found. Install or update Codex first."
 }
@@ -403,7 +407,15 @@ $legacyRuntimeFiles = @(
     "scripts\test-anticodex-xiaoqiang-usage-ledger.mjs"
 )
 Invoke-AntiCodexSourcePreflight
-$sourceCodex = Find-CodexAppRoot
+$sourceCodex = if ($SourceRoot) {
+    $explicitSource = [IO.Path]::GetFullPath($SourceRoot)
+    if (-not (Resolve-CodexDesktopHost -AppRoot $explicitSource)) {
+        throw "The selected Codex source root has no desktop host: $explicitSource"
+    }
+    $explicitSource
+} else {
+    Find-CodexAppRoot
+}
 $hostMarker = Join-Path $resolvedTarget "codex-patched-app.ok"
 
 # A marker is valid only for a fully patched host whose hashes were recorded last.
@@ -433,11 +445,21 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\start-anticodex.ps1"),
         (Join-Path $runtime "scripts\hide-anticodex-console.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-task.mjs"),
+        (Join-Path $runtime "scripts\start-anticodex-shortcut-broker.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-update-task.mjs"),
         (Join-Path $runtime "scripts\start-anticodex-fixed-route.mjs"),
         (Join-Path $runtime "scripts\anticodex-manager-service.mjs"),
+        (Join-Path $runtime "scripts\build-anticodex-gate5-evidence.mjs"),
+        (Join-Path $runtime "scripts\build-anticodex-gate8-autonomous-video-evidence.mjs"),
         (Join-Path $runtime "scripts\install-codexplusplus-component.ps1"),
+        (Join-Path $runtime "scripts\test-codexplusplus-antigravity-route-switch.mjs"),
+        (Join-Path $runtime "scripts\test-anticodex-gate8-autonomous-video.mjs"),
+        (Join-Path $runtime "scripts\test-anticodex-shortcut-restore.ps1"),
+        (Join-Path $runtime "scripts\anticodex-report-io.ps1"),
         (Join-Path $runtime "scripts\lib\anticodex-fixed-route.mjs"),
+        (Join-Path $runtime "scripts\lib\anticodex-gate4-runtime.mjs"),
+        (Join-Path $runtime "scripts\lib\anticodex-gate8-evidence.mjs"),
+        (Join-Path $runtime "scripts\lib\anticodex-release-binding.mjs"),
         (Join-Path $runtime "scripts\deepcodex-cdp-inject.mjs"),
         (Join-Path $runtime "scripts\anticodex-manager-bridge.mjs"),
         (Join-Path $runtime "scripts\anticodex-manager-inject.js"),
@@ -447,6 +469,7 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\rollback-anticodex.ps1"),
         (Join-Path $runtime "scripts\manage-anticodex.ps1"),
         (Join-Path $runtime "translator\antigravity-model-catalog.mjs"),
+        (Join-Path $runtime "translator\antigravity-contract.mjs"),
         (Join-Path $runtime "translator\antigravity-native-mcp-bridge.mjs"),
         (Join-Path $runtime "translator\provider\antigravity-cascade-client.mjs"),
         (Join-Path $runtime "translator\provider\antigravity-chat-adapter.mjs"),

@@ -1,10 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import * as taskLauncher from "../../scripts/start-anticodex-task.mjs";
+
 const root = resolve(import.meta.dirname, "..", "..");
 const launcher = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+const taskLauncherSource = readFileSync(resolve(root, "scripts", "start-anticodex-task.mjs"), "utf8");
 const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
 const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
 const manager = readFileSync(resolve(root, "scripts", "manage-anticodex.ps1"), "utf8");
@@ -19,6 +23,53 @@ const updateTaskBroker = readFileSync(resolve(root, "scripts", "start-anticodex-
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
+
+test("controlled route restarts do not accumulate signal listeners", () => {
+  assert.equal(typeof taskLauncher.attachForwardedSignalHandlers, "function");
+  const signalTarget = new EventEmitter();
+  const baselineSigint = signalTarget.listenerCount("SIGINT");
+  const baselineSigterm = signalTarget.listenerCount("SIGTERM");
+  const child = { kill() {} };
+
+  for (let restart = 0; restart < 12; restart += 1) {
+    const detach = taskLauncher.attachForwardedSignalHandlers(child, signalTarget);
+    assert.equal(signalTarget.listenerCount("SIGINT"), baselineSigint + 1);
+    assert.equal(signalTarget.listenerCount("SIGTERM"), baselineSigterm + 1);
+    detach();
+  }
+
+  assert.equal(signalTarget.listenerCount("SIGINT"), baselineSigint);
+  assert.equal(signalTarget.listenerCount("SIGTERM"), baselineSigterm);
+});
+
+test("task launcher acquires and releases the real Windows host sync barriers", {
+  skip: process.platform !== "win32",
+}, async () => {
+  const release = await taskLauncher.acquireHostSyncBarrier({ timeoutMs: 5_000 });
+  assert.doesNotThrow(() => release.assertHeld());
+  await release();
+  await release();
+  assert.throws(() => release.assertHeld(), /released before runtime startup/);
+});
+
+test("normal launchers hold the host sync publication barrier while runtime startup is committed", () => {
+  assert.match(launcher, /Global\\AntiCodexHostSync/);
+  assert.match(launcher, /Local\\AntiCodexHostSync/);
+  assert.match(launcher, /Enter-AntiCodexHostSyncBarrier/);
+  assert.match(launcher, /Exit-AntiCodexHostSyncBarrier/);
+  assert.match(launcher, /\[switch\]\$SkipSyncBarrier/);
+  assert.match(runtimeSync, /-SkipSyncBarrier/);
+
+  assert.match(taskLauncherSource, /acquireHostSyncBarrier/);
+  assert.match(taskLauncherSource, /Global\\\\AntiCodexHostSync/);
+  assert.match(taskLauncherSource, /Local\\\\AntiCodexHostSync/);
+  const acquire = taskLauncherSource.indexOf("await acquireHostSyncBarrier");
+  const spawnSupervisor = taskLauncherSource.indexOf("const child = spawn(process.execPath", acquire);
+  const release = taskLauncherSource.indexOf("releaseHostSyncBarrier", spawnSupervisor);
+  assert.ok(acquire >= 0, "task launcher must acquire the publication barrier");
+  assert.ok(spawnSupervisor > acquire, "task launcher must acquire before spawning the runtime supervisor");
+  assert.ok(release > spawnSupervisor, "task launcher must release only after the supervisor exists");
+});
 
 test("formal launcher uses the fixed CodexPlusPlus route as the only model path", () => {
   assert.match(launcher, /start-anticodex-fixed-route\.mjs/);
@@ -66,6 +117,14 @@ test("every production relaunch keeps the fixed-route supervisor attached", () =
   assert.match(modelRefresh, /-File[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
   assert.match(conversationCleanup, /"-SkipUpdateCheck"[\s\S]*?"-InlineSupervisor"/);
   assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
+});
+
+test("standalone model refresh calls the authenticated Manager action before restart fallback", () => {
+  assert.match(modelRefresh, /\/anticodex\/manager\/bootstrap/);
+  assert.match(modelRefresh, /\/anticodex\/manager\/action/);
+  assert.match(modelRefresh, /x-anticodex-manager-token/);
+  assert.match(modelRefresh, /action\s*=\s*"refreshModels"/);
+  assert.doesNotMatch(modelRefresh, /\/anticodex\/models\/refresh/);
 });
 
 test("host sync restarts outside native Codex process ownership", () => {
@@ -276,16 +335,25 @@ test("install and runtime sync require every fixed-route production module", () 
     "scripts\\antigravity-desktop.ps1",
     "scripts\\apply-anticodex-upstream.ps1",
     "scripts\\start-anticodex-task.mjs",
+    "scripts\\start-anticodex-shortcut-broker.ps1",
     "scripts\\start-anticodex-update-task.mjs",
     "scripts\\start-anticodex-fixed-route.mjs",
     "scripts\\anticodex-manager-service.mjs",
+    "scripts\\build-anticodex-gate5-evidence.mjs",
+    "scripts\\build-anticodex-gate8-autonomous-video-evidence.mjs",
     "scripts\\install-codexplusplus-component.ps1",
+    "scripts\\test-anticodex-gate8-autonomous-video.mjs",
+    "scripts\\test-anticodex-shortcut-restore.ps1",
     "scripts\\lib\\anticodex-fixed-route.mjs",
+    "scripts\\lib\\anticodex-gate8-evidence.mjs",
+    "scripts\\lib\\anticodex-release-binding.mjs",
+    "scripts\\anticodex-report-io.ps1",
     "scripts\\deepcodex-cdp-inject.mjs",
     "scripts\\anticodex-manager-bridge.mjs",
     "scripts\\anticodex-manager-inject.js",
     "scripts\\anticodex-manager-open-inject.js",
     "translator\\antigravity-model-catalog.mjs",
+    "translator\\antigravity-contract.mjs",
     "translator\\antigravity-native-mcp-bridge.mjs",
     "translator\\provider\\antigravity-cascade-client.mjs",
     "translator\\provider\\antigravity-chat-adapter.mjs",
@@ -341,25 +409,37 @@ test("runtime sync no-restart mode verifies copied files without polling live he
   assert.match(runtimeSync, /verifiedFileCount = \$requiredSourceFiles\.Count/);
 });
 
-test("runtime sync verifies the supervisor PID after a taskkill child-exit race", () => {
+test("runtime sync revalidates supervisor identity before controlled fallback", () => {
+  const verifierStart = runtimeSync.indexOf("function Stop-AntiCodexVerifiedScriptProcess");
+  const verifierEnd = runtimeSync.indexOf("function Get-AntiCodexFixedRouteSupervisorProcesses", verifierStart);
+  const verifier = runtimeSync.slice(verifierStart, verifierEnd);
   const start = runtimeSync.indexOf("function Stop-AntiCodexFixedRouteSupervisor");
   const end = runtimeSync.indexOf("function Remove-AntiCodexLegacyRuntimeFiles", start);
   const stop = runtimeSync.slice(start, end);
-  assert.match(stop, /\$savedErrorActionPreference/);
-  assert.match(stop, /\$ErrorActionPreference\s*=\s*"Continue"/);
-  assert.match(stop, /\$taskkillExitCode\s*=\s*\$LASTEXITCODE/);
-  assert.match(stop, /\$stillRunning\s*=\s*Get-Process -Id/);
-  assert.match(stop, /if \(\$taskkillExitCode -ne 0 -and \$stillRunning\)/);
+  assert.match(stop, /Get-AntiCodexScriptProcessSnapshot/);
+  assert.match(stop, /Stop-AntiCodexVerifiedScriptProcess/);
+  assert.match(verifier, /VerifiedProcessHandle\]::Open\(\$processId\)/);
+  assert.match(verifier, /CreationFileTimeUtcTicks/);
+  assert.match(verifier, /ExecutablePath/);
+  assert.match(verifier, /Test-AntiCodexCommandLineHasExactPath/);
+  assert.match(verifier, /TerminateAndWait\(3000\)/);
+  assert.doesNotMatch(verifier, /Stop-Process|Invoke-CimMethod|\.Terminate\(\)/);
+  assert.match(runtimeSync, /OpenProcess/);
+  assert.match(runtimeSync, /GetProcessTimes/);
+  assert.match(runtimeSync, /QueryFullProcessImageName/);
+  assert.match(runtimeSync, /TerminateProcess/);
+  assert.match(runtimeSync, /WaitForSingleObject/);
 });
 
-test("runtime sync requests graceful fixed-route shutdown before taskkill fallback", () => {
+test("runtime sync requests graceful fixed-route shutdown before verified fallback", () => {
   const start = runtimeSync.indexOf("function Stop-AntiCodexFixedRouteSupervisor");
   const end = runtimeSync.indexOf("function Remove-AntiCodexLegacyRuntimeFiles", start);
   const stop = runtimeSync.slice(start, end);
   const graceful = stop.indexOf("Invoke-AntiCodexFixedRouteShutdown");
-  const force = stop.indexOf("taskkill.exe");
+  const force = stop.indexOf("Stop-AntiCodexVerifiedScriptProcess", graceful);
   assert.ok(graceful >= 0, "missing graceful shutdown request");
-  assert.ok(force > graceful, "taskkill must remain a fallback");
+  assert.ok(force > graceful, "verified process stop must remain a fallback");
+  assert.doesNotMatch(stop, /taskkill(?:\.exe)?/i);
   assert.match(runtimeSync, /anticodex\/fixed-route\/shutdown/);
   assert.match(runtimeSync, /Authorization/);
 });
@@ -372,6 +452,7 @@ test("standalone Manager recovery uses the formal fixed-route launcher", () => {
 test("installer requires fixed-route modules and removes legacy runtime files", () => {
   const requiredRuntimeList = installer.match(/foreach \(\$requiredRuntimePath in @\(([\s\S]*?)\n\s*\)\)/)?.[1] ?? "";
   assert.match(requiredRuntimeList, /scripts\\start-anticodex-update-task\.mjs/);
+  assert.match(requiredRuntimeList, /scripts\\start-anticodex-shortcut-broker\.ps1/);
   for (const legacy of [
     "translator\\adaptive-server.mjs",
     "translator\\codex-native-compact.mjs",

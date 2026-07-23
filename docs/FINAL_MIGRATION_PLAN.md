@@ -1,11 +1,21 @@
 # Anti-Codex Final Migration Plan
 
-- Status: authoritative execution plan; maintenance acceptance reopened for seamless frontend switching
-- Updated: 2026-07-20
+- Status: authoritative execution plan; release acceptance reopened after an installed-client fatal-page failure and P1 audit findings
+- Updated: 2026-07-23
 - Architecture: [`THREE_LAYER_ARCHITECTURE.md`](THREE_LAYER_ARCHITECTURE.md)
 - Removal ledger: [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_REMOVAL_MANIFEST.md)
 - Implementation inventory: [`CURRENT_IMPLEMENTATION_AUDIT.md`](CURRENT_IMPLEMENTATION_AUDIT.md)
 - Dual-environment reference: [`audits/2026-07-14-dual-environment-reference.md`](audits/2026-07-14-dual-environment-reference.md)
+
+> **Current release override - 2026-07-23 16:20:** Runtime synchronization and installed UI/isolation checks are complete on one visible Anti-Codex. The signed Manager suite is fully green with zero traffic, and three actual taskbar-button restores retain one PID/HWND/CDP target, one Electron product window and zero blank frames while original Codex remains alive. The exact-continuation ledger now supports only native-error/native-abort recovery and still rejects all micro-prompts. Remaining order: independent diff review, complete no-traffic preflight, final release-binding refresh if required, one commit, then one Gemini-first autonomous task and external Gate 8 review. Overall remains 97%, not 100%.
+
+> **Current release override - 2026-07-23 14:00:** Gate 4/5 credential separation and Gate 4 diagnostics are source-complete. The no-traffic helper smoke is green, focused checks pass 59/59 and the complete source preflight passes 672/672 across 55 files. The next sequence is fixed: one no-restart runtime copy, installed/single-window/UI checks, one bounded formal Gate 4 turn, a commit, then exactly one new Gemini-first autonomous task. No host micro-prompts are permitted. Overall remains 97% until the real task, external media review and final bound Gate 5/8 release evidence pass.
+
+> **Current release override - 2026-07-23 13:12:** The adversarial repair set is source-green: complete no-traffic preflight 665/665 across 54 test files, runtime race verification 135/135, Gate 8 37/37 and release self-test 11/11. Production evidence no longer accepts fake media, task self-review, arbitrary provider-error text or caller-recomputed sidecars as host identity; process shutdown, Manager delivery and single-instance startup now fail closed at their race boundaries. Installed runtime/UI evidence, the final commit and the one new Gemini-first autonomous task are still absent. Overall remains 97% until the installed gates, real deliverable, external host review, Gate 5, Gate 8 and final release report all pass.
+
+> **Current release override - 2026-07-23 12:01:** The complete no-traffic source gate now passes 648/648. Gate 5 and Gate 8 have real offline evidence builders, release producers are signed/fresh/current-bound, and no component may display 100 before the real new task passes both gates. The final source delta has not yet been copied into the installed runtime and the new task has not been submitted; therefore 97% remains the only current overall claim. The next side effects are limited to one no-restart runtime copy, bounded installed/isolation/UI evidence and one Gemini-first single-submit task.
+
+> **Current release override - 2026-07-23 10:40:** Historical 100% and `releaseReady:true` statements below are not current claims. Official and active shell versions are both `26.715.10079.0`; the latest complete source preflight passes 589/589 with no traffic, failures, skips or warnings. The release report intentionally fails closed at 97% because Gate 5 and Gate 8 evidence is absent or stale. The current P1 source fixes still require one verified `-NoRestart` runtime copy, one controlled Anti-Codex-only restart and installed/UI/isolation verification. Only then may one brand-new native task receive the unchanged total objective once, with Gemini first, Claude after an explicit Gemini failure, and third-party only after both are explicitly unavailable. Independent artifact verification plus fresh bound Gate 5/8 evidence—not code completion alone—is the only route back to 100%.
 
 ## 1. Fixed Target
 
@@ -45,15 +55,15 @@ At the end of every cycle:
 
 ## 3. Current Completion Baseline
 
-**Superseding maintenance status, 2026-07-20:** the current installed release has restored seamless native model switching without client/helper/task restart and now uses the accepted nine-patch CodexPlusPlus `v1.2.39` component. Patch 0009 raises only the bounded local helper body limit to 128 MiB; repeated approximately 35 MiB same-task multimodal turns, the 50.342-second live-action Stage 4B video and the 19-entry Stage 4D package are independently green. The remaining real-provider acceptance gap is Antigravity Gemini: the currently logged-in Pro account reaches native Cascade but is rejected as `unsupported_location` before tools run. This external account-region condition does not reopen the fixed architecture or third-party route.
+**Superseding maintenance status, 2026-07-23:** official and active shell versions are both `26.715.10079.0`; installed nine-patch CodexPlusPlus `v1.2.39` matches the accepted binary hash. Current no-traffic source/installed, isolation, Manager real-mouse, frontend model-menu and single-window restore checks pass. The checked-in Gate 5 and prior Gate 8 evidence are not current-version release proof, and the old long-task artifacts were deleted, so real provider dispatch plus one new autonomous long task remain mandatory.
 
 - Reusable shell, isolation, branding, Antigravity connection and verifier assets: complete for the fixed route.
-- Deliverable completion on the fixed three-layer runtime route: 100%. Gates 1 through 8 are complete and the independent release summary reports `releaseReady:true`.
+- Deliverable completion on the fixed three-layer runtime route: reopened. Current formal release gates must remain `releaseReady:false` until fresh Gate 5/UI evidence and the new Gate 8 task pass.
 - Inventory and exact keep/adapt/delete classification: complete.
 - CodexPlusPlus isolation review, rebaseable patch, reproducible Windows launcher build and real copied-client isolation proof: complete.
 - Deterministic third-party Chat Completions route: complete. The only non-isolation CodexPlusPlus transport change is the documented one-shot cancel-aware path for plain HTTP loopback model streams; normal completion closes gracefully, while remote provider payloads, protocol conversion, retries and task behavior remain upstream.
-- Thin Antigravity adapter and isolated CodexPlusPlus route switch: complete. The persistent copied-client matrix, visible-client short proof, formal edge/recovery matrix, legacy zero-hit gate, release packaging proof and final multi-style Gate 8 are green.
-- Post-release real-artifact validation is maintenance, not a new architecture gate. It now includes the earlier short video/PPTX/site matrix, the accepted 68-second character-dialogue animation, a separate offline premiere-site project, a host-verified 50.342-second真人口型剪辑, a hash-bound 19-entry provisional package, and a further 22m50s same-task publish-suite turn producing verified 49.716s/29.821s/15.015s真人 videos plus a 24-entry package. Claude 429 and the current-account Gemini location rejection remain provider conditions; third-party recovery completed real artifacts without adding task control or replacing CodexPlusPlus translation.
+- Thin Antigravity adapter and isolated CodexPlusPlus route switch: deterministic/no-traffic coverage is complete; current-version real Gemini/Claude dispatch remains unproven until the new task sends its first request.
+- Earlier real artifacts remain historical audit evidence only. Their deleted files and old signed reports cannot advance the current release gate.
 
 Old percentages from the mixed translator describe historical reusable evidence only. They are not completion claims for this plan.
 
@@ -61,11 +71,11 @@ Old percentages from the mixed translator describe historical reusable evidence 
 
 Every progress report to the user must use these three product parts in this order, with separate evidence-based percentages:
 
-1. **Anti-Codex shell plus native Codex client features - 100% current acceptance.** Isolation, native task behavior, exact Chinese `管理`, preserved Anti-Codex icons, upper/center/lower close clicks, unified model menu and installed real-mouse no-restart switching are proven while original Codex stays alive.
-2. **CodexPlusPlus general translation layer - 100% current acceptance.** General conversion remains upstream CodexPlusPlus `1.2.39`; Anti-Codex carries only nine documented compatibility patches. The installed build preserves process/task identity and completed repeated approximately 35 MiB multimodal turns above the former 32 MiB bound, with explicit 413 regression coverage above the new 128 MiB bound.
-3. **Native Antigravity export plus thin Chat adapter - 100% implementation, current live-provider acceptance blocked externally.** Native tools, multi-turn work, adapter restart, cancellation/recovery, exact failed-tool results, parallel tool results and deterministic quota/auth/network/timeout/location mapping remain proven. The current Pro account exposes models but Antigravity rejects real Gemini turns as `unsupported_location` before tool execution; no product code can truthfully mark that account-specific run green.
+1. **Anti-Codex shell plus native Codex client features - implementation repaired; release acceptance pending fresh Gate 5.** Isolation, exact Chinese `管理`, preserved icons, close clicks, model-menu switching and same-window restore are proven while original Codex stays alive, but formal current-version UI evidence must be wired into the release gate.
+2. **CodexPlusPlus general translation layer - current no-traffic acceptance passes; release acceptance pending real route proof.** General conversion remains upstream CodexPlusPlus `1.2.39` with nine documented compatibility patches and the installed binary hash matches.
+3. **Native Antigravity export plus thin Chat adapter - deterministic acceptance passes; live task acceptance pending.** Cancellation/recovery, tool-result and error mapping remain proven, but the new task must show the selected Gemini/Claude request actually reaches the Antigravity relay.
 
-Overall implementation and installed third-party acceptance are 100%; full current-account alternating-provider acceptance remains 99% until Antigravity accepts one real Gemini contribution in the preserved task. Each report must say what changed in each part and whether third-party API routing is affected.
+No current overall percentage may be reported as 100% until the formal release gate and the new autonomous long task both pass. Each report must state the concrete passed and missing evidence for all three parts and whether third-party API routing is affected.
 
 ## 4. Sequential Gates
 
@@ -220,17 +230,17 @@ The formal edge matrix is `docs/audits/2026-07-15-gate6-edge-matrix.json`: 14/14
 
 The cancellation verifier now writes no-traffic readiness to a separate report, so report-only checks cannot overwrite formal real-cancellation evidence. The focused red/green regression passes 2/2; the refreshed real probe observed exactly one `CancelCascadeInvocation:200` and a fresh HTTP 200 recovery with no 409.
 
-### Gate 7: Three-Part Completion, Legacy Removal, UI and Release Closeout - COMPLETE
+### Gate 7: Three-Part Completion, Legacy Removal, UI and Release Closeout - CURRENTLY REOPENED
 
 Delete every obsolete production file and test in `LEGACY_REMOVAL_MANIFEST.md`, then run the production zero-hit gate. Synchronize the current official Codex shell, preserve Anti-Codex icons, exact Chinese `管理`, full close-button hit area, responsive task history and isolated cleanup. Finish packaging, original-Codex zero-change audit, update/rollback proof and checkpoint. At the end of this gate the shell/client, CodexPlusPlus layer and Antigravity thin-adapter part must each have concrete 100% implementation evidence.
 
-Current release summary reports `shellProgress:100`, `codexPlusPlusProgress:100`, `antigravityAdapterProgress:100`, overall 100%, completed Gates 1-8, `releaseReady:true`, no missing gate and no damaged report.
+The earlier release summary reported all three parts and overall at 100% with `releaseReady:true`. That report is historical: the current formal gate must reject the stale Gate 5/8 evidence and remain blocked until fresh current-version visible integration and a new autonomous long task pass.
 
-### Gate 8: Final Visible Long-Task Acceptance - COMPLETE
+### Gate 8: Final Visible Long-Task Acceptance - HISTORICAL RESULT RETIRED; NEW TASK REQUIRED
 
 Only after all three reported product parts are at 100%, run the final visible long project. It must include repeated file edits, real tests, at least one mid-task user correction/dialogue, long-context pressure and native Codex compaction/resume. Judge artifacts, hashes, command counts, test exits, continuity and cleanup. Do not use the long task as an implementation-debug loop; if it fails, reopen the responsible component percentage and fix that component before rerunning the failed lane.
 
-Final accepted evidence has two parts. The signed formal inventory journey completed eight visible turns, four edit rounds, 49 real tool calls, correction, controlled interruption/recovery, actual-mouse history reopen and native compaction/same-thread continuation. The signed multi-style run then completed interrupted migration and a greenfield 12-file project in 8/8 additional visible turns. Migration passed protected-input, test, exact-output, two-run idempotency and stale-temp recovery checks. Greenfield passed tests, JSON/text CLI, expected metrics, Chinese README/full HTML and hash-stable read-only verification. Each project's title and task-suggestion helpers made one request and zero tools. Later maintenance added the 68-second character-dialogue animation and offline premiere site as tangible cross-provider evidence. Installed checks target official Codex `26.715.4045.0` / CLI `0.145.0-alpha.18`.
+Historical accepted evidence had two parts: the signed formal inventory journey completed eight visible turns, four edit rounds, 49 real tool calls, correction, controlled interruption/recovery, actual-mouse history reopen and native compaction/same-thread continuation; the signed multi-style run then completed interrupted migration and a greenfield 12-file project in 8/8 additional visible turns. Those checks targeted official Codex `26.715.4045.0` / CLI `0.145.0-alpha.18`, and the later media artifacts were deleted at the user's request. They remain audit history only and cannot satisfy the current Gate 8.
 
 The paragraphs below retain the chronological Gate 8 failure and hardening record. They are historical diagnostics, not current blockers.
 

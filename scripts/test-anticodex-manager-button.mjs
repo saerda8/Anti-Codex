@@ -1,15 +1,45 @@
 #!/usr/bin/env node
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
+
+import { readNativeCodexRequestSnapshot } from "./lib/anticodex-native-request-activity.mjs";
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
+const flagEnabled = (name) => args.has(name) && String(args.get(name) ?? "true").toLowerCase() !== "false";
+const MANAGER_DAILY_ACTION_IDS = Object.freeze([
+  "refreshStatus",
+  "refreshModels",
+  "accountSwitch",
+  "accountProxy",
+  "syncReadiness",
+  "repairShortcuts",
+  "updateCheck",
+  "sourcePreflight",
+  "mcpSkills",
+  "pluginCapabilities",
+  "diagnosticsBundle",
+  "viewLatestReports",
+]);
+const MANAGER_HIGH_IMPACT_ACTION_IDS = Object.freeze([
+  "syncHost",
+  "upstreamConfig",
+  "refreshFeatures",
+  "stabilitySoak",
+  "coldRelaunch",
+  "fastOverallNoTraffic",
+  "overallNoTraffic",
+  "postVerificationFull",
+]);
+const MANAGER_HIGH_IMPACT_ACTION_SET = new Set(MANAGER_HIGH_IMPACT_ACTION_IDS);
+const MANAGER_ALL_ACTION_IDS = Object.freeze([...MANAGER_DAILY_ACTION_IDS, ...MANAGER_HIGH_IMPACT_ACTION_IDS]);
 const explicitPorts = args.get("--ports") || args.get("--port") || "";
 const ports = explicitPorts
   ? String(explicitPorts).split(",").map((value) => Number(value.trim())).filter(Number.isFinite)
@@ -20,19 +50,56 @@ const defaultAction = String(args.get("--action") || (simulatePendingReopen ? "r
 const actions = String(args.get("--actions") || defaultAction).split(",").map((value) => value.trim()).filter(Boolean);
 const action = actions[0] || defaultAction;
 const verificationMode = String(args.get("--verification-mode") || "");
-const uiOnlyMode = verificationMode === "ui-only";
+const uiOnlyMatrix = flagEnabled("--ui-only-matrix");
+const uiOnlyBatchMode = uiOnlyMatrix || flagEnabled("--ui-only-batch");
+const uiOnlyMode = verificationMode === "ui-only" || uiOnlyBatchMode;
 const closeOnly = args.has("--close-only") && String(args.get("--close-only") ?? "true").toLowerCase() !== "false";
 const profileEntryOnly = args.has("--profile-entry-only") && String(args.get("--profile-entry-only") ?? "true").toLowerCase() !== "false";
 const upstreamConfigOnly = args.has("--upstream-config-only") && String(args.get("--upstream-config-only") ?? "true").toLowerCase() !== "false";
 const defaultTimeoutMs = action === "fastOverallNoTraffic" ? 90000 : 15000;
 const timeoutMs = Number(args.get("--timeout-ms") || defaultTimeoutMs);
 const compact = args.has("--compact");
+const evidenceReportRoot = path.resolve(args.get("--report-root")
+  || path.join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
+const antiCodexHome = path.resolve(args.get("--codex-home")
+  || process.env.ANTICODEX_CODEX_HOME
+  || path.join(process.env.APPDATA || os.tmpdir(), "anticodex", "codex-home-deepseek-app"));
+const managerBridgeLogPath = path.resolve(args.get("--manager-bridge-log")
+  || path.join(process.env.APPDATA || os.tmpdir(), "anticodex", "fixed-route-logs", "manager-bridge.log"));
+const fixedRouteHealthUrl = String(args.get("--fixed-route-health-url")
+  || process.env.ANTICODEX_FIXED_ROUTE_HEALTH_URL
+  || "http://127.0.0.1:18487/anticodex/fixed-route/health");
 // Hidden or fully occluded Electron windows can take about five seconds to
 // acknowledge a CDP mouse event even though the renderer remains responsive.
 const CDP_INPUT_EVENT_TIMEOUT_MS = 12_000;
 let managerInjectSource = readFileSync(new URL("./anticodex-manager-inject.js", import.meta.url), "utf8");
 if (simulatePendingReopen) {
   managerInjectSource = managerInjectSource.replace("const ACTION_UI_TIMEOUT_MS = 5000;", "const ACTION_UI_TIMEOUT_MS = 120;");
+}
+if (uiOnlyMode) {
+  managerInjectSource = managerInjectSource
+    .replace("const ACCOUNT_SWITCH_POLL_INTERVAL_MS = 3000;", "const ACCOUNT_SWITCH_POLL_INTERVAL_MS = 25;")
+    .replace("const ACCOUNT_SWITCH_TIMEOUT_MS = 120000;", "const ACCOUNT_SWITCH_TIMEOUT_MS = 150;");
+}
+if (uiOnlyMode && !uiOnlyBatchMode) {
+  let accountSwitchCapturePatchCount = 0;
+  managerInjectSource = managerInjectSource.replace(
+    /  async function captureAccountSwitchState\(\) \{[\s\S]*?\r?\n  \}\r?\n\r?\n  function accountSwitchChanged/,
+    () => {
+      accountSwitchCapturePatchCount += 1;
+      return `  async function captureAccountSwitchState() {
+    return {
+      accountFingerprint: "ui-only-account-fingerprint",
+      modelFingerprint: "ui-only-model-fingerprint",
+    };
+  }
+
+  function accountSwitchChanged`;
+    },
+  );
+  if (accountSwitchCapturePatchCount !== 1) {
+    throw new Error("Manager verifier failed to isolate account-switch state capture");
+  }
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
@@ -84,6 +151,7 @@ function shortText(value, maxLength = 900) {
 
 function compactManagerButtonRecord(record) {
   const result = record?.result || {};
+  const actionActualMouse = result.actionActualMouse || result.initial?.actionActualMouse || result.initial?.actualMouse || null;
   return {
     ok: record?.ok === true,
     action: result.action,
@@ -96,12 +164,29 @@ function compactManagerButtonRecord(record) {
     disabled: result.disabled,
     lastUiOnly: result.lastUiOnly,
     actionCenterHitsButton: result.actionCenterHitsButton ?? result.initial?.actionCenterHitsButton,
+    actionActualMouseOk: actionActualMouse?.ok,
+    actionActualMouseRequiredConfirmation: actionActualMouse?.requiredConfirmation,
+    actionActualMouseExpectedClickCount: actionActualMouse?.expectedClickCount,
+    actionActualMouseClickCount: actionActualMouse?.clickCount,
+    actionActualMouseConfirmationArmed: actionActualMouse?.confirmationArmed,
+    actionActualMouseConfirmationCleared: actionActualMouse?.confirmationCleared,
+    actionActualMouseInputEventCount: actionActualMouse?.inputEventCount,
+    actionActualMouseError: actionActualMouse?.error || null,
+    actionActualMousePoints: Array.isArray(actionActualMouse?.points)
+      ? actionActualMouse.points.map((point) => ({
+        phase: point.phase,
+        x: point.x,
+        y: point.y,
+        label: point.label,
+        hitAction: point.hitAction,
+      }))
+      : [],
     closeHitAreaOk: result.closeHitAreaOk ?? result.initial?.closeHitAreaOk,
     closeActualMouseOk: result.closeActualMouseOk ?? result.initial?.closeActualMouseOk,
     managerOpenedNewPage: record?.managerOpenedNewPage,
     text: shortText(result.text),
     lastSummary: shortText(result.lastSummary),
-    error: result.error || result.initial?.error || null,
+    error: result.error || result.initial?.error || actionActualMouse?.error || null,
   };
 }
 
@@ -114,9 +199,14 @@ function compactManagerButtonOutput(output) {
     }
     return {
       ok: output.ok,
+      mode: output.mode,
       port: output.port,
-      target: output.target ? { title: output.target.title, url: output.target.url } : null,
+      target: output.target ? { id: output.target.id, title: output.target.title, url: output.target.url } : null,
       actions: output.actions,
+      actionGroups: output.actionGroups,
+      zeroSideEffects: output.zeroSideEffects,
+      usedRealTraffic: output.usedRealTraffic,
+      isolationEvidence: output.isolationEvidence,
       results,
       durationMs: output.durationMs,
     };
@@ -124,7 +214,7 @@ function compactManagerButtonOutput(output) {
   return {
     ok: output?.ok,
     port: output?.port,
-    target: output?.target ? { title: output.target.title, url: output.target.url } : null,
+    target: output?.target ? { id: output.target.id, title: output.target.title, url: output.target.url } : null,
     result: compactManagerButtonRecord(output),
     managerOpenedNewPage: output?.managerOpenedNewPage,
     pageTargetCountBeforeManagerOpen: output?.pageTargetCountBeforeManagerOpen,
@@ -180,6 +270,94 @@ function isFinishedText(text) {
     && FINISHED_HINTS.some((hint) => text.includes(hint));
 }
 
+function writeTextAtomic(targetPath, text) {
+  mkdirSync(path.dirname(targetPath), { recursive: true });
+  const temporaryPath = `${targetPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(temporaryPath, text, "utf8");
+  renameSync(temporaryPath, targetPath);
+}
+
+function writeSignedJsonReport(reportName, payload) {
+  const checkedAt = new Date().toISOString();
+  const stamp = checkedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
+  const latest = path.resolve(evidenceReportRoot, `latest-${reportName}.json`);
+  const history = path.resolve(evidenceReportRoot, `${stamp}-${reportName}-${crypto.randomBytes(4).toString("hex")}.json`);
+  const stamped = {
+    ...payload,
+    generatedAt: checkedAt,
+    checkedAt,
+    report: { latest, history },
+  };
+  const body = `${JSON.stringify(stamped, null, 2)}\n`;
+  const sidecar = `sha256:${crypto.createHash("sha256").update(body).digest("hex")}`;
+  for (const reportPath of [history, latest]) {
+    writeTextAtomic(reportPath, body);
+    writeTextAtomic(`${reportPath}.sha256`, sidecar);
+  }
+  return stamped;
+}
+
+function emitEvidenceReport(reportName, payload) {
+  const stamped = writeSignedJsonReport(reportName, payload);
+  console.log(asciiJson(stamped, compact ? 0 : 2));
+  return stamped;
+}
+
+async function nativeRequestSnapshotSafe() {
+  try {
+    const snapshot = await readNativeCodexRequestSnapshot({ codexHome: antiCodexHome });
+    return {
+      available: snapshot.databasePresent === true,
+      databasePresent: snapshot.databasePresent === true,
+      requestCount: Number(snapshot.requestCount || 0),
+      latestRequestRowId: Number(snapshot.latestRequestRowId || 0),
+      latestRowId: Number(snapshot.latestRowId || 0),
+    };
+  } catch (error) {
+    return { available: false, error: error?.message || String(error) };
+  }
+}
+
+function managerBridgeLogSnapshot() {
+  if (!existsSync(managerBridgeLogPath)) return { available: false, path: managerBridgeLogPath };
+  try {
+    const source = readFileSync(managerBridgeLogPath, "utf8");
+    return {
+      available: true,
+      path: managerBridgeLogPath,
+      byteLength: Buffer.byteLength(source),
+      actionReceivedCount: (source.match(/"event":"manager-action-received"/g) || []).length,
+      requestReceivedCount: (source.match(/"event":"manager-request-received"/g) || []).length,
+    };
+  } catch (error) {
+    return { available: false, path: managerBridgeLogPath, error: error?.message || String(error) };
+  }
+}
+
+function nonNegativeDelta(after, before, key) {
+  const next = Number(after?.[key]);
+  const previous = Number(before?.[key]);
+  if (!Number.isFinite(next) || !Number.isFinite(previous)) return null;
+  return Math.max(0, next - previous);
+}
+
+function isUiOnlyActionFinished(actionName, state) {
+  const text = String(state?.text || state?.lastSummary || "");
+  const settled = state?.disabled !== true
+    && Number(state?.pendingCount || 0) === 0
+    && Number(state?.queueLength || 0) === 0
+    && !isRunningText(text)
+    && !isActionFailureText(actionName, text);
+  if (!settled) return false;
+  if (actionName === "accountSwitch") {
+    return text.includes("\u672a\u68c0\u6d4b\u5230\u53ef\u8bc1\u660e\u7684\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316");
+  }
+  return Boolean(text)
+    && state?.lastAction === actionName
+    && state?.lastOk !== false
+    && state?.lastUiOnly === true;
+}
+
 function hasLatestReportFieldEvidence(text) {
   const value = String(text || "");
   if (!value.includes("\u6e90\u7801\u9884\u68c0")) return true;
@@ -225,8 +403,7 @@ function hasActionSpecificResult(actionName, text) {
   return true;
 }
 
-function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
-  if (!enabled) return "";
+function uiOnlyPayloadForAction(actionName) {
   const payloadByAction = {
     sourcePreflight: {
       ok: true,
@@ -273,17 +450,147 @@ function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
         sourceSnapshot: { fingerprint: "abcdef0123456789", fileCount: 42 },
       },
     },
+    updateCheck: {
+      ok: true,
+      action: actionName,
+      uiOnly: true,
+      result: { ok: true, updateNeeded: false },
+    },
   };
-  const payload = payloadByAction[actionName] || { ok: true, action: actionName, uiOnly: true, result: { ok: true } };
+  return payloadByAction[actionName] || { ok: true, action: actionName, uiOnly: true, result: { ok: true } };
+}
+
+function uiOnlyPayloadMap() {
+  return Object.fromEntries(MANAGER_ALL_ACTION_IDS.map((actionName) => [actionName, uiOnlyPayloadForAction(actionName)]));
+}
+
+function uiOnlyBridgeSource(actionName, enabled = uiOnlyMode) {
+  if (!enabled) return "";
+  const payload = uiOnlyPayloadForAction(actionName);
   return `
+  if (window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.active === true) {
+    // The batch-scoped action and request shims were installed before Manager opened.
+  } else {
+  clearInterval(window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__);
+  delete window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__;
   if (!window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__) {
     window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_ACTION__;
   }
-  window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => Promise.resolve({
-    ...${JSON.stringify(payload)},
-    action: requestedAction,
-  });
+  window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_CALLS__ ||= [];
+  window.__ANTICODEX_RUN_MANAGER_ACTION__ = (requestedAction) => {
+    window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_CALLS__.push({ action: requestedAction, at: Date.now() });
+    return Promise.resolve({
+      ...${JSON.stringify(payload)},
+      action: requestedAction,
+    });
+  };
   window.__ANTICODEX_RUN_MANAGER_ACTION__.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__ = true;
+  }
+`;
+}
+
+function uiOnlyBatchBridgeSource(enabled = uiOnlyBatchMode) {
+  if (!enabled) return "";
+  const payloads = uiOnlyPayloadMap();
+  return `
+(() => {
+  if (window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.active === true) return;
+  const snapshotResponses = window.__ANTICODEX_MANAGER_SNAPSHOT__?.responses || {};
+  const fallbackResponses = {
+    "/anticodex/manager/bootstrap": { ok: true, token: "ui-only-manager-token" },
+    "/health": { ok: true, upstream: "ui-only", accountReady: true, accountState: "ready" },
+    "/models": { object: "list", data: [] },
+    "/anticodex/account": { ok: true, identityAvailable: false, fingerprint: "" },
+    "/anticodex/diagnostics": { ok: true, localFeatures: { mcp: { count: 1 }, skills: { count: 1 } } },
+    "/backend-api/ps/plugins/installed": { plugins: [] },
+    "/backend-api/aip/connectors": { connectors: [] },
+    "/backend-api/plugins/list": { plugins: [] },
+    "/backend-api/wham/apps": { tools: [] },
+    "/anticodex/local-connectors/allowlist": { persisted: [], env: [], counts: {} },
+    "/anticodex/upstream-profile": { active: "third-party", runtime: { protocol: "openai-compatible", model: "ui-only-model" } },
+    "/anticodex/model-routes": { latest: null },
+  };
+  const state = {
+    active: true,
+    originalActionBridge: window.__ANTICODEX_RUN_MANAGER_ACTION__,
+    originalRequestBridge: window.__ANTICODEX_RUN_MANAGER_REQUEST__,
+    originalBridgeReady: window.__ANTICODEX_MANAGER_BRIDGE_READY__,
+    baselineQueueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0,
+    baselinePromiseCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+    actionCalls: [],
+    requestCalls: [],
+  };
+  const payloads = ${JSON.stringify(payloads)};
+  const actionShim = (requestedAction) => {
+    state.actionCalls.push({ action: requestedAction, at: Date.now() });
+    const payload = payloads[requestedAction] || { ok: true, action: requestedAction, uiOnly: true, result: { ok: true } };
+    return Promise.resolve({ ...payload, action: requestedAction, uiOnly: true });
+  };
+  actionShim.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__ = true;
+  actionShim.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ = true;
+  const requestShim = (requestedPath, options = {}) => {
+    state.requestCalls.push({ path: requestedPath, method: String(options.method || "GET").toUpperCase(), at: Date.now() });
+    const value = Object.prototype.hasOwnProperty.call(snapshotResponses, requestedPath)
+      ? snapshotResponses[requestedPath]
+      : (fallbackResponses[requestedPath] ?? {});
+    return Promise.resolve({ kind: "manager-request", path: requestedPath, ok: true, value });
+  };
+  requestShim.__ANTICODEX_MANAGER_BUTTON_UI_ONLY__ = true;
+  requestShim.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ = true;
+  window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__ = state;
+  window.__ANTICODEX_RUN_MANAGER_ACTION__ = actionShim;
+  window.__ANTICODEX_RUN_MANAGER_REQUEST__ = requestShim;
+  window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
+})()
+`;
+}
+
+function uiOnlyBatchEvidenceSource() {
+  return `(() => {
+    const state = window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+    if (!state) return window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_LAST_EVIDENCE__ || { installed: false };
+    return {
+      installed: true,
+      active: state.active === true,
+      actionCalls: [...state.actionCalls],
+      requestCalls: [...state.requestCalls],
+      baselineQueueLength: state.baselineQueueLength,
+      currentQueueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0,
+      baselinePromiseCount: state.baselinePromiseCount,
+      currentPromiseCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+      actionShimActive: window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ === true,
+      requestShimActive: window.__ANTICODEX_RUN_MANAGER_REQUEST__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ === true,
+    };
+  })()`;
+}
+
+function cleanupUiOnlyBatchBridgeSource(enabled = uiOnlyBatchMode) {
+  if (!enabled) return "";
+  return `
+(() => {
+  const state = window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+  if (!state) return window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_LAST_EVIDENCE__ || { restored: false, missing: true };
+  const evidence = {
+    installed: true,
+    actionCalls: [...state.actionCalls],
+    requestCalls: [...state.requestCalls],
+    baselineQueueLength: state.baselineQueueLength,
+    currentQueueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0,
+    baselinePromiseCount: state.baselinePromiseCount,
+    currentPromiseCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+  };
+  window.__ANTICODEX_RUN_MANAGER_ACTION__ = state.originalActionBridge;
+  window.__ANTICODEX_RUN_MANAGER_REQUEST__ = state.originalRequestBridge;
+  window.__ANTICODEX_MANAGER_BRIDGE_READY__ = state.originalBridgeReady;
+  state.active = false;
+  evidence.actionBridgeRestored = window.__ANTICODEX_RUN_MANAGER_ACTION__ === state.originalActionBridge;
+  evidence.requestBridgeRestored = window.__ANTICODEX_RUN_MANAGER_REQUEST__ === state.originalRequestBridge;
+  evidence.bridgeReadyRestored = window.__ANTICODEX_MANAGER_BRIDGE_READY__ === state.originalBridgeReady;
+  evidence.restored = evidence.actionBridgeRestored && evidence.requestBridgeRestored && evidence.bridgeReadyRestored;
+  window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_LAST_EVIDENCE__ = evidence;
+  delete window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+  return evidence;
+})()
 `;
 }
 
@@ -393,14 +700,20 @@ function cleanupRealBridgeSource(enabled = true) {
 `;
 }
 
-function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
+function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode, actionName = action) {
   if (!enabled) return "";
   return `
-  if (window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__) {
-    window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-    delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
-  }
-  {
+  if (window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.active === true) {
+    // Batch cleanup owns bridge restoration after every action and request is observed.
+  } else {
+  const uiOnlyActionName = ${JSON.stringify(actionName)};
+  function restoreUiOnlyBridge() {
+    clearInterval(window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__);
+    delete window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__;
+    if (window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__) {
+      window.__ANTICODEX_RUN_MANAGER_ACTION__ = window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+      delete window.__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__;
+    }
     const lastActionResult = window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__;
     const lastSummary = String(lastActionResult?.managerSummary || "");
     if (lastActionResult?.uiOnly === true || lastSummary.includes("ui-only manager button smoke")) {
@@ -408,6 +721,26 @@ function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode) {
       const result = document.querySelector('[data-anticodex-result="action"]');
       if (result && result.textContent.includes("ui-only manager button smoke")) result.textContent = "";
     }
+    delete window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_CALLS__;
+  }
+  function managerActionStillActive() {
+    const overlay = document.querySelector("#anticodex-manager-overlay");
+    const calls = window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_CALLS__ || [];
+    const actionReachedSafeBridge = calls.some((entry) => entry?.action === uiOnlyActionName);
+    if (!overlay) return !actionReachedSafeBridge;
+    const busy = overlay.querySelector('.anticodex-actions')?.getAttribute('data-anticodex-busy') === 'true';
+    const disabled = Boolean(overlay.querySelector('button[data-action]:disabled'));
+    const running = Boolean(overlay.querySelector('[data-anticodex-result="action"][data-anticodex-running]'));
+    return busy || disabled || running;
+  }
+  if (managerActionStillActive()) {
+    clearInterval(window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__);
+    window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_RESTORE_TIMER__ = setInterval(() => {
+      if (!managerActionStillActive()) restoreUiOnlyBridge();
+    }, 50);
+  } else {
+    restoreUiOnlyBridge();
+  }
   }
 `;
 }
@@ -489,6 +822,17 @@ function managerSummaryFromActionPayload(actionName, payload) {
   return `${actionName}: ${payload?.ok === false ? "failed" : "ok"}`;
 }
 
+if (args.has("--report-io-self-test")) {
+  emitEvidenceReport("manager-report-io-self-test", {
+    ok: true,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    processIdentity: { verifierPid: process.pid },
+    sessionIdentity: { kind: "offline-report-io-self-test" },
+  });
+  process.exit(0);
+}
+
 if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("fastOverallNoTraffic", "\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("fastOverallNoTraffic", "\u5feb\u901f\u68c0\u67e5\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a23000 ms"), true);
@@ -526,6 +870,37 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("diagnosticsBundle", managerSummaryFromActionPayload("diagnosticsBundle", { ok: true, result: { ok: true } })), true);
   assert.equal(isUiOnlySmokeText("\u8bf4\u660e\uff1aui-only manager button smoke"), true);
   assert.ok(uiOnlyBridgeSource("mcpSkills", true).includes("__ANTICODEX_MANAGER_BUTTON_REAL_BRIDGE__"));
+  let realActionCalls = 0;
+  let realRequestCalls = 0;
+  const batchContext = {
+    Date,
+    Promise,
+    __ANTICODEX_MANAGER_BRIDGE_READY__: true,
+    __ANTICODEX_MANAGER_ACTION_QUEUE__: [],
+    __ANTICODEX_MANAGER_ACTION_PROMISES__: {},
+    __ANTICODEX_MANAGER_SNAPSHOT__: { responses: { "/models": { object: "list", data: [{ id: "snapshot-model" }] } } },
+    __ANTICODEX_RUN_MANAGER_ACTION__: async () => { realActionCalls += 1; },
+    __ANTICODEX_RUN_MANAGER_REQUEST__: async () => { realRequestCalls += 1; },
+  };
+  batchContext.window = batchContext;
+  batchContext.globalThis = batchContext;
+  vm.runInNewContext(uiOnlyBatchBridgeSource(true), batchContext);
+  const batchAction = await batchContext.__ANTICODEX_RUN_MANAGER_ACTION__("updateCheck");
+  const batchRequest = await batchContext.__ANTICODEX_RUN_MANAGER_REQUEST__("/models", { method: "GET" });
+  assert.equal(batchAction.action, "updateCheck");
+  assert.equal(batchAction.uiOnly, true);
+  assert.equal(batchRequest.kind, "manager-request");
+  assert.equal(batchRequest.path, "/models");
+  assert.equal(batchRequest.value.data[0].id, "snapshot-model");
+  assert.equal(realActionCalls, 0);
+  assert.equal(realRequestCalls, 0);
+  const batchBeforeCleanup = vm.runInNewContext(uiOnlyBatchEvidenceSource(), batchContext);
+  assert.equal(batchBeforeCleanup.actionCalls.length, 1);
+  assert.equal(batchBeforeCleanup.requestCalls.length, 1);
+  const batchCleanup = vm.runInNewContext(cleanupUiOnlyBatchBridgeSource(true), batchContext);
+  assert.equal(batchCleanup.restored, true);
+  assert.equal(batchContext.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__, undefined);
+  assert.equal(batchContext.__ANTICODEX_RUN_MANAGER_REQUEST__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__, undefined);
   console.log(JSON.stringify({ ok: true, selfTest: true }));
   process.exit(0);
 }
@@ -550,6 +925,40 @@ function getJson(url, timeout = 3000) {
     request.on("timeout", () => request.destroy(new Error(`Timed out fetching ${url}`)));
     request.on("error", reject);
   });
+}
+
+function firstPid(value) {
+  if (Array.isArray(value)) return Number(value[0] || 0);
+  return Number(value || 0);
+}
+
+function pidIsAlive(pid) {
+  if (!(Number(pid) > 0)) return false;
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function collectEvidenceIdentity(target, port) {
+  const health = await getJson(fixedRouteHealthUrl, 3000).catch(() => null);
+  const originalCodexPid = Number(args.get("--expected-original-codex-pid") || 0);
+  return {
+    processIdentity: {
+      supervisorPid: Number(health?.pid || 0),
+      codexPlusPlusPid: firstPid(health?.processes?.codexPlusPlus),
+      antiCodexMainPid: firstPid(health?.processes?.copiedClient),
+      originalCodexPid,
+      originalCodexAlive: pidIsAlive(originalCodexPid),
+    },
+    sessionIdentity: {
+      cdpPort: Number(port || 0),
+      targetId: String(target?.id || ""),
+      targetUrl: String(target?.url || ""),
+    },
+  };
 }
 
 function httpJson(url, options = {}) {
@@ -840,6 +1249,9 @@ async function findTarget() {
 }
 
 const { port, target } = await findTarget();
+const evidenceIdentity = await collectEvidenceIdentity(target, port);
+let uiOnlyTrafficBefore = null;
+let uiOnlyManagerLogBefore = null;
 const pageTargetsBeforeManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
 if (profileEntryOnly) {
   const profileEntry = await verifyProfileManagerEntryActualMouseWithFreshCdp().catch((error) => ({
@@ -848,7 +1260,13 @@ if (profileEntryOnly) {
     error: error?.message || String(error),
   }));
   releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson({ ok: profileEntry.ok === true, port, target: { id: target.id, title: target.title, url: target.url }, profileEntry }, compact ? 0 : 2));
+  emitEvidenceReport("manager-profile-entry", {
+    ok: profileEntry.ok === true,
+    port,
+    target: { id: target.id, title: target.title, url: target.url },
+    ...evidenceIdentity,
+    profileEntry,
+  });
   process.exit(profileEntry.ok ? 0 : 1);
 }
 const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
@@ -884,6 +1302,27 @@ await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
   returnByValue: true,
   allowUnsafeEvalBlockedByCSP: true,
 }), 10000);
+if (uiOnlyBatchMode) {
+  await ws.call(id++, "Runtime.evaluate", runtimeParams(uiOnlyBatchBridgeSource(true), {
+    awaitPromise: true,
+    returnByValue: true,
+    allowUnsafeEvalBlockedByCSP: true,
+  }), 10000);
+  const preexistingManagerWork = await waitForRealManagerQueueDrain();
+  if (!preexistingManagerWork.ok) {
+    await evaluate(cleanupUiOnlyBatchBridgeSource(true), 5000).catch(() => {});
+    throw new Error(preexistingManagerWork.error || "Pre-existing Manager bridge work did not drain before UI-only verification");
+  }
+  await evaluate(`(() => {
+    const state = window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+    if (!state) return { ok: false };
+    state.baselineQueueLength = Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0;
+    state.baselinePromiseCount = Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length;
+    return { ok: true, baselineQueueLength: state.baselineQueueLength, baselinePromiseCount: state.baselinePromiseCount };
+  })()`, 5000);
+  uiOnlyManagerLogBefore = await waitForManagerBridgeLogStable();
+  uiOnlyTrafficBefore = await nativeRequestSnapshotSafe();
+}
 
 if (simulatePendingReopen) {
   await ws.call(id++, "Runtime.evaluate", runtimeParams(`(() => {
@@ -920,6 +1359,65 @@ async function evaluate(expression, timeout = 8000) {
     allowUnsafeEvalBlockedByCSP: true,
   }), timeout);
   return message.result?.result?.value || {};
+}
+
+async function waitForRealManagerQueueDrain(waitMs = 10000) {
+  const deadline = Date.now() + Math.max(1000, Number(waitMs) || 10000);
+  let latest = null;
+  do {
+    latest = await evaluate(`(() => ({
+      queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0,
+      promiseCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+    }))()`, 2500).catch((error) => ({ error: error?.message || String(error) }));
+    if (Number(latest.queueLength || 0) === 0 && Number(latest.promiseCount || 0) === 0) return { ok: true, ...latest };
+    await sleep(100);
+  } while (Date.now() < deadline);
+  return { ok: false, ...(latest || {}), error: latest?.error || "Pre-existing Manager bridge work did not drain" };
+}
+
+async function waitForManagerBridgeLogStable(waitMs = 3000) {
+  const deadline = Date.now() + Math.max(500, Number(waitMs) || 3000);
+  let previous = managerBridgeLogSnapshot();
+  do {
+    await sleep(100);
+    const current = managerBridgeLogSnapshot();
+    if (current.available === true
+        && previous.available === true
+        && current.byteLength === previous.byteLength
+        && current.actionReceivedCount === previous.actionReceivedCount
+        && current.requestReceivedCount === previous.requestReceivedCount) {
+      return current;
+    }
+    previous = current;
+  } while (Date.now() < deadline);
+  return previous;
+}
+
+async function waitForUiOnlyBatchIdle(waitMs = 30000) {
+  const deadline = Date.now() + Math.max(1000, Number(waitMs) || 30000);
+  let latest = null;
+  do {
+    latest = await evaluate(`(() => {
+      const overlay = document.querySelector("#anticodex-manager-overlay");
+      return {
+        overlayPresent: Boolean(overlay),
+        busy: overlay?.querySelector('.anticodex-actions')?.getAttribute('data-anticodex-busy') === 'true',
+        disabledCount: overlay?.querySelectorAll('button[data-action]:disabled').length || 0,
+        running: Boolean(overlay?.querySelector('[data-anticodex-result="action"][data-anticodex-running]')),
+        queueLength: Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length : 0,
+        promiseCount: Object.keys(window.__ANTICODEX_MANAGER_ACTION_PROMISES__ || {}).length,
+        baselineQueueLength: window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.baselineQueueLength ?? 0,
+        baselinePromiseCount: window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.baselinePromiseCount ?? 0,
+      };
+    })()`, 2500).catch((error) => ({ error: error?.message || String(error) }));
+    const queueStable = Number(latest.queueLength || 0) === Number(latest.baselineQueueLength || 0)
+      && Number(latest.promiseCount || 0) === Number(latest.baselinePromiseCount || 0);
+    if (!latest.busy && Number(latest.disabledCount || 0) === 0 && !latest.running && queueStable) {
+      return { ok: true, ...latest };
+    }
+    await sleep(100);
+  } while (Date.now() < deadline);
+  return { ok: false, ...(latest || {}), error: latest?.error || "Manager UI-only batch did not become idle" };
 }
 
 async function cleanupInjectedBridges() {
@@ -1151,8 +1649,12 @@ async function verifyCloseButtonActualMouseClick() {
         };
       }
     }
-    await sleep(150);
-    const closed = await evaluate(`(() => ({ closed: !document.querySelector("#anticodex-manager-overlay") }))()`, 2500);
+    const closeDeadline = Date.now() + 3000;
+    let closed = { closed: false };
+    do {
+      await sleep(50);
+      closed = await evaluate(`(() => ({ closed: !document.querySelector("#anticodex-manager-overlay") }))()`, 2500);
+    } while (closed.closed !== true && Date.now() < closeDeadline);
     const result = { ...probe, closed: closed.closed === true };
     probes.push(result);
     if (!result.closed) {
@@ -1169,6 +1671,136 @@ async function verifyCloseButtonActualMouseClick() {
   return { ok: true, phase: "actual-click", probes, reopened: true, finalOverlayClosed: true };
 }
 
+async function readManagerActionClickPoint(actionName) {
+  return evaluate(`(async () => {
+    const actionName = ${JSON.stringify(actionName)};
+    const overlay = document.querySelector("#anticodex-manager-overlay");
+    const button = Array.from(overlay?.querySelectorAll("button[data-action]") || [])
+      .find((candidate) => candidate.dataset.action === actionName) || null;
+    if (!button) return { ok: false, present: false, action: actionName, error: "Manager action button missing" };
+    button.scrollIntoView({ block: "center", inline: "nearest" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const rect = button.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    const hitButton = hit?.closest?.("button[data-action]") || null;
+    const style = getComputedStyle(button);
+    const visible = rect.width > 0
+      && rect.height > 0
+      && rect.bottom > 0
+      && rect.right > 0
+      && rect.top < innerHeight
+      && rect.left < innerWidth
+      && style.visibility !== "hidden"
+      && style.display !== "none"
+      && style.pointerEvents !== "none";
+    return {
+      ok: visible && hitButton === button,
+      present: true,
+      action: actionName,
+      x,
+      y,
+      rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      label: String(button.textContent || "").trim(),
+      hitAction: hitButton?.dataset?.action || "",
+      confirming: button.getAttribute("data-confirming-high-impact") === "true",
+      disabled: button.disabled === true,
+      visible,
+    };
+  })()`, 3500);
+}
+
+async function dispatchManagerActionActualMouse(actionName) {
+  const requiredConfirmation = MANAGER_HIGH_IMPACT_ACTION_SET.has(actionName);
+  const expectedClickCount = requiredConfirmation ? 2 : 1;
+  const points = [];
+  let clickCount = 0;
+  let inputEventCount = 0;
+  let confirmationArmed = false;
+  let confirmationCleared = !requiredConfirmation;
+  const evidence = () => ({
+    action: actionName,
+    requiredConfirmation,
+    expectedClickCount,
+    clickCount,
+    inputEventCount,
+    confirmationArmed,
+    confirmationCleared,
+    points,
+  });
+  try {
+    await ws.call(id++, "Page.bringToFront", {}, 5000);
+    await evaluate(`(() => { window.focus(); return document.hasFocus(); })()`, 2500);
+    const click = async (point, phase) => {
+      if (!point?.ok || point?.disabled || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) {
+        throw new Error(`${phase} Manager action point is not clickable`);
+      }
+      points.push({ phase, ...point });
+      for (const mouseEvent of [
+        { type: "mouseMoved", button: "none", buttons: 0 },
+        { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
+        { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
+      ]) {
+        await ws.call(id++, "Input.dispatchMouseEvent", {
+          ...mouseEvent,
+          x: point.x,
+          y: point.y,
+        }, CDP_INPUT_EVENT_TIMEOUT_MS);
+        inputEventCount += 1;
+      }
+      clickCount += 1;
+    };
+
+    const firstPoint = await readManagerActionClickPoint(actionName);
+    await click(firstPoint, "first");
+
+    let afterFirst = null;
+    const confirmationDeadline = Date.now() + (requiredConfirmation ? 3000 : 500);
+    do {
+      afterFirst = await readManagerActionClickPoint(actionName);
+      confirmationArmed = afterFirst?.confirming === true;
+      if (confirmationArmed || !requiredConfirmation) break;
+      await sleep(50);
+    } while (Date.now() < confirmationDeadline);
+
+    if (requiredConfirmation && !confirmationArmed) {
+      return { ok: false, ...evidence(), error: "high-impact Manager action did not arm confirmation" };
+    }
+    if (!requiredConfirmation && confirmationArmed) {
+      return { ok: false, ...evidence(), error: "daily Manager action unexpectedly armed high-impact confirmation" };
+    }
+
+    if (requiredConfirmation) {
+      const secondPoint = await readManagerActionClickPoint(actionName);
+      if (secondPoint?.confirming !== true) {
+        return { ok: false, ...evidence(), error: "high-impact confirmation cleared before the second click" };
+      }
+      await click(secondPoint, "second");
+      const clearedDeadline = Date.now() + 3000;
+      do {
+        const afterSecond = await readManagerActionClickPoint(actionName);
+        confirmationCleared = afterSecond?.present === true && afterSecond.confirming !== true;
+        if (confirmationCleared) break;
+        await sleep(50);
+      } while (Date.now() < clearedDeadline);
+      if (!confirmationCleared) {
+        return { ok: false, ...evidence(), error: "high-impact confirmation did not clear after the second click" };
+      }
+    }
+
+    const actualMouse = evidence();
+    return {
+      ok: clickCount === expectedClickCount
+        && inputEventCount === expectedClickCount * 3
+        && confirmationCleared,
+      ...actualMouse,
+    };
+  } catch (error) {
+    return { ok: false, ...evidence(), error: error?.message || String(error) };
+  }
+}
+
 async function verifyUpstreamConfigActualMouseClick() {
   const trustedHeaders = {
     origin: baseUrl,
@@ -1183,10 +1815,22 @@ async function verifyUpstreamConfigActualMouseClick() {
   const beforeSignature = publicProfileSignature(beforeProfile);
   const dispatchActualClick = async (point) => {
     for (const event of [
+      { type: "mouseMoved", button: "none", buttons: 0 },
       { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
       { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
     ]) {
       await ws.call(id++, "Input.dispatchMouseEvent", { ...event, x: point.x, y: point.y }, CDP_INPUT_EVENT_TIMEOUT_MS);
+    }
+  };
+  const dispatchKeyInput = async (key, windowsVirtualKeyCode) => {
+    for (const type of ["keyDown", "keyUp"]) {
+      await ws.call(id++, "Input.dispatchKeyEvent", {
+        type,
+        key,
+        code: key,
+        windowsVirtualKeyCode,
+        nativeVirtualKeyCode: windowsVirtualKeyCode,
+      }, CDP_INPUT_EVENT_TIMEOUT_MS);
     }
   };
   const actionPoint = async () => evaluate(`(() => {
@@ -1250,7 +1894,10 @@ async function verifyUpstreamConfigActualMouseClick() {
     form = await evaluate(`(() => {
       const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
       const labels = Array.from(result?.querySelectorAll('label > span') || []).map((node) => String(node.textContent || '').trim());
-      const select = result?.querySelector('select');
+      const protocolLabel = Array.from(result?.querySelectorAll('label') || []).find((label) =>
+        String(label.querySelector(':scope > span')?.textContent || '').trim() === '\u534f\u8bae'
+      );
+      const select = protocolLabel?.querySelector('select') || null;
       return {
         ok: labels.includes('API key') && !!select,
         labels,
@@ -1273,8 +1920,67 @@ async function verifyUpstreamConfigActualMouseClick() {
     await sleep(100);
   } while (Date.now() < formDeadline);
 
+  const readProtocolSelect = async () => evaluate(`(() => {
+    const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
+    const protocolLabel = Array.from(result?.querySelectorAll('label') || []).find((label) =>
+      String(label.querySelector(':scope > span')?.textContent || '').trim() === '\u534f\u8bae'
+    );
+    const select = protocolLabel?.querySelector('select') || null;
+    select?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+    const rect = select?.getBoundingClientRect?.();
+    const x = rect ? rect.left + rect.width / 2 : 0;
+    const y = rect ? rect.top + rect.height / 2 : 0;
+    const hit = document.elementFromPoint(x, y);
+    return {
+      ok: !!select && !!rect && rect.width > 0 && rect.height > 0 && (hit === select || hit?.closest?.('select') === select),
+      x,
+      y,
+      value: String(select?.value || ''),
+      selectedIndex: Number(select?.selectedIndex ?? -1),
+      optionValues: Array.from(select?.options || []).map((option) => String(option.value || '')),
+    };
+  })()`, 3500);
+  const protocolBefore = await readProtocolSelect();
+  const alternateIndex = protocolBefore.selectedIndex === 0 ? 1 : 0;
+  let protocolAlternate = {};
+  let protocolRestored = {};
+  if (protocolBefore.ok && protocolBefore.optionValues?.length === 2 && alternateIndex >= 0) {
+    await dispatchActualClick(protocolBefore);
+    const alternateKey = alternateIndex > protocolBefore.selectedIndex ? "ArrowDown" : "ArrowUp";
+    await dispatchKeyInput(alternateKey, alternateKey === "ArrowDown" ? 40 : 38);
+    await dispatchKeyInput("Enter", 13);
+    await sleep(150);
+    protocolAlternate = await readProtocolSelect();
+
+    if (protocolAlternate.ok) {
+      await dispatchActualClick(protocolAlternate);
+      const restoreKey = protocolBefore.selectedIndex > protocolAlternate.selectedIndex ? "ArrowDown" : "ArrowUp";
+      await dispatchKeyInput(restoreKey, restoreKey === "ArrowDown" ? 40 : 38);
+      await dispatchKeyInput("Enter", 13);
+      await sleep(150);
+      protocolRestored = await readProtocolSelect();
+    }
+  }
+  const protocolInteraction = {
+    ok: protocolBefore.ok === true
+      && protocolAlternate.ok === true
+      && protocolRestored.ok === true
+      && protocolAlternate.selectedIndex === alternateIndex
+      && protocolAlternate.value !== protocolBefore.value
+      && protocolRestored.selectedIndex === protocolBefore.selectedIndex
+      && protocolRestored.value === protocolBefore.value,
+    selectedAlternate: protocolAlternate.selectedIndex === alternateIndex && protocolAlternate.value !== protocolBefore.value,
+    restoredOriginal: protocolRestored.selectedIndex === protocolBefore.selectedIndex && protocolRestored.value === protocolBefore.value,
+    actualMouseClickCount: 2,
+    keyEventCount: 8,
+    before: protocolBefore,
+    alternate: protocolAlternate,
+    restored: protocolRestored,
+  };
+
   const closePoint = await evaluate(`(() => {
     const button = document.querySelector('#anticodex-manager-overlay [data-anticodex-close="true"]');
+    button?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
     const rect = button?.getBoundingClientRect?.();
     const x = rect ? rect.left + rect.width / 2 : 0;
     const y = rect ? rect.top + rect.height / 2 : 0;
@@ -1293,6 +1999,20 @@ async function verifyUpstreamConfigActualMouseClick() {
   const profileUnchanged = beforeSignature === publicProfileSignature(afterProfile);
   const pageTargetsAfter = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
   const buttonState = Object.fromEntries((form.buttons || []).map((button) => [button.label, button.disabled]));
+  const actualMouse = {
+    ok: confirmation.ok === true && form.ok === true && form.confirming === "",
+    action: "upstreamConfig",
+    requiredConfirmation: true,
+    expectedClickCount: 2,
+    clickCount: 2,
+    inputEventCount: 6,
+    confirmationArmed: confirmation.ok === true,
+    confirmationCleared: form.confirming === "",
+    points: [
+      { phase: "first", ...first, hitAction: "upstreamConfig" },
+      { phase: "second", ...second, hitAction: "upstreamConfig" },
+    ],
+  };
   const ok = form.ok === true
     && form.embedded === true
     && form.warningMentionsBypass === true
@@ -1302,6 +2022,9 @@ async function verifyUpstreamConfigActualMouseClick() {
     && buttonState["\u4fdd\u5b58\u5e76\u5207\u6362"] === true
     && buttonState["\u6062\u590d Antigravity"] === false
     && confirmation.formOpenedBeforeConfirm === false
+    && actualMouse.ok === true
+    && protocolInteraction.selectedAlternate === true
+    && protocolInteraction.restoredOriginal === true
     && profileUnchanged
     && closePoint.ok === true
     && closePoint.hasTextNode === false
@@ -1317,6 +2040,8 @@ async function verifyUpstreamConfigActualMouseClick() {
     secondClickLabel: second.label,
     secondClickDurationMs,
     form,
+    actualMouse,
+    protocolInteraction,
     profileUnchanged,
     closeActualMouse: closePoint.ok === true && closed.closed === true,
     closeHasTextNode: closePoint.hasTextNode === true,
@@ -1367,13 +2092,14 @@ async function drainManagerActionQueue() {
 async function runManagerActionBatch(actions) {
   const startedAt = Date.now();
   const results = {};
+  const batchCloseActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
+    ok: false,
+    error: error?.message || String(error),
+    phase: "actual-click-exception",
+  }));
   for (const actionName of actions) {
     const safeActionName = JSON.stringify(actionName);
-    const closeActualMouse = await verifyCloseButtonActualMouseClick().catch((error) => ({
-      ok: false,
-      error: error?.message || String(error),
-      phase: "actual-click-exception",
-    }));
+    const closeActualMouse = batchCloseActualMouse;
     if (!closeActualMouse.ok) {
       results[actionName] = { ok: false, error: "close button actual mouse click failed", closeActualMouse };
       continue;
@@ -1428,14 +2154,6 @@ async function runManagerActionBatch(actions) {
     if (result) result.textContent = ${JSON.stringify(REFRESHED_TEXT)};
   }
   ${uiOnlyBridgeSource(actionName)}
-  actionCenterTarget.dispatchEvent(new MouseEvent("click", {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-    clientX: actionCenterX,
-    clientY: actionCenterY,
-  }));
-  await sleep(50);
   return {
     ok: true,
       closeCenterHitsButton,
@@ -1444,20 +2162,27 @@ async function runManagerActionBatch(actions) {
       closeHitAreaOk,
       closeHitResults,
       actionCenterHitsButton,
+      actionCenterX,
+      actionCenterY,
       label: button.textContent || "",
       initialText: result.textContent || "",
   };
 })()
 `, 12000);
+    const actualMouse = initial.ok
+      ? await dispatchManagerActionActualMouse(actionName)
+      : { ok: false, action: actionName, error: initial.error || "Manager action setup failed" };
+    initial.actualMouse = actualMouse;
+    if (!actualMouse.ok) initial.ok = false;
     initial.closeActualMouseOk = closeActualMouse.ok;
     initial.closeActualMouse = closeActualMouse;
 
     let latest = initial;
     const deadline = Date.now() + timeoutMs;
-    let drainedPayloads = await drainManagerActionQueue();
+    let drainedPayloads = uiOnlyMode ? {} : await drainManagerActionQueue();
     while (initial.ok && Date.now() < deadline) {
       await sleep(100);
-      drainedPayloads = { ...drainedPayloads, ...(await drainManagerActionQueue()) };
+      if (!uiOnlyMode) drainedPayloads = { ...drainedPayloads, ...(await drainManagerActionQueue()) };
       latest = await evaluate(`(() => {
         const overlay = document.querySelector("#anticodex-manager-overlay");
         const button = overlay?.querySelector('button[data-action=' + ${safeActionName} + ']') || null;
@@ -1509,12 +2234,7 @@ async function runManagerActionBatch(actions) {
         && isFinishedText(text)
         && (uiOnlyMode || !isUiOnlySmokeText(text))
         && hasActionSpecificResult(actionName, text);
-      const uiOnlyFinished = uiOnlyMode
-        && !latest.disabled
-        && !isRunningText(text)
-        && !isActionFailureText(actionName, text)
-        && isFinishedText(text)
-        && hasActionSpecificResult(actionName, text);
+      const uiOnlyFinished = uiOnlyMode && isUiOnlyActionFinished(actionName, { ...latest, text });
       const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
       if (uiOnlyFinished) {
         break;
@@ -1554,31 +2274,32 @@ async function runManagerActionBatch(actions) {
       && isFinishedText(text)
       && (uiOnlyMode || !isUiOnlySmokeText(text))
       && hasActionSpecificResult(actionName, text);
-    const uiOnlyFinished = uiOnlyMode
-      && !latest.disabled
-      && !isRunningText(text)
-      && !isActionFailureText(actionName, text)
-      && isFinishedText(text)
-      && hasActionSpecificResult(actionName, text);
+    const uiOnlyFinished = uiOnlyMode && isUiOnlyActionFinished(actionName, { ...latest, text });
     const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
+    const pageTargetsAfterManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
+    const pageTargetCountBeforeManagerOpen = pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length;
+    const pageTargetCountAfterManagerOpen = pageTargetsAfterManagerOpen.filter((item) => item?.type === "page").length;
+    const managerOpenedNewPage = pageTargetCountAfterManagerOpen > pageTargetCountBeforeManagerOpen;
     const ok = initial.ok === true
       && (uiOnlyFinished || isFastMode || settled)
       && initial.closeCenterHitsButton === true
       && initial.closeUpperCenterHitsButton === true
       && initial.closeLowerCenterHitsButton === true
       && initial.actionCenterHitsButton === true
+      && initial.actualMouse?.ok === true
+      && managerOpenedNewPage === false
       && (uiOnlyFinished ? true : isFastMode ? !isActionFailureText(actionName, text) : (latest.lastOk !== false && visibleFinished));
     results[actionName] = {
       ok,
       port,
       target: { id: target.id, title: target.title, url: target.url },
       result: { ...latest, lastUiOnly: uiOnlyMode || latest.lastUiOnly === true, action: actionName, label: initial.label, initialText: initial.initialText, text, initial },
-      managerOpenedNewPage: false,
-      pageTargetCountBeforeManagerOpen: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
-      pageTargetCountAfterManagerOpen: pageTargetsBeforeManagerOpen.filter((item) => item?.type === "page").length,
+      managerOpenedNewPage,
+      pageTargetCountBeforeManagerOpen,
+      pageTargetCountAfterManagerOpen,
     };
     await evaluate(`(() => {
-      ${cleanupUiOnlyBridgeSource()}
+      ${cleanupUiOnlyBridgeSource(true, actionName)}
       return true;
     })()`, 2000);
   }
@@ -1592,6 +2313,109 @@ async function runManagerActionBatch(actions) {
   };
 }
 
+if (uiOnlyMatrix) {
+  const startedAt = Date.now();
+  const genericActions = MANAGER_ALL_ACTION_IDS.filter((actionName) => actionName !== "upstreamConfig");
+  const output = await runManagerActionBatch(genericActions);
+  const upstreamConfig = await verifyUpstreamConfigActualMouseClick().catch((error) => ({
+    ok: false,
+    phase: "upstream-config-exception",
+    error: error?.message || String(error),
+    usedRealTraffic: false,
+  }));
+  output.results.upstreamConfig = {
+    ok: upstreamConfig.ok === true,
+    port,
+    target: { id: target.id, title: target.title, url: target.url },
+    result: {
+      action: "upstreamConfig",
+      lastAction: "upstreamConfig",
+      lastOk: upstreamConfig.ok === true,
+      lastPending: false,
+      pendingCount: 0,
+      queueLength: 0,
+      disabled: false,
+      lastUiOnly: true,
+      actionActualMouse: upstreamConfig.actualMouse,
+      text: upstreamConfig.ok ? "upstreamConfig UI-only form verified" : (upstreamConfig.error || upstreamConfig.phase || "upstreamConfig verification failed"),
+    },
+    managerOpenedNewPage: Number(upstreamConfig.pageTargetCountAfter || 0) > Number(upstreamConfig.pageTargetCountBefore || 0),
+    pageTargetCountBeforeManagerOpen: upstreamConfig.pageTargetCountBefore,
+    pageTargetCountAfterManagerOpen: upstreamConfig.pageTargetCountAfter,
+  };
+  output.ok = output.ok === true && upstreamConfig.ok === true;
+  output.mode = "ui-only-matrix";
+  output.actions = [...MANAGER_ALL_ACTION_IDS];
+  output.actionGroups = {
+    daily: [...MANAGER_DAILY_ACTION_IDS],
+    highImpact: [...MANAGER_HIGH_IMPACT_ACTION_IDS],
+  };
+  const batchBeforeRestore = await evaluate(uiOnlyBatchEvidenceSource(), 5000).catch((error) => ({
+    installed: false,
+    error: error?.message || String(error),
+  }));
+  const batchIdle = await waitForUiOnlyBatchIdle();
+  const batchRestore = batchIdle.ok
+    ? await evaluate(cleanupUiOnlyBatchBridgeSource(true), 5000).catch((error) => ({
+      restored: false,
+      error: error?.message || String(error),
+    }))
+    : { restored: false, safeBridgeRetained: true, error: batchIdle.error };
+  await cleanupInjectedBridges();
+  const uiOnlyTrafficAfter = await nativeRequestSnapshotSafe();
+  const uiOnlyManagerLogAfter = await waitForManagerBridgeLogStable();
+  const nativeRequestDelta = nonNegativeDelta(uiOnlyTrafficAfter, uiOnlyTrafficBefore, "requestCount");
+  const managerActionDelta = nonNegativeDelta(uiOnlyManagerLogAfter, uiOnlyManagerLogBefore, "actionReceivedCount");
+  const managerRequestDelta = nonNegativeDelta(uiOnlyManagerLogAfter, uiOnlyManagerLogBefore, "requestReceivedCount");
+  const stubbedActionNames = [...new Set((batchBeforeRestore.actionCalls || []).map((entry) => String(entry?.action || "")).filter(Boolean))];
+  const missingStubbedActions = genericActions.filter((actionName) => !stubbedActionNames.includes(actionName));
+  const requestPaths = [...new Set((batchBeforeRestore.requestCalls || []).map((entry) => String(entry?.path || "")).filter(Boolean))];
+  const queueUnchanged = Number(batchBeforeRestore.currentQueueLength) === Number(batchBeforeRestore.baselineQueueLength)
+    && Number(batchBeforeRestore.currentPromiseCount) === Number(batchBeforeRestore.baselinePromiseCount);
+  output.usedRealTraffic = nativeRequestDelta === null ? null : nativeRequestDelta > 0;
+  output.zeroSideEffects = batchBeforeRestore.installed === true
+    && batchBeforeRestore.actionShimActive === true
+    && batchBeforeRestore.requestShimActive === true
+    && batchIdle.ok === true
+    && batchRestore.restored === true
+    && queueUnchanged
+    && missingStubbedActions.length === 0
+    && requestPaths.includes("/anticodex/account")
+    && requestPaths.includes("/models")
+    && managerActionDelta === 0
+    && managerRequestDelta === 0
+    && nativeRequestDelta === 0;
+  output.isolationEvidence = {
+    batchBeforeRestore,
+    batchIdle,
+    batchRestore,
+    stubbedActionNames,
+    missingStubbedActions,
+    requestPaths,
+    queueUnchanged,
+    traffic: {
+      before: uiOnlyTrafficBefore,
+      after: uiOnlyTrafficAfter,
+      requestDelta: nativeRequestDelta,
+    },
+    managerBridgeLog: {
+      before: uiOnlyManagerLogBefore,
+      after: uiOnlyManagerLogAfter,
+      actionReceivedDelta: managerActionDelta,
+      requestReceivedDelta: managerRequestDelta,
+    },
+  };
+  output.ok = output.ok === true && output.zeroSideEffects === true && output.usedRealTraffic === false;
+  output.durationMs = Date.now() - startedAt;
+  ws.close();
+  releaseManagerButtonLock(managerButtonLock);
+  emitEvidenceReport("manager-ui-only-button-matrix", {
+    ...compactManagerButtonOutput(output),
+    ...evidenceIdentity,
+  });
+  process.exit(output.ok ? 0 : 1);
+}
+
 if (upstreamConfigOnly) {
   const upstreamConfig = await verifyUpstreamConfigActualMouseClick().catch((error) => ({
     ok: false,
@@ -1602,12 +2426,13 @@ if (upstreamConfigOnly) {
   await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson({
+  emitEvidenceReport("manager-upstream-protocol", {
     ok: upstreamConfig.ok === true,
     port,
     target: { id: target.id, title: target.title, url: target.url },
+    ...evidenceIdentity,
     upstreamConfig,
-  }, compact ? 0 : 2));
+  });
   process.exit(upstreamConfig.ok ? 0 : 1);
 }
 
@@ -1620,18 +2445,57 @@ if (closeOnly) {
   await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
-  console.log(asciiJson({
+  emitEvidenceReport("manager-close-actual-mouse", {
     ok: closeActualMouse.ok === true,
     port,
     target: { id: target.id, title: target.title, url: target.url },
+    ...evidenceIdentity,
     closeActualMouse,
     finalOverlayClosed: closeActualMouse.finalOverlayClosed === true
-  }, compact ? 0 : 2));
+  });
   process.exit(closeActualMouse.ok ? 0 : 1);
 }
 
 if (actions.length > 1) {
   const output = await runManagerActionBatch(actions);
+  if (uiOnlyBatchMode) {
+    const batchBeforeRestore = await evaluate(uiOnlyBatchEvidenceSource(), 5000).catch((error) => ({ installed: false, error: error?.message || String(error) }));
+    const batchIdle = await waitForUiOnlyBatchIdle();
+    const batchRestore = batchIdle.ok
+      ? await evaluate(cleanupUiOnlyBatchBridgeSource(true), 5000).catch((error) => ({ restored: false, error: error?.message || String(error) }))
+      : { restored: false, safeBridgeRetained: true, error: batchIdle.error };
+    const trafficAfter = await nativeRequestSnapshotSafe();
+    const managerLogAfter = await waitForManagerBridgeLogStable();
+    const nativeRequestDelta = nonNegativeDelta(trafficAfter, uiOnlyTrafficBefore, "requestCount");
+    const managerActionDelta = nonNegativeDelta(managerLogAfter, uiOnlyManagerLogBefore, "actionReceivedCount");
+    const managerRequestDelta = nonNegativeDelta(managerLogAfter, uiOnlyManagerLogBefore, "requestReceivedCount");
+    const stubbedActionNames = [...new Set((batchBeforeRestore.actionCalls || []).map((entry) => String(entry?.action || "")).filter(Boolean))];
+    const missingStubbedActions = actions.filter((actionName) => !stubbedActionNames.includes(actionName));
+    const queueUnchanged = Number(batchBeforeRestore.currentQueueLength) === Number(batchBeforeRestore.baselineQueueLength)
+      && Number(batchBeforeRestore.currentPromiseCount) === Number(batchBeforeRestore.baselinePromiseCount);
+    output.usedRealTraffic = nativeRequestDelta === null ? null : nativeRequestDelta > 0;
+    output.zeroSideEffects = batchBeforeRestore.installed === true
+      && batchBeforeRestore.actionShimActive === true
+      && batchBeforeRestore.requestShimActive === true
+      && batchIdle.ok === true
+      && batchRestore.restored === true
+      && queueUnchanged
+      && missingStubbedActions.length === 0
+      && managerActionDelta === 0
+      && managerRequestDelta === 0
+      && nativeRequestDelta === 0;
+    output.isolationEvidence = {
+      batchBeforeRestore,
+      batchIdle,
+      batchRestore,
+      stubbedActionNames,
+      missingStubbedActions,
+      queueUnchanged,
+      traffic: { before: uiOnlyTrafficBefore, after: trafficAfter, requestDelta: nativeRequestDelta },
+      managerBridgeLog: { before: uiOnlyManagerLogBefore, after: managerLogAfter, actionReceivedDelta: managerActionDelta, requestReceivedDelta: managerRequestDelta },
+    };
+    output.ok = output.ok === true && output.zeroSideEffects === true && output.usedRealTraffic === false;
+  }
   await cleanupInjectedBridges();
   ws.close();
   releaseManagerButtonLock(managerButtonLock);
@@ -1759,14 +2623,6 @@ const initial = await evaluate(`
     if (result) result.textContent = ${JSON.stringify(REFRESHED_TEXT)};
   }
   ${uiOnlyBridgeSource(action)}
-  actionCenterTarget.dispatchEvent(new MouseEvent("click", {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-    clientX: actionCenterX,
-    clientY: actionCenterY,
-  }));
-  await sleep(50);
   return {
     ok: true,
     selectedContextId: ${JSON.stringify(pageContextId)},
@@ -1787,6 +2643,11 @@ const initial = await evaluate(`
   };
 })()
 `, 12000);
+const actionActualMouse = initial.ok
+  ? await dispatchManagerActionActualMouse(action)
+  : { ok: false, action, error: initial.error || "Manager action setup failed" };
+initial.actionActualMouse = actionActualMouse;
+if (!actionActualMouse.ok) initial.ok = false;
 const pageTargetsAfterManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
 initial.closeActualMouseOk = closeActualMouse.ok === true;
 initial.closeActualMouse = closeActualMouse;

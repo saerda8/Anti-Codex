@@ -5,6 +5,16 @@
 - Decision owner: user-approved product direction
 - Upstream reference: `BigPizzaV3/CodexPlusPlus` commit `37c628e58b21cd3698b68a72c15133c91ccc5f92` (`v1.2.39`)
 
+> **Acceptance update - 2026-07-23 16:20:** The latest Manager, taskbar-restore and exact-continuation work remains acceptance-only around the same three layers. MSAA/SendInput verifies the copied shell without launching another client; the continuation ledger audits native Codex turns but does not plan, retry or execute production work. No fourth controller was added. Architecture checks and installed UI evidence are green, but the new real task and external result acceptance are still required before 100%.
+
+> **Acceptance override - 2026-07-23:** The three-layer architecture remains unchanged, but later 100% completion statements in this document are historical and currently withdrawn. An installed fatal page plus P1 review findings reopened the shell and integration gates. Architecture compliance is not release proof; current 100% requires the rebuilt installed client, real UI/isolation/provider-switch checks and a new autonomous long task to pass.
+
+> **Acceptance update - 2026-07-23 12:01:** No fourth layer was introduced during closure. The 648/648 source gate confirms the fixed shell -> CodexPlusPlus -> thin Antigravity route; new Gate 5/8 evidence builders only verify that route and the real deliverable. They do not plan, retry or complete the task. Overall release remains 97% until installed and new-task evidence passes.
+
+> **Acceptance update - 2026-07-23 13:12:** The post-adversarial source gate is 665/665, with 135/135 runtime-race checks and 37/37 Gate 8 checks. The added host-review boundary is acceptance-only: it runs after native task completion, does not send prompts, select models, plan work, call production tools on behalf of the task or create a fourth controller. Installed and real-task evidence remain pending, so architecture compliance still does not justify a 100% release claim.
+
+> **Acceptance update - 2026-07-23 14:00:** The Gate 4/5 credential repair stays inside the fixed three layers: Codex authenticates to its local CodexPlusPlus proxy with an isolated local bearer, while CodexPlusPlus authenticates to the thin Antigravity Chat adapter with that adapter's separate generated token. The 8484 test dependency was removed; no controller or task policy was added. The source gate is 672/672, but installed and real-task evidence remain pending, so release is still 97%.
+
 ## 1. Final Product Shape
 
 Anti-Codex has exactly three layers. A fourth task-control layer is forbidden.
@@ -12,7 +22,7 @@ Anti-Codex has exactly three layers. A fourth task-control layer is forbidden.
 ```mermaid
 flowchart LR
     U["User"] --> C["Layer 1: official Codex Desktop shell and native harness"]
-    P["Layer 2: upstream CodexPlusPlus with seven narrow compatibility patches"] -. "launches and configures isolated client" .-> C
+    P["Layer 2: upstream CodexPlusPlus with nine narrow compatibility patches"] -. "launches and configures isolated client" .-> C
     C --> P
     P --> X["Third-party Responses or Chat API"]
     X --> P
@@ -64,11 +74,11 @@ The official Codex installation is a read-only source for guarded package synchr
 - CodexPlusPlus state used by Anti-Codex must also be isolated from any CodexPlusPlus configuration that targets original Codex.
 - Original Codex installation files, `%USERPROFILE%\.codex`, sessions, login state, running processes and shortcuts must remain unchanged.
 - Every compatibility, update and release test snapshots original Codex process IDs plus relevant file/state fingerprints before and after. Any unexplained change fails the gate.
-- If the upstream CodexPlusPlus provider/proxy plus the seven approved patches cannot select the copied client path and isolated state, the compatibility gate fails. Anti-Codex must not fall back to operating on original Codex.
+- If the upstream CodexPlusPlus provider/proxy plus the nine approved patches cannot select the copied client path and isolated state, the compatibility gate fails. Anti-Codex must not fall back to operating on original Codex.
 
 ## 3. Layer 2: CodexPlusPlus Integration
 
-Use upstream CodexPlusPlus as a separately licensed component. Its provider management and Responses/Chat protocol implementation remain upstream behavior. Anti-Codex carries exactly seven rebaseable patches: copied-product isolation, plain-HTTP loopback cancellation, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, image-bearing tool-output preservation, structured `apply_patch` priority/guidance, and suppression of late reasoning only after visible text has already begun so one Chat stream maps to one active Responses output item.
+Use upstream CodexPlusPlus as a separately licensed component. Its provider management and Responses/Chat protocol implementation remain upstream behavior. Anti-Codex carries exactly nine rebaseable patches: copied-product isolation, plain-HTTP loopback cancellation, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, image-bearing tool-output preservation, structured `apply_patch` priority/guidance, suppression of late reasoning only after visible text has already begun, an explicit Codex tool-conversion audit patch, and the bounded long-multimodal helper-body compatibility patch.
 
 The native Codex frontend is authoritative for provider and model selection. Anti-Codex must expose one stable catalog containing exact Antigravity models, a generic Antigravity slot, a generic third-party slot and namespaced third-party models. The backend may translate those identifiers to an upstream relay/model, but it must never silently replace a concrete frontend selection with a different saved or fixed model.
 
@@ -102,7 +112,7 @@ License rule:
 - do not paste or merge AGPL CodexPlusPlus source into the current non-commercial codebase;
 - keep the component and isolation patch in a separately licensed AGPL source/build boundary and retain upstream notices;
 - record every isolation patch hunk and keep it rebaseable against the pinned upstream commit;
-- if any additional provider or protocol modification beyond the seven documented patches becomes necessary, stop and record the exact missing behavior before implementation;
+- if any additional provider or protocol modification beyond the nine documented patches becomes necessary, stop and record the exact missing behavior before implementation;
 - do not silently reimplement CodexPlusPlus behavior after a compatibility failure.
 
 ## 4. Layer 3: Thin Antigravity Chat Adapter
@@ -178,21 +188,21 @@ The exact file-by-file deletion ledger is [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_
 The steps are sequential. A failed gate blocks the next step.
 
 1. **Inventory gate**: this document and the implementation audit identify every kept, reused and retired active-path module.
-2. **No-traffic compatibility gate**: CodexPlusPlus with only the six documented patches launches/configures the Anti-Codex client copy with disposable isolated state against a deterministic local fake third-party Chat Completions provider. Model selection, history, one tool call/result, streaming, cancellation, terminal errors and text-only native helpers must pass without the Antigravity adapter, and original Codex files/processes/state must have zero changes. **Complete on v1.2.39; copied-client release proof must be rerun after each upstream update.**
+2. **No-traffic compatibility gate**: CodexPlusPlus with only the nine documented patches launches/configures the Anti-Codex client copy with disposable isolated state against a deterministic local fake third-party Chat Completions provider. Model selection, history, one tool call/result, streaming, cancellation, terminal errors and text-only native helpers must pass without the Antigravity adapter, and original Codex files/processes/state must have zero changes. **Current v1.2.39 no-traffic proof passes; copied-client release proof must be rerun after each upstream update.**
 3. **Provider contract gate**: a small standalone Antigravity Chat Adapter passes deterministic Chat Completions contract tests without the mixed server. **Complete: 19/19 deterministic tests plus one real exact native-tool continuation.**
 4. **Route switch gate**: the disposable CodexPlusPlus provider points to the adapter; diagnostics prove the mixed translator is not serving the request. **Complete: 23/23 with one real native file-tool continuation and zero old-route hits.**
-5. **Component integration gate**: the visible copied client is wired to the fixed route; current official Codex UI/features, Anti-Codex branding and bounded text/tool work pass. **Complete.**
-6. **Bounded edge gate**: quota exhaustion, cancellation, tool failure, malformed arguments, adapter restart, client restart, same-task resume and parallel calls pass through focused tests. **Complete.**
-7. **Component completion and release gate**: old active-path code is removed, official UI/brand regressions pass, packaging/update/rollback are proven, validation tasks are backed up/cleaned, and each of the three reported product parts reaches 100% implementation completion. **Complete.**
-8. **Final long-task acceptance gate**: formal inventory and combined migration/greenfield journeys pass result-based host verification, followed by tangible media and website maintenance tasks across third-party and Antigravity routes. **Complete; current artifacts and receipts are recorded in `CURRENT_LONG_TASK_ACCEPTANCE.md`.**
+5. **Component integration gate**: the visible copied client is wired to the fixed route; current official Codex UI/features, Anti-Codex branding and bounded text/tool work pass. **Historical proof exists; current-version real-traffic proof is reopened.**
+6. **Bounded edge gate**: quota exhaustion, cancellation, tool failure, malformed arguments, adapter restart, client restart, same-task resume and parallel calls pass through focused tests. **Current deterministic proof passes; release still depends on fresh Gate 5 evidence.**
+7. **Component completion and release gate**: old active-path code is removed, official UI/brand regressions pass, packaging/update/rollback are proven, validation tasks are backed up/cleaned, and each of the three reported product parts reaches 100% implementation completion. **Reopened until fresh current-version release evidence passes.**
+8. **Final long-task acceptance gate**: formal inventory and combined migration/greenfield journeys pass result-based host verification, followed by tangible media and website maintenance tasks across third-party and Antigravity routes. **Historical proof exists, but its artifacts were deleted; a new autonomous task is required.**
 
-## 7. Current Implemented Status (2026-07-19)
+## 7. Historical Implemented Status (2026-07-19; withdrawn as current release proof)
 
 1. **Layer 1 shell/client: 100%.** The isolated copy is synchronized to official Codex `26.715.4045.0` with CLI `0.145.0-alpha.18`. Anti-Codex icons, Chinese `管理`, native task/tool behavior and original-Codex isolation remain intact. The required scheduled-task Node owner is hidden; a 120-second, eight-sample check kept one visible Anti-Codex window and the original Codex process alive.
 2. **Layer 2 CodexPlusPlus: 100%.** Pinned upstream `v1.2.39` plus the six documented patches replays to tree `d8d9fd0f35e3eae44591b7a008a628b8006b6eea`. Ordinary third-party APIs still bypass Antigravity and use upstream conversion.
 3. **Layer 3 Antigravity adapter: 100%.** The adapter remains a thin Chat-to-Cascade mapping. Real quota/location failures stop honestly, while provider fallback and artifact continuation remain Codex-owned.
 
-Overall implementation and tangible long-task acceptance are 100%. Future Codex/CodexPlusPlus updates reopen only their compatibility and release checks, not this architecture.
+This section recorded a historical 100% snapshot. It is not a current release claim; the architecture remains fixed while current compatibility, visible integration and long-task acceptance are revalidated.
 
 ## 8. Acceptance Rules
 

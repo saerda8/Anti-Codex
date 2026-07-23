@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-14T16:16:00.463Z",
+  "generatedAtUtc": "2026-07-23T06:10:12.369Z",
   "gate": "Gate 3 thin Antigravity Chat adapter contract",
   "ok": true,
   "failedIds": [],
@@ -11,6 +11,22 @@
   "coverageKind": "real-traffic",
   "modelTraffic": "one bounded real native tool round trip",
   "checks": [
+    {
+      "id": "current_release_binding_available",
+      "ok": true,
+      "releaseBinding": {
+        "schema": "anticodex-release-binding-v1",
+        "valid": true,
+        "officialShellVersion": "26.715.10079.0",
+        "activeShellVersion": "26.715.10079.0",
+        "codexPlusPlusVersion": "1.2.39",
+        "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
+        "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+        "codexPlusPlusPatchTreeSha256": "e2d570056d1e42a2a87362eef756886230fb3fc6d1f1da4dc1c3d5ec44e316b3",
+        "codexPlusPlusPatchCount": 9,
+        "syncReadinessSha256": "a3858523abc0f98003b44ffa38243c673f5c361e367b1b090348f946a99df896"
+      }
+    },
     {
       "id": "provider_syntax",
       "ok": true,
@@ -41,8 +57,8 @@
       "id": "deterministic_contract_tests",
       "ok": true,
       "exitCode": 0,
-      "tests": 19,
-      "pass": 19,
+      "tests": 52,
+      "pass": 52,
       "fail": 0,
       "stderr": ""
     },
@@ -52,29 +68,29 @@
       "sources": [
         {
           "path": "translator/provider/antigravity-chat-adapter.mjs",
-          "bytes": 19534,
-          "sha256": "5e4cc15e672da7ac689e82cba795c686916133a61a9e53c35aab86ac14e3541b",
+          "bytes": 38813,
+          "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
         {
           "path": "translator/provider/antigravity-chat-server.mjs",
-          "bytes": 5696,
-          "sha256": "cf4f6358af357fe57263972273a702df67865c738007b1e9ab9f55dd5623dbb6",
+          "bytes": 7548,
+          "sha256": "a5ee1ae35b11e6dc0c0d07e47574d510cb072dc8e053c210cdceadce4a76959d",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
         {
           "path": "translator/provider/antigravity-cascade-client.mjs",
-          "bytes": 25065,
-          "sha256": "16e86dc37312671d5c2ab79184647d1ed761e816079ca43e56034cf4a80324b7",
+          "bytes": 34826,
+          "sha256": "d6a99121a368f6a861047e3773edadd83fbc5e1be79e6f963ba7fd5fd985e47d",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
         {
           "path": "translator/provider/start-antigravity-chat-provider.mjs",
-          "bytes": 1712,
-          "sha256": "9b1d46782f25cd56fbb89d85c0d78eefe58ef33f0e76a0cd9e8ea222c929d422",
+          "bytes": 1789,
+          "sha256": "5662abc153021c7940824e59b5651b793ce281d647710ebc48b006a15fe1145f",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         }
@@ -87,33 +103,24 @@
     {
       "id": "provider_boundary_small",
       "ok": true,
-      "totalBytes": 52007
+      "totalBytes": 82976
     },
     {
       "id": "real_desktop_read_only_discovery",
       "ok": true,
-      "modelCount": 20,
+      "modelCount": 11,
       "modelIds": [
-        "gemini-3.5-flash-low",
+        "gemini-3.6-flash-high",
+        "gemini-3.6-flash-medium",
+        "gemini-3.6-flash-low",
         "gemini-3-flash-agent",
+        "gemini-3.5-flash-low",
         "gemini-3.5-flash-extra-low",
-        "gemini-3.1-pro-low",
         "gemini-pro-agent",
+        "gemini-3.1-pro-low",
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
-        "gpt-oss-120b-medium",
-        "chat_20706",
-        "chat_23310",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.5-flash-thinking",
-        "gemini-2.5-pro",
-        "gemini-3-flash",
-        "gemini-3.1-flash-image",
-        "gemini-3.1-flash-lite",
-        "gemini-3.1-pro-high",
-        "tab_flash_lite_preview",
-        "tab_jump_flash_lite_preview"
+        "gpt-oss-120b-medium"
       ],
       "signedIn": true,
       "identityAvailable": true,
@@ -126,17 +133,17 @@
       "used": true,
       "reason": "passed",
       "model": "gemini-3.5-flash-low",
-      "inputMarker": "REAL_ADAPTER_TOOL_INPUT_1300C88AE39A",
-      "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+      "inputMarker": "REAL_ADAPTER_TOOL_INPUT_8CCD42047F1C",
+      "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_8CCD42047F1C",
       "firstStatus": 200,
       "secondStatus": 200,
       "firstFinishReason": "tool_calls",
       "secondFinishReason": "stop",
       "toolName": "echo_probe",
-      "toolCallId": "call_69e4b2beb00645bf93e2ed9bfd2fe697",
+      "toolCallId": "call_513111bbaa494d54a68e23ac2733d35f",
       "exactArguments": true,
       "exactToolResultObserved": true,
-      "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+      "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_8CCD42047F1C",
       "counters": {
         "start": 1,
         "resume": 1,
@@ -146,28 +153,19 @@
   ],
   "readOnlyProbe": {
     "ok": true,
-    "modelCount": 20,
+    "modelCount": 11,
     "modelIds": [
-      "gemini-3.5-flash-low",
+      "gemini-3.6-flash-high",
+      "gemini-3.6-flash-medium",
+      "gemini-3.6-flash-low",
       "gemini-3-flash-agent",
+      "gemini-3.5-flash-low",
       "gemini-3.5-flash-extra-low",
-      "gemini-3.1-pro-low",
       "gemini-pro-agent",
+      "gemini-3.1-pro-low",
       "claude-sonnet-4-6",
       "claude-opus-4-6-thinking",
-      "gpt-oss-120b-medium",
-      "chat_20706",
-      "chat_23310",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.5-flash-thinking",
-      "gemini-2.5-pro",
-      "gemini-3-flash",
-      "gemini-3.1-flash-image",
-      "gemini-3.1-flash-lite",
-      "gemini-3.1-pro-high",
-      "tab_flash_lite_preview",
-      "tab_jump_flash_lite_preview"
+      "gpt-oss-120b-medium"
     ],
     "signedIn": true,
     "identityAvailable": true,
@@ -179,17 +177,17 @@
     "ok": true,
     "reason": "passed",
     "model": "gemini-3.5-flash-low",
-    "inputMarker": "REAL_ADAPTER_TOOL_INPUT_1300C88AE39A",
-    "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+    "inputMarker": "REAL_ADAPTER_TOOL_INPUT_8CCD42047F1C",
+    "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_8CCD42047F1C",
     "firstStatus": 200,
     "secondStatus": 200,
     "firstFinishReason": "tool_calls",
     "secondFinishReason": "stop",
     "toolName": "echo_probe",
-    "toolCallId": "call_69e4b2beb00645bf93e2ed9bfd2fe697",
+    "toolCallId": "call_513111bbaa494d54a68e23ac2733d35f",
     "exactArguments": true,
     "exactToolResultObserved": true,
-    "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_1300C88AE39A",
+    "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_8CCD42047F1C",
     "counters": {
       "start": 1,
       "resume": 1,
@@ -199,33 +197,45 @@
   "providerSources": [
     {
       "path": "translator/provider/antigravity-chat-adapter.mjs",
-      "bytes": 19534,
-      "sha256": "5e4cc15e672da7ac689e82cba795c686916133a61a9e53c35aab86ac14e3541b",
+      "bytes": 38813,
+      "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
     {
       "path": "translator/provider/antigravity-chat-server.mjs",
-      "bytes": 5696,
-      "sha256": "cf4f6358af357fe57263972273a702df67865c738007b1e9ab9f55dd5623dbb6",
+      "bytes": 7548,
+      "sha256": "a5ee1ae35b11e6dc0c0d07e47574d510cb072dc8e053c210cdceadce4a76959d",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
     {
       "path": "translator/provider/antigravity-cascade-client.mjs",
-      "bytes": 25065,
-      "sha256": "16e86dc37312671d5c2ab79184647d1ed761e816079ca43e56034cf4a80324b7",
+      "bytes": 34826,
+      "sha256": "d6a99121a368f6a861047e3773edadd83fbc5e1be79e6f963ba7fd5fd985e47d",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
     {
       "path": "translator/provider/start-antigravity-chat-provider.mjs",
-      "bytes": 1712,
-      "sha256": "9b1d46782f25cd56fbb89d85c0d78eefe58ef33f0e76a0cd9e8ea222c929d422",
+      "bytes": 1789,
+      "sha256": "5662abc153021c7940824e59b5651b793ce281d647710ebc48b006a15fe1145f",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     }
   ],
+  "releaseBinding": {
+    "schema": "anticodex-release-binding-v1",
+    "valid": true,
+    "officialShellVersion": "26.715.10079.0",
+    "activeShellVersion": "26.715.10079.0",
+    "codexPlusPlusVersion": "1.2.39",
+    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
+    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+    "codexPlusPlusPatchTreeSha256": "e2d570056d1e42a2a87362eef756886230fb3fc6d1f1da4dc1c3d5ec44e316b3",
+    "codexPlusPlusPatchCount": 9,
+    "syncReadinessSha256": "a3858523abc0f98003b44ffa38243c673f5c361e367b1b090348f946a99df896"
+  },
   "workerReview": {
     "jobId": "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
     "accepted": [
@@ -239,15 +249,5 @@
       "old response-id request registry",
       "any task retry or completion policy"
     ]
-  },
-  "evidenceRecovery": {
-    "recovered": true,
-    "recoveredAtUtc": "2026-07-15T19:36:55.2233329Z",
-    "sourceRollout": "C:/Users/XD/.codex/sessions/2026/07/09/rollout-2026-07-09T02-19-50-019f42f5-22ad-72a2-a847-2b134d2126e6.jsonl",
-    "eventTimestampUtc": "2026-07-14T16:16:00.463Z",
-    "callId": "call_1flxO4ghZoyEP0kyAyxCANw9",
-    "receiptSha256": "a5955995dfa96e011d77a71a0dfbcd39ba5405c20d04605d22949a9a57615155",
-    "receiptLength": 2551,
-    "reason": "A no-traffic readiness run from the legacy script overwrote the formal report. This file restores the exact persisted execution receipt without replaying model traffic."
   }
 }

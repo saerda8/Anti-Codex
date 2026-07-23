@@ -11,6 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 $failures = New-Object System.Collections.Generic.List[string]
 $startedAt = [DateTime]::UtcNow
+$acceptanceRunId = [guid]::NewGuid().ToString("N")
 
 if ($Fast) { $SkipIconPaletteProbe = $true }
 
@@ -159,6 +160,11 @@ $postSyncVerifier = Join-Path $scriptsRoot "test-anticodex-installed-overall.ps1
 $startScript = Join-Path $scriptsRoot "start-anticodex.ps1"
 $fixedRouteSupervisorScript = Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"
 $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+$interactivePowerShell = $powershell
+$interactivePowerShellCandidate = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe" } else { "" }
+if ($interactivePowerShellCandidate -and (Test-Path -LiteralPath $interactivePowerShellCandidate -PathType Leaf)) {
+    $interactivePowerShell = [IO.Path]::GetFullPath($interactivePowerShellCandidate)
+}
 $schtasks = Join-Path ([Environment]::SystemDirectory) "schtasks.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
@@ -166,10 +172,10 @@ $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) 
 $launchTaskName = "Anti-Codex Launcher"
 $updateTaskName = "Anti-Codex Updater"
 $launchTaskScript = Join-Path $scriptsRoot "start-anticodex-task.mjs"
+$shortcutBrokerScript = Join-Path $scriptsRoot "start-anticodex-shortcut-broker.ps1"
 $launchTaskActionArguments = "`"$launchTaskScript`" --hide-console"
 $updateTaskScript = Join-Path $scriptsRoot "start-anticodex-update-task.mjs"
-$launchTaskShortcutCommand = "`$service = New-Object -ComObject 'Schedule.Service'; `$service.Connect(); `$task = `$service.GetFolder('\').GetTask('\$launchTaskName'); [void]`$task.Run(`$null)"
-$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$launchTaskShortcutCommand`""
+$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shortcutBrokerScript`" -InstallRoot `"$installRoot`""
 $updateTaskActionArguments = "`"$updateTaskScript`" --hide-console"
 $programsPath = [Environment]::GetFolderPath("Programs")
 if (-not $programsPath) {
@@ -215,7 +221,7 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
     Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock"
 }
 
-foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
+foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $launchTaskScript, $shortcutBrokerScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure "sync readiness missing required path: $path"
     }
@@ -286,7 +292,9 @@ if (-not (Has-Text $managerScript "ANTICODEX_MANAGER_API")) { Add-Failure "manag
 if (-not (Has-Text $cdpInjectScript "ANTICODEX_MANAGER_API_CANDIDATES")) { Add-Failure "CDP injector does not pass gateway URL candidates to the embedded panel" }
 if (-not (Has-Text $cdpInjectScript "ANTICODEX_MANAGER_SNAPSHOT")) { Add-Failure "CDP injector does not preload the embedded manager status snapshot" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_MANAGER_ACTION_QUEUE__")) { Add-Failure "manager bridge missing CDP action queue" }
-if (-not (Has-Text $managerBridgeScript "splice\(0\)")) { Add-Failure "manager bridge missing action queue drain" }
+if (-not (Has-Text $managerBridgeScript "__ANTICODEX_ACK_MANAGER_ACTION__")) { Add-Failure "manager bridge missing explicit action acknowledgement" }
+if (-not (Has-Text $managerBridgeScript "leaseCount")) { Add-Failure "manager bridge missing action queue leasing" }
+if (Has-Text $managerBridgeScript "splice\(0\)") { Add-Failure "manager bridge still destructively drains actions before acknowledgement" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager bridge missing page action function" }
 if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v107"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
@@ -645,12 +653,12 @@ function New-AntiCodexShortcutSpec {
         path = $Path
         displayName = $displayName
         expectedDisplayName = $displayName
-        expectedTarget = $powershell
+        expectedTarget = if ($UseLaunchTask) { $interactivePowerShell } else { $powershell }
         expectedScript = $ExpectedScript
         expectedLauncherTarget = $ExpectedScript
         expectedArguments = $expectedArguments
         expectedIconLocation = $ExpectedIconLocation
-        launchMode = if ($UseLaunchTask) { "scheduled-task" } else { "powershell-direct" }
+        launchMode = if ($UseLaunchTask) { "shortcut-broker" } else { "powershell-direct" }
         useNativeLauncher = $false
     }
 }
@@ -683,11 +691,7 @@ function Test-AntiCodexShortcutSpec {
             $arguments = [string]$shortcut.Arguments
             $description = [string]$shortcut.Description
             $iconLocation = [string]$shortcut.IconLocation
-            $actualLauncherTarget = if ([string]$Spec.launchMode -eq "scheduled-task") {
-                [string]$launchTaskEvidence.actualScript
-            } else {
-                Get-AntiCodexShortcutLauncherTarget $arguments
-            }
+            $actualLauncherTarget = Get-AntiCodexShortcutLauncherTarget $arguments
             $targetMatches = ($target -ieq [string]$Spec.expectedTarget)
             $launcherTargetMatches = ($actualLauncherTarget -and ($actualLauncherTarget -ieq [string]$Spec.expectedLauncherTarget))
             $scriptMatches = $launcherTargetMatches
@@ -748,8 +752,8 @@ function Test-AntiCodexShortcutSpec {
 }
 
 $shortcutSpecs = @(
-    New-AntiCodexShortcutSpec -Label "Desktop Anti-Codex" -Path $desktopMainShortcut -ExpectedScript $launchTaskScript -ExpectedIconLocation $expectedDesktopShortcutIconLocation -UseLaunchTask
-    New-AntiCodexShortcutSpec -Label "Start Menu Anti-Codex" -Path $startMenuMainShortcut -ExpectedScript $launchTaskScript -ExpectedIconLocation $expectedShortcutIconLocation -UseLaunchTask
+    New-AntiCodexShortcutSpec -Label "Desktop Anti-Codex" -Path $desktopMainShortcut -ExpectedScript $shortcutBrokerScript -ExpectedIconLocation $expectedDesktopShortcutIconLocation -UseLaunchTask
+    New-AntiCodexShortcutSpec -Label "Start Menu Anti-Codex" -Path $startMenuMainShortcut -ExpectedScript $shortcutBrokerScript -ExpectedIconLocation $expectedShortcutIconLocation -UseLaunchTask
     New-AntiCodexShortcutSpec -Label "Start Menu sync" -Path $startMenuSyncShortcut -ExpectedScript $syncLauncherScript -ExpectedIconLocation $expectedShortcutIconLocation
     New-AntiCodexShortcutSpec -Label "Start Menu rollback" -Path $startMenuRollbackShortcut -ExpectedScript $rollbackLauncherScript -ExpectedIconLocation $expectedShortcutIconLocation
     New-AntiCodexShortcutSpec -Label "Start Menu manager" -Path $startMenuManagerShortcut -ExpectedScript $managerScript -ExpectedIconLocation $expectedShortcutIconLocation
@@ -764,12 +768,12 @@ if (-not $startMenuMainShortcutExists) {
         $startMenuMainShortcutTarget = [string]$mainShortcut.TargetPath
         $startMenuMainShortcutArguments = [string]$mainShortcut.Arguments
         $startMenuMainShortcutIconLocation = [string]$mainShortcut.IconLocation
-        if ($startMenuMainShortcutTarget -ine $powershell) {
+        if ($startMenuMainShortcutTarget -ine $interactivePowerShell) {
             Add-Failure "Start Menu Anti-Codex shortcut target is not the Windows launch broker: $startMenuMainShortcutTarget"
         }
-        $startMenuLauncherTarget = [string]$launchTaskEvidence.actualScript
-        if ($startMenuLauncherTarget -ine $launchTaskScript) {
-            Add-Failure "Start Menu Anti-Codex shortcut does not launch the protected startup script: $startMenuMainShortcutArguments"
+        $startMenuLauncherTarget = Get-AntiCodexShortcutLauncherTarget $startMenuMainShortcutArguments
+        if ($startMenuLauncherTarget -ine $shortcutBrokerScript) {
+            Add-Failure "Start Menu Anti-Codex shortcut does not launch the protected shortcut broker: $startMenuMainShortcutArguments"
         }
         if ($startMenuMainShortcutArguments -cne $launchTaskShortcutArguments) {
             Add-Failure "Start Menu Anti-Codex shortcut does not call the isolated launch task: $startMenuMainShortcutArguments"
@@ -790,12 +794,12 @@ if (-not $desktopMainShortcutExists) {
         $desktopMainShortcutTarget = [string]$desktopShortcut.TargetPath
         $desktopMainShortcutArguments = [string]$desktopShortcut.Arguments
         $desktopMainShortcutIconLocation = [string]$desktopShortcut.IconLocation
-        if ($desktopMainShortcutTarget -ine $powershell) {
+        if ($desktopMainShortcutTarget -ine $interactivePowerShell) {
             Add-Failure "Desktop Anti-Codex shortcut target is not the Windows launch broker: $desktopMainShortcutTarget"
         }
-        $desktopLauncherTarget = [string]$launchTaskEvidence.actualScript
-        if ($desktopLauncherTarget -ine $launchTaskScript) {
-            Add-Failure "Desktop Anti-Codex shortcut does not launch the protected startup script: $desktopMainShortcutArguments"
+        $desktopLauncherTarget = Get-AntiCodexShortcutLauncherTarget $desktopMainShortcutArguments
+        if ($desktopLauncherTarget -ine $shortcutBrokerScript) {
+            Add-Failure "Desktop Anti-Codex shortcut does not launch the protected shortcut broker: $desktopMainShortcutArguments"
         }
         if ($desktopMainShortcutArguments -cne $launchTaskShortcutArguments) {
             Add-Failure "Desktop Anti-Codex shortcut does not call the isolated launch task: $desktopMainShortcutArguments"
@@ -1054,12 +1058,15 @@ if (
 
 $endedAt = [DateTime]::UtcNow
 $elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
+$checkedAt = $endedAt.ToString("o")
 if ($Fast -and $FastMaxElapsedMs -gt 0 -and $elapsedMs -gt $FastMaxElapsedMs) {
     Add-Failure "fast sync readiness exceeded ${FastMaxElapsedMs}ms: ${elapsedMs}ms"
 }
 
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    generatedAt = $checkedAt
+    checkedAt = $checkedAt
     reportName = "sync-readiness"
     failures = $failures.ToArray()
     elapsedMs = $elapsedMs
@@ -1068,6 +1075,17 @@ $result = [pscustomobject]@{
     usedRealTraffic = $false
     behaviorCovered = $true
     coverageKind = if ($Fast) { "installed-fast-no-traffic" } else { "installed-no-traffic" }
+    processIdentity = [pscustomobject]@{
+        verifierPid = $PID
+        verifierProcess = [Diagnostics.Process]::GetCurrentProcess().ProcessName
+    }
+    sessionIdentity = [pscustomobject]@{
+        runId = $acceptanceRunId
+        kind = "offline-sync-readiness"
+        runtimeRoot = $runtimeRootFull
+        installRoot = $installRoot
+        cdpSessionRequired = $false
+    }
     skipAccountProxyProbe = [bool]$SkipAccountProxyProbe
     skipIconPaletteProbe = [bool]$SkipIconPaletteProbe
     installRoot = $installRoot

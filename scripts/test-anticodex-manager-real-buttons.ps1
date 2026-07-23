@@ -5,7 +5,9 @@ param(
     [string]$RuntimeRoot = $(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Anti-Codex\runtime"),
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$CdpPort = 0,
+    [int]$ExpectedOriginalCodexPid = 0,
     [string[]]$Actions = @("pluginCapabilities", "mcpSkills"),
+    [switch]$UiOnlyMatrix,
     [int]$TimeoutSec = 480,
     [int]$MaxAttempts = 2
 )
@@ -147,15 +149,31 @@ function Get-ManagerButtonActionResult {
 }
 
 function Invoke-ManagerButtonAction {
-    param([string]$ActionName)
-    $nodeArgs = @(
-        $managerButtonScript,
-        "--port", "$resolvedCdpPort",
-        "--base-url", $BaseUrl,
-        "--action", $ActionName,
-        "--timeout-ms", "$([Math]::Max(1, $TimeoutSec) * 1000)",
-        "--compact", "1"
-    )
+    param([string]$ActionName, [switch]$RunUiOnlyMatrix)
+    if ($RunUiOnlyMatrix) {
+        $nodeArgs = @(
+            $managerButtonScript,
+            "--port", "$resolvedCdpPort",
+            "--base-url", $BaseUrl,
+            "--report-root", $ReportRoot,
+            "--expected-original-codex-pid", "$ExpectedOriginalCodexPid",
+            "--ui-only-matrix", "1",
+            "--verification-mode", "ui-only",
+            "--timeout-ms", "5000",
+            "--compact", "1"
+        )
+    } else {
+        $nodeArgs = @(
+            $managerButtonScript,
+            "--port", "$resolvedCdpPort",
+            "--base-url", $BaseUrl,
+            "--report-root", $ReportRoot,
+            "--expected-original-codex-pid", "$ExpectedOriginalCodexPid",
+            "--action", $ActionName,
+            "--timeout-ms", "$([Math]::Max(1, $TimeoutSec) * 1000)",
+            "--compact", "1"
+        )
+    }
     $stdoutPath = [IO.Path]::GetTempFileName()
     $stderrPath = [IO.Path]::GetTempFileName()
     $actionStartedAt = [DateTime]::UtcNow
@@ -168,7 +186,8 @@ function Invoke-ManagerButtonAction {
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
         [void]$process.Handle
-        $completed = Wait-ManagerButtonProcess -Process $process -TimeoutSeconds ([Math]::Max(1, $TimeoutSec + 20))
+        $processTimeoutSec = if ($RunUiOnlyMatrix) { [Math]::Max(90, $TimeoutSec + 20) } else { [Math]::Max(1, $TimeoutSec + 20) }
+        $completed = Wait-ManagerButtonProcess -Process $process -TimeoutSeconds $processTimeoutSec
         if (-not $completed) {
             try { $process.Kill() } catch {}
             Wait-ManagerButtonProcess -Process $process -TimeoutSeconds 3 -PollMs 100 | Out-Null
@@ -221,9 +240,9 @@ function Test-TransientManagerButtonFailure {
 
 $runtimeRootFull = [IO.Path]::GetFullPath($RuntimeRoot)
 $installRoot = [IO.Path]::GetFullPath((Split-Path -Parent $runtimeRootFull))
-$managerButtonScript = Join-Path $runtimeRootFull "scripts\test-anticodex-manager-button.mjs"
+$managerButtonScript = Join-Path $PSScriptRoot "test-anticodex-manager-button.mjs"
 if (-not (Test-Path -LiteralPath $managerButtonScript -PathType Leaf)) {
-    $managerButtonScript = Join-Path $PSScriptRoot "test-anticodex-manager-button.mjs"
+    $managerButtonScript = Join-Path $runtimeRootFull "scripts\test-anticodex-manager-button.mjs"
 }
 if (-not (Test-Path -LiteralPath $managerButtonScript -PathType Leaf)) {
     throw "Manager button verifier missing: $managerButtonScript"
@@ -231,6 +250,113 @@ if (-not (Test-Path -LiteralPath $managerButtonScript -PathType Leaf)) {
 
 $node = Resolve-Node $installRoot
 $resolvedCdpPort = Resolve-CdpPort $CdpPort
+
+if ($UiOnlyMatrix) {
+    $reportName = "manager-ui-only-button-matrix"
+    $dailyActions = @(
+        "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+        "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+        "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports"
+    )
+    $highImpactActions = @(
+        "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+        "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull"
+    )
+    $expectedActions = @($dailyActions + $highImpactActions)
+    $matrixRun = Invoke-ManagerButtonAction -ActionName "ui-only-matrix" -RunUiOnlyMatrix
+    $payload = $matrixRun.payload
+
+    if ($matrixRun.exitCode -eq -1) {
+        Add-Failure "Manager UI-only button matrix timed out"
+    } elseif ($matrixRun.exitCode -ne 0) {
+        Add-Failure "Manager UI-only button matrix failed with exit code $($matrixRun.exitCode)"
+    }
+    if (-not $payload) {
+        Add-Failure "Manager UI-only button matrix did not emit valid JSON"
+    } else {
+        if ($payload.ok -ne $true) { Add-Failure "Manager UI-only button matrix reported ok=false" }
+        if ([string]$payload.mode -ne "ui-only-matrix") { Add-Failure "Manager UI-only button matrix mode evidence is missing" }
+        if ($payload.usedRealTraffic -ne $false) { Add-Failure "Manager UI-only button matrix did not prove usedRealTraffic=false" }
+        if ($payload.zeroSideEffects -ne $true) { Add-Failure "Manager UI-only button matrix did not prove zeroSideEffects=true" }
+        $isolation = $payload.isolationEvidence
+        if (-not $isolation) {
+            Add-Failure "Manager UI-only bridge isolation evidence is missing"
+        } else {
+            if ($isolation.batchBeforeRestore.actionShimActive -ne $true) { Add-Failure "Manager UI-only action shim was not active for the full batch" }
+            if ($isolation.batchBeforeRestore.requestShimActive -ne $true) { Add-Failure "Manager UI-only request shim was not active for the full batch" }
+            if ($isolation.batchRestore.restored -ne $true) { Add-Failure "Manager UI-only bridges were not restored after the batch" }
+            if ($isolation.queueUnchanged -ne $true) { Add-Failure "Manager real queue or promise baseline changed during UI-only verification" }
+            if (@($isolation.missingStubbedActions).Count -ne 0) { Add-Failure "Manager UI-only action shim did not serve every tested action" }
+            if (@($isolation.requestPaths) -notcontains "/anticodex/account") { Add-Failure "Manager UI-only request shim did not serve the account read" }
+            if (@($isolation.requestPaths) -notcontains "/models") { Add-Failure "Manager UI-only request shim did not serve the model read" }
+            if ([int]$isolation.traffic.requestDelta -ne 0) { Add-Failure "Manager UI-only verification changed the native model request count" }
+            if ([int]$isolation.managerBridgeLog.actionReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real action bridge" }
+            if ([int]$isolation.managerBridgeLog.requestReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real request bridge" }
+        }
+        if ((@($payload.actions) -join "|") -ne ($expectedActions -join "|")) {
+            Add-Failure "Manager UI-only button matrix action coverage drifted from the complete 20-button contract"
+        }
+        if ((@($payload.actionGroups.daily) -join "|") -ne ($dailyActions -join "|")) {
+            Add-Failure "Manager UI-only daily action group is incomplete"
+        }
+        if ((@($payload.actionGroups.highImpact) -join "|") -ne ($highImpactActions -join "|")) {
+            Add-Failure "Manager UI-only high-impact action group is incomplete"
+        }
+
+        foreach ($actionName in $expectedActions) {
+            $entryProperty = $payload.results.PSObject.Properties[$actionName]
+            if (-not $entryProperty) {
+                Add-Failure "Manager UI-only button result missing: $actionName"
+                continue
+            }
+            $entry = $entryProperty.Value
+            $isHighImpact = $highImpactActions -contains $actionName
+            $expectedClickCount = if ($isHighImpact) { 2 } else { 1 }
+            if ($entry.ok -ne $true) { Add-Failure "Manager UI-only button failed: $actionName" }
+            if ($entry.lastUiOnly -ne $true) { Add-Failure "Manager UI-only bridge evidence missing: $actionName" }
+            if ($entry.managerOpenedNewPage -ne $false) { Add-Failure "Manager button opened a new page: $actionName" }
+            if ($entry.actionActualMouseOk -ne $true) { Add-Failure "Manager native mouse evidence failed: $actionName" }
+            if ([int]$entry.actionActualMouseExpectedClickCount -ne $expectedClickCount) { Add-Failure "Manager expected click count is wrong: $actionName" }
+            if ([int]$entry.actionActualMouseClickCount -ne $expectedClickCount) { Add-Failure "Manager actual click count is wrong: $actionName" }
+            if ([int]$entry.actionActualMouseInputEventCount -ne ($expectedClickCount * 3)) { Add-Failure "Manager CDP mouse event count is wrong: $actionName" }
+            if ($entry.actionActualMouseRequiredConfirmation -ne $isHighImpact) { Add-Failure "Manager confirmation classification is wrong: $actionName" }
+            if ($isHighImpact -and $entry.actionActualMouseConfirmationArmed -ne $true) { Add-Failure "Manager high-impact confirmation was not armed: $actionName" }
+            if ($entry.actionActualMouseConfirmationCleared -ne $true) { Add-Failure "Manager confirmation was not cleared: $actionName" }
+            $points = @($entry.actionActualMousePoints)
+            if ($points.Count -ne $expectedClickCount) { Add-Failure "Manager live click-point evidence count is wrong: $actionName" }
+            foreach ($point in $points) {
+                if ([string]$point.hitAction -ne $actionName) { Add-Failure "Manager live click point hit the wrong button: $actionName" }
+                if ($null -eq $point.x -or $null -eq $point.y) { Add-Failure "Manager live click point coordinates are missing: $actionName" }
+            }
+        }
+    }
+
+    $checkedAt = [DateTime]::UtcNow.ToString("o")
+    $result = [pscustomobject]@{
+        ok = ($failures.Count -eq 0)
+        generatedAt = $checkedAt
+        checkedAt = $checkedAt
+        reportName = $reportName
+        failures = $failures.ToArray()
+        baseUrl = $BaseUrl
+        runtimeRoot = $runtimeRootFull
+        cdpPort = $resolvedCdpPort
+        actions = $expectedActions
+        exitCode = [int]$matrixRun.exitCode
+        elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+        processIdentity = $payload.processIdentity
+        sessionIdentity = $payload.sessionIdentity
+        managerButton = $matrixRun
+        tail = @($matrixRun.tail)
+    }
+    $reportPaths = New-ReportPaths $reportName
+    $result | Add-Member -NotePropertyName report -NotePropertyValue $reportPaths
+    Save-JsonReport $reportPaths $result
+    $result | ConvertTo-Json -Depth 16 -Compress
+    if ($failures.Count -gt 0) { exit 1 }
+    exit 0
+}
+
 $actionList = @($Actions |
     ForEach-Object { [string]$_ } |
     ForEach-Object { $_ -split "," } |
@@ -257,6 +383,7 @@ if ($actionList.Count -lt 1) {
 }
 
 $managerResults = [ordered]@{}
+$latestIdentityPayload = $null
 $exitCode = 0
 $tail = @()
 if ($actionList.Count -gt 0) {
@@ -285,6 +412,7 @@ if ($actionList.Count -gt 0) {
             }
             continue
         }
+        $latestIdentityPayload = $actionRun.payload
         if ($actionRun.payload.ok -ne $true) {
             Add-Failure "manager button verifier reported ok=false: $actionName"
         }
@@ -305,8 +433,11 @@ if ($actionList.Count -gt 0) {
     }
 }
 
+$checkedAt = [DateTime]::UtcNow.ToString("o")
 $result = [pscustomobject]@{
     ok = ($failures.Count -eq 0)
+    generatedAt = $checkedAt
+    checkedAt = $checkedAt
     reportName = $reportName
     canonicalReleaseReport = $canonicalReleaseReport
     releaseRequiredActions = $releaseRequiredActions
@@ -317,6 +448,8 @@ $result = [pscustomobject]@{
     actions = $actionList
     exitCode = $exitCode
     elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
+    processIdentity = $latestIdentityPayload.processIdentity
+    sessionIdentity = $latestIdentityPayload.sessionIdentity
     managerButton = [pscustomobject]@{
         ok = ($failures.Count -eq 0)
         results = $managerResults

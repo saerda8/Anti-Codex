@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { ownerProcessIsAlive } from "./lib/anticodex-owner-process.mjs";
 
 const args = new Map();
@@ -73,13 +75,19 @@ class LocalWebSocket {
     this.pending = new Map();
     this.onEvent = null;
     this.onClose = null;
+    this.failureNotified = false;
   }
   async open() {
     const key = crypto.randomBytes(16).toString("base64");
     this.socket = net.createConnection({ host: this.url.hostname, port: Number(this.url.port) });
-    this.socket.on("close", () => this.onClose?.());
+    this.socket.on("close", () => this.handleFailure(new Error("WebSocket closed.")));
+    this.socket.on("error", (error) => this.handleFailure(error));
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timed out opening ${this.url.href}`)), 5000);
+      const timer = setTimeout(() => {
+        const error = new Error(`Timed out opening ${this.url.href}`);
+        this.socket?.destroy(error);
+        reject(error);
+      }, 5000);
       this.socket.once("connect", () => {
         this.socket.write([
           `GET ${this.url.pathname}${this.url.search} HTTP/1.1`,
@@ -107,6 +115,16 @@ class LocalWebSocket {
       this.socket.on("data", onHandshake);
       this.socket.once("error", (error) => { clearTimeout(timer); reject(error); });
     });
+  }
+  handleFailure(error) {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    if (this.failureNotified) return;
+    this.failureNotified = true;
+    this.onClose?.(error);
   }
   onData(chunk) {
     this.buffer = Buffer.concat([this.buffer, chunk]);
@@ -150,6 +168,9 @@ class LocalWebSocket {
     }
   }
   sendText(text) {
+    if (!this.socket || this.socket.destroyed || !this.socket.writable) {
+      throw new Error("WebSocket is closed.");
+    }
     const payload = Buffer.from(text, "utf8");
     const mask = crypto.randomBytes(4);
     let header;
@@ -177,9 +198,310 @@ class LocalWebSocket {
         reject(new Error(`Timed out waiting for ${method}`));
       }, timeout);
       this.pending.set(id, { resolve, reject, timer });
-      this.sendText(JSON.stringify({ id, method, params }));
+      try {
+        this.sendText(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(error);
+      }
     });
   }
+  close() {
+    this.onClose = null;
+    this.handleFailure(new Error("WebSocket closed by Manager bridge."));
+    this.socket?.destroy();
+  }
+}
+
+export function managerBridgeFailureRequiresReconnect(error) {
+  const message = String(error?.message || error || "");
+  return /target crashed|websocket[^\n]*closed|socket[^\n]*closed|econnreset|econnrefused|epipe|detached|connection[^\n]*closed|write after end/i.test(message);
+}
+
+export class ManagerBridgeRecoveryController {
+  constructor(options = {}) {
+    if (typeof options.openSession !== "function") throw new TypeError("openSession must be a function.");
+    if (typeof options.pollSession !== "function") throw new TypeError("pollSession must be a function.");
+    this.openSession = options.openSession;
+    this.pollSession = options.pollSession;
+    this.deliverRequest = options.deliverRequest ?? (async () => {});
+    this.sleep = options.sleep ?? sleep;
+    this.isOwnerAlive = options.isOwnerAlive ?? (() => true);
+    this.logger = options.logger ?? console;
+    this.maxConsecutivePollFailures = Math.max(1, Number(options.maxConsecutivePollFailures) || 3);
+    this.backoffMs = Array.isArray(options.backoffMs) && options.backoffMs.length > 0
+      ? options.backoffMs.map((value) => Math.max(0, Number(value) || 0))
+      : [250, 500, 1_000, 2_000, 5_000];
+    this.currentSession = null;
+    this.reconnectPromise = null;
+    this.pollPromise = null;
+    this.consecutivePollFailures = 0;
+    this.stopped = false;
+  }
+
+  status() {
+    return {
+      connected: this.currentSession !== null,
+      consecutivePollFailures: this.consecutivePollFailures,
+      polling: this.pollPromise !== null,
+      reconnecting: this.reconnectPromise !== null,
+    };
+  }
+
+  async start() {
+    this.stopped = false;
+    return this.requestReconnect("startup");
+  }
+
+  detachCurrentSession() {
+    const session = this.currentSession;
+    this.currentSession = null;
+    if (!session) return;
+    try { session.setFailureHandler?.(null); } catch {}
+    try { session.close?.(); } catch {}
+  }
+
+  async requestReconnect(reason = "unknown") {
+    if (this.stopped || !this.isOwnerAlive()) return null;
+    if (this.reconnectPromise) return this.reconnectPromise;
+    const reconnect = (async () => {
+      this.detachCurrentSession();
+      let attempt = 0;
+      while (!this.stopped && this.isOwnerAlive()) {
+        try {
+          const session = await this.openSession();
+          if (!session) throw new Error("No Anti-Codex page target found.");
+          if (this.stopped || !this.isOwnerAlive()) {
+            try { session.close?.(); } catch {}
+            return null;
+          }
+          session.setFailureHandler?.((error) => {
+            void this.notifySessionFailure(session, error);
+          });
+          this.currentSession = session;
+          this.consecutivePollFailures = 0;
+          this.logger.log?.(JSON.stringify({
+            event: "manager-bridge-connected",
+            reason,
+            attempt: attempt + 1,
+            target: session.target
+              ? { id: session.target.id, title: session.target.title, url: session.target.url }
+              : undefined,
+          }));
+          return session;
+        } catch (error) {
+          if (this.stopped || !this.isOwnerAlive()) return null;
+          const delay = this.backoffMs[Math.min(attempt, this.backoffMs.length - 1)];
+          attempt += 1;
+          this.logger.error?.(`[anticodex-manager-bridge] reconnect failed (${reason}, attempt ${attempt}): ${error.message}`);
+          await this.sleep(delay);
+        }
+      }
+      return null;
+    })();
+    this.reconnectPromise = reconnect;
+    try {
+      return await reconnect;
+    } finally {
+      if (this.reconnectPromise === reconnect) this.reconnectPromise = null;
+    }
+  }
+
+  async notifySessionFailure(session, error) {
+    if (this.stopped || session !== this.currentSession) return null;
+    this.logger.error?.(`[anticodex-manager-bridge] session failed: ${error?.message || error}`);
+    return this.requestReconnect(error?.message || "session failure");
+  }
+
+  async pollOnce() {
+    if (this.stopped || !this.isOwnerAlive()) return [];
+    if (this.pollPromise) return this.pollPromise;
+    const poll = (async () => {
+      if (!this.currentSession) await this.requestReconnect("poll without session");
+      const session = this.currentSession;
+      if (!session) return [];
+      try {
+        const queued = await this.pollSession(session);
+        if (session === this.currentSession) this.consecutivePollFailures = 0;
+        if (Array.isArray(queued)) {
+          for (const request of queued) {
+            if (this.stopped || !this.isOwnerAlive()) break;
+            await this.deliverRequest(request, this.currentSession ?? session);
+          }
+        }
+        return Array.isArray(queued) ? queued : [];
+      } catch (error) {
+        if (session !== this.currentSession) return [];
+        this.consecutivePollFailures += 1;
+        this.logger.error?.(`[anticodex-manager-bridge] poll failed (${this.consecutivePollFailures}/${this.maxConsecutivePollFailures}): ${error.message}`);
+        if (
+          managerBridgeFailureRequiresReconnect(error)
+          || this.consecutivePollFailures >= this.maxConsecutivePollFailures
+        ) {
+          await this.requestReconnect(error.message || "poll failure");
+        }
+        return [];
+      }
+    })();
+    this.pollPromise = poll;
+    try {
+      return await poll;
+    } finally {
+      if (this.pollPromise === poll) this.pollPromise = null;
+    }
+  }
+
+  async run(options = {}) {
+    const intervalMs = Math.max(0, Number(options.intervalMs) || 250);
+    while (!this.stopped && this.isOwnerAlive()) {
+      await this.pollOnce();
+      if (!this.stopped && this.isOwnerAlive()) await this.sleep(intervalMs);
+    }
+    this.stop();
+  }
+
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.detachCurrentSession();
+  }
+}
+
+export class ManagerActionExecutionLedger {
+  constructor() {
+    this.entries = new Map();
+  }
+
+  runOnce(requestId, execute) {
+    const id = String(requestId || "");
+    if (!id) throw new TypeError("A Manager requestId is required.");
+    if (typeof execute !== "function") throw new TypeError("A Manager action executor is required.");
+    if (this.entries.has(id)) return this.entries.get(id);
+    const execution = Promise.resolve().then(execute);
+    this.entries.set(id, execution);
+    execution.catch(() => {
+      if (this.entries.get(id) === execution) this.entries.delete(id);
+    });
+    return execution;
+  }
+
+  acknowledge(requestId) {
+    return this.entries.delete(String(requestId || ""));
+  }
+
+  has(requestId) {
+    return this.entries.has(String(requestId || ""));
+  }
+}
+
+export function createManagerBridgeSource() {
+  return `
+(() => {
+  globalThis.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
+  globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__ ||= {};
+  globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ ||= [];
+  globalThis.__ANTICODEX_ACK_MANAGER_ACTION__ = (id, payload) => {
+    const entry = globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
+    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ =
+      (globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).filter((request) => request?.id !== id);
+    if (!entry) return;
+    delete globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
+    entry.resolve(payload);
+  };
+  globalThis.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = globalThis.__ANTICODEX_ACK_MANAGER_ACTION__;
+  globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action) => new Promise((resolve) => {
+    const id = Date.now() + ":" + Math.random().toString(36).slice(2);
+    globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
+    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action, leaseCount: 0 });
+  });
+  globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ = (path, options = {}) => new Promise((resolve) => {
+    const id = Date.now() + ":" + Math.random().toString(36).slice(2);
+    globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
+    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({
+      id,
+      kind: "manager-request",
+      path,
+      options,
+      leaseCount: 0,
+    });
+  });
+})()`;
+}
+
+export function createManagerQueuePollSource(bridgeSource = createManagerBridgeSource()) {
+  return `
+(() => {
+  if (
+    typeof globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function" ||
+    typeof globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function" ||
+    typeof globalThis.__ANTICODEX_ACK_MANAGER_ACTION__ !== "function"
+  ) {
+    ${bridgeSource}
+  }
+  const queue = globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [];
+  return queue.map((request) => {
+    request.leaseCount = Number(request.leaseCount || 0) + 1;
+    request.leasedAt = Date.now();
+    return { ...request };
+  });
+})()`;
+}
+
+export async function deliverManagerPayloadWithReconnect(
+  controller,
+  initialSession,
+  expression,
+  options = {},
+) {
+  const maxAttempts = Math.max(1, Number(options.maxAttempts) || 3);
+  const logger = options.logger ?? controller?.logger ?? console;
+  let deliverySession = controller?.currentSession ?? initialSession;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (!deliverySession) {
+      deliverySession = await controller?.requestReconnect("manager payload delivery without session");
+    }
+    if (!deliverySession) {
+      lastError = new Error("Manager bridge renderer is unavailable for delivery.");
+    } else {
+      try {
+        await deliverySession.evaluate(expression);
+        if (attempt > 1) {
+          logger.log?.(JSON.stringify({
+            event: "manager-delivery-recovered",
+            attempt,
+            maxAttempts,
+          }));
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (attempt >= maxAttempts) break;
+    logger.error?.(JSON.stringify({
+      event: "manager-delivery-retry",
+      attempt,
+      maxAttempts,
+      error: lastError?.message || String(lastError),
+    }));
+    const failedSession = deliverySession;
+    deliverySession = controller?.currentSession;
+    if (failedSession && failedSession === controller?.currentSession) {
+      deliverySession = await controller.notifySessionFailure(failedSession, lastError);
+    }
+    deliverySession ||= controller?.currentSession;
+  }
+
+  logger.error?.(JSON.stringify({
+    event: "manager-delivery-exhausted",
+    attempts: maxAttempts,
+    error: lastError?.message || String(lastError),
+  }));
+  throw new Error(`Manager payload delivery failed after ${maxAttempts} attempts.`, { cause: lastError });
 }
 
 async function cdpTargets() {
@@ -288,15 +610,6 @@ async function runManagerRequest(pathValue, options = {}) {
 
 async function runAction(action) {
   if (action === "refreshStatus") return { ok: true, action, result: { ok: true }, snapshot: await managerSnapshot() };
-  if (action === "refreshModels") {
-    const catalog = await httpJson(`${baseUrl}/models`, { timeout: 10000 });
-    const models = Array.isArray(catalog?.data) ? catalog.data : [];
-    return {
-      ok: true,
-      action,
-      result: { ok: true, modelCount: models.length, models, source: catalog?.source || "fixed-route-proxy" },
-    };
-  }
   return postManagerJsonWithToken(
     "/anticodex/manager/action",
     JSON.stringify({ action }),
@@ -546,74 +859,63 @@ if (args.has("--self-test")) {
 
 async function main() {
   if (!ownerProcessIsAlive(supervisorPid)) return;
-  const deadline = Date.now() + 45000;
-  let target = null;
-  while (!target && Date.now() < deadline) {
-    if (!ownerProcessIsAlive(supervisorPid)) return;
+
+  const bridgeSource = createManagerBridgeSource();
+  const managerQueuePollSource = createManagerQueuePollSource(bridgeSource);
+
+  async function openBridgeSession() {
+    const target = pickTarget(await cdpTargets());
+    if (!target) throw new Error("No Anti-Codex page target found.");
+    const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    let failureHandler = null;
+    let id = 1;
+    ws.onClose = (error) => failureHandler?.(error);
+    ws.onEvent = (message) => {
+      if (/targetCrashed|detachedFromTarget/i.test(String(message?.method || ""))) {
+        failureHandler?.(new Error(message.method));
+      }
+    };
     try {
-      target = pickTarget(await cdpTargets());
-      if (target) break;
-    } catch {}
-    await sleep(500);
-  }
-  if (!target) throw new Error("No Anti-Codex page target found.");
-
-  const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
-  await ws.open();
-  ws.onClose = () => process.exit(0);
-  let id = 1;
-
-  const bridgeSource = `
-(() => {
-  globalThis.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
-  globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__ ||= {};
-  globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ ||= [];
-  globalThis.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = (id, payload) => {
-    const entry = globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
-    if (!entry) return;
-    delete globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
-    entry.resolve(payload);
-  };
-  globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action) => new Promise((resolve) => {
-    const id = Date.now() + ":" + Math.random().toString(36).slice(2);
-    globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
-    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action });
-  });
-  globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ = (path, options = {}) => new Promise((resolve) => {
-    const id = Date.now() + ":" + Math.random().toString(36).slice(2);
-    globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
-    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, kind: "manager-request", path, options });
-  });
-})();`;
-
-  const managerQueuePollSource = `
-(() => {
-  if (
-    typeof globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function" ||
-    typeof globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function"
-  ) {
-    ${bridgeSource}
-  }
-  return globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__
-    ? globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.splice(0)
-    : [];
-})()`;
-
-  await ws.call(id++, "Runtime.enable");
-  await ws.call(id++, "Page.addScriptToEvaluateOnNewDocument", { source: bridgeSource });
-  await ws.call(id++, "Runtime.evaluate", { expression: bridgeSource, awaitPromise: false, allowUnsafeEvalBlockedByCSP: true });
-  console.log(JSON.stringify({ ok: true, port, baseUrl, target: { id: target.id, title: target.title, url: target.url } }));
-
-  async function evaluate(expression, timeout = 30000) {
-    return ws.call(id++, "Runtime.evaluate", {
-      expression,
-      awaitPromise: false,
-      returnByValue: true,
-      allowUnsafeEvalBlockedByCSP: true,
-    }, timeout);
+      await ws.open();
+      await ws.call(id++, "Runtime.enable");
+      await ws.call(id++, "Page.addScriptToEvaluateOnNewDocument", { source: bridgeSource });
+      await ws.call(id++, "Runtime.evaluate", {
+        expression: bridgeSource,
+        awaitPromise: false,
+        allowUnsafeEvalBlockedByCSP: true,
+      });
+      if (ws.failureNotified || ws.socket?.destroyed) throw new Error("WebSocket closed during Manager bridge injection.");
+    } catch (error) {
+      ws.close();
+      throw error;
+    }
+    return {
+      target,
+      setFailureHandler(handler) {
+        failureHandler = typeof handler === "function" ? handler : null;
+        if (failureHandler && (ws.failureNotified || ws.socket?.destroyed)) {
+          queueMicrotask(() => failureHandler?.(new Error("WebSocket closed.")));
+        }
+      },
+      evaluate(expression, timeout = 30000) {
+        return ws.call(id++, "Runtime.evaluate", {
+          expression,
+          awaitPromise: false,
+          returnByValue: true,
+          allowUnsafeEvalBlockedByCSP: true,
+        }, timeout);
+      },
+      close() {
+        failureHandler = null;
+        ws.close();
+      },
+    };
   }
 
-  async function deliver(request) {
+  let controller = null;
+  const executionLedger = new ManagerActionExecutionLedger();
+
+  async function deliver(request, session) {
     const requestId = String(request.id || "");
     const action = String(request.action || "");
     const isManagerRequest = request.kind === "manager-request";
@@ -622,27 +924,30 @@ async function main() {
       ...(isManagerRequest ? { path: String(request.path || "") } : { action }),
       requestId: requestId.slice(0, 32),
     }));
-    let payload;
-    try {
-      if (isManagerRequest) {
-        payload = {
-          ok: true,
-          kind: "manager-request",
-          path: String(request.path || ""),
-          value: await runManagerRequest(request.path, request.options),
-        };
-      } else {
-        payload = await runAction(action);
-        payload.action ||= action;
-        payload.snapshot = await managerSnapshot();
-        payload.managerSummary = managerSummary(action, payload);
+    const payload = await executionLedger.runOnce(requestId, async () => {
+      let completedPayload;
+      try {
+        if (isManagerRequest) {
+          completedPayload = {
+            ok: true,
+            kind: "manager-request",
+            path: String(request.path || ""),
+            value: await runManagerRequest(request.path, request.options),
+          };
+        } else {
+          completedPayload = await runAction(action);
+          completedPayload.action ||= action;
+          completedPayload.snapshot = await managerSnapshot();
+          completedPayload.managerSummary = managerSummary(action, completedPayload);
+        }
+      } catch (error) {
+        completedPayload = isManagerRequest
+          ? { ok: false, kind: "manager-request", path: String(request.path || ""), message: error.message }
+          : { ok: false, action, message: error.message, managerSummary: `\u8fd0\u884c\u5931\u8d25\uff1a${error.message}`, snapshot: await managerSnapshot().catch(() => null) };
       }
-    } catch (error) {
-      payload = isManagerRequest
-        ? { ok: false, kind: "manager-request", path: String(request.path || ""), message: error.message }
-        : { ok: false, action, message: error.message, managerSummary: `\u8fd0\u884c\u5931\u8d25\uff1a${error.message}`, snapshot: await managerSnapshot().catch(() => null) };
-    }
-    await evaluate(`(() => {
+      return completedPayload;
+    });
+    const deliveryExpression = `(() => {
       const payload = ${JSON.stringify(payload)};
       const action = ${JSON.stringify(action)};
       const isManagerRequest = payload.kind === "manager-request";
@@ -662,9 +967,10 @@ async function main() {
       if (!isManagerRequest && isCurrentAction && result && payload.managerSummary && !suppressRefreshStatusResult) result.textContent = payload.managerSummary;
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) globalThis.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) for (const button of document.querySelectorAll('button[data-action]')) button.disabled = false;
-      globalThis.__ANTICODEX_RESOLVE_MANAGER_ACTION__?.(${JSON.stringify(requestId)}, payload);
-      delete globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[${JSON.stringify(requestId)}];
-    })()`);
+      globalThis.__ANTICODEX_ACK_MANAGER_ACTION__?.(${JSON.stringify(requestId)}, payload);
+      })()`;
+    await deliverManagerPayloadWithReconnect(controller, session, deliveryExpression);
+    executionLedger.acknowledge(requestId);
     console.log(JSON.stringify({
       event: isManagerRequest ? "manager-request-resolved" : "manager-action-resolved",
       ...(isManagerRequest ? { path: String(request.path || "") } : { action }),
@@ -672,29 +978,39 @@ async function main() {
     }));
   }
 
-  let polling = false;
-  setInterval(async () => {
-    if (!ownerProcessIsAlive(supervisorPid)) process.exit(0);
-    if (polling) return;
-    polling = true;
-    try {
-      const message = await evaluate(managerQueuePollSource, 5000);
+  controller = new ManagerBridgeRecoveryController({
+    openSession: openBridgeSession,
+    pollSession: async (session) => {
+      const message = await session.evaluate(managerQueuePollSource, 5000);
       const queued = message.result?.result?.value || [];
       if (Array.isArray(queued) && queued.length > 0) {
         console.log(JSON.stringify({ event: "manager-action-queue", count: queued.length }));
-        for (const request of queued) await deliver(request);
       }
-    } catch (error) {
-      console.error(`[anticodex-manager-bridge] poll failed: ${error.message}`);
-    } finally {
-      polling = false;
-    }
-  }, 250);
-
-  setInterval(() => {}, 60000);
+      return Array.isArray(queued) ? queued : [];
+    },
+    deliverRequest: deliver,
+    isOwnerAlive: () => ownerProcessIsAlive(supervisorPid),
+  });
+  const initialSession = await controller.start();
+  if (!initialSession) return;
+  console.log(JSON.stringify({
+    ok: true,
+    port,
+    baseUrl,
+    target: {
+      id: initialSession.target?.id,
+      title: initialSession.target?.title,
+      url: initialSession.target?.url,
+    },
+  }));
+  await controller.run({ intervalMs: 250 });
 }
 
-main().catch((error) => {
-  console.error(`[anticodex-manager-bridge] ${error.stack || error.message || error}`);
-  process.exit(1);
-});
+const invokedAsMain = Boolean(process.argv[1])
+  && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+if (invokedAsMain) {
+  main().catch((error) => {
+    console.error(`[anticodex-manager-bridge] ${error.stack || error.message || error}`);
+    process.exit(1);
+  });
+}

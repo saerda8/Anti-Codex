@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -80,11 +80,17 @@ Options:
   --require-native-single-task    Require native Codex request quiet before submit and reject hidden tool execution.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
   --same-chat-title-contains <text>  Reopen an existing task whose visible title contains this text.
+  --expected-task-id <id>    Bind a no-traffic same-task model probe to the exact native task id.
+  --expected-original-codex-pid <pid>  Require the original Codex process to remain alive.
+  --expected-anticodex-main-pid <pid>  Bind evidence to the current Anti-Codex main process.
+  --expected-supervisor-pid <pid>      Bind evidence to the current fixed-route supervisor.
+  --expected-codexplusplus-pid <pid>   Bind evidence to the current CodexPlusPlus process.
   --navigate-away-before-history-reopen  Open a blank new task before reopening --same-chat-title-contains.
   --require-history-responsive       Fail when reopening history exceeds the configured budget.
   --history-open-budget-ms <ms>      Maximum history click-to-interactive time (default: 3000).
   --history-probe-only               Reopen and time an existing task without submitting model traffic.
   --frontend-model-probe-only        Physically select --model in the current task without submitting model traffic.
+  --single-submit-handoff            Create one fresh exact-marker task, submit once, write a bounded startup receipt, then exit.
   --force-reset-same-chat  Allow stale recovery to interrupt/reset a reused chat.
   --workspace-command <command>  No-traffic workspace command (restore only).
   --workspace-state-file <path>  Workspace snapshot JSON used by --workspace-command restore.
@@ -103,9 +109,11 @@ const fixedRouteHealthUrl = String(args.get("--fixed-route-health-url")
   || "http://127.0.0.1:18487/anticodex/fixed-route/health").replace(/\/$/, "");
 const timeoutMs = Math.max(15_000, Number(args.get("--timeout-ms") || 90_000));
 const DESKTOP_SUBMIT_REQUEST_GRACE_MS = 70_000;
+const SINGLE_SUBMIT_EVIDENCE_MS = 25_000;
 const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
 const responseHistoryPath = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "response-history.json");
 const taskMode = String(args.get("--task-mode") || "exact-marker");
+const singleSubmitHandoff = args.has("--single-submit-handoff");
 const resultDrivenCompletionEnabled = args.has("--result-driven-completion");
 const requireNativeSingleTask = args.has("--require-native-single-task");
 const requiredModel = String(args.get("--model") || args.get("--required-model") || process.env.ANTICODEX_TEST_MODEL || "").trim();
@@ -116,6 +124,7 @@ const anticodexCodexHome = resolve(process.env.ANTICODEX_CODEX_HOME || join(anti
 const anticodexConfigPath = resolve(anticodexCodexHome, "config.toml");
 const anticodexModelCatalogPath = resolve(anticodexCodexHome, "deepseek-model-catalog.json");
 const codexRolloutRoot = resolve(anticodexCodexHome, "sessions");
+const codexPlusPlusLogPath = resolve(anticodexStateRoot, "codexplusplus", "codex-plus.log");
 if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath)) {
   try {
     const catalog = JSON.parse(readFileSync(anticodexModelCatalogPath, "utf8").replace(/^\uFEFF/, ""));
@@ -128,6 +137,7 @@ if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath
   }
 }
 const sameChatTitleContains = String(args.get("--same-chat-title-contains") || "").trim();
+const expectedTaskId = String(args.get("--expected-task-id") || "").trim();
 const navigateAwayBeforeHistoryReopen = args.has("--navigate-away-before-history-reopen");
 const isolateChat = !(args.has("--same-chat") || sameChatTitleContains);
 const preserveSameChatActiveTask = !isolateChat && !args.has("--force-reset-same-chat");
@@ -135,13 +145,18 @@ const requireHistoryResponsive = args.has("--require-history-responsive");
 const historyOpenBudgetMs = Math.max(250, Number(args.get("--history-open-budget-ms") || 3_000));
 const historyProbeOnly = args.has("--history-probe-only");
 const frontendModelProbeOnly = args.has("--frontend-model-probe-only");
+if (frontendModelProbeOnly && !expectedTaskId) {
+  throw new Error("--frontend-model-probe-only requires --expected-task-id");
+}
 const customBaseReportName = String(args.get("--report-name") || "")
   .trim()
   .toLowerCase()
   .replace(/[^a-z0-9_-]+/g, "-")
   .replace(/^-+|-+$/g, "")
   .slice(0, 100);
-const baseReportName = customBaseReportName || (taskMode === "web-search"
+const baseReportName = customBaseReportName || (singleSubmitHandoff
+  ? "ui-single-submit-handoff"
+  : taskMode === "web-search"
   ? "ui-web-search-smoke"
   : taskMode === "free-chat"
     ? "ui-free-chat-smoke"
@@ -247,6 +262,37 @@ const promptFromFile = promptFile ? readFileSync(promptFile, "utf8") : "";
 const followupPromptFile = args.get("--followup-prompt-file") ? resolve(String(args.get("--followup-prompt-file"))) : "";
 const followupPromptFromFile = followupPromptFile ? readFileSync(followupPromptFile, "utf8") : "";
 const customFollowupPromptText = String(followupPromptFromFile || args.get("--followup-prompt") || "").trim();
+const singleSubmitForbiddenArgs = [
+  "--same-chat",
+  "--same-chat-title-contains",
+  "--followup-prompt-file",
+  "--followup-prompt",
+  "--prompt",
+  "--force-reset-same-chat",
+  "--navigate-away-before-history-reopen",
+  "--history-probe-only",
+  "--frontend-model-probe-only",
+  "--workspace-command",
+  "--result-driven-completion",
+];
+if (singleSubmitHandoff && taskMode !== "exact-marker") {
+  throw new Error("--single-submit-handoff requires --task-mode exact-marker");
+}
+if (singleSubmitHandoff) {
+  const forbidden = singleSubmitForbiddenArgs.filter((name) => args.has(name));
+  if (forbidden.length > 0) {
+    throw new Error(`--single-submit-handoff cannot be combined with ${forbidden.join(", ")}`);
+  }
+  if (!args.get("--project-root") || !args.get("--prompt-file") || !args.get("--model")) {
+    throw new Error("--single-submit-handoff requires --project-root, --prompt-file, and --model");
+  }
+  if (!String(promptFromFile || "").trim()) {
+    throw new Error("--single-submit-handoff requires a non-empty UTF-8 --prompt-file");
+  }
+  if (!requireNativeSingleTask) {
+    throw new Error("--single-submit-handoff requires --require-native-single-task");
+  }
+}
 const requiredFile = args.get("--required-file") ? resolve(String(args.get("--required-file"))) : "";
 const requiredFileContains = String(args.get("--required-file-contains") || "")
   .split("|")
@@ -1043,6 +1089,7 @@ function summarizeNetworkEvents(events) {
 
 function writeReport(payload) {
   mkdirSync(reportRoot, { recursive: true });
+  if (!payload.checkedAt) payload.checkedAt = new Date().toISOString();
   const latest = join(reportRoot, `latest-${reportName}.json`);
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
   const history = join(reportRoot, `${stamp}-${reportName}.json`);
@@ -1083,6 +1130,243 @@ function recentCodexRolloutFiles(limit = 120) {
     }
   }
   return files.sort((left, right) => right.mtimeMs - left.mtimeMs).slice(0, limit);
+}
+
+function snapshotSingleSubmitRollouts() {
+  return new Map(recentCodexRolloutFiles(500).map((file) => [file.path, {
+    size: file.size,
+    mtimeMs: file.mtimeMs,
+  }]));
+}
+
+function readJsonLines(path) {
+  try {
+    return readFileSync(path, "utf8")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .flatMap((line) => {
+        try { return [JSON.parse(line.replace(/^\uFEFF/, ""))]; } catch { return []; }
+      });
+  } catch {
+    return [];
+  }
+}
+
+function sameNativePath(left, right) {
+  const normalize = (value) => resolve(String(value || "")).replaceAll("/", "\\").toLowerCase();
+  return Boolean(left && right) && normalize(left) === normalize(right);
+}
+
+function recordContainsExactPrompt(record, expectedPrompt) {
+  const normalize = (value) => String(value || "").replace(/\r\n?/g, "\n");
+  const prompt = normalize(expectedPrompt);
+  if (!prompt) return false;
+  if (record?.type === "event_msg"
+    && record?.payload?.type === "user_message"
+    && normalize(record?.payload?.message) === prompt) return true;
+  if (record?.type !== "response_item"
+    || record?.payload?.type !== "message"
+    || record?.payload?.role !== "user") return false;
+  const text = (Array.isArray(record?.payload?.content) ? record.payload.content : [])
+    .filter((item) => item?.type === "input_text")
+    .map((item) => String(item?.text || ""))
+    .join("");
+  return normalize(text) === prompt;
+}
+
+function readSingleSubmitRolloutEvidence(baseline, expectedCwd, expectedPrompt) {
+  const candidates = [];
+  for (const file of recentCodexRolloutFiles(500)) {
+    if (baseline.has(file.path)) continue;
+    const records = readJsonLines(file.path);
+    const sessionMeta = records.find((record) => record?.type === "session_meta") || null;
+    const sessionId = String(sessionMeta?.payload?.id || sessionMeta?.payload?.session_id || "").trim();
+    const turnContexts = records.filter((record) => record?.type === "turn_context");
+    const turnContext = turnContexts.at(-1) || null;
+    const cwd = String(turnContext?.payload?.cwd || sessionMeta?.payload?.cwd || "").trim();
+    const model = String(
+      turnContext?.payload?.model
+      || turnContext?.payload?.collaboration_mode?.settings?.model
+      || "",
+    ).trim();
+    const promptSeen = records.some((record) => recordContainsExactPrompt(record, expectedPrompt));
+    const cwdMatched = sameNativePath(cwd, expectedCwd);
+    const modelMatched = modelValueMatches(model, requiredModelNeedles());
+    candidates.push({
+      ok: Boolean(sessionId && promptSeen && cwdMatched && modelMatched),
+      newTask: true,
+      sessionId,
+      taskId: sessionId,
+      turnId: String(turnContext?.payload?.turn_id || "").trim() || null,
+      file: file.path,
+      cwd,
+      cwdMatched,
+      model,
+      modelMatched,
+      promptSeen,
+      recordCount: records.length,
+    });
+  }
+  return candidates.find((candidate) => candidate.ok) || candidates[0] || {
+    ok: false,
+    newTask: false,
+    sessionId: null,
+    taskId: null,
+    turnId: null,
+    file: null,
+    cwd: null,
+    cwdMatched: false,
+    model: null,
+    modelMatched: false,
+    promptSeen: false,
+    recordCount: 0,
+  };
+}
+
+function findPriorSingleSubmitTask(expectedCwd, expectedPrompt) {
+  for (const file of recentCodexRolloutFiles(500)) {
+    const records = readJsonLines(file.path);
+    if (!records.some((record) => recordContainsExactPrompt(record, expectedPrompt))) continue;
+    const sessionMeta = records.find((record) => record?.type === "session_meta") || null;
+    const turnContext = records.filter((record) => record?.type === "turn_context").at(-1) || null;
+    const cwd = String(turnContext?.payload?.cwd || sessionMeta?.payload?.cwd || "").trim();
+    if (!sameNativePath(cwd, expectedCwd)) continue;
+    return {
+      found: true,
+      sessionId: String(sessionMeta?.payload?.id || sessionMeta?.payload?.session_id || "").trim() || null,
+      turnId: String(turnContext?.payload?.turn_id || "").trim() || null,
+      file: file.path,
+      cwd,
+      model: String(turnContext?.payload?.model || turnContext?.payload?.collaboration_mode?.settings?.model || "").trim() || null,
+    };
+  }
+  return { found: false, sessionId: null, turnId: null, file: null, cwd: null, model: null };
+}
+
+function readSingleSubmitUpstreamEvidence(offset) {
+  if (!existsSync(codexPlusPlusLogPath)) {
+    return { ok: false, logPath: codexPlusPlusLogPath, offset, end: 0, rotated: false, request: null, response: null };
+  }
+  const end = statSync(codexPlusPlusLogPath).size;
+  const rotated = end < offset;
+  const effectiveOffset = rotated ? 0 : offset;
+  const length = Math.max(0, end - effectiveOffset);
+  const body = Buffer.alloc(length);
+  const descriptor = openSync(codexPlusPlusLogPath, "r");
+  try {
+    if (length > 0) readSync(descriptor, body, 0, length, effectiveOffset);
+  } finally {
+    closeSync(descriptor);
+  }
+  const records = body.toString("utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      try { return [JSON.parse(line)]; } catch { return []; }
+    });
+  const requestIndex = records.findIndex((record) => (
+    record?.event === "protocol_proxy.upstream_request"
+    && record?.detail?.relayId === "anticodex-antigravity"
+    && Number(record?.detail?.candidateCount || 0) === 1
+    && Number(record?.detail?.requestTools?.count || 0) > 0
+    && Number(record?.detail?.upstreamTools?.count || 0) > 0
+  ));
+  const requestRecord = requestIndex >= 0 ? records[requestIndex] : null;
+  const responseRecord = requestRecord
+    ? records.slice(requestIndex + 1).find((record) => (
+      record?.event === "protocol_proxy.upstream_response"
+      && record?.detail?.relayId === requestRecord.detail.relayId
+      && record?.detail?.endpoint === requestRecord.detail.endpoint
+      && Number(record?.detail?.attempt || 0) === Number(requestRecord.detail.attempt || 0)
+      && Number(record?.detail?.candidateCount || 0) === Number(requestRecord.detail.candidateCount || 0)
+    )) || null
+    : null;
+  const statusCode = Number(responseRecord?.detail?.statusCode || 0);
+  const request = requestRecord ? {
+    timestampMs: Number(requestRecord.timestamp_ms || 0),
+    relayId: requestRecord.detail.relayId,
+    relayName: requestRecord.detail.relayName || null,
+    endpoint: requestRecord.detail.endpoint || null,
+    wireApi: requestRecord.detail.wireApi || null,
+    attempt: Number(requestRecord.detail.attempt || 0),
+    candidateCount: Number(requestRecord.detail.candidateCount || 0),
+    requestTools: requestRecord.detail.requestTools || null,
+    upstreamTools: requestRecord.detail.upstreamTools || null,
+  } : null;
+  const response = responseRecord ? {
+    timestampMs: Number(responseRecord.timestamp_ms || 0),
+    statusCode,
+    relayId: responseRecord.detail.relayId || null,
+    endpoint: responseRecord.detail.endpoint || null,
+    attempt: Number(responseRecord.detail.attempt || 0),
+    candidateCount: Number(responseRecord.detail.candidateCount || 0),
+  } : null;
+  return {
+    ok: !rotated && request !== null && statusCode >= 200 && statusCode < 300,
+    logPath: codexPlusPlusLogPath,
+    offset: effectiveOffset,
+    requestedOffset: offset,
+    end,
+    rotated,
+    parsedRecordCount: records.length,
+    request,
+    response,
+  };
+}
+
+async function readSingleSubmitNativeEvidence(preflight, rollout) {
+  const taskId = String(rollout?.taskId || "").trim();
+  if (!taskId || preflight?.ok !== true) {
+    return {
+      ok: false,
+      taskId: taskId || null,
+      reason: taskId ? "native_preflight_missing" : "rollout_task_id_missing",
+      activity: null,
+    };
+  }
+  const rows = await readNativeCodexActivityRows({
+    codexHome: anticodexCodexHome,
+    afterId: Number(preflight.baselineId || 0),
+  });
+  const activity = analyzeNativeCodexActivityRows(rows, { expectedThreadIds: [rollout.taskId] });
+  const expectedRequestObserved = nativeExpectedRequestObserved(activity);
+  const ok = expectedRequestObserved
+    && activity.expectedThreadIds.length === 1
+    && activity.expectedThreadIds[0] === taskId
+    && activity.unexpectedRequestThreadIds.length === 0
+    && activity.unexpectedExecutionThreadIds.length === 0
+    && activity.titleThreadsUsedTools !== true
+    && activity.taskSuggestionThreadsUsedTools !== true;
+  return {
+    ok,
+    taskId,
+    reason: ok ? "task_bound_native_request" : "native_request_not_exclusive_to_rollout_task",
+    expectedRequestObserved,
+    activity,
+  };
+}
+
+async function waitForSingleSubmitReadOnlyEvidence(rolloutBaseline, codexPlusPlusLogOffset, nativePreflight) {
+  const deadline = Date.now() + SINGLE_SUBMIT_EVIDENCE_MS;
+  let rollout = readSingleSubmitRolloutEvidence(rolloutBaseline, projectChatRoot, promptText);
+  let native = await readSingleSubmitNativeEvidence(nativePreflight, rollout);
+  let upstream = readSingleSubmitUpstreamEvidence(codexPlusPlusLogOffset);
+  while (Date.now() < deadline && !(rollout.ok && native.ok && upstream.ok)) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    rollout = readSingleSubmitRolloutEvidence(rolloutBaseline, projectChatRoot, promptText);
+    native = await readSingleSubmitNativeEvidence(nativePreflight, rollout);
+    upstream = readSingleSubmitUpstreamEvidence(codexPlusPlusLogOffset);
+  }
+  return {
+    ok: rollout.ok === true && native.ok === true && upstream.ok === true,
+    waitedMs: SINGLE_SUBMIT_EVIDENCE_MS - Math.max(0, deadline - Date.now()),
+    timedOut: !(rollout.ok && native.ok && upstream.ok),
+    rollout,
+    native,
+    upstream,
+  };
 }
 
 function codexRolloutMarkerBundles(text) {
@@ -4191,6 +4475,162 @@ function newChatClickExpression(projectName = "") {
   })()`;
 }
 
+function singleSubmitNewTaskProbeExpression(projectName = "") {
+  const expectedProject = JSON.stringify(String(projectName || ""));
+  return `(() => {
+    const expectedProject = ${expectedProject};
+    const visible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 1 && rect.height > 1 && style.display !== 'none' && style.visibility !== 'hidden';
+    };
+    const controls = Array.from(document.querySelectorAll('button,[role="button"],a')).filter(visible);
+    const normalizedProjectName = String(expectedProject || '').trim();
+    const projectContextActive = normalizedProjectName && controls.some((element) => {
+      const text = [element.innerText, element.getAttribute('aria-label'), element.title]
+        .map((value) => String(value || '').replace(/\\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' ');
+      return text.includes(normalizedProjectName) && /切换项目|项目操作|project/i.test(text);
+    });
+    const candidates = controls.map((element, index) => {
+      const text = [element.innerText, element.getAttribute('aria-label'), element.title]
+        .map((value) => String(value || '').replace(/\\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' ');
+      const aria = String(element.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+      const rect = element.getBoundingClientRect();
+      const isNewTask = text.includes('新对话') || text.includes('新建任务') || /Ctrl\\+N|New chat/i.test(text);
+      const projectText = text + ' ' + aria;
+      const isProjectNewTask = normalizedProjectName
+        && projectText.includes(normalizedProjectName)
+        && (projectText.includes('开始新对话') || projectText.includes('新建任务') || /new chat|new conversation|start/i.test(projectText));
+      return { element, index, text, aria, rect, isNewTask, isProjectNewTask };
+    }).filter((item) => item.isNewTask);
+    const selected = candidates.sort((left, right) => {
+      if (left.isProjectNewTask !== right.isProjectNewTask) return left.isProjectNewTask ? -1 : 1;
+      return (left.rect.y - right.rect.y) || (left.rect.x - right.rect.x);
+    })[0] || null;
+    const hit = selected
+      ? document.elementFromPoint(selected.rect.left + selected.rect.width / 2, selected.rect.top + selected.rect.height / 2)
+      : null;
+    const hitControl = hit?.closest?.('button,[role="button"],a') || null;
+    const selectedHit = Boolean(selected && (hitControl === selected.element || selected.element.contains(hit)));
+    return {
+      found: Boolean(selected),
+      selectedHit,
+      clicked: false,
+      projectPreferred: Boolean(normalizedProjectName),
+      projectMatched: Boolean(selected?.isProjectNewTask || projectContextActive),
+      projectContextActive: Boolean(projectContextActive),
+      selected: selected ? {
+        index: selected.index,
+        text: selected.text,
+        aria: selected.aria,
+        rect: { x: selected.rect.x, y: selected.rect.y, w: selected.rect.width, h: selected.rect.height },
+      } : null,
+      hit: hit ? {
+        tag: hit.tagName || '',
+        label: String(hit.getAttribute?.('aria-label') || hit.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+      } : null,
+    };
+  })()`;
+}
+
+async function createSingleSubmitTaskWithPhysicalMouse(ws) {
+  const probe = async () => {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: singleSubmitNewTaskProbeExpression(projectChatLabel),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    return result.result?.result?.value || null;
+  };
+  const deadline = Date.now() + 8_000;
+  let initial = null;
+  while (Date.now() < deadline) {
+    initial = await probe();
+    if (initial?.found === true && initial?.selectedHit === true) break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+  }
+  if (initial?.found !== true || initial?.selectedHit !== true) {
+    throw new Error(`fresh task control was not a live physical mouse target: ${JSON.stringify(initial)}`);
+  }
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  const live = await probe();
+  if (live?.found !== true || live?.selectedHit !== true || !live?.selected?.rect) {
+    throw new Error(`fresh task control changed before the physical click: ${JSON.stringify(live)}`);
+  }
+  if (live.projectPreferred && live.projectMatched !== true) {
+    throw new Error(`fresh task control was not bound to project ${projectChatLabel}`);
+  }
+  const rect = live.selected.rect;
+  const x = Number(rect.x) + Number(rect.w) / 2;
+  const y = Number(rect.y) + Number(rect.h) / 2;
+  if (![x, y].every(Number.isFinite)) throw new Error("fresh task control did not expose finite coordinates");
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  const visibleIdle = await waitForVisibleComposerIdle(ws, 20_000);
+  if (visibleIdle?.ok !== true) throw new Error("fresh native task did not open an idle composer");
+  return {
+    ok: true,
+    actualMouseClick: true,
+    clickCount: 1,
+    initial,
+    live,
+    clickPoint: { x, y },
+    visibleIdle,
+  };
+}
+
+async function sendSingleSubmitPromptWithPhysicalMouse(ws) {
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 4_000 });
+  const cleared = await ws.send("Runtime.evaluate", {
+    expression: `(() => {
+      const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
+      if (!composer) return { ok: false };
+      composer.focus();
+      document.execCommand('selectAll');
+      document.execCommand('delete');
+      composer.innerHTML = '<p><br></p>';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      return { ok: true };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  if (cleared.result?.result?.value?.ok !== true) throw new Error("fresh task composer was not found");
+  await ws.send("Input.insertText", { text: promptText });
+  await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 4_000 });
+  const modelConfirmation = await confirmRequiredModelSelected(ws, 5_000);
+  if (modelConfirmation?.matched !== true) {
+    throw new Error(`required model was not selected immediately before handoff: ${requiredModel}`);
+  }
+  let prep = await waitForComposerPromptReady(ws, promptText, 5_000);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  prep = await waitForComposerPromptReady(ws, promptText, 2_000);
+  const rect = prep?.selected?.rect || null;
+  if (prep?.composerMatches !== true || prep?.hasSendButton !== true || prep?.selectedHit !== true || !rect) {
+    throw new Error(`single-submit send control was not a live exact-prompt target: ${JSON.stringify(prep)}`);
+  }
+  const x = Number(rect.x) + Number(rect.w) / 2;
+  const y = Number(rect.y) + Number(rect.h) / 2;
+  if (![x, y].every(Number.isFinite)) throw new Error("single-submit send control did not expose finite coordinates");
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  return {
+    ok: true,
+    clickMethod: "cdp-mouse",
+    sendClickCount: 1,
+    clickPoint: { x, y },
+    prep,
+    modelConfirmation,
+  };
+}
+
 function sameChatClickExpression(titleNeedle) {
   const needle = JSON.stringify(String(titleNeedle || ""));
   return `(() => {
@@ -4217,9 +4657,15 @@ function sameChatClickExpression(titleNeedle) {
     const selected = candidates[0];
     if (!selected) return { clicked: false, wanted, candidates: [] };
     const rect = selected.el.getBoundingClientRect();
+    const identityElement = selected.el.closest('[data-app-action-sidebar-thread-id]')
+      || selected.el.querySelector('[data-app-action-sidebar-thread-id]');
+    const rawTaskId = String(identityElement?.getAttribute('data-app-action-sidebar-thread-id') || '').trim();
+    const taskId = rawTaskId.includes(':') ? rawTaskId.slice(rawTaskId.lastIndexOf(':') + 1) : rawTaskId;
     return {
       clicked: true,
       wanted,
+      taskId: taskId || null,
+      rawTaskId: rawTaskId || null,
       text: selected.text.slice(0, 240),
       tag: selected.el.tagName,
       role: selected.el.getAttribute("role") || "",
@@ -5076,17 +5522,28 @@ function physicalModelMenuProbeExpression(requiredValues = []) {
   })()`;
 }
 
+async function waitForFrontendModelSelector(ws, requiredValues, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: currentModelProbeExpression(requiredValues),
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    latest = result.result?.result?.value || null;
+    if (latest?.selected?.rect) return latest;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  return latest;
+}
+
 async function selectFrontendModelWithPhysicalMouse(ws, timeoutMs = 20_000) {
   const requiredValues = requiredModelNeedles();
   if (requiredValues.length === 0) throw new Error("--frontend-model-probe-only requires --model or --model-label");
   await closeOpenModelMenusAndOverlays(ws, { timeoutMs: 3_000 });
 
-  const beforeResult = await ws.send("Runtime.evaluate", {
-    expression: currentModelProbeExpression(requiredValues),
-    returnByValue: true,
-    awaitPromise: true,
-  });
-  const before = beforeResult.result?.result?.value || null;
+  const before = await waitForFrontendModelSelector(ws, requiredValues, 5_000);
   const selector = before?.selected || before?.candidates?.[0] || null;
   if (!selector?.rect) throw new Error(`native model selector button was not found: ${JSON.stringify(before)}`);
 
@@ -5413,6 +5870,9 @@ async function runFrontendModelProbeOnly() {
       originalCodexAlive: expectedOriginalCodexPid > 0 ? (() => { try { process.kill(expectedOriginalCodexPid, 0); return true; } catch { return false; } })() : null,
     };
     const failures = [];
+    if (sameChatEvidence?.taskId !== expectedTaskId) {
+      failures.push(`same-chat task id ${sameChatEvidence?.taskId || "<missing>"} did not match ${expectedTaskId}`);
+    }
     if (selection.ok !== true || selection.actualMouseClick !== true) failures.push("native model was not selected with physical mouse input");
     if (runtime.ok !== true) failures.push("fixed-route runtime was not ready after frontend selection");
     if (requestsAfter.requestCount !== requestsBefore.requestCount || requestsAfter.latestRequestRowId !== requestsBefore.latestRequestRowId) {
@@ -5432,6 +5892,8 @@ async function runFrontendModelProbeOnly() {
       usedRealTraffic: false,
       coverageKind: "desktop-ui-physical-model-switch-no-traffic",
       failures,
+      taskId: sameChatEvidence?.taskId || null,
+      expectedTaskId,
       sameChatTitleContains,
       sameChatEvidence,
       windowActivation,
@@ -5495,6 +5957,159 @@ async function runWorkspaceCommandOnly() {
     try { ws?.socket?.destroy(); } catch {}
     releaseUiLock?.();
   }
+}
+
+async function runSingleSubmitHandoff() {
+  const failures = [];
+  let releaseUiLock = null;
+  let ws = null;
+  let target = null;
+  let projectRootEvidence = null;
+  let newTaskEvidence = null;
+  let modelSelectionEvidence = null;
+  let submitEvidence = null;
+  let startupEvidence = null;
+  let windowActivationEvidence = null;
+  let currentTaskIdleEvidence = null;
+  let priorTaskEvidence = null;
+  let nativeActivityPreflight = null;
+  let processIdentity = null;
+  let codexPlusPlusLogOffset = 0;
+  let rolloutBaseline = new Map();
+  let sendDispatched = false;
+  const handoffStartedAt = Date.now();
+
+  try {
+    releaseUiLock = await acquireUiSmokeLock();
+    const targets = await resolveCdpTargets();
+    target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
+    ws = new LocalWebSocket(target.webSocketDebuggerUrl);
+    await ws.connect();
+    await ws.send("Page.bringToFront");
+    await ws.send("Runtime.enable");
+    await ws.send("DOM.enable");
+    await ws.send("Input.setIgnoreInputEvents", { ignore: false });
+
+    const fixedRouteHealth = await readFixedRouteHealth();
+    if (!fixedRouteHealthIsReady(fixedRouteHealth)) throw new Error("fixed-route runtime was not ready for single-submit handoff");
+    const foregroundProcessId = Number(fixedRouteHealth?.processes?.copiedClient?.[0] || 0);
+    const originalCodexPid = Number(args.get("--expected-original-codex-pid") || 0);
+    processIdentity = {
+      supervisorPid: Number(fixedRouteHealth?.pid || 0),
+      codexPlusPlusPid: Number(fixedRouteHealth?.processes?.codexPlusPlus || 0),
+      antiCodexMainPid: foregroundProcessId,
+      originalCodexPid,
+      originalCodexAlive: originalCodexPid > 0
+        ? (() => { try { process.kill(originalCodexPid, 0); return true; } catch { return false; } })()
+        : null,
+    };
+    const activation = activateAntiCodexWindow(foregroundProcessId);
+    const visibleWindow = await waitForVisibleDocument(ws, 3_000);
+    windowActivationEvidence = { ...activation, document: visibleWindow };
+    if (activation?.ok !== true || visibleWindow?.focused !== true || visibleWindow?.visibility !== "visible") {
+      throw new Error(`Anti-Codex window was not foreground and visible before single-submit handoff: ${JSON.stringify(windowActivationEvidence)}`);
+    }
+    const overlayProbe = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const overlay = document.querySelector('#anticodex-manager-overlay');
+        if (!overlay) return { open: false };
+        const rect = overlay.getBoundingClientRect();
+        const style = getComputedStyle(overlay);
+        return { open: rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    if (overlayProbe.result?.result?.value?.open === true) {
+      throw new Error("Anti-Codex manager overlay must be closed before single-submit handoff");
+    }
+    currentTaskIdleEvidence = await waitForVisibleComposerIdle(ws, 5_000);
+    if (currentTaskIdleEvidence?.ok !== true) {
+      throw new Error("an existing visible Anti-Codex task is still active; single-submit handoff did not touch it");
+    }
+    priorTaskEvidence = findPriorSingleSubmitTask(projectChatRoot, promptText);
+    if (priorTaskEvidence.found === true) {
+      throw new Error(`the exact handoff goal was already submitted to task ${priorTaskEvidence.sessionId || "<unknown>"}`);
+    }
+
+    rolloutBaseline = snapshotSingleSubmitRollouts();
+    codexPlusPlusLogOffset = existsSync(codexPlusPlusLogPath) ? statSync(codexPlusPlusLogPath).size : 0;
+    nativeActivityPreflight = await beginNativeSingleTaskWindow();
+    projectRootEvidence = await activateNativeProjectRoot(ws, projectChatRoot, projectChatLabel);
+    newTaskEvidence = await createSingleSubmitTaskWithPhysicalMouse(ws);
+    modelSelectionEvidence = await selectFrontendModelWithPhysicalMouse(ws, 20_000);
+    if (modelSelectionEvidence?.ok !== true || modelSelectionEvidence?.actualMouseClick !== true) {
+      throw new Error(`required model was not selected with native physical input: ${JSON.stringify(modelSelectionEvidence)}`);
+    }
+
+    submitEvidence = await sendSingleSubmitPromptWithPhysicalMouse(ws);
+    sendDispatched = submitEvidence?.ok === true && submitEvidence?.sendClickCount === 1;
+    try { ws.socket?.destroy(); } catch {}
+    ws = null;
+
+    startupEvidence = await waitForSingleSubmitReadOnlyEvidence(
+      rolloutBaseline,
+      codexPlusPlusLogOffset,
+      nativeActivityPreflight,
+    );
+    if (startupEvidence?.rollout?.ok !== true) failures.push("fresh native rollout/task/cwd/model evidence was not observed");
+    if (startupEvidence?.native?.ok !== true) failures.push("fresh native request was not exclusively bound to the new rollout task");
+    if (startupEvidence?.upstream?.request === null) failures.push("first tool-bearing Antigravity upstream request was not observed");
+    if (startupEvidence?.upstream?.ok !== true) failures.push("first tool-bearing Antigravity upstream request did not receive a 2xx response");
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
+  } finally {
+    try { ws?.socket?.destroy(); } catch {}
+    releaseUiLock?.();
+  }
+
+  const payload = {
+    ok: sendDispatched && startupEvidence?.ok === true && failures.length === 0,
+    reportName,
+    coverageKind: "desktop-ui-single-submit-handoff",
+    singleSubmitHandoff: true,
+    taskMode,
+    taskStartedAt: new Date(handoffStartedAt).toISOString(),
+    requestedRealTraffic: true,
+    usedRealTraffic: sendDispatched || startupEvidence?.upstream?.request !== null,
+    promptFile,
+    promptSha256: createHash("sha256").update(promptText, "utf8").digest("hex"),
+    projectRoot: projectChatRoot,
+    projectLabel: projectChatLabel,
+    requiredModel,
+    requiredModelLabel: requiredModelLabel || null,
+    maximumSendClicks: 1,
+    sendClickCount: Number(submitEvidence?.sendClickCount || 0),
+    sendDispatched,
+    waitedForTaskCompletion: false,
+    harnessInterruptedTask: false,
+    harnessSubmittedAdditionalTurns: false,
+    evidenceWindowMs: SINGLE_SUBMIT_EVIDENCE_MS,
+    elapsedMs: Date.now() - handoffStartedAt,
+    failures,
+    cdpPort,
+    target: target ? { id: target.id, title: target.title, url: target.url } : null,
+    processIdentity: processIdentity ? {
+      ...processIdentity,
+      originalCodexAlive: processIdentity.originalCodexPid > 0
+        ? (() => { try { process.kill(processIdentity.originalCodexPid, 0); return true; } catch { return false; } })()
+        : null,
+    } : null,
+    windowActivationEvidence,
+    currentTaskIdleEvidence,
+    priorTaskEvidence,
+    nativeActivityPreflight,
+    projectRootEvidence,
+    newTaskEvidence,
+    modelSelectionEvidence,
+    submitEvidence,
+    codexPlusPlusLogOffset,
+    rolloutBaselineCount: rolloutBaseline.size,
+    startupEvidence,
+  };
+  writeReport(payload);
+  return payload;
 }
 
 async function main() {
@@ -7135,18 +7750,43 @@ async function main() {
   process.exit(0);
 }
 
-if (frontendModelProbeOnly) {
-  runFrontendModelProbeOnly().then((payload) => {
+if (singleSubmitHandoff) {
+  runSingleSubmitHandoff().then((payload) => {
     console.log(JSON.stringify(payload));
     process.exit(payload.ok ? 0 : 1);
   }).catch((error) => {
-    console.log(JSON.stringify({
+    const payload = {
       ok: false,
+      reportName,
+      singleSubmitHandoff: true,
+      taskMode,
+      requestedRealTraffic: true,
+      usedRealTraffic: false,
+      waitedForTaskCompletion: false,
+      harnessInterruptedTask: false,
+      harnessSubmittedAdditionalTurns: false,
+      failures: [error instanceof Error ? error.message : String(error)],
+    };
+    writeReport(payload);
+    console.log(JSON.stringify(payload));
+    process.exit(1);
+  });
+} else if (frontendModelProbeOnly) {
+  runFrontendModelProbeOnly().then((payload) => {
+    writeReport(payload);
+    console.log(JSON.stringify(payload));
+    process.exit(payload.ok ? 0 : 1);
+  }).catch((error) => {
+    const payload = {
+      ok: false,
+      reportName,
       frontendModelProbeOnly: true,
       requestedRealTraffic: false,
       usedRealTraffic: false,
       failures: [error instanceof Error ? error.message : String(error)],
-    }));
+    };
+    writeReport(payload);
+    console.log(JSON.stringify(payload));
     process.exit(1);
   });
 } else if (historyProbeOnly) {

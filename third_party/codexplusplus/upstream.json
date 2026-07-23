@@ -5,63 +5,63 @@
   "version": "1.2.39",
   "tag": "v1.2.39",
   "upstreamCommit": "37c628e58b21cd3698b68a72c15133c91ccc5f92",
-  "isolationPatchCommit": "cd98d4ac846876311234af583737d629306e8c91",
-  "patchCommit": "cbea7671be790b907df8ee311de244d9e5a02636",
+  "isolationPatchCommit": "3618eb9de45c16fcad63054e99032c411f1d3829",
+  "patchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-      "sha256": "14501436e744caa20fe657eea15da17b5e9176f806c32b9852e5e6f3858380cc",
-      "scope": "state, ports, branded executable selection, process paths and global watcher isolation only"
+      "sha256": "f4cf8e5f54f625de2de5b989c2fea4e0f4c68cf15648f2499021c621d4577c0a",
+      "scope": "state, ports, branded executable selection, process paths and global watcher isolation, including canonical exact copied-app root validation before any restart target can be stopped"
     },
     {
       "file": "patches/0002-cancel-loopback-streams-without-resets.patch",
-      "sha256": "67b093dbcf9ba8526ab876572099a28f94150e78c3c3f850ca3acfda894914f8",
-      "scope": "one-shot cancel-aware plain-HTTP loopback streams; downstream cancellation drops the request while normal completion closes gracefully without zero-linger resets"
+      "sha256": "1a114924f5a585967885a1a3b9d1beac046e336ee3a62104928e7568d5182875",
+      "scope": "one-shot cancel-aware loopback-only HTTP streams with bounded header-first parsing, fixed-route bearer authorization before any large body read, bounded body reads and concurrency, unauthenticated slow-body permit-release regression coverage, plus shared response-header timeouts for direct Chat requests"
     },
     {
       "file": "patches/0003-native-codex-helper-requests-text-only.patch",
-      "sha256": "0ac221b22f30dd3c96bd1abc081c2ab1ddb60bddd9c6dfa25546cc1789f942b8",
+      "sha256": "b5b2a28b14279df3e35990f8d5391e737f1189928c6565cffcf4d72df310d436",
       "scope": "strip project tool controls only from exact official Codex title and task-suggestion helper requests; ordinary user tasks and all other conversion behavior remain upstream"
     },
     {
       "file": "patches/0004-route-anticodex-model-slots.patch",
-      "sha256": "8108500b10a5e9a85ea75320e3d470b71cbfcca17d287c4bccea1061b6aadac1",
+      "sha256": "1c4d43ee44df550509f9cbaff74ac6837c224e0f8cb1e6165b4ec5d23cdcee9d",
       "scope": "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction preserves an explicit routable request model and uses isolated config only when that model is missing or unknown, directed requests fail closed without fallback, and ordinary CodexPlusPlus relay selection remains unchanged"
     },
     {
       "file": "patches/0005-preserve-image-tool-outputs-for-chat-relays.patch",
-      "sha256": "2e53cb660bdd5ba27100846f4ff16d4694ab87cf554abb5f56ee831ecaa22bb3",
+      "sha256": "b58ba81fc2591b5da8313e1e23a7667d7409f1ab9c4e0a0230a691d8e1846b70",
       "scope": "convert image-bearing Responses tool outputs to standard multimodal Chat content instead of textual JSON/Base64; ordinary tool text, tool association, streaming, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0006-guide-models-to-structured-patch-tools.patch",
-      "sha256": "ef374e4fd6ab9f8a3daf712b31bc9c4f7e69bd5b840af2be0cd0e119d61276eb",
-      "scope": "expose an exact-name structured apply_patch function before compatibility proxies and command tools, reuse existing native custom-tool reconstruction, and add generic request-level plus command-tool guidance only when apply_patch is present; command execution, routing, history, retries and task control remain unchanged"
+      "sha256": "9ef3ae4f7325574a5106a9235568497f9097a1db34d01e6d7e9c2c1aaf565b5a",
+      "scope": "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, and reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged; command execution, routing, history, retries and task control remain unchanged"
     },
     {
       "file": "patches/0007-ignore-late-reasoning-after-visible-text.patch",
-      "sha256": "db437338a2b64b4ebc86796a3e42a790df24ee53a7610e14894a33a1aa56f0f1",
+      "sha256": "2cd9a7a0fcd343dc3cea628d52e46f22bbf853229d7d9ed703f37092fd952b8b",
       "scope": "map balanced leading think or thinking blocks to reasoning and ignore a separate reasoning delta only after visible text has already started; visible text, reasoning-first streams, tools, routing, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0008-chore-audit-Codex-tool-conversion.patch",
-      "sha256": "926587bc23980250c6e9d4c188ed4a044dfcb97368874cc2e385e8fc116aa271",
+      "sha256": "dbd7023bc32ba6fc03ed257badf482c140185278f7b05da49ae87c42f97c4d8f",
       "scope": "record only native and converted tool counts, names and types for local relay diagnosis; request content, arguments, credentials, routing and model behavior remain unchanged"
     },
     {
       "file": "patches/0009-fix-allow-long-multimodal-helper-requests.patch",
-      "sha256": "5398fd115c78bc2bd102cc16239662eb1eb42ef20c617f9d03a2abd7bc5dc9ac",
+      "sha256": "71c1128db363975474ffee8c1da02a5456b341481e46c69bcad2f0284ec0c148",
       "scope": "raise the bounded loopback helper request limit from 32 MiB to 128 MiB for long multimodal Codex turns while preserving explicit 413 rejection above the limit; routing, translation, retries, history and task control remain unchanged"
     }
   ],
   "verification": {
-    "patchReplay": "nine patches applied from v1.2.39; accepted source series head cbea7671be790b907df8ee311de244d9e5a02636, tree 5596c525d9adfa25e908de1a2f921e28156f3677",
-    "sourceIsolationAudit": "9/9 passed",
-    "auditRegressionTests": "current compaction routing passed 9/9 focused core tests and 54/54 protocol proxy tests; retained earlier evidence covers the diagnostic no-secret audit and 5/5 body-limit boundary tests",
-    "cargoFmt": "changed launcher source passed rustfmt --check; unrelated upstream watcher formatting remains outside the accepted patch",
-    "cargoCheck": "Windows x64 codex-plus-plus release build passed with pinned cargo-xwin Docker image",
-    "windowsNativeTests": "Windows x64 release build passed in the pinned cargo-xwin environment; compaction routing and protocol proxy regressions passed in the same pinned build container",
-    "launcherReleaseBuild": "sha256:23c23ca7e4960b2c9351fa15f62bccd89fda671acdef39cc26fef005c105e73b",
-    "runtimeIsolation": "installed real-mouse provider/model switching preserved the copied client, CodexPlusPlus process, original Codex process and visible task; repeated approximately 35 MiB same-task multimodal third-party requests completed above the former 32 MiB limit"
+    "patchReplay": "nine canonical 1/9 through 9/9 patches were regenerated offline from accepted source series head 36068438997136b8ebe3de1b8fc56a410b72977a; the Windows release build used clean replay head 7690ebea85d44c57b4cf279f2176de2b8009c9b6; source and independent clean replays produced the identical tree 19ea2a0f3ff87a20a473691575601390ff9c1358",
+    "sourceIsolationAudit": "focused source boundary contracts passed; canonical copied-root rejection and zero-stop ordering are covered in the patched Rust tests",
+    "auditRegressionTests": "229/229 focused offline component, isolation, runtime-contract and security-boundary tests passed, including 4/4 security-boundary contracts; 56/56 protocol proxy Rust tests passed; the three launcher TCP authorization/slow-body regressions executed in the pinned container and passed 3/3",
+    "cargoFmt": "all changed Rust source passed rustfmt",
+    "cargoCheck": "pinned messense/cargo-xwin:0.23.0 Windows x64 release build passed in 146.8 seconds; rustc reported one non-functional dead-code warning for the retained bounded request-header field",
+    "windowsNativeTests": "Windows x64 release binary built successfully; the new TCP regressions ran as native Rust tests in the pinned Linux container because the Windows host lacks link.exe/cl.exe",
+    "launcherReleaseBuild": "sha256:b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+    "runtimeIsolation": "pending installed-runtime verification after the verified rebuild; the build and test containers were automatically deleted and no client process or model route was changed"
   }
 }

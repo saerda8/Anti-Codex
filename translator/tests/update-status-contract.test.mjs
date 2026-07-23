@@ -49,6 +49,19 @@ test("official package version drift forces a shell sync even when host hashes m
   assert.match(checker, /\$sourceFingerprint[\s\S]{0,220}\$source\.packageVersion/);
 });
 
+test("checker, installer and sync use the same newest official package root", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  const install = fs.readFileSync(installer, "utf8");
+  const sync = fs.readFileSync(hostSync, "utf8");
+
+  assert.match(checker, /\$packages\s*=\s*@\([\s\S]*?OpenAI\.Codex[\s\S]*?OpenAI\.Codex_8wekyb3d8bbwe[\s\S]*?Sort-Object\s+Version\s+-Descending/);
+  assert.match(install, /\[string\]\$SourceRoot\s*=\s*""/);
+  assert.match(install, /if \(\$SourceRoot\)[\s\S]*?GetFullPath\(\$SourceRoot\)[\s\S]*?Find-CodexAppRoot/);
+  assert.match(sync, /\$sourceSelection\s*=\s*&\s*\$updateChecker\s+-InstallRoot\s+\$installRoot\s+-StateRoot\s+\$stateRoot\s+-NoPersist/);
+  assert.match(sync, /\$selectedSourceRoot\s*=\s*\[IO\.Path\]::GetFullPath\(\[string\]\$sourceSelection\.source\.root\)/);
+  assert.match(sync, /&\s*\$installer\s+-InstallTarget\s+\$candidateRoot\s+-SourceRoot\s+\$selectedSourceRoot\s+-HostOnly/);
+});
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex").toUpperCase();
 }

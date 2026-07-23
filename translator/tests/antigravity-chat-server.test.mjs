@@ -3,7 +3,78 @@ import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
 
 import { createAntigravityChatAdapter } from "../provider/antigravity-chat-adapter.mjs";
-import { createAntigravityChatServer } from "../provider/antigravity-chat-server.mjs";
+import {
+  MAX_CHAT_BODY_BYTES,
+  createAntigravityChatServer,
+} from "../provider/antigravity-chat-server.mjs";
+import { startAntigravityChatProvider } from "../provider/start-antigravity-chat-provider.mjs";
+
+test("provider construction passes the fixed-route bearer into the Chat server", async () => {
+  const provider = await startAntigravityChatProvider({
+    authToken: "route-generated-secret",
+    client: fakeClient([]),
+  });
+  try {
+    assert.equal(provider.authToken, "route-generated-secret");
+    const rejected = await fetch(`${provider.url}/models`);
+    assert.equal(rejected.status, 401);
+    const accepted = await fetch(`${provider.url}/models`, {
+      headers: { authorization: "Bearer route-generated-secret" },
+    });
+    assert.equal(accepted.status, 200);
+  } finally {
+    await provider.close();
+  }
+});
+
+test("uses a fresh bearer and a hard 128 MiB request ceiling", async () => {
+  const first = await createAntigravityChatServer({ adapter: adapterFor(fakeClient([])) });
+  const second = await createAntigravityChatServer({
+    adapter: adapterFor(fakeClient([])),
+    maxBodyBytes: MAX_CHAT_BODY_BYTES + 1,
+  });
+  try {
+    assert.equal(MAX_CHAT_BODY_BYTES, 128 * 1024 * 1024);
+    assert.equal(first.maxBodyBytes, MAX_CHAT_BODY_BYTES);
+    assert.equal(second.maxBodyBytes, MAX_CHAT_BODY_BYTES);
+    assert.notEqual(first.authToken, second.authToken);
+    assert.ok(first.authToken.length >= 32);
+
+    const missing = await fetch(`${first.url}/models`);
+    assert.equal(missing.status, 401);
+    const wrong = await fetch(`${first.url}/models`, {
+      headers: { authorization: "Bearer wrong" },
+    });
+    assert.equal(wrong.status, 401);
+    const accepted = await fetch(`${first.url}/models`, {
+      headers: { authorization: `Bearer ${first.authToken}` },
+    });
+    assert.equal(accepted.status, 200);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test("rejects an authenticated Chat body above the configured bounded limit", async () => {
+  const server = await createAntigravityChatServer({
+    adapter: adapterFor(fakeClient([])),
+    maxBodyBytes: 128,
+  });
+  try {
+    const response = await fetch(`${server.url}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${server.authToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ padding: "x".repeat(256) }),
+    });
+    assert.equal(response.status, 413);
+  } finally {
+    await server.close();
+  }
+});
 
 test("serves loopback model discovery and non-stream Chat Completions", async () => {
   const client = fakeClient([{ type: "text_delta", delta: "hello" }, { type: "done" }]);
@@ -11,13 +82,13 @@ test("serves loopback model discovery and non-stream Chat Completions", async ()
   const server = await createAntigravityChatServer({ adapter });
   try {
     assert.match(server.url, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
-    const modelsResponse = await fetch(`${server.url}/models`);
+    const modelsResponse = await authorizedFetch(server, "/models");
     assert.equal(modelsResponse.status, 200);
     const models = await modelsResponse.json();
     assert.equal(models.object, "list");
     assert.equal(models.data[0].id, "gemini-pro-agent");
 
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body()),
@@ -47,7 +118,7 @@ test("serves anonymized account readiness without model traffic", async () => {
   };
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const response = await fetch(`${server.url}/account`);
+    const response = await authorizedFetch(server, "/account");
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       object: "antigravity.account",
@@ -72,7 +143,7 @@ test("streams standard Chat chunks followed by exactly one DONE marker", async (
   ]);
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body({ stream: true })),
@@ -106,7 +177,7 @@ test("returns OpenAI-shaped JSON errors before streaming headers", async () => {
   };
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body()),
@@ -136,7 +207,7 @@ test("returns a terminal quota status before opening an empty stream", async () 
   };
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body({ stream: true })),
@@ -173,7 +244,7 @@ test("maps an upstream AbortError before headers without crashing the server", a
   };
   const server = await createAntigravityChatServer({ adapter });
   try {
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body({ stream: true })),
@@ -182,7 +253,7 @@ test("maps an upstream AbortError before headers without crashing the server", a
     assert.equal((await response.json()).error.code, "upstream_error");
     assert.equal(streamCalls, 1);
 
-    const health = await fetch(`${server.url}/models`);
+    const health = await authorizedFetch(server, "/models");
     assert.equal(health.status, 200);
   } finally {
     await server.close();
@@ -209,7 +280,7 @@ test("malformed native tool arguments return a structured 502 and cancel the con
   };
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const response = await fetch(`${server.url}/chat/completions`, {
+    const response = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body()),
@@ -251,7 +322,7 @@ test("normal non-stream response close preserves a retained tool continuation", 
   };
   const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
   try {
-    const firstResponse = await fetch(`${server.url}/chat/completions`, {
+    const firstResponse = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body({
@@ -261,7 +332,7 @@ test("normal non-stream response close preserves a retained tool continuation", 
     const first = await firstResponse.json();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(firstSignal.aborted, false);
-    const secondResponse = await fetch(`${server.url}/chat/completions`, {
+    const secondResponse = await authorizedFetch(server, "/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body({ messages: [
@@ -304,7 +375,10 @@ test("client disconnect aborts the in-flight Cascade request", async () => {
         port: target.port,
         path: target.pathname,
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${server.authToken}`,
+          "content-type": "application/json",
+        },
       }, (response) => response.resume());
       request.once("error", (error) => {
         if (error.code === "ECONNRESET") resolve();
@@ -358,4 +432,14 @@ function body(overrides = {}) {
     messages: [{ role: "user", content: "hello" }],
     ...overrides,
   };
+}
+
+function authorizedFetch(server, path, options = {}) {
+  return fetch(`${server.url}${path}`, {
+    ...options,
+    headers: {
+      ...options.headers,
+      authorization: `Bearer ${server.authToken}`,
+    },
+  });
 }

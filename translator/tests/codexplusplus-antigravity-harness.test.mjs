@@ -89,6 +89,27 @@ test("visible candidate launch requires approval and no active Anti-Codex root",
   }));
 });
 
+test("Gate 5 separates the local Codex proxy key from the provider relay key", () => {
+  const relayProfile = harnessSource.match(
+    /relayProfiles:\s*\[\{(?<profile>[\s\S]*?)\}\],\s*activeRelayId:/,
+  )?.groups?.profile;
+
+  assert.ok(relayProfile, "expected the Gate 5 relay profile");
+  assert.match(relayProfile, /apiKey:\s*provider\.authToken/);
+  assert.match(
+    relayProfile,
+    /authContents:\s*`\$\{JSON\.stringify\(\{\s*OPENAI_API_KEY:\s*provider\.authToken\s*\}/,
+  );
+  assert.doesNotMatch(relayProfile, /OPENAI_API_KEY:\s*"gate5-local-key"/);
+
+  assert.match(
+    harnessSource,
+    /writeFileSync\(join\(paths\.codexHome,\s*"auth\.json"\),[\s\S]*?OPENAI_API_KEY:\s*"gate5-local-key"/,
+  );
+  assert.match(harnessSource, /Authorization:\s*"Bearer gate5-local-key"/);
+  assert.match(harnessSource, /experimental_bearer_token = \\"gate5-local-key\\"/);
+});
+
 test("tree manifest preserves nested paths relative to the requested root", () => {
   const root = mkdtempSync(join(tmpdir(), "AntiCodex-Harness-Test-"));
   try {

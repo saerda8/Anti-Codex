@@ -1,4 +1,4 @@
-From 7361e83bd8ca959d60445db67ded149391d0ccfe Mon Sep 17 00:00:00 2001
+From a30e31f1decc57857f7ae3f44d8a4abb948fcc4c Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 08:09:32 +0800
 Subject: [PATCH 7/9] handle third-party thinking tags without interleaving
@@ -9,7 +9,7 @@ Subject: [PATCH 7/9] handle third-party thinking tags without interleaving
  2 files changed, 101 insertions(+), 14 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index f9f51d5..ee2ab70 100644
+index 6b397fa..bb06088 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -7,7 +7,7 @@ use std::collections::BTreeSet;
@@ -34,7 +34,7 @@ index f9f51d5..ee2ab70 100644
  const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
      "frequency_penalty",
      "logit_bias",
-@@ -56,7 +62,7 @@ fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
+@@ -75,7 +81,7 @@ fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
  
  #[cfg(test)]
  mod isolation_port_tests {
@@ -43,7 +43,7 @@ index f9f51d5..ee2ab70 100644
  
      #[test]
      fn protocol_proxy_port_accepts_only_nonzero_u16_values() {
-@@ -726,9 +732,9 @@ fn select_anticodex_relay_for_model(
+@@ -745,9 +751,9 @@ fn select_anticodex_relay_for_model(
  #[cfg(test)]
  mod anticodex_model_routing_tests {
      use super::{
@@ -54,7 +54,7 @@ index f9f51d5..ee2ab70 100644
      };
      use crate::settings::{BackendSettings, RelayProfile};
      use serde_json::json;
-@@ -1925,6 +1931,10 @@ impl ChatSseState {
+@@ -1946,6 +1952,10 @@ impl ChatSseState {
      }
  
      fn push_reasoning_delta_into(&mut self, delta: &str, output: &mut String) {
@@ -65,7 +65,7 @@ index f9f51d5..ee2ab70 100644
          if !self.reasoning.added {
              let output_index = self.next_output_index();
              let item_id = format!("rs_{}", self.response_id);
-@@ -2396,10 +2406,16 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+@@ -2431,10 +2441,16 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
      if trimmed.is_empty() {
          return ThinkPrefixDecision::NeedMore;
      }
@@ -84,7 +84,7 @@ index f9f51d5..ee2ab70 100644
          return ThinkPrefixDecision::NeedMore;
      }
      ThinkPrefixDecision::Text
-@@ -3926,13 +3942,14 @@ fn response_tool_call_item(
+@@ -3962,13 +3978,14 @@ fn response_tool_call_item(
  fn split_leading_think_block(text: &str) -> Option<(String, String)> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -105,7 +105,7 @@ index f9f51d5..ee2ab70 100644
      Some((
          text[body_start..close_start].trim().to_string(),
          strip_think_answer_separator(&text[answer_start..]).to_string(),
-@@ -3942,9 +3959,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+@@ -3978,9 +3995,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
  fn strip_leading_think_open_tag(text: &str) -> Option<String> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -121,10 +121,10 @@ index f9f51d5..ee2ab70 100644
  
  fn strip_think_answer_separator(text: &str) -> &str {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 8330898..bc08084 100644
+index 6682ebe..a0080f0 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1381,6 +1381,33 @@ fn chat_completion_response_splits_inline_think_block() {
+@@ -1428,6 +1428,33 @@ fn chat_completion_response_splits_inline_think_block() {
      );
      assert_eq!(converted["output"][1]["type"], "message");
      assert_eq!(converted["output"][1]["content"][0]["text"], "pong");
@@ -158,7 +158,7 @@ index 8330898..bc08084 100644
  }
  
  #[test]
-@@ -1404,6 +1431,33 @@ data: [DONE]
+@@ -1451,6 +1478,33 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  
@@ -192,7 +192,7 @@ index 8330898..bc08084 100644
  #[test]
  fn chat_sse_converts_reasoning_inline_think_tools_and_errors_like_ccs() {
      let reasoning = chat_sse_to_responses_sse(
-@@ -1436,6 +1490,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
+@@ -1483,6 +1537,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
      assert!(!inline_think.contains("<think>"));
      assert!(!inline_think.contains("</think>"));
  

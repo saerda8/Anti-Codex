@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { createAntigravityCascadeClient } from "../translator/provider/antigravity-cascade-client.mjs";
 import { startAntigravityChatProvider } from "../translator/provider/start-antigravity-chat-provider.mjs";
+import { createCurrentReleaseBinding } from "./lib/anticodex-release-binding.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const argv = process.argv.slice(2);
@@ -13,6 +14,10 @@ const allowRealTraffic = args.has("--allow-real-traffic");
 const compact = args.has("--compact");
 const offlineFixture = args.has("--offline-fixture");
 const reportRoot = resolve(optionValue("--report-root") || resolve(root, "docs", "audits"));
+const releaseReportRoot = resolve(
+  optionValue("--release-report-root")
+    || resolve(process.env.APPDATA || ".", "anticodex", "reports"),
+);
 const formalReportPath = resolve(reportRoot, "2026-07-14-antigravity-chat-adapter-contract.json");
 const readinessReportPath = resolve(reportRoot, "2026-07-14-antigravity-chat-adapter-readiness.json");
 const reportPath = allowRealTraffic ? formalReportPath : readinessReportPath;
@@ -34,6 +39,9 @@ delete childTestEnv.NODE_TEST_CONTEXT;
 function record(id, ok, detail = {}) {
   checks.push({ id, ok: ok === true, ...detail });
 }
+
+const releaseBinding = createCurrentReleaseBinding({ sourceRoot: root, reportRoot: releaseReportRoot });
+record("current_release_binding_available", releaseBinding.valid === true, { releaseBinding });
 
 const syntax = providerPaths.map((path) => {
   const result = spawnSync(process.execPath, ["--check", path], {
@@ -111,9 +119,17 @@ let realTraffic = {
   ok: !allowRealTraffic,
   reason: allowRealTraffic ? "not_started" : "not_requested",
 };
-if (allowRealTraffic) {
+if (allowRealTraffic && releaseBinding.valid) {
   realTraffic = await runRealToolRoundTrip();
   record("real_native_tool_round_trip", realTraffic.ok, realTraffic);
+} else if (allowRealTraffic) {
+  realTraffic = {
+    requested: true,
+    used: false,
+    ok: false,
+    reason: "current_release_binding_unavailable",
+  };
+  record("real_native_tool_round_trip", false, realTraffic);
 }
 
 const failedIds = checks.filter((check) => !check.ok).map((check) => check.id);
@@ -133,6 +149,7 @@ const report = {
   readOnlyProbe,
   realTraffic,
   providerSources: sources,
+  releaseBinding,
   workerReview: {
     jobId: "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
     accepted: [
@@ -150,7 +167,17 @@ const report = {
 };
 
 mkdirSync(dirname(reportPath), { recursive: true });
-writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+const reportBody = `${JSON.stringify(report, null, 2)}\n`;
+writeFileSync(reportPath, reportBody, "utf8");
+if (allowRealTraffic && report.ok) {
+  writeFileSync(
+    `${reportPath}.sha256`,
+    `sha256:${createHash("sha256").update(reportBody).digest("hex")}`,
+    "ascii",
+  );
+} else {
+  rmSync(`${reportPath}.sha256`, { force: true });
+}
 process.stdout.write(`${JSON.stringify(compact ? {
   ok: report.ok,
   failedIds,
@@ -223,7 +250,7 @@ async function runRealToolRoundTrip() {
       tools,
       tool_choice: { type: "function", function: { name: "echo_probe" } },
     };
-    const first = await postJson(`${provider.url}/chat/completions`, firstBody, 180000);
+    const first = await postJson(`${provider.url}/chat/completions`, firstBody, 180000, provider.authToken);
     const toolCalls = first.body?.choices?.[0]?.message?.tool_calls ?? [];
     const call = toolCalls[0];
     let parsedArguments = null;
@@ -254,7 +281,7 @@ async function runRealToolRoundTrip() {
       tools,
       tool_choice: "none",
     };
-    const second = await postJson(`${provider.url}/chat/completions`, secondBody, 180000);
+    const second = await postJson(`${provider.url}/chat/completions`, secondBody, 180000, provider.authToken);
     const finalText = String(second.body?.choices?.[0]?.message?.content ?? "").trim();
     const exactResume = observedResults.length === 1
       && observedResults[0].callId === call.id
@@ -301,10 +328,13 @@ async function runRealToolRoundTrip() {
   }
 }
 
-async function postJson(url, body, timeoutMs) {
+async function postJson(url, body, timeoutMs, authToken) {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${authToken}`,
+      "content-type": "application/json",
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeoutMs),
   });

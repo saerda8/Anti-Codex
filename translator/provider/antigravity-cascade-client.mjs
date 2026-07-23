@@ -1,6 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readSync,
+} from "node:fs";
 import { platform } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +13,7 @@ import {
   createAntigravityNativeMcpBridge,
   withAntigravitySystemPromptSections,
 } from "../antigravity-native-mcp-bridge.mjs";
+import { DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS } from "../antigravity-contract.mjs";
 import { extractAvailableAgentModels } from "../antigravity-model-catalog.mjs";
 
 const SERVICE_PREFIX = "/exa.language_server_pb.LanguageServerService";
@@ -109,7 +115,10 @@ export function createAntigravityCascadeClient(options = {}) {
           tools: request.tools,
           systemPromptSections,
           signal,
-          callTimeoutMs: timeoutMs,
+          pendingCallTimeoutMs: positiveInteger(
+            request.toolContinuationTimeoutMs ?? options.toolContinuationTimeoutMs,
+            DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS,
+          ),
         });
       }
       const customAgentSpec = withAntigravitySystemPromptSections(
@@ -360,26 +369,47 @@ function isTransientEmptyTrajectoryIdleError(error) {
 }
 
 async function captureNativeCalls(options) {
-  const calls = [];
   for (const pending of options.pending) {
-    if (pending.interaction) {
-      await serviceCall(options.connection, "HandleCascadeUserInteraction", {
-        cascadeId: options.cascadeId,
-        interaction: {
-          trajectoryId: pending.interaction.trajectoryId,
-          stepIndex: pending.interaction.stepIndex,
-          ...approvalFor(pending.requestedInteraction),
-        },
-      }, {
-        fetchImpl: options.fetchImpl,
-        signal: options.signal,
-        timeoutMs: options.interactionTimeoutMs,
-      });
-    }
-    const nativeCall = await options.bridge.waitForCall({
+    if (!pending.interaction) continue;
+    await serviceCall(options.connection, "HandleCascadeUserInteraction", {
+      cascadeId: options.cascadeId,
+      interaction: {
+        trajectoryId: pending.interaction.trajectoryId,
+        stepIndex: pending.interaction.stepIndex,
+        ...approvalFor(pending.requestedInteraction),
+      },
+    }, {
+      fetchImpl: options.fetchImpl,
+      signal: options.signal,
+      timeoutMs: options.interactionTimeoutMs,
+    });
+  }
+
+  const nativeCalls = [];
+  for (let index = 0; index < options.pending.length; index += 1) {
+    nativeCalls.push(await options.bridge.waitForCall({
       timeoutMs: options.toolCallTimeoutMs,
       signal: options.signal,
-    });
+    }));
+  }
+
+  const calls = [];
+  for (const pending of options.pending) {
+    const exactIndexes = nativeCalls.flatMap((nativeCall, index) => (
+      nativeCallIdMatches(nativeCall, pending) ? [index] : []
+    ));
+    const matchingIndexes = exactIndexes.length > 0
+      ? exactIndexes
+      : nativeCalls.flatMap((nativeCall, index) => (
+          nativeCallSignatureMatches(nativeCall, pending) ? [index] : []
+        ));
+    if (matchingIndexes.length !== 1) {
+      throw new AntigravityCascadeError(
+        `Native MCP call identity mismatch for ${pending.name}.`,
+        { statusCode: 502 },
+      );
+    }
+    const [nativeCall] = nativeCalls.splice(matchingIndexes[0], 1);
     const nativeName = nativeCall?.nativeName ?? nativeCall?.name;
     if (!nativeCall?.callId || nativeName !== pending.name) {
       throw new AntigravityCascadeError(
@@ -394,6 +424,22 @@ async function captureNativeCalls(options) {
     });
   }
   return calls;
+}
+
+function nativeCallIdMatches(nativeCall, pending) {
+  const pendingId = String(pending?.nativeCallId ?? "");
+  const nativeId = String(nativeCall?.nativeCallId ?? "");
+  return Boolean(pendingId && nativeId && pendingId === nativeId);
+}
+
+function nativeCallSignatureMatches(nativeCall, pending) {
+  const nativeName = String(nativeCall?.nativeName ?? nativeCall?.name ?? "");
+  if (nativeName !== pending?.name) return false;
+  try {
+    return JSON.stringify(nativeCall?.arguments ?? {}) === JSON.stringify(pending?.arguments ?? {});
+  } catch {
+    return false;
+  }
 }
 
 function approvalFor(requestedInteraction) {
@@ -425,6 +471,7 @@ function extractPendingMcpCalls(payload, allowedNames = []) {
     const sourceTrajectoryId = String(source?.trajectoryId ?? source?.trajectory_id ?? trajectoryId);
     const sourceStepIndex = Number(source?.stepIndex ?? source?.step_index ?? stepArrayIndex);
     return [{
+      nativeCallId: String(toolCall?.id ?? ""),
       name,
       arguments: args,
       stepArrayIndex,
@@ -518,6 +565,7 @@ export function extractAvailableModelEntries(payload) {
 
 function normalizeModelEntry(entry) {
   return {
+    ...entry,
     id: String(entry.id),
     displayName: String(entry.displayName ?? entry.display_name ?? entry.id),
     internalModel: String(entry.model ?? ""),
@@ -576,10 +624,16 @@ export function discoverAntigravityDesktopConnection(env = process.env) {
   for (const row of rows) {
     const csrfToken = String(row.commandLine ?? "").match(/--csrf_token\s+([^\s]+)/)?.[1];
     const ports = extractListeningPortsForProcess(netstat, row.processId);
-    if (csrfToken && ports.length) {
+    const lsPort = csrfToken
+      ? selectAntigravityLanguageServerPort(
+          ports,
+          (candidate) => probeAntigravityLanguageServerPort(candidate, csrfToken, env),
+        )
+      : 0;
+    if (csrfToken && lsPort) {
       return {
-        agentApiAddress: `127.0.0.1:${ports[0]}`,
-        lsAddress: `127.0.0.1:${ports.at(-1)}`,
+        agentApiAddress: `127.0.0.1:${lsPort}`,
+        lsAddress: `127.0.0.1:${lsPort}`,
         csrfToken,
       };
     }
@@ -631,9 +685,64 @@ function discoverAntigravityDesktopConnectionFromFiles(env) {
     env.ANTIGRAVITY_LANGUAGE_SERVER_LOG_PATH,
   ].filter(Boolean);
   const readLogs = (paths) => paths.map((file) => {
-    try { return readFileSync(file, "utf8"); } catch { return ""; }
+    try { return readBoundedLogTail(file); } catch { return ""; }
   }).filter(Boolean).join("\n");
   return extractAntigravityConnectionFromLogs(readLogs(mainLogPaths), readLogs(languageServerLogPaths));
+}
+
+export function readBoundedLogTail(file, maxBytes = 1024 * 1024) {
+  const limit = positiveInteger(maxBytes, 1024 * 1024);
+  const handle = openSync(file, "r");
+  try {
+    const size = fstatSync(handle).size;
+    const length = Math.min(size, limit);
+    const buffer = Buffer.alloc(length);
+    if (length > 0) readSync(handle, buffer, 0, length, Math.max(0, size - length));
+    return buffer.toString("utf8");
+  } finally {
+    closeSync(handle);
+  }
+}
+
+export function selectAntigravityLanguageServerPort(ports, probe) {
+  for (const port of ports ?? []) {
+    if (probe(port) === true) return port;
+  }
+  return 0;
+}
+
+function probeAntigravityLanguageServerPort(port, csrfToken, env) {
+  const curl = join(env.SystemRoot || process.env.SystemRoot || "C:\\Windows", "System32", "curl.exe");
+  try {
+    const status = execFileSync(curl, [
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "2",
+      "--output",
+      "NUL",
+      "--write-out",
+      "%{http_code}",
+      "--request",
+      "POST",
+      `http://127.0.0.1:${port}${SERVICE_PREFIX}/GetUserStatus`,
+      "--header",
+      "content-type: application/json",
+      "--header",
+      "connect-protocol-version: 1",
+      "--header",
+      `x-codeium-csrf-token: ${csrfToken}`,
+      "--data",
+      "{}",
+    ], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 3000,
+    }).trim();
+    return status === "200";
+  } catch {
+    return false;
+  }
 }
 
 export function extractListeningPortsForProcess(netstatOutput, processId) {
@@ -732,11 +841,23 @@ function requiredText(value, label) {
 }
 
 function normalizeAddress(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^localhost:/i, "127.0.0.1:")
-    .replace(/\/+$/, "");
+  const match = String(value ?? "").trim().match(
+    /^(?:https?:\/\/)?(127\.0\.0\.1|localhost|\[::1\]|::1):([0-9]+)(?:\/+)?$/i,
+  );
+  const port = Number(match?.[2]);
+  if (!match || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new AntigravityCascadeError(
+      "Antigravity address must use a loopback host with a valid port.",
+      { statusCode: 400 },
+    );
+  }
+  const host = match[1].toLowerCase();
+  const normalizedHost = host === "localhost"
+    ? "127.0.0.1"
+    : host === "::1"
+      ? "[::1]"
+      : host;
+  return `${normalizedHost}:${port}`;
 }
 
 function isConnectionError(error) {

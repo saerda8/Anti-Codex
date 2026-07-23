@@ -14,6 +14,7 @@ export async function startAntigravityChatProvider(options = {}) {
     adapter,
     host: options.host ?? "127.0.0.1",
     port: options.port ?? 0,
+    authToken: options.authToken,
     maxBodyBytes: options.maxBodyBytes,
   });
   return { ...server, client, adapter };

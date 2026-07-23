@@ -1,8 +1,13 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 
 import { ChatAdapterError, mapAntigravityError } from "./antigravity-chat-adapter.mjs";
+import {
+  MAX_CHAT_BODY_BYTES,
+  boundedPositiveInteger,
+} from "../antigravity-contract.mjs";
 
-const DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024;
+export { MAX_CHAT_BODY_BYTES };
 
 export async function createAntigravityChatServer(options = {}) {
   const adapter = options.adapter;
@@ -13,7 +18,12 @@ export async function createAntigravityChatServer(options = {}) {
   if (host !== "127.0.0.1" && host !== "::1" && host !== "localhost") {
     throw new Error("The Antigravity Chat adapter may listen only on loopback.");
   }
-  const maxBodyBytes = positiveInteger(options.maxBodyBytes, DEFAULT_MAX_BODY_BYTES);
+  const maxBodyBytes = boundedPositiveInteger(
+    options.maxBodyBytes,
+    MAX_CHAT_BODY_BYTES,
+    MAX_CHAT_BODY_BYTES,
+  );
+  const authToken = String(options.authToken || randomBytes(32).toString("base64url"));
   const active = new Set();
 
   const server = createServer(async (request, response) => {
@@ -32,6 +42,11 @@ export async function createAntigravityChatServer(options = {}) {
 
     try {
       const url = new URL(request.url ?? "/", `http://${host}`);
+      if (!bearerMatches(request.headers.authorization, authToken)) {
+        finished = true;
+        sendJson(response, 401, openAiError("Unauthorized.", "authentication_error", "invalid_request_error"));
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/v1/models") {
         const models = await adapter.models({ signal: controller.signal });
         finished = true;
@@ -129,25 +144,41 @@ export async function createAntigravityChatServer(options = {}) {
 
   return {
     url: `http://${displayHost}:${address.port}/v1`,
+    authToken,
     host: address.address,
+    maxBodyBytes,
     port: address.port,
     close,
   };
 }
 
+function bearerMatches(header, expected) {
+  const match = String(header ?? "").match(/^Bearer\s+(.+)$/i);
+  if (!match) return false;
+  const supplied = Buffer.from(match[1], "utf8");
+  const wanted = Buffer.from(expected, "utf8");
+  return supplied.length === wanted.length && timingSafeEqual(supplied, wanted);
+}
+
 async function readJsonBody(request, maxBytes) {
   const chunks = [];
   let size = 0;
+  let tooLarge = false;
   for await (const chunk of request) {
     size += chunk.length;
     if (size > maxBytes) {
-      throw new ChatAdapterError(`Request body exceeds ${maxBytes} bytes.`, {
-        statusCode: 413,
-        code: "request_too_large",
-        type: "invalid_request_error",
-      });
+      tooLarge = true;
+      chunks.length = 0;
+      continue;
     }
-    chunks.push(chunk);
+    if (!tooLarge) chunks.push(chunk);
+  }
+  if (tooLarge) {
+    throw new ChatAdapterError(`Request body exceeds ${maxBytes} bytes.`, {
+      statusCode: 413,
+      code: "request_too_large",
+      type: "invalid_request_error",
+    });
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -184,9 +215,4 @@ function chatChunkCommitsResponse(value) {
       || typeof delta?.reasoning_content === "string"
       || Array.isArray(delta?.tool_calls);
   });
-}
-
-function positiveInteger(value, fallback) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

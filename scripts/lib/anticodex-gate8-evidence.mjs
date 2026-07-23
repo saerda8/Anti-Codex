@@ -1,4 +1,13 @@
-import { createHash } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  generateKeyPairSync,
+  randomBytes,
+  sign as signBytes,
+  timingSafeEqual,
+  verify as verifyBytes,
+} from "node:crypto";
+import { isAbsolute, resolve } from "node:path";
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
 const MIN_LONG_CONTEXT_CHARS = 65_536;
@@ -439,6 +448,1411 @@ export function retainJourneyTurnEvidence(...sources) {
   };
   for (const source of sources) add(source);
   return retained;
+}
+
+const NATIVE_ID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const AUTONOMOUS_VIDEO_COVERAGE = "native-single-task-single-goal-autonomous-live-action-video";
+const REQUIRED_ARTIFACT_ROLES = Object.freeze([
+  "main-video",
+  "release-video",
+  "subtitle",
+  "lipsync-report",
+  "media-qa-report",
+  "checksum-manifest",
+  "total-goal-prompt",
+  "native-rollout",
+]);
+const REQUIRED_PACKAGE_ROLES = Object.freeze([
+  "main-video",
+  "release-video",
+  "subtitle",
+  "lipsync-report",
+  "media-qa-report",
+]);
+const TRUSTED_EXTERNAL_EVIDENCE_ROLES = new Set(["total-goal-prompt", "native-rollout"]);
+const STRUCTURED_PROVIDER_ERROR_CODES = new Set([
+  "quota_exhausted",
+  "rate_limit_exceeded",
+  "resource_exhausted",
+  "service_unavailable",
+  "provider_unavailable",
+]);
+const TOOL_RESIDUE_NAMES = /^(?:cmd|conhost|powershell|pwsh|python|pythonw|node|ffmpeg|ffprobe|git|bash|sh)\.exe$/i;
+
+function gate8Assertion(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function jsonBytes(value) {
+  return Buffer.from(JSON.stringify(value), "utf8");
+}
+
+function recordTurnId(record, currentTurnId = "") {
+  return String(
+    record?.payload?.turn_id
+    || record?.payload?.internal_chat_message_metadata_passthrough?.turn_id
+    || currentTurnId
+    || "",
+  );
+}
+
+function modelProvider(modelValue) {
+  const model = String(modelValue || "").toLowerCase();
+  if (model.includes("gemini")) return "gemini";
+  if (model.includes("claude")) return "claude";
+  if (model.includes("third-party") || model.includes("gpt-")) return "third-party";
+  return "";
+}
+
+function secondsFromSrtTimestamp(value) {
+  const match = String(value || "").match(/^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/);
+  gate8Assertion(match, `subtitle timestamp is invalid: ${value}`);
+  return (Number(match[1]) * 3600) + (Number(match[2]) * 60)
+    + Number(match[3]) + (Number(match[4]) / 1000);
+}
+
+export function parseTrustedSrtCues(textValue, durationSecondsValue) {
+  const durationSeconds = Number(durationSecondsValue);
+  gate8Assertion(Number.isFinite(durationSeconds) && durationSeconds > 0,
+    "subtitle main duration is invalid");
+  const blocks = String(textValue || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split(/\r?\n\s*\r?\n/)
+    .filter((block) => block.trim());
+  const cues = [];
+  let previousStart = Number.NEGATIVE_INFINITY;
+  let previousEnd = Number.NEGATIVE_INFINITY;
+  for (const [index, block] of blocks.entries()) {
+    const lines = block.split(/\r?\n/).map((line) => line.trimEnd());
+    const timingIndex = lines.findIndex((line) => line.includes("-->"));
+    gate8Assertion(timingIndex >= 0, `subtitle cue ${index + 1} has no timing`);
+    const match = lines[timingIndex].trim().match(
+      /^(\d{2}:\d{2}:\d{2}[,.]\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}[,.]\d{3})$/,
+    );
+    gate8Assertion(match, `subtitle cue ${index + 1} timing is invalid`);
+    const startSeconds = secondsFromSrtTimestamp(match[1]);
+    const endSeconds = secondsFromSrtTimestamp(match[2]);
+    const text = lines.slice(timingIndex + 1).join("\n").trim();
+    gate8Assertion(/[\u3400-\u9fff]/u.test(text),
+      `subtitle Chinese text is missing from cue ${index + 1}`);
+    gate8Assertion(endSeconds > startSeconds,
+      `subtitle cue ${index + 1} duration is invalid`);
+    gate8Assertion(startSeconds >= previousStart,
+      `subtitle cue ${index + 1} is not ordered`);
+    gate8Assertion(startSeconds >= previousEnd,
+      `subtitle cue ${index + 1} overlaps the previous cue`);
+    gate8Assertion(endSeconds <= durationSeconds + 0.001,
+      `subtitle cue ${index + 1} exceeds main duration`);
+    cues.push({ index: index + 1, startSeconds, endSeconds, text });
+    previousStart = startSeconds;
+    previousEnd = endSeconds;
+  }
+  gate8Assertion(cues.length >= 1, "subtitle has no cues");
+
+  let coveredSeconds = 0;
+  let unionStart = Number.NaN;
+  let unionEnd = Number.NaN;
+  for (const cue of cues) {
+    if (!Number.isFinite(unionStart)) {
+      unionStart = cue.startSeconds;
+      unionEnd = cue.endSeconds;
+      continue;
+    }
+    if (cue.startSeconds <= unionEnd) {
+      unionEnd = Math.max(unionEnd, cue.endSeconds);
+      continue;
+    }
+    coveredSeconds += unionEnd - unionStart;
+    unionStart = cue.startSeconds;
+    unionEnd = cue.endSeconds;
+  }
+  if (Number.isFinite(unionStart)) coveredSeconds += unionEnd - unionStart;
+  return {
+    cues,
+    cueCount: cues.length,
+    coveredSeconds,
+    durationCoverageRatio: Math.min(1, coveredSeconds / durationSeconds),
+  };
+}
+
+export function validateTrustedLipSyncWindows(windowsValue, durationSecondsValue) {
+  const durationSeconds = Number(durationSecondsValue);
+  gate8Assertion(Number.isFinite(durationSeconds) && durationSeconds > 0,
+    "lip-sync main duration is invalid");
+  const windows = Array.isArray(windowsValue) ? windowsValue : [];
+  gate8Assertion(windows.length >= 5, "lip-sync requires at least five windows");
+  const normalized = [];
+  const ids = new Set();
+  const speakers = new Set();
+  const faceTracks = new Set();
+  let previousStart = Number.NEGATIVE_INFINITY;
+  let previousEnd = Number.NEGATIVE_INFINITY;
+  for (const [index, raw] of windows.entries()) {
+    const id = String(raw?.id || "").trim();
+    const speaker = String(raw?.speaker || "").trim();
+    const faceTrackId = String(raw?.faceTrackId || "").trim();
+    const startSeconds = Number(raw?.startSeconds);
+    const endSeconds = Number(raw?.endSeconds);
+    const offsetMs = Number(raw?.offsetMs);
+    const mouthMotionScore = Number(raw?.mouthMotionScore);
+    const avSyncScore = Number(raw?.avSyncScore);
+    gate8Assertion(id && !ids.has(id), `lip-sync window ${index + 1} id is empty or duplicated`);
+    gate8Assertion(speaker, `lip-sync window ${id} speaker is empty`);
+    gate8Assertion(faceTrackId, `lip-sync window ${id} face track is empty`);
+    gate8Assertion(Number.isFinite(startSeconds) && Number.isFinite(endSeconds)
+      && startSeconds >= 0 && endSeconds > startSeconds,
+    `lip-sync window ${id} timing is invalid`);
+    gate8Assertion(startSeconds >= previousStart && startSeconds >= previousEnd,
+      `lip-sync window ${id} is unordered or overlaps`);
+    gate8Assertion(endSeconds <= durationSeconds + 0.001,
+      `lip-sync window ${id} exceeds main duration`);
+    gate8Assertion(Number.isFinite(offsetMs) && offsetMs >= 0 && offsetMs <= 500,
+      `lip-sync window ${id} offset is invalid`);
+    gate8Assertion(Number.isFinite(mouthMotionScore)
+      && mouthMotionScore >= 0 && mouthMotionScore <= 1
+      && Number.isFinite(avSyncScore)
+      && avSyncScore >= 0 && avSyncScore <= 1,
+    `lip-sync window ${id} score is outside 0..1`);
+    gate8Assertion(mouthMotionScore >= 0.5 && avSyncScore >= 0.65,
+      `lip-sync window ${id} score is below the acceptance threshold`);
+    ids.add(id);
+    speakers.add(speaker);
+    faceTracks.add(faceTrackId);
+    previousStart = startSeconds;
+    previousEnd = endSeconds;
+    normalized.push({
+      id,
+      startSeconds,
+      endSeconds,
+      speaker,
+      faceTrackId,
+      offsetMs,
+      mouthMotionScore,
+      avSyncScore,
+      passed: true,
+    });
+  }
+  gate8Assertion(speakers.size >= 2, "lip-sync windows do not cover two speakers");
+  gate8Assertion(faceTracks.size >= 2, "lip-sync windows do not cover two face tracks");
+  return normalized;
+}
+
+function structuredProviderErrorForTurn(records, turnId, provider) {
+  const matches = records.filter((record) => {
+    const payload = record?.payload || {};
+    if (record?.type !== "event_msg"
+      || payload?.type !== "provider_error"
+      || String(payload?.turn_id || "") !== turnId
+      || String(payload?.provider || "") !== provider) return false;
+    const statusCode = Number(payload?.status_code);
+    const errorCode = String(payload?.error_code || "");
+    return [429, 503].includes(statusCode) && STRUCTURED_PROVIDER_ERROR_CODES.has(errorCode);
+  });
+  gate8Assertion(matches.length <= 1,
+    `multiple structured provider errors exist for turn ${turnId}`);
+  if (matches.length === 0) return null;
+  const payload = matches[0].payload;
+  return {
+    statusCode: Number(payload.status_code),
+    errorCode: String(payload.error_code),
+    reasonKind: Number(payload.status_code) === 429 ? "quota-error" : "service-error",
+    timestamp: String(matches[0].timestamp || ""),
+  };
+}
+
+export function deriveTrustedProviderReceipts(recordsValue = []) {
+  const records = Array.isArray(recordsValue) ? recordsValue : [];
+  const turns = records
+    .filter((record) => record?.type === "turn_context")
+    .map((record) => ({
+      turnId: String(record?.payload?.turn_id || ""),
+      model: String(record?.payload?.model || record?.payload?.collaboration_mode?.settings?.model || ""),
+      provider: modelProvider(
+        record?.payload?.model || record?.payload?.collaboration_mode?.settings?.model,
+      ),
+      timestamp: String(record?.timestamp || ""),
+    }));
+  gate8Assertion(turns.length >= 1, "provider evidence has no native turn");
+  gate8Assertion(turns.every((turn) => NATIVE_ID_PATTERN.test(turn.turnId)
+    && turn.model && turn.provider),
+  "provider evidence has an invalid native turn, model, or provider");
+  gate8Assertion(turns[0].provider === "gemini",
+    "provider state machine must start with Gemini");
+  const receipts = turns.map((turn) => {
+    const completions = records.filter((record) => (
+      record?.type === "event_msg"
+      && record?.payload?.type === "task_complete"
+      && String(record?.payload?.turn_id || "") === turn.turnId
+    ));
+    const error = structuredProviderErrorForTurn(records, turn.turnId, turn.provider);
+    const interruptions = records.filter((record) => (
+      record?.type === "event_msg"
+      && ["turn_aborted", "turn_interrupted"].includes(String(record?.payload?.type || ""))
+      && String(record?.payload?.turn_id || "") === turn.turnId
+    ));
+    gate8Assertion(completions.length <= 1,
+      `multiple task_complete events exist for turn ${turn.turnId}`);
+    gate8Assertion(interruptions.length <= 1,
+      `multiple client interruptions exist for turn ${turn.turnId}`);
+    const terminalCount = completions.length + Number(Boolean(error)) + interruptions.length;
+    gate8Assertion(terminalCount === 1,
+      `turn ${turn.turnId} needs exactly one task_complete, structured provider error, or client interruption`);
+    const completed = completions.length === 1;
+    const interrupted = interruptions.length === 1;
+    return {
+      receiptId: `rollout-provider-${turn.turnId}`,
+      turnId: turn.turnId,
+      provider: turn.provider,
+      model: turn.model,
+      requestObserved: true,
+      responseObserved: completed,
+      terminalKind: completed
+        ? "native-task-complete"
+        : interrupted
+          ? "native-client-interruption"
+          : "structured-provider-error",
+      statusCode: completed ? 200 : interrupted ? 0 : error.statusCode,
+      errorCode: error?.errorCode || null,
+      reasonKind: error?.reasonKind || null,
+      terminalAtUtc: String(
+        completions[0]?.timestamp || interruptions[0]?.timestamp || error?.timestamp || "",
+      ),
+    };
+  });
+  const priority = ["gemini", "claude", "third-party"];
+  const fallbacks = [];
+  const recoveries = [];
+  for (let index = 1; index < receipts.length; index += 1) {
+    const previous = receipts[index - 1];
+    const current = receipts[index];
+    const previousIndex = priority.indexOf(previous.provider);
+    const currentIndex = priority.indexOf(current.provider);
+    if (currentIndex === previousIndex) continue;
+    if (currentIndex === previousIndex + 1) {
+      gate8Assertion(previous.terminalKind === "structured-provider-error"
+        && ["quota-error", "service-error"].includes(previous.reasonKind),
+      `provider downgrade ${previous.provider} to ${current.provider} lacks a structured provider error`);
+      fallbacks.push({
+        explicitProviderError: true,
+        from: previous.provider,
+        to: current.provider,
+        reasonKind: previous.reasonKind,
+        turnId: previous.turnId,
+      });
+      continue;
+    }
+    if (currentIndex === 0 && previousIndex > 0) {
+      const successfulRecovery = current.terminalKind === "native-task-complete"
+        && current.responseObserved === true;
+      const structuredRetryFailure = current.terminalKind === "structured-provider-error"
+        && current.responseObserved === false
+        && ["quota-error", "service-error"].includes(current.reasonKind);
+      gate8Assertion(successfulRecovery || structuredRetryFailure,
+        `provider recovery ${previous.provider} to Gemini lacks a trusted native retry`);
+      recoveries.push({
+        from: previous.provider,
+        to: "gemini",
+        turnId: current.turnId,
+        credentialKind: successfulRecovery
+          ? "native-task-complete"
+          : "structured-provider-retry",
+        terminalAtUtc: current.terminalAtUtc,
+      });
+      continue;
+    }
+    throw new Error(`provider transition ${previous.provider} to ${current.provider} is invalid`);
+  }
+  return { priority, receipts, fallbacks, recoveries };
+}
+
+function processField(row, camel, pascal) {
+  return row?.[camel] ?? row?.[pascal];
+}
+
+function statusProcessIds(status) {
+  const processes = status?.processes || {};
+  return [
+    processes.managerService,
+    processes.codexPlusPlus,
+    processes.managerWatcher,
+    processes.managerBridge,
+    ...(Array.isArray(processes.copiedClient) ? processes.copiedClient : []),
+  ].map(Number).filter((value) => Number.isInteger(value) && value > 0);
+}
+
+function descendantProcessIds(rows, rootIds) {
+  const descendants = new Set(rootIds);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      const pid = Number(processField(row, "processId", "ProcessId") || 0);
+      const parentPid = Number(processField(row, "parentProcessId", "ParentProcessId") || 0);
+      if (pid > 0 && descendants.has(parentPid) && !descendants.has(pid)) {
+        descendants.add(pid);
+        changed = true;
+      }
+    }
+  }
+  return descendants;
+}
+
+function valueMentionsPath(value, targetPath) {
+  const target = String(targetPath || "").toLowerCase();
+  const targetForward = target.replaceAll("\\", "/");
+  if (typeof value === "string") {
+    const text = value.toLowerCase();
+    if (text.includes(target) || text.replaceAll("\\", "/").includes(targetForward)) return true;
+    const trimmed = value.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}"))
+      || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return valueMentionsPath(JSON.parse(trimmed), targetPath);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+  if (Array.isArray(value)) return value.some((entry) => valueMentionsPath(entry, targetPath));
+  if (value && typeof value === "object") {
+    return Object.values(value).some((entry) => valueMentionsPath(entry, targetPath));
+  }
+  return false;
+}
+
+export function validatePostTaskHostBoundary({
+  records: recordsValue = [],
+  taskId,
+  taskCwd,
+  reviewPaths = [],
+  reviewGeneratedAtUtc,
+  status = {},
+  processRows: processRowsValue = [],
+  trustedHostProcessIds: trustedHostProcessIdsValue = [],
+} = {}) {
+  const records = Array.isArray(recordsValue) ? recordsValue : [];
+  const processRows = Array.isArray(processRowsValue) ? processRowsValue : [];
+  const session = records.find((record) => record?.type === "session_meta");
+  gate8Assertion(String(session?.payload?.id || session?.payload?.session_id || "") === String(taskId || ""),
+    "post-task witness task id differs from native rollout");
+  gate8Assertion(normalizedPath(session?.payload?.cwd) === normalizedPath(taskCwd),
+    "post-task witness cwd differs from native rollout");
+  const turns = records.filter((record) => record?.type === "turn_context");
+  gate8Assertion(turns.length >= 1, "post-task witness has no native turn");
+  const finalTurnId = String(turns.at(-1)?.payload?.turn_id || "");
+  const completions = records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => record?.type === "event_msg"
+      && record?.payload?.type === "task_complete"
+      && String(record?.payload?.turn_id || "") === finalTurnId);
+  gate8Assertion(completions.length === 1, "native task is not terminal");
+  const completion = completions[0];
+  const taskCompletedAtUtc = String(completion.record?.timestamp || "");
+  const completedAtMs = Date.parse(taskCompletedAtUtc);
+  gate8Assertion(Number.isFinite(completedAtMs), "native task terminal timestamp is invalid");
+  const taskStartedAtMs = Date.parse(String(session?.timestamp || session?.payload?.timestamp || ""));
+  gate8Assertion(Number.isFinite(taskStartedAtMs) && taskStartedAtMs <= completedAtMs,
+    "native task start timestamp is invalid");
+  const reviewAtMs = Date.parse(String(reviewGeneratedAtUtc || ""));
+  gate8Assertion(Number.isFinite(reviewAtMs) && reviewAtMs > completedAtMs,
+    "host review was not generated after native task complete");
+  for (const path of reviewPaths.map(String)) {
+    gate8Assertion(isAbsolute(path) && !pathIsInside(taskCwd, path)
+      && normalizedPath(path) !== normalizedPath(taskCwd),
+    "host review path must be outside the native task cwd");
+    gate8Assertion(!records.some((record) => valueMentionsPath(record, path)),
+    "host review path appeared in the native rollout");
+  }
+  const activeAfterComplete = records.slice(completion.index + 1).some((record) => (
+    record?.type === "turn_context"
+    || (record?.type === "event_msg"
+      && ["task_started", "user_message"].includes(String(record?.payload?.type || "")))
+    || (record?.type === "response_item"
+      && ["function_call", "custom_tool_call", "local_shell_call"]
+        .includes(String(record?.payload?.type || "")))
+  ));
+  gate8Assertion(!activeAfterComplete, "native task remained active after task_complete");
+  gate8Assertion(status?.schema === "anticodex-fixed-route-status-v1"
+    && status?.state === "ready",
+  "Anti-Codex supervisor status is not ready");
+  const ownedIds = statusProcessIds(status);
+  gate8Assertion(ownedIds.length >= 3, "Anti-Codex supervisor process identity is incomplete");
+  gate8Assertion(processRows.length > 0, "post-task process snapshot is missing");
+  const descendantIds = descendantProcessIds(processRows, ownedIds);
+  const ownedIdSet = new Set(ownedIds);
+  const trustedHostProcessIds = (Array.isArray(trustedHostProcessIdsValue)
+    ? trustedHostProcessIdsValue
+    : [])
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+  const trustedHostDescendantIds = descendantProcessIds(processRows, trustedHostProcessIds);
+  const residue = processRows.filter((row) => {
+    const pid = Number(processField(row, "processId", "ProcessId") || 0);
+    if (ownedIdSet.has(pid) || trustedHostDescendantIds.has(pid)) return false;
+    const name = String(processField(row, "name", "Name") || "");
+    const commandLine = String(processField(row, "commandLine", "CommandLine") || "");
+    if (descendantIds.has(pid)) {
+      return TOOL_RESIDUE_NAMES.test(name)
+        || (taskCwd && normalizedPath(commandLine).includes(normalizedPath(taskCwd)));
+    }
+    const createdAtMs = Date.parse(String(
+      processField(row, "creationTimeUtc", "CreationTimeUtc") || "",
+    ));
+    return Number.isFinite(createdAtMs)
+      && createdAtMs >= taskStartedAtMs
+      && createdAtMs <= completedAtMs;
+  });
+  gate8Assertion(residue.length === 0,
+    `post-task tool/background residue remains: ${residue.map((row) => (
+      `${processField(row, "name", "Name") || "process"}:${processField(row, "processId", "ProcessId") || "?"}`
+    )).join(", ")}`);
+  return {
+    taskTerminal: true,
+    taskCompletedAtUtc,
+    finalTurnId,
+    supervisorState: status.state,
+    residueProcessCount: residue.length,
+    reviewPathsOutsideTask: true,
+  };
+}
+
+const HOST_REVIEW_ATTESTATION_KEYS = Object.freeze([
+  "algorithm",
+  "cryptographicHostIdentity",
+  "nonce",
+  "schema",
+  "signatureBase64",
+  "trustKind",
+]);
+const EXTERNAL_HOST_TRUST_ANCHOR_CONFIGURED = false;
+
+function hostReviewContainsSelfKey(value, seen = new Set()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  for (const [key, nested] of Object.entries(value)) {
+    if (/^(?:secret|secretBase64|privateKey|publicKey|verificationKey|hmacKey)$/i.test(key)) return true;
+    if (hostReviewContainsSelfKey(nested, seen)) return true;
+  }
+  return false;
+}
+
+function hostReviewConclusion(receipt = {}) {
+  return {
+    liveAction: receipt?.liveAction === true,
+    continuousHumanFootage: receipt?.continuousHumanFootage === true,
+    visibleSpeaking: receipt?.visibleSpeaking === true,
+    observedSpeakingSeconds: Number(receipt?.observedSpeakingSeconds),
+    dialoguePresent: receipt?.dialoguePresent === true,
+    musicPresent: receipt?.musicPresent === true,
+    subtitleLanguage: String(receipt?.subtitleLanguage || ""),
+    subtitleBurnedIn: receipt?.subtitleBurnedIn === true,
+    lipSyncWindows: (Array.isArray(receipt?.lipSyncWindows) ? receipt.lipSyncWindows : [])
+      .map((window) => ({
+        id: String(window?.id || ""),
+        startSeconds: Number(window?.startSeconds),
+        endSeconds: Number(window?.endSeconds),
+        speaker: String(window?.speaker || ""),
+        faceTrackId: String(window?.faceTrackId || ""),
+        offsetMs: Number(window?.offsetMs),
+        mouthMotionScore: Number(window?.mouthMotionScore),
+        avSyncScore: Number(window?.avSyncScore),
+      })),
+  };
+}
+
+function hostReviewHmacPayload({
+  nonce,
+  request = {},
+  requestSha256,
+  receipt = {},
+  rolloutSha256,
+  requestPath,
+  receiptPath,
+} = {}) {
+  return {
+    schema: "anticodex-gate8-host-review-hmac-payload-v1",
+    nonce: String(nonce || ""),
+    taskId: String(request?.taskId || ""),
+    turnId: String(request?.turnId || ""),
+    rolloutSha256: String(rolloutSha256 || "").toLowerCase(),
+    requestSha256: String(requestSha256 || "").toLowerCase(),
+    mainVideoSha256: String(request?.mainVideoSha256 || "").toLowerCase(),
+    taskCompletedAtUtc: String(request?.taskCompletedAtUtc || ""),
+    reviewGeneratedAtUtc: String(receipt?.generatedAtUtc || ""),
+    requestPath: resolve(String(requestPath || "")),
+    receiptPath: resolve(String(receiptPath || "")),
+    reviewConclusion: hostReviewConclusion(receipt),
+  };
+}
+
+function requireExternalHostReviewSecret(secret) {
+  gate8Assertion(Buffer.isBuffer(secret) && secret.length === 32,
+    "host review external secret is missing or invalid");
+  return secret;
+}
+
+export function createHostReviewHmacAttestation({
+  secret,
+  request = {},
+  requestSha256,
+  receipt = {},
+  rolloutSha256,
+  requestPath,
+  receiptPath,
+} = {}) {
+  requireExternalHostReviewSecret(secret);
+  gate8Assertion(!hostReviewContainsSelfKey(receipt),
+    "host review receipt contains a forbidden self-key");
+  gate8Assertion(SHA256_PATTERN.test(String(rolloutSha256 || "")),
+    "host review rollout SHA-256 is invalid");
+  const nonce = randomBytes(32).toString("hex");
+  const payload = hostReviewHmacPayload({
+    nonce,
+    request,
+    requestSha256,
+    receipt,
+    rolloutSha256,
+    requestPath,
+    receiptPath,
+  });
+  const signatureBase64 = createHmac("sha256", secret)
+    .update(jsonBytes(payload))
+    .digest("base64");
+  return {
+    schema: "anticodex-gate8-host-review-hmac-v1",
+    algorithm: "HMAC-SHA256",
+    trustKind: "caller-integrity-only",
+    cryptographicHostIdentity: false,
+    nonce,
+    signatureBase64,
+  };
+}
+
+export function verifyHostReviewHmacAttestation({
+  secret,
+  request = {},
+  requestSha256,
+  receipt = {},
+  rolloutSha256,
+  requestPath,
+  receiptPath,
+} = {}) {
+  requireExternalHostReviewSecret(secret);
+  gate8Assertion(!hostReviewContainsSelfKey(receipt),
+    "host review receipt contains a forbidden self-key");
+  const attestation = receipt?.hostAttestation || {};
+  gate8Assertion(
+    Object.keys(attestation).sort().join(",") === [...HOST_REVIEW_ATTESTATION_KEYS].sort().join(","),
+    "host review attestation has an unexpected self-key or field",
+  );
+  gate8Assertion(attestation?.schema === "anticodex-gate8-host-review-hmac-v1"
+    && attestation?.algorithm === "HMAC-SHA256"
+    && attestation?.trustKind === "caller-integrity-only"
+    && attestation?.cryptographicHostIdentity === false
+    && /^[a-f0-9]{64}$/i.test(String(attestation?.nonce || "")),
+  "host review HMAC attestation schema, algorithm, or nonce is invalid");
+  gate8Assertion(SHA256_PATTERN.test(String(rolloutSha256 || "")),
+    "host review rollout SHA-256 is invalid");
+  const supplied = Buffer.from(String(attestation?.signatureBase64 || ""), "base64");
+  const expected = createHmac("sha256", secret)
+    .update(jsonBytes(hostReviewHmacPayload({
+      nonce: attestation.nonce,
+      request,
+      requestSha256,
+      receipt,
+      rolloutSha256,
+      requestPath,
+      receiptPath,
+    })))
+    .digest();
+  gate8Assertion(supplied.length === expected.length && timingSafeEqual(supplied, expected),
+    "host review HMAC signature is invalid");
+  return {
+    callerSecretMatched: true,
+    externalTrustAnchorVerified: false,
+    hostAttestation: {
+      schema: attestation.schema,
+      algorithm: attestation.algorithm,
+      trustKind: attestation.trustKind,
+      cryptographicHostIdentity: attestation.cryptographicHostIdentity,
+      nonce: attestation.nonce,
+      signatureBase64: attestation.signatureBase64,
+    },
+  };
+}
+
+export function validateHostHumanReviewReceipt({
+  request = {},
+  requestSha256,
+  receipt = {},
+  rolloutSha256,
+  hostSecret,
+  taskCwd,
+  requestPath,
+  receiptPath,
+} = {}) {
+  gate8Assertion(isAbsolute(String(requestPath || ""))
+    && isAbsolute(String(receiptPath || ""))
+    && !pathIsInside(taskCwd, requestPath)
+    && !pathIsInside(taskCwd, receiptPath)
+    && normalizedPath(requestPath) !== normalizedPath(taskCwd)
+    && normalizedPath(receiptPath) !== normalizedPath(taskCwd),
+  "host review request and receipt must be outside the native task cwd");
+  gate8Assertion(request?.schema === "anticodex-gate8-host-review-request-v1",
+    "host review request schema is invalid");
+  gate8Assertion(receipt?.schema === "anticodex-gate8-host-human-review-v1"
+    && receipt?.trustKind === "host-human-review",
+  "host review receipt trust kind or schema is invalid");
+  gate8Assertion(SHA256_PATTERN.test(String(requestSha256 || ""))
+    && String(receipt?.requestSha256 || "").toLowerCase() === String(requestSha256).toLowerCase(),
+  "host review receipt is not bound to the generated request hash");
+  gate8Assertion(SHA256_PATTERN.test(String(request?.mainVideoSha256 || ""))
+    && String(receipt?.mainVideoSha256 || "").toLowerCase()
+      === String(request.mainVideoSha256).toLowerCase(),
+  "host review receipt main video hash binding is invalid");
+  const completedAtMs = Date.parse(String(request?.taskCompletedAtUtc || ""));
+  const requestAtMs = Date.parse(String(request?.generatedAtUtc || ""));
+  const receiptAtMs = Date.parse(String(receipt?.generatedAtUtc || ""));
+  gate8Assertion(Number.isFinite(completedAtMs)
+    && Number.isFinite(requestAtMs)
+    && Number.isFinite(receiptAtMs)
+    && requestAtMs > completedAtMs
+    && receiptAtMs > requestAtMs,
+  "host review request and receipt must be generated after native task complete");
+  const samples = Array.isArray(request?.samples) ? request.samples : [];
+  gate8Assertion(samples.length >= 6 && samples.every((sample) => (
+    isAbsolute(String(sample?.path || ""))
+    && SHA256_PATTERN.test(String(sample?.sha256 || ""))
+    && Number.isFinite(Number(sample?.timestampSeconds))
+  )), "host review request lacks six builder-generated hashed frame samples");
+  const requestedWindows = Array.isArray(request?.windows) ? request.windows : [];
+  const receiptWindows = Array.isArray(receipt?.lipSyncWindows) ? receipt.lipSyncWindows : [];
+  gate8Assertion(requestedWindows.length >= 5
+    && requestedWindows.every((window) => (
+      String(window?.id || "").trim()
+      && String(window?.speaker || "").trim()
+      && String(window?.faceTrackId || "").trim()
+      && Number.isFinite(Number(window?.startSeconds))
+      && Number.isFinite(Number(window?.endSeconds))
+      && isAbsolute(String(window?.clipPath || ""))
+      && SHA256_PATTERN.test(String(window?.clipSha256 || ""))
+    ))
+    && receiptWindows.length === requestedWindows.length
+    && requestedWindows.every((window, index) => (
+      String(window?.id || "") === String(receiptWindows[index]?.id || "")
+      && Number(window?.startSeconds) === Number(receiptWindows[index]?.startSeconds)
+      && Number(window?.endSeconds) === Number(receiptWindows[index]?.endSeconds)
+      && String(window?.speaker || "") === String(receiptWindows[index]?.speaker || "")
+      && String(window?.faceTrackId || "") === String(receiptWindows[index]?.faceTrackId || "")
+    )),
+  "host review lip-sync windows do not match the generated request");
+  gate8Assertion(receipt?.liveAction === true
+    && receipt?.continuousHumanFootage === true
+    && receipt?.visibleSpeaking === true
+    && Number(receipt?.observedSpeakingSeconds) >= 10
+    && receipt?.dialoguePresent === true
+    && receipt?.musicPresent === true
+    && receipt?.subtitleLanguage === "zh-CN"
+    && receipt?.subtitleBurnedIn === true,
+  "host human review did not prove live action, speaking, audio, or burned-in subtitles");
+  const hmac = verifyHostReviewHmacAttestation({
+    secret: hostSecret,
+    request,
+    requestSha256,
+    receipt,
+    rolloutSha256,
+    requestPath,
+    receiptPath,
+  });
+  gate8Assertion(EXTERNAL_HOST_TRUST_ANCHOR_CONFIGURED,
+    "external host trust anchor is not configured; caller self-HMAC is integrity-only");
+  return {
+    trustKind: "host-human-review",
+    cryptographicIdentityClaimed: false,
+    callerSecretMatched: hmac.callerSecretMatched,
+    externalTrustAnchorVerified: hmac.externalTrustAnchorVerified,
+    hostAttestation: hmac.hostAttestation,
+    liveAction: true,
+    continuousHumanFootage: true,
+    visibleSpeaking: true,
+    observedSpeakingSeconds: Number(receipt.observedSpeakingSeconds),
+    dialoguePresent: true,
+    musicPresent: true,
+    subtitleLanguage: "zh-CN",
+    subtitleBurnedIn: true,
+    lipSyncWindows: receiptWindows,
+  };
+}
+
+export function validateMediaToolIdentity(identity = {}) {
+  const path = String(identity?.path || "");
+  gate8Assertion(String(identity?.name || ""), "media tool name is missing");
+  gate8Assertion(isAbsolute(path), "media tool executable path must be absolute");
+  gate8Assertion(SHA256_PATTERN.test(String(identity?.sha256 || "")),
+    "media tool executable SHA-256 is invalid");
+  gate8Assertion(String(identity?.version || ""), "media tool version is missing");
+  return {
+    name: String(identity.name),
+    path: resolve(path),
+    sha256: String(identity.sha256).toLowerCase(),
+    version: String(identity.version),
+  };
+}
+
+export function createEphemeralGate8Witness(payload = {}) {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const challenge = randomBytes(32).toString("hex");
+  const signedPayload = {
+    ...payload,
+    challenge,
+  };
+  const signature = signBytes(null, jsonBytes(signedPayload), privateKey).toString("base64");
+  privateKey.export({ type: "pkcs8", format: "der" }).fill(0);
+  return {
+    schema: "anticodex-gate8-ephemeral-witness-v1",
+    algorithm: "Ed25519",
+    trustKind: "in-process-integrity-only",
+    cryptographicHostIdentity: false,
+    payload: signedPayload,
+    publicKeySpkiBase64: publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+    signatureBase64: signature,
+  };
+}
+
+export function verifyEphemeralGate8Witness(witness = {}) {
+  try {
+    if (witness?.schema !== "anticodex-gate8-ephemeral-witness-v1"
+      || witness?.algorithm !== "Ed25519"
+      || witness?.trustKind !== "in-process-integrity-only"
+      || witness?.cryptographicHostIdentity !== false
+      || !/^[a-f0-9]{64}$/i.test(String(witness?.payload?.challenge || ""))) {
+      return { ok: false };
+    }
+    const key = {
+      key: Buffer.from(String(witness.publicKeySpkiBase64 || ""), "base64"),
+      type: "spki",
+      format: "der",
+    };
+    const ok = verifyBytes(
+      null,
+      jsonBytes(witness.payload),
+      key,
+      Buffer.from(String(witness.signatureBase64 || ""), "base64"),
+    );
+    return { ok };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function normalizedPath(value) {
+  return String(value || "")
+    .replaceAll("\\", "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function pathIsInside(root, candidate) {
+  const normalizedRoot = normalizedPath(root);
+  const normalizedCandidate = normalizedPath(candidate);
+  return normalizedRoot !== ""
+    && normalizedCandidate !== normalizedRoot
+    && normalizedCandidate.startsWith(`${normalizedRoot}/`);
+}
+
+function artifactMatches(left, right) {
+  return normalizedPath(left?.path) === normalizedPath(right?.path)
+    && String(left?.role || "") === String(right?.role || "")
+    && Number(left?.bytes || 0) === Number(right?.bytes || 0)
+    && String(left?.sha256 || "").toLowerCase() === String(right?.sha256 || "").toLowerCase();
+}
+
+function validateArtifactReference(reference, artifactByPath, failures, label) {
+  const artifact = artifactByPath.get(normalizedPath(reference?.path));
+  if (!artifact || !artifactMatches(reference, artifact)) {
+    failures.push(`${label} is not bound to the hashed artifact manifest`);
+  }
+}
+
+function validateContinuationContract(task, failures) {
+  const interruptions = Array.isArray(task?.interruptions) ? task.interruptions : [];
+  const continuations = Array.isArray(task?.continuations) ? task.continuations : [];
+  const turnIds = new Set((Array.isArray(task?.turns) ? task.turns : [])
+    .map((turn) => String(turn?.turnId || ""))
+    .filter(Boolean));
+  const interruptionById = new Map(interruptions.map((entry) => [String(entry?.receiptId || ""), entry]));
+  for (const continuation of continuations) {
+    const interruption = interruptionById.get(String(continuation?.interruptionReceiptId || ""));
+    if (String(continuation?.text || "").trim() !== "继续"
+      || !interruption
+      || !["client-interruption", "provider-quota", "provider-service"].includes(String(interruption?.kind || ""))
+      || String(interruption?.taskId || "") !== String(task?.taskId || "")
+      || String(continuation?.taskId || "") !== String(task?.taskId || "")
+      || !turnIds.has(String(interruption?.turnId || ""))
+      || !turnIds.has(String(continuation?.turnId || ""))) {
+      failures.push("continuation is not an exact native resume after a proven interruption");
+    }
+  }
+}
+
+function validateLipSyncEvidence(lipSync, failures, durationSeconds) {
+  const windows = Array.isArray(lipSync?.windows) ? lipSync.windows : [];
+  const ids = new Set();
+  const speakers = new Set();
+  const faceTracks = new Set();
+  let previousStart = Number.NEGATIVE_INFINITY;
+  let previousEnd = Number.NEGATIVE_INFINITY;
+  let invalidWindow = false;
+  for (const window of windows) {
+    const id = String(window?.id || "");
+    const speaker = String(window?.speaker || "").trim();
+    const faceTrackId = String(window?.faceTrackId || "").trim();
+    const startSeconds = Number(window?.startSeconds);
+    const endSeconds = Number(window?.endSeconds);
+    const offsetMs = Number(window?.offsetMs);
+    const mouthMotionScore = Number(window?.mouthMotionScore);
+    const avSyncScore = Number(window?.avSyncScore);
+    if (!id
+      || ids.has(id)
+      || !Number.isFinite(startSeconds)
+      || !Number.isFinite(endSeconds)
+      || startSeconds < 0
+      || endSeconds <= startSeconds
+      || startSeconds < previousStart
+      || startSeconds < previousEnd
+      || !Number.isFinite(Number(durationSeconds))
+      || endSeconds > Number(durationSeconds) + 0.001
+      || !speaker
+      || !faceTrackId
+      || !Number.isFinite(offsetMs)
+      || offsetMs < 0
+      || offsetMs > 500
+      || !Number.isFinite(mouthMotionScore)
+      || mouthMotionScore < 0.5
+      || mouthMotionScore > 1
+      || !Number.isFinite(avSyncScore)
+      || avSyncScore < 0.65
+      || avSyncScore > 1
+      || window?.passed !== true) {
+      invalidWindow = true;
+    }
+    ids.add(id);
+    speakers.add(speaker);
+    faceTracks.add(faceTrackId);
+    previousStart = startSeconds;
+    previousEnd = endSeconds;
+  }
+  if (lipSync?.passed !== true
+    || !String(lipSync?.evaluator || "")
+    || !String(lipSync?.evaluatorVersion || "")
+    || !String(lipSync?.contractVersion || "")
+    || windows.length < 5
+    || Number(lipSync?.aggregateDenominator) !== windows.length
+    || Number(lipSync?.passCount) !== windows.length
+    || invalidWindow
+    || [...speakers].filter(Boolean).length < 2
+    || [...faceTracks].filter(Boolean).length < 2) {
+    failures.push("lip-sync evidence lacks five distinct non-overlapping passed speaking windows");
+  }
+}
+
+export function validateGate8AutonomousVideoReport(report = {}) {
+  const failures = [];
+  if (report?.schema !== "anticodex-gate8-autonomous-video-v1"
+    || report?.reportName !== "gate8-autonomous-live-action-video"
+    || Number(report?.gate) !== 8
+    || report?.coverageKind !== AUTONOMOUS_VIDEO_COVERAGE) {
+    failures.push("Gate 8 schema is not the autonomous live-action video contract");
+  }
+  if (report?.ok !== true
+    || report?.gateComplete !== true
+    || report?.requestedRealTraffic !== false
+    || report?.usedRealTraffic !== false
+    || report?.sourceTaskUsedRealTraffic !== true
+    || !Array.isArray(report?.failures)
+    || report.failures.length !== 0) {
+    failures.push("autonomous video result is incomplete");
+  }
+
+  const releaseBinding = report?.releaseBinding || {};
+  if (releaseBinding?.schema !== "anticodex-release-binding-v1"
+    || releaseBinding?.valid !== true
+    || !String(releaseBinding?.officialShellVersion || "")
+    || releaseBinding?.activeShellVersion !== releaseBinding?.officialShellVersion
+    || !String(releaseBinding?.codexPlusPlusVersion || "")
+    || !/^[0-9a-f]{40}$/i.test(String(releaseBinding?.codexPlusPlusPatchCommit || ""))
+    || !SHA256_PATTERN.test(String(releaseBinding?.codexPlusPlusBinarySha256 || ""))
+    || !SHA256_PATTERN.test(String(releaseBinding?.codexPlusPlusPatchTreeSha256 || ""))
+    || Number(releaseBinding?.codexPlusPlusPatchCount) !== 9
+    || !SHA256_PATTERN.test(String(releaseBinding?.syncReadinessSha256 || ""))) {
+    failures.push("current release and CodexPlusPlus component binding is invalid");
+  }
+
+  const task = report?.task || {};
+  const prompt = task?.prompt || {};
+  const taskId = String(task?.taskId || "");
+  const primaryTurnId = String(task?.primaryTurnId || "");
+  const taskCwd = String(task?.cwd || "");
+  const promptSha256 = String(prompt?.sha256 || "").toLowerCase();
+  const turns = Array.isArray(task?.turns) ? task.turns : [];
+  if (task?.newTask !== true
+    || task?.nativeTask !== true
+    || !NATIVE_ID_PATTERN.test(taskId)
+    || !NATIVE_ID_PATTERN.test(primaryTurnId)
+    || !taskCwd
+    || task?.sameTaskThroughout !== true
+    || task?.finalState !== "completed"
+    || prompt?.totalGoal !== true
+    || !String(prompt?.path || "")
+    || !SHA256_PATTERN.test(promptSha256)
+    || !String(prompt?.marker || "")
+    || Number(prompt?.submissionCount) !== 1
+    || Number(prompt?.hostIntermediatePromptCount) !== 0
+    || !String(task?.rolloutPath || "")
+    || !SHA256_PATTERN.test(String(task?.rolloutSha256 || ""))
+    || turns.length < 1
+    || !turns.some((turn) => String(turn?.turnId || "") === primaryTurnId)
+    || turns.some((turn) => (
+      !NATIVE_ID_PATTERN.test(String(turn?.turnId || ""))
+      || String(turn?.taskId || "") !== taskId
+      || normalizedPath(turn?.cwd) !== normalizedPath(taskCwd)
+      || String(turn?.promptSha256 || "").toLowerCase() !== promptSha256
+      || turn?.autonomous !== true
+      || !["gemini", "claude", "third-party"].includes(String(turn?.provider || ""))
+      || !String(turn?.model || "")
+      || !["completed", "interrupted", "provider-error"].includes(String(turn?.status || ""))
+    ))) {
+    failures.push("native single-task single-goal task, turn, cwd, prompt, or rollout binding is invalid");
+  }
+  validateContinuationContract(task, failures);
+
+  const providerPriority = report?.providerPolicy?.priority;
+  if (!Array.isArray(providerPriority)
+    || providerPriority.join(",") !== "gemini,claude,third-party") {
+    failures.push("provider priority is not Gemini then Claude then third-party");
+  }
+  const providerReceipts = Array.isArray(report?.providerReceipts) ? report.providerReceipts : [];
+  const receiptTurnIds = providerReceipts.map((receipt) => String(receipt?.turnId || ""));
+  const validProviderTerminal = (receipt) => {
+    const terminalKind = String(receipt?.terminalKind || "");
+    const statusCode = Number(receipt?.statusCode);
+    if (terminalKind === "native-task-complete") {
+      return receipt?.responseObserved === true
+        && statusCode >= 200
+        && statusCode < 300
+        && !receipt?.errorCode
+        && !receipt?.reasonKind;
+    }
+    if (terminalKind === "structured-provider-error") {
+      return receipt?.responseObserved === false
+        && [429, 503].includes(statusCode)
+        && STRUCTURED_PROVIDER_ERROR_CODES.has(String(receipt?.errorCode || ""))
+        && String(receipt?.reasonKind || "") === (statusCode === 429 ? "quota-error" : "service-error");
+    }
+    return terminalKind === "native-client-interruption"
+      && receipt?.responseObserved === false
+      && statusCode === 0
+      && !receipt?.errorCode
+      && !receipt?.reasonKind;
+  };
+  if (providerReceipts.length !== turns.length
+    || new Set(receiptTurnIds).size !== receiptTurnIds.length
+    || providerReceipts.some((receipt) => {
+      const turn = turns.find((entry) => String(entry?.turnId || "") === String(receipt?.turnId || ""));
+      return !String(receipt?.receiptId || "")
+        || String(receipt?.taskId || "") !== taskId
+        || !turn
+        || normalizedPath(receipt?.cwd) !== normalizedPath(taskCwd)
+        || String(receipt?.promptSha256 || "").toLowerCase() !== promptSha256
+        || !["gemini", "claude", "third-party"].includes(String(receipt?.provider || ""))
+        || !String(receipt?.model || "")
+        || String(turn?.provider || "") !== String(receipt?.provider || "")
+        || String(turn?.model || "") !== String(receipt?.model || "")
+        || receipt?.requestObserved !== true
+        || !String(receipt?.terminalAtUtc || "")
+        || !validProviderTerminal(receipt)
+        || String(receipt?.component?.version || "") !== String(releaseBinding?.codexPlusPlusVersion || "")
+        || String(receipt?.component?.patchCommit || "") !== String(releaseBinding?.codexPlusPlusPatchCommit || "")
+        || String(receipt?.component?.binarySha256 || "").toLowerCase()
+          !== String(releaseBinding?.codexPlusPlusBinarySha256 || "").toLowerCase();
+    })) {
+    failures.push("provider receipt is not bound to the current task, turn, cwd, prompt, and component");
+  }
+  const providerFallbacks = Array.isArray(report?.providerFallbacks) ? report.providerFallbacks : [];
+  const providerRecoveries = Array.isArray(report?.providerRecoveries) ? report.providerRecoveries : [];
+  const receiptByTurn = new Map(providerReceipts.map((receipt) => [String(receipt?.turnId || ""), receipt]));
+  if (String(providerReceipts[0]?.provider || "") !== "gemini") {
+    failures.push("provider state machine did not start with Gemini");
+  }
+  for (let index = 1; index < turns.length; index += 1) {
+    const previousReceipt = receiptByTurn.get(String(turns[index - 1]?.turnId || ""));
+    const currentReceipt = receiptByTurn.get(String(turns[index]?.turnId || ""));
+    const previousProviderIndex = providerPriority.indexOf(String(previousReceipt?.provider || ""));
+    const currentProviderIndex = providerPriority.indexOf(String(currentReceipt?.provider || ""));
+    if (previousProviderIndex >= 0 && currentProviderIndex === previousProviderIndex) continue;
+    if (previousProviderIndex >= 0 && currentProviderIndex === previousProviderIndex + 1) {
+      const fallback = providerFallbacks.find((entry) => (
+        entry?.explicitProviderError === true
+        && String(entry?.from || "") === String(previousReceipt?.provider || "")
+        && String(entry?.to || "") === String(currentReceipt?.provider || "")
+        && String(entry?.turnId || "") === String(previousReceipt?.turnId || "")
+        && String(entry?.taskId || "") === taskId
+        && ["quota-error", "service-error"].includes(String(entry?.reasonKind || ""))
+      ));
+      if (!fallback
+        || previousReceipt?.terminalKind !== "structured-provider-error"
+        || previousReceipt?.reasonKind !== fallback?.reasonKind) {
+        failures.push("provider switch lacks its turn-scoped structured unavailability receipt");
+      }
+      continue;
+    }
+    if (previousProviderIndex > 0 && currentProviderIndex === 0) {
+      const successfulRecovery = currentReceipt?.terminalKind === "native-task-complete"
+        && currentReceipt?.responseObserved === true;
+      const structuredRetryFailure = currentReceipt?.terminalKind === "structured-provider-error"
+        && currentReceipt?.responseObserved === false
+        && ["quota-error", "service-error"].includes(String(currentReceipt?.reasonKind || ""));
+      const credentialKind = successfulRecovery
+        ? "native-task-complete"
+        : "structured-provider-retry";
+      const recovery = providerRecoveries.find((entry) => (
+        String(entry?.from || "") === String(previousReceipt?.provider || "")
+        && entry?.to === "gemini"
+        && String(entry?.turnId || "") === String(currentReceipt?.turnId || "")
+        && String(entry?.taskId || "") === taskId
+        && entry?.credentialKind === credentialKind
+      ));
+      if (!recovery
+        || (!successfulRecovery && !structuredRetryFailure)) {
+        failures.push("return to Gemini lacks a trusted native recovery or structured retry turn");
+      }
+      continue;
+    }
+    failures.push("provider receipts do not follow Gemini then Claude then third-party or trusted Gemini recovery");
+  }
+
+  const execution = report?.autonomousExecution || {};
+  if (execution?.planCreated !== true
+    || Number(execution?.planUpdateCount) < 1
+    || Number(execution?.toolCallCount) < 5
+    || Number(execution?.fileActionCount) < 1
+    || execution?.sameTask !== true
+    || execution?.finalMarkerSeen !== true
+    || String(execution?.finalMarker || "") !== String(prompt?.marker || "")
+    || Number(execution?.hostIntermediatePromptCount) !== 0
+    || Number(execution?.postFinalToolCallCount) !== 0) {
+    failures.push("autonomous execution or zero host-intermediate-prompt contract is invalid");
+  }
+
+  const sourceBuilder = report?.sourceEvidence?.builder || {};
+  const mediaVerification = report?.mediaVerification || {};
+  const hostReview = mediaVerification?.hostReview || {};
+  const sourceHostReview = report?.sourceEvidence?.hostReview || {};
+  const hostReviewAttestation = hostReview?.hostAttestation || {};
+  const sourceHostReviewAttestation = sourceHostReview?.hostAttestation || {};
+  const postTaskWitness = report?.postTaskWitness || {};
+  const ephemeralWitness = report?.sourceEvidence?.hostWitness || {};
+  const ffprobe = mediaVerification?.tools?.ffprobe || {};
+  const ffmpeg = mediaVerification?.tools?.ffmpeg || {};
+  if (!EXTERNAL_HOST_TRUST_ANCHOR_CONFIGURED) {
+    failures.push("external host trust anchor is not configured; caller self-HMAC is integrity-only");
+  }
+  if (sourceBuilder?.schema !== "anticodex-gate8-source-builder-v1"
+    || sourceBuilder?.mode !== "offline-local-media-verifier"
+    || !String(sourceBuilder?.path || "")
+    || !SHA256_PATTERN.test(String(sourceBuilder?.sha256 || ""))) {
+    failures.push("Gate 8 source builder provenance is missing or invalid");
+  }
+  if (mediaVerification?.schema !== "anticodex-gate8-local-media-verification-v1"
+    || mediaVerification?.mode !== "local-ffmpeg-ffprobe"
+    || ffprobe?.name !== "ffprobe"
+    || !isAbsolute(String(ffprobe?.path || ""))
+    || !SHA256_PATTERN.test(String(ffprobe?.sha256 || ""))
+    || !String(ffprobe?.version || "")
+    || ffmpeg?.name !== "ffmpeg"
+    || !isAbsolute(String(ffmpeg?.path || ""))
+    || !SHA256_PATTERN.test(String(ffmpeg?.sha256 || ""))
+    || !String(ffmpeg?.version || "")
+    || hostReview?.trustKind !== "host-human-review"
+    || hostReview?.cryptographicIdentityClaimed !== false
+    || hostReview?.callerSecretMatched !== true
+    || hostReview?.externalTrustAnchorVerified !== false
+    || Object.keys(hostReviewAttestation).sort().join(",")
+      !== [...HOST_REVIEW_ATTESTATION_KEYS].sort().join(",")
+    || hostReviewAttestation?.schema !== "anticodex-gate8-host-review-hmac-v1"
+    || hostReviewAttestation?.algorithm !== "HMAC-SHA256"
+    || hostReviewAttestation?.trustKind !== "caller-integrity-only"
+    || hostReviewAttestation?.cryptographicHostIdentity !== false
+    || !/^[a-f0-9]{64}$/i.test(String(hostReviewAttestation?.nonce || ""))
+    || Buffer.from(String(hostReviewAttestation?.signatureBase64 || ""), "base64").length !== 32
+    || hostReview?.schema !== "anticodex-gate8-host-human-review-v1"
+    || !isAbsolute(String(hostReview?.requestPath || ""))
+    || !isAbsolute(String(hostReview?.receiptPath || ""))
+    || pathIsInside(taskCwd, hostReview?.requestPath)
+    || pathIsInside(taskCwd, hostReview?.receiptPath)
+    || !SHA256_PATTERN.test(String(hostReview?.requestSha256 || ""))
+    || !SHA256_PATTERN.test(String(hostReview?.receiptSha256 || ""))
+    || !String(hostReview?.name || "")
+    || !String(hostReview?.version || "")
+    || !String(hostReview?.contractVersion || "")
+    || sourceHostReview?.trustKind !== "host-human-review"
+    || sourceHostReview?.cryptographicHostIdentity !== false
+    || sourceHostReview?.callerSecretMatched !== true
+    || sourceHostReview?.externalTrustAnchorVerified !== false
+    || Object.keys(sourceHostReviewAttestation).sort().join(",")
+      !== [...HOST_REVIEW_ATTESTATION_KEYS].sort().join(",")
+    || sourceHostReviewAttestation?.schema !== hostReviewAttestation?.schema
+    || sourceHostReviewAttestation?.algorithm !== hostReviewAttestation?.algorithm
+    || sourceHostReviewAttestation?.nonce !== hostReviewAttestation?.nonce
+    || sourceHostReviewAttestation?.signatureBase64 !== hostReviewAttestation?.signatureBase64
+    || normalizedPath(sourceHostReview?.requestPath) !== normalizedPath(hostReview?.requestPath)
+    || normalizedPath(sourceHostReview?.receiptPath) !== normalizedPath(hostReview?.receiptPath)
+    || String(sourceHostReview?.requestSha256 || "").toLowerCase()
+      !== String(hostReview?.requestSha256 || "").toLowerCase()
+    || String(sourceHostReview?.receiptSha256 || "").toLowerCase()
+      !== String(hostReview?.receiptSha256 || "").toLowerCase()) {
+    failures.push("local media tools or integrity-only caller-HMAC post-task host-human review provenance is invalid");
+  }
+  if (postTaskWitness?.taskTerminal !== true
+    || !String(postTaskWitness?.taskCompletedAtUtc || "")
+    || String(postTaskWitness?.finalTurnId || "") !== String(turns.at(-1)?.turnId || "")
+    || postTaskWitness?.supervisorState !== "ready"
+    || Number(postTaskWitness?.residueProcessCount) !== 0
+    || postTaskWitness?.reviewPathsOutsideTask !== true) {
+    failures.push("post-task terminal or zero-residue host boundary is invalid");
+  }
+  if (verifyEphemeralGate8Witness(ephemeralWitness).ok !== true) {
+    failures.push("in-process integrity witness is missing or invalid");
+  }
+
+  const artifacts = Array.isArray(report?.artifacts) ? report.artifacts : [];
+  const artifactPaths = artifacts.map((artifact) => normalizedPath(artifact?.path));
+  const artifactByPath = new Map(artifacts.map((artifact) => [normalizedPath(artifact?.path), artifact]));
+  const artifactRoot = String(report?.deliverable?.artifactRoot || "");
+  if (artifacts.length < 10
+    || artifactPaths.some((path) => !path)
+    || new Set(artifactPaths).size !== artifactPaths.length
+    || artifacts.some((artifact) => (
+      !String(artifact?.role || "")
+      || (!TRUSTED_EXTERNAL_EVIDENCE_ROLES.has(String(artifact?.role || ""))
+        && !pathIsInside(artifactRoot, artifact?.path))
+      || Number(artifact?.bytes) <= 0
+      || !SHA256_PATTERN.test(String(artifact?.sha256 || ""))
+    ))
+    || REQUIRED_ARTIFACT_ROLES.some((role) => !artifacts.some((artifact) => artifact?.role === role))) {
+    failures.push("hashed artifact manifest or release-package roles are incomplete");
+  }
+  if (normalizedPath(taskCwd) !== normalizedPath(artifactRoot)) {
+    failures.push("deliverable root is not the native task cwd");
+  }
+  validateArtifactReference({
+    role: "total-goal-prompt",
+    path: prompt.path,
+    bytes: artifactByPath.get(normalizedPath(prompt.path))?.bytes,
+    sha256: prompt.sha256,
+  }, artifactByPath, failures, "total-goal prompt");
+  validateArtifactReference({
+    role: "native-rollout",
+    path: task.rolloutPath,
+    bytes: artifactByPath.get(normalizedPath(task.rolloutPath))?.bytes,
+    sha256: task.rolloutSha256,
+  }, artifactByPath, failures, "native rollout");
+
+  const deliverable = report?.deliverable || {};
+  const mainVideo = deliverable?.mainVideo || {};
+  const mainDurationSeconds = Number(mainVideo?.durationSeconds);
+  const mainFrameRate = Number(mainVideo?.frameRate);
+  validateArtifactReference(mainVideo, artifactByPath, failures, "main video");
+  if (mainVideo?.role !== "main-video"
+    || mainVideo?.decodable !== true
+    || mainVideo?.liveAction !== true
+    || mainVideo?.continuousHumanFootage !== true
+    || mainVideo?.visibleSpeaking !== true
+    || !Number.isFinite(mainDurationSeconds)
+    || mainDurationSeconds < 45
+    || mainDurationSeconds > 60
+    || Number(mainVideo?.width) !== 1080
+    || Number(mainVideo?.height) !== 1920
+    || !Number.isFinite(mainFrameRate)
+    || mainFrameRate < 20
+    || !String(mainVideo?.videoCodec || "")) {
+    failures.push("main video is not a decodable 45-60 second 1080x1920 continuous live-action speaking film");
+  }
+
+  const releaseVideos = Array.isArray(deliverable?.releaseVideos) ? deliverable.releaseVideos : [];
+  if (releaseVideos.length < 3
+    || new Set(releaseVideos.map((video) => normalizedPath(video?.path))).size !== releaseVideos.length
+    || releaseVideos.some((video) => (
+      video?.role !== "release-video"
+      || video?.decodable !== true
+      || !Number.isFinite(Number(video?.durationSeconds))
+      || Number(video?.durationSeconds) < 45
+      || Number(video?.durationSeconds) > 60
+      || Number(video?.width) !== 1080
+      || Number(video?.height) !== 1920
+    ))) {
+    failures.push("three platform-ready release videos were not proven");
+  }
+  for (const video of releaseVideos) validateArtifactReference(video, artifactByPath, failures, "release video");
+
+  const subtitle = deliverable?.subtitle || {};
+  const subtitleCueCount = Number(subtitle?.cueCount);
+  const subtitleCoverage = Number(subtitle?.durationCoverageRatio);
+  const subtitleCoveredSeconds = Number(subtitle?.coveredSeconds);
+  const subtitleCues = Array.isArray(subtitle?.cues) ? subtitle.cues : [];
+  let subtitlePreviousStart = Number.NEGATIVE_INFINITY;
+  let subtitlePreviousEnd = Number.NEGATIVE_INFINITY;
+  let subtitleUnionSeconds = 0;
+  let subtitleCuesInvalid = false;
+  for (const cue of subtitleCues) {
+    const startSeconds = Number(cue?.startSeconds);
+    const endSeconds = Number(cue?.endSeconds);
+    const text = String(cue?.text || "");
+    if (!Number.isFinite(startSeconds)
+      || !Number.isFinite(endSeconds)
+      || startSeconds < 0
+      || endSeconds <= startSeconds
+      || startSeconds < subtitlePreviousStart
+      || startSeconds < subtitlePreviousEnd
+      || endSeconds > mainDurationSeconds + 0.001
+      || !/[\u3400-\u9fff]/u.test(text)) {
+      subtitleCuesInvalid = true;
+    }
+    if (Number.isFinite(startSeconds) && Number.isFinite(endSeconds) && endSeconds > startSeconds) {
+      subtitleUnionSeconds += endSeconds - startSeconds;
+    }
+    subtitlePreviousStart = startSeconds;
+    subtitlePreviousEnd = endSeconds;
+  }
+  validateArtifactReference(subtitle, artifactByPath, failures, "Chinese subtitle");
+  if (subtitle?.role !== "subtitle"
+    || subtitle?.language !== "zh-CN"
+    || subtitle?.burnedIn !== true
+    || !Number.isFinite(subtitleCueCount)
+    || subtitleCueCount < 5
+    || subtitleCueCount !== subtitleCues.length
+    || subtitleCuesInvalid
+    || !Number.isFinite(subtitleCoveredSeconds)
+    || Math.abs(subtitleCoveredSeconds - subtitleUnionSeconds) > 0.002
+    || !Number.isFinite(subtitleCoverage)
+    || Math.abs(subtitleCoverage - (subtitleUnionSeconds / mainDurationSeconds)) > 0.0001
+    || subtitleCoverage < 0.8) {
+    failures.push("Chinese subtitle coverage is incomplete");
+  }
+
+  const audio = deliverable?.audio || {};
+  const audioSilenceRatio = Number(audio?.silenceRatio);
+  const integratedLufs = Number(audio?.integratedLufs);
+  const truePeakDb = Number(audio?.truePeakDb);
+  if (audio?.streamPresent !== true
+    || audio?.dialoguePresent !== true
+    || audio?.musicPresent !== true
+    || !Number.isFinite(audioSilenceRatio)
+    || audioSilenceRatio < 0
+    || audioSilenceRatio > 0.1
+    || !Number.isFinite(integratedLufs)
+    || integratedLufs < -24
+    || integratedLufs > -8
+    || !Number.isFinite(truePeakDb)
+    || truePeakDb > -1) {
+    failures.push("dialogue, music, silence, or loudness evidence is invalid");
+  }
+
+  const lipSync = deliverable?.lipSync || {};
+  validateArtifactReference(lipSync, artifactByPath, failures, "lip-sync report");
+  validateLipSyncEvidence(lipSync, failures, mainDurationSeconds);
+  if (String(lipSync?.sourceVideoSha256 || "").toLowerCase() !== String(mainVideo?.sha256 || "").toLowerCase()) {
+    failures.push("lip-sync report is not bound to the main source video hash");
+  }
+
+  const witnessPayload = ephemeralWitness?.payload || {};
+  if (String(witnessPayload?.taskId || "") !== taskId
+    || String(witnessPayload?.finalTurnId || "") !== String(postTaskWitness?.finalTurnId || "")
+    || String(witnessPayload?.taskCompletedAtUtc || "") !== String(postTaskWitness?.taskCompletedAtUtc || "")
+    || String(witnessPayload?.rolloutSha256 || "").toLowerCase()
+      !== String(task?.rolloutSha256 || "").toLowerCase()
+    || String(witnessPayload?.mainVideoSha256 || "").toLowerCase()
+      !== String(mainVideo?.sha256 || "").toLowerCase()
+    || String(witnessPayload?.hostReviewRequestSha256 || "").toLowerCase()
+      !== String(hostReview?.requestSha256 || "").toLowerCase()
+    || String(witnessPayload?.hostReviewReceiptSha256 || "").toLowerCase()
+      !== String(hostReview?.receiptSha256 || "").toLowerCase()
+    || String(witnessPayload?.builderSha256 || "").toLowerCase()
+      !== String(sourceBuilder?.sha256 || "").toLowerCase()
+    || normalizedPath(witnessPayload?.ffmpegPath) !== normalizedPath(ffmpeg?.path)
+    || String(witnessPayload?.ffmpegSha256 || "").toLowerCase()
+      !== String(ffmpeg?.sha256 || "").toLowerCase()
+    || normalizedPath(witnessPayload?.ffprobePath) !== normalizedPath(ffprobe?.path)
+    || String(witnessPayload?.ffprobeSha256 || "").toLowerCase()
+      !== String(ffprobe?.sha256 || "").toLowerCase()) {
+    failures.push("in-process integrity witness is not bound to the report inputs and media tools");
+  }
+
+  const mediaQa = deliverable?.mediaQa || {};
+  const blackFrameRatio = Number(mediaQa?.blackFrameRatio);
+  const freezeFrameRatio = Number(mediaQa?.freezeFrameRatio);
+  const mediaSilenceRatio = Number(mediaQa?.silenceRatio);
+  validateArtifactReference(mediaQa, artifactByPath, failures, "media QA report");
+  if (mediaQa?.passed !== true
+    || String(mediaQa?.sourceVideoSha256 || "").toLowerCase() !== String(mainVideo?.sha256 || "").toLowerCase()
+    || mediaQa?.decodePassed !== true
+    || mediaQa?.videoStreamPresent !== true
+    || mediaQa?.audioStreamPresent !== true
+    || mediaQa?.subtitlePresent !== true
+    || mediaQa?.durationMatches !== true
+    || !Number.isFinite(blackFrameRatio)
+    || blackFrameRatio < 0
+    || blackFrameRatio > 0.01
+    || !Number.isFinite(freezeFrameRatio)
+    || freezeFrameRatio < 0
+    || freezeFrameRatio > 0.05
+    || !Number.isFinite(mediaSilenceRatio)
+    || mediaSilenceRatio < 0
+    || mediaSilenceRatio > 0.1) {
+    failures.push("decode, stream, duration, black-frame, freeze-frame, or silence media QA failed");
+  }
+
+  const packageEvidence = deliverable?.package || {};
+  validateArtifactReference(packageEvidence?.manifest, artifactByPath, failures, "checksum manifest");
+  const requiredRoles = Array.isArray(packageEvidence?.requiredRoles) ? packageEvidence.requiredRoles : [];
+  const packagedArtifactCount = artifacts.filter((artifact) => (
+    pathIsInside(artifactRoot, artifact?.path)
+      && artifact?.role !== "checksum-manifest"
+      && !TRUSTED_EXTERNAL_EVIDENCE_ROLES.has(String(artifact?.role || ""))
+  )).length;
+  if (packageEvidence?.checksumsVerified !== true
+    || packageEvidence?.hashManifestComplete !== true
+    || Number(packageEvidence?.fileCount) !== packagedArtifactCount
+    || REQUIRED_PACKAGE_ROLES.some((role) => !requiredRoles.includes(role))) {
+    failures.push("release package manifest, hashes, or required roles are incomplete");
+  }
+
+  return [...new Set(failures)];
+}
+
+export function buildGate8AutonomousVideoReport(input = {}) {
+  const candidate = {
+    ...input,
+    schema: "anticodex-gate8-autonomous-video-v1",
+    reportName: "gate8-autonomous-live-action-video",
+    gate: 8,
+    coverageKind: AUTONOMOUS_VIDEO_COVERAGE,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    ok: true,
+    gateComplete: true,
+    failures: [],
+  };
+  const failures = validateGate8AutonomousVideoReport(candidate);
+  return {
+    ...candidate,
+    ok: failures.length === 0,
+    gateComplete: failures.length === 0,
+    failures,
+  };
 }
 
 export function validateGate8MultiStyleReport(report = {}) {

@@ -6,16 +6,20 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import * as fixedRoute from "../../scripts/start-anticodex-fixed-route.mjs";
+
 import {
   assertNoExistingClientProcesses,
   assertProductionRoots,
   buildFixedRoutePlan,
   buildSupervisorChildEnvironment,
+  clientSessionRequiresShutdown,
   liveOwnedClientPids,
   observeCopiedClientSession,
   parseTasklistAntiCodexProcesses,
   proxyModelCatalogReady,
   readCompatibilityModelAliases,
+  refreshAntigravityRelayModelList,
   scanCopiedClientProcessesSafely,
   startHealthServer,
   updateClientExitGrace,
@@ -33,6 +37,8 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.match(source, /startAntigravityChatProvider/);
   assert.match(source, /createAntiCodexManagerService/);
   assert.match(source, /await managerService\.listen\(\)/);
+  assert.match(source, /refreshModels:\s*\(\)\s*=>\s*refreshModelsCallback\(\)/);
+  assert.match(source, /source:\s*"antigravity-cascade"/);
   assert.match(source, /managerService:\s*process\.pid/);
   assert.match(source, /buildAntigravityModelCatalog/);
   assert.match(source, /readCompatibilityModelAliases/);
@@ -52,6 +58,43 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.doesNotMatch(source, /TRANSLATOR_URL|TRANSLATOR_PORT/);
   assert.doesNotMatch(source, /["']--help["']/);
   assert.doesNotMatch(source, /taskkill[^\n]+\/IM/i);
+});
+
+test("model refresh preserves the live provider and updates only the Antigravity model list", () => {
+  const liveSettings = {
+    activeRelayId: "anticodex-third-party",
+    relayTestModel: "gpt-5.6-sol",
+    relayProfiles: [
+      {
+        id: "anticodex-antigravity",
+        apiKey: "local-secret",
+        testModel: "gemini-3.1-pro-low",
+        modelList: "anticodex-antigravity\ngemini-3.1-pro-low",
+      },
+      {
+        id: "anticodex-third-party",
+        apiKey: "saved-third-party-secret",
+        testModel: "gpt-5.6-sol",
+        modelList: "anticodex-third-party\ngpt-5.6-sol",
+      },
+    ],
+  };
+  const refreshed = refreshAntigravityRelayModelList(liveSettings, {
+    models: [
+      { slug: "gemini-3.1-pro-low" },
+      { slug: "claude-sonnet-4-6" },
+    ],
+  });
+
+  assert.equal(refreshed.activeRelayId, "anticodex-third-party");
+  assert.equal(refreshed.relayTestModel, "gpt-5.6-sol");
+  assert.deepEqual(refreshed.relayProfiles[1], liveSettings.relayProfiles[1]);
+  assert.equal(refreshed.relayProfiles[0].apiKey, "local-secret");
+  assert.equal(refreshed.relayProfiles[0].testModel, "gemini-3.1-pro-low");
+  assert.equal(
+    refreshed.relayProfiles[0].modelList,
+    "anticodex/antigravity\ngemini-3.1-pro-low\nclaude-sonnet-4-6",
+  );
 });
 
 test("Manager support children exit when their owning supervisor no longer exists", () => {
@@ -82,7 +125,7 @@ test("Manager support children exit when their owning supervisor no longer exist
   assert.equal(bridge.status, 0);
 });
 
-test("ready-state supervision follows copied-client process handoffs through CDP without runtime scans", async () => {
+test("ready-state supervision follows copied-client process handoffs through CDP without unverified monitor-loop scans", async () => {
   const source = readFileSync(supervisorPath, "utf8");
   assert.deepEqual(liveOwnedClientPids([101, 202, 303], (pid) => pid !== 202), [101, 303]);
   const ownedClients = new Set([101]);
@@ -92,6 +135,7 @@ test("ready-state supervision follows copied-client process handoffs through CDP
   });
   assert.deepEqual(observed, {
     ready: true,
+    fatal: false,
     livePids: [],
     ownershipChanged: true,
     source: "cdp",
@@ -99,12 +143,99 @@ test("ready-state supervision follows copied-client process handoffs through CDP
   assert.deepEqual([...ownedClients], []);
   assert.match(source, /observeCopiedClientSession\(ownedClients/);
   assert.match(source, /tasklist\.exe/);
-  assert.doesNotMatch(source, /Get-CimInstance Win32_Process/);
-  assert.doesNotMatch(source, /execFileSync\("powershell\.exe"/);
   assert.match(source, /const startupProcessScan = assertNoExistingClient\(\)/);
-  assert.match(source, /const processScan = scanCopiedClientProcessesSafely\(\)/);
+  assert.match(source, /const processScan = refreshOwnedClientIdentities\(\)/);
   const readyLoop = source.slice(source.indexOf("let clientMissingSince = null"), source.indexOf("} catch (error)", source.indexOf("let clientMissingSince = null")));
-  assert.doesNotMatch(readyLoop, /tasklist|scanCopiedClientProcessesSafely|getCopiedClientProcesses/);
+  const steadyLoop = readyLoop.slice(0, readyLoop.indexOf("if (exitGrace.expired)"));
+  assert.doesNotMatch(steadyLoop, /tasklist|powershell|Get-CimInstance|scanCopiedClientProcessesSafely|scanClientProcessTableSafely|getCopiedClientProcesses/);
+  assert.match(readyLoop, /assertLaunchSafe:[\s\S]*scanClientProcessTableSafely\(\)/);
+});
+
+test("owned client discovery requires the spawned root identity and a verified path, parent chain, and creation order", () => {
+  assert.equal(typeof fixedRoute.selectVerifiedOwnedClientProcessRows, "function");
+  const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
+  const rows = [
+    { processId: 101, parentProcessId: 900, executablePath: expectedExecutablePath, createdAtMs: 1_000 },
+    { processId: 102, parentProcessId: 101, executablePath: expectedExecutablePath, createdAtMs: 1_100 },
+    { processId: 103, parentProcessId: 101, executablePath: "G:\\Install-A\\codex-patched-app\\crashpad.exe", createdAtMs: 1_150 },
+    { processId: 104, parentProcessId: 103, executablePath: expectedExecutablePath, createdAtMs: 1_200 },
+    { processId: 105, parentProcessId: 101, executablePath: expectedExecutablePath, createdAtMs: 900 },
+    { processId: 201, parentProcessId: 777, executablePath: expectedExecutablePath, createdAtMs: 1_250 },
+    { processId: 301, parentProcessId: 888, executablePath: "G:\\Install-B\\codex-patched-app\\Anti-Codex.exe", createdAtMs: 1_300 },
+  ];
+
+  const selected = fixedRoute.selectVerifiedOwnedClientProcessRows(rows, {
+    rootPid: 101,
+    expectedExecutablePath,
+    rootStartedAtMs: 950,
+    nowMs: 2_000,
+  });
+  assert.deepEqual(selected.map((row) => row.processId), [101, 102, 104]);
+});
+
+test("owned client revalidation rejects PID reuse and never expands to a concurrent or other-install process", () => {
+  assert.equal(typeof fixedRoute.revalidatedOwnedClientPids, "function");
+  const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
+  const identities = [
+    { processId: 101, parentProcessId: 900, executablePath: expectedExecutablePath, createdAtMs: 1_000 },
+    { processId: 102, parentProcessId: 101, executablePath: expectedExecutablePath, createdAtMs: 1_100 },
+  ];
+  const currentRows = [
+    { processId: 101, parentProcessId: 900, executablePath: expectedExecutablePath, createdAtMs: 1_000 },
+    { processId: 102, parentProcessId: 555, executablePath: expectedExecutablePath, createdAtMs: 9_999 },
+    { processId: 201, parentProcessId: 777, executablePath: expectedExecutablePath, createdAtMs: 1_250 },
+    { processId: 301, parentProcessId: 888, executablePath: "G:\\Install-B\\codex-patched-app\\Anti-Codex.exe", createdAtMs: 1_300 },
+  ];
+  assert.deepEqual(
+    fixedRoute.revalidatedOwnedClientPids(currentRows, identities, expectedExecutablePath),
+    [101],
+  );
+});
+
+test("owned client discovery never launders a reused root PID over its captured spawn identity", () => {
+  const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
+  const capturedRoot = {
+    processId: 101,
+    parentProcessId: 900,
+    executablePath: expectedExecutablePath,
+    createdAtMs: 1_000,
+  };
+  const reusedRows = [
+    {
+      ...capturedRoot,
+      parentProcessId: 901,
+      createdAtMs: 1_500,
+    },
+    {
+      processId: 102,
+      parentProcessId: 101,
+      executablePath: expectedExecutablePath,
+      createdAtMs: 1_600,
+    },
+  ];
+
+  assert.deepEqual(fixedRoute.selectVerifiedOwnedClientProcessRows(reusedRows, {
+    rootPid: capturedRoot.processId,
+    expectedExecutablePath,
+    rootStartedAtMs: 950,
+    nowMs: 2_000,
+    knownIdentities: [capturedRoot],
+  }), []);
+});
+
+test("single-window recovery fails closed for the same executable or an uninspectable Anti-Codex process", () => {
+  assert.equal(typeof fixedRoute.recoveryLaunchIsSafe, "function");
+  const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
+  assert.equal(fixedRoute.recoveryLaunchIsSafe([
+    { name: "Anti-Codex.exe", executablePath: expectedExecutablePath },
+  ], expectedExecutablePath), false);
+  assert.equal(fixedRoute.recoveryLaunchIsSafe([
+    { name: "Anti-Codex.exe", executablePath: "" },
+  ], expectedExecutablePath), false);
+  assert.equal(fixedRoute.recoveryLaunchIsSafe([
+    { name: "Anti-Codex.exe", executablePath: "G:\\Install-B\\codex-patched-app\\Anti-Codex.exe" },
+    { name: "ChatGPT.exe", executablePath: "C:\\Program Files\\WindowsApps\\OpenAI.Codex_1\\app\\ChatGPT.exe" },
+  ], expectedExecutablePath), true);
 });
 
 test("client handoff uses CDP and requires a sustained exit", async () => {
@@ -133,13 +264,117 @@ test("client handoff uses CDP and requires a sustained exit", async () => {
   });
 });
 
+test("a live owned Electron PID does not mask a failed semantic renderer", async () => {
+  let rendererProbeCount = 0;
+  const observed = await observeCopiedClientSession(new Set([101]), {
+    isAlive: () => true,
+    isCdpReady: async () => {
+      rendererProbeCount += 1;
+      return false;
+    },
+  });
+
+  assert.equal(rendererProbeCount, 1);
+  assert.deepEqual(observed, {
+    ready: false,
+    fatal: false,
+    livePids: [101],
+    ownershipChanged: false,
+    source: "renderer",
+  });
+
+  assert.equal(clientSessionRequiresShutdown(observed), false);
+  assert.equal(clientSessionRequiresShutdown({ ...observed, fatal: true, source: "fatal_renderer" }), true);
+  assert.equal(clientSessionRequiresShutdown({ ...observed, livePids: [], source: "missing" }), true);
+  assert.equal(clientSessionRequiresShutdown({ ...observed, fatal: true, livePids: [], source: "fatal_renderer" }), true);
+  assert.equal(clientSessionRequiresShutdown({ ...observed, ready: true, fatal: false, livePids: [], source: "cdp" }), false);
+
+  const source = readFileSync(supervisorPath, "utf8");
+  const readyLoop = source.slice(
+    source.indexOf("let clientMissingSince = null"),
+    source.indexOf("} catch (error)", source.indexOf("let clientMissingSince = null")),
+  );
+  assert.match(readyLoop, /state:\s*"degraded"/);
+  assert.match(readyLoop, /clientSessionRequiresShutdown\(clientSession\)/);
+  assert.match(readyLoop, /cleanup\("client_unhealthy",\s*\{\s*stopClient:\s*true\s*\}\)/);
+});
+
+test("an explicit fatal renderer schedules owned cleanup after the existing grace even with a live Electron PID", async () => {
+  const observed = await observeCopiedClientSession(new Set([101]), {
+    isAlive: () => true,
+    isCdpReady: async () => ({ ready: false, fatal: true }),
+  });
+  assert.deepEqual(observed, {
+    ready: false,
+    fatal: true,
+    livePids: [101],
+    ownershipChanged: false,
+    source: "fatal_renderer",
+  });
+  assert.equal(clientSessionRequiresShutdown(observed), true);
+  const started = updateClientExitGrace(null, !clientSessionRequiresShutdown(observed), 1_000, 10_000);
+  assert.deepEqual(started, { missingSince: 1_000, expired: false });
+  assert.deepEqual(
+    updateClientExitGrace(started.missingSince, !clientSessionRequiresShutdown(observed), 11_000, 10_000),
+    { missingSince: 1_000, expired: true },
+  );
+});
+
+test("fatal renderer recovery is controlled, launch-safe, and allowed at most once", async () => {
+  assert.equal(typeof fixedRoute.recoverCopiedClientOnce, "function");
+  const calls = [];
+  const recovered = await fixedRoute.recoverCopiedClientOnce({
+    alreadyAttempted: false,
+    backoffMs: 25,
+    stopOwned: async () => { calls.push("stop"); return { survivors: [] }; },
+    sleep: async (ms) => { calls.push(`sleep:${ms}`); },
+    assertLaunchSafe: async () => { calls.push("guard"); return true; },
+    spawnClient: async () => { calls.push("spawn"); return { pid: 202 }; },
+    waitUntilReady: async (child) => { calls.push(`ready:${child.pid}`); return { clients: [202, 203] }; },
+  });
+  assert.deepEqual(calls, ["stop", "sleep:25", "guard", "spawn", "ready:202"]);
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.attempted, true);
+  assert.equal(recovered.child.pid, 202);
+
+  calls.length = 0;
+  const exhausted = await fixedRoute.recoverCopiedClientOnce({
+    alreadyAttempted: true,
+    stopOwned: async () => { calls.push("stop"); return { survivors: [] }; },
+    assertLaunchSafe: async () => { calls.push("guard"); return true; },
+    spawnClient: async () => { calls.push("spawn"); return { pid: 303 }; },
+    waitUntilReady: async () => ({ clients: [303] }),
+  });
+  assert.equal(exhausted.ok, false);
+  assert.equal(exhausted.code, "recovery_exhausted");
+  assert.deepEqual(calls, []);
+
+  const unsafe = await fixedRoute.recoverCopiedClientOnce({
+    alreadyAttempted: false,
+    stopOwned: async () => ({ survivors: [] }),
+    sleep: async () => {},
+    assertLaunchSafe: async () => false,
+    spawnClient: async () => { throw new Error("must not launch"); },
+    waitUntilReady: async () => ({ clients: [] }),
+  });
+  assert.equal(unsafe.ok, false);
+  assert.equal(unsafe.code, "launch_not_safe");
+});
+
 test("cleanup persists its reason before terminating any owned process", () => {
   const source = readFileSync(supervisorPath, "utf8");
   const cleanupStart = source.indexOf("const cleanup = async");
+  const cleanupEnd = source.indexOf("requestShutdown =", cleanupStart);
+  const cleanup = cleanupStart >= 0 && cleanupEnd > cleanupStart
+    ? source.slice(cleanupStart, cleanupEnd)
+    : "";
   const stoppingState = source.indexOf('state: "stopping"', cleanupStart);
   const firstTermination = source.indexOf("stopOwnedProcess(", cleanupStart);
   assert.ok(cleanupStart >= 0 && stoppingState > cleanupStart);
   assert.ok(firstTermination > stoppingState);
+  assert.match(cleanup, /await stopOwnedClientSession\(\)/);
+  assert.match(cleanup, /stopOwnedProcess\(launcher,\s*launcherIdentity\)/);
+  assert.doesNotMatch(cleanup, /tasklist|scanCopiedClientProcessesSafely|getCopiedClientProcesses/);
 });
 
 test("owned-process shutdown waits for every unique process and reports survivors", async () => {
@@ -159,9 +394,10 @@ test("owned-process shutdown waits for every unique process and reports survivor
   assert.deepEqual(survivors, [303]);
 
   const source = readFileSync(supervisorPath, "utf8");
-  assert.match(source, /shutdownSurvivors = await waitForOwnedProcessExit\(shutdownPids\)/);
+  assert.match(source, /\.\.\.await waitForOwnedProcessExit\(shutdownPids\)/);
   assert.match(source, /state: stoppedNormally && fullyStopped \? "stopped" : "error"/);
-  assert.match(source, /process\.kill\(Number\(pid\), "SIGKILL"\)/);
+  assert.doesNotMatch(source, /process\.kill\(pid,\s*signal\)|child\.kill\(signal\)/);
+  assert.match(source, /TerminateProcess\(process,\s*1\)/);
 });
 
 test("tasklist duplicate-client scan is locale independent and ignores no-match text", () => {
@@ -176,7 +412,7 @@ test("tasklist duplicate-client scan is locale independent and ignores no-match 
   assert.deepEqual(parseTasklistAntiCodexProcesses("信息: 没有运行的任务与指定标准匹配。"), []);
 });
 
-test("a timed-out startup process scan is advisory because the launcher guard remains authoritative", () => {
+test("a timed-out startup process scan fails closed before a second client can launch", () => {
   const result = scanCopiedClientProcessesSafely(() => {
     const error = new Error("tasklist timed out");
     error.code = "ETIMEDOUT";
@@ -186,6 +422,63 @@ test("a timed-out startup process scan is advisory because the launcher guard re
     ok: false,
     processes: [],
     error: "tasklist timed out",
+  });
+  assert.equal(typeof fixedRoute.assertSafeStartupClientScan, "function");
+  assert.throws(
+    () => fixedRoute.assertSafeStartupClientScan(result),
+    /cannot prove that no anti-codex client is already running.*tasklist timed out/i,
+  );
+});
+
+test("fixed-route force stops reject a PID reused after its owned identity snapshot", () => {
+  assert.equal(typeof fixedRoute.stopExactProcess, "function");
+  assert.equal(typeof fixedRoute.stopOwnedProcess, "function");
+  const identity = {
+    processId: 44001,
+    parentProcessId: 33001,
+    executablePath: "C:\\Anti-Codex\\Anti-Codex.exe",
+    createdAtMs: 1_720_000_000_000,
+    creationFileTimeUtcTicks: "133659776000000000",
+    name: "Anti-Codex.exe",
+  };
+  const terminationAttempts = [];
+  const exactResult = fixedRoute.stopExactProcess(identity, {
+    terminate: (expected) => {
+      terminationAttempts.push(expected);
+      return { status: "identity_changed" };
+    },
+  });
+  assert.equal(exactResult.stopped, false);
+  assert.equal(exactResult.reason, "identity_changed");
+  assert.equal(terminationAttempts.length, 1);
+  assert.equal(terminationAttempts[0].creationFileTimeUtcTicks, identity.creationFileTimeUtcTicks);
+
+  const childResult = fixedRoute.stopOwnedProcess({
+    pid: identity.processId,
+    exitCode: null,
+    signalCode: null,
+  }, identity, {
+    terminate: () => ({ status: "identity_changed" }),
+  });
+  assert.equal(childResult.stopped, false);
+  assert.equal(childResult.reason, "identity_changed");
+
+  const safeResult = fixedRoute.stopExactProcess(identity, {
+    terminate: () => ({ status: "terminated" }),
+  });
+  assert.deepEqual(safeResult, {
+    stopped: true,
+    processId: identity.processId,
+    reason: "killed",
+  });
+
+  const exitedResult = fixedRoute.stopExactProcess(identity, {
+    terminate: () => ({ status: "already_exited" }),
+  });
+  assert.deepEqual(exitedResult, {
+    stopped: false,
+    processId: identity.processId,
+    reason: "already_exited",
   });
 });
 
@@ -218,7 +511,7 @@ test("supervisor closes the Antigravity provider before terminating owned childr
     ? source.slice(cleanupStart, cleanupEnd)
     : "";
   const providerClose = cleanup.indexOf("await provider?.close?.()");
-  const childStop = cleanup.indexOf("stopOwnedProcess(launcher)");
+  const childStop = cleanup.indexOf("stopOwnedProcess(launcher, launcherIdentity)");
   assert.ok(providerClose >= 0, "cleanup must close the provider");
   assert.ok(childStop > providerClose, "provider close must precede child termination");
 });
@@ -266,7 +559,8 @@ test("plan-json proves third-party bypass without starting processes or exposing
     headlessProtocolProxy: true,
     codexPlusPlusOwnsClient: false,
     clientOwner: "fixed-route-supervisor",
-    automaticallyRelaunchesClient: false,
+    automaticallyRelaunchesClient: true,
+    automaticClientRecoveryLimit: 1,
     ownsTaskControl: false,
     cleansOnlyOwnedChildren: true,
   });
@@ -418,6 +712,33 @@ test("compatibility aliases load from durable catalogs without trusting malforme
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+test("unified catalog keeps retired Antigravity models hidden but routable", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  const bundled = { models: [{
+    slug: "gpt-5.5",
+    visibility: "list",
+    supported_in_api: true,
+    shell_type: "shell_command",
+    apply_patch_tool_type: "freeform",
+  }] };
+  const current = { ...bundled.models[0], slug: "gemini-3.1-pro-low", display_name: "Gemini 3.1 Pro" };
+  const retired = { ...bundled.models[0], slug: "claude-sonnet-4-5", display_name: "Claude Sonnet 4.5", visibility: "list" };
+  const preserved = supervisor.preserveHiddenCompatibilityModels({ models: [current] }, { models: [retired, current] });
+  const catalog = supervisor.buildUnifiedModelCatalog(bundled, {
+    antigravityCatalog: preserved,
+    thirdPartyModel: "gpt-5.6-sol",
+  });
+
+  assert.deepEqual(preserved.models.map((entry) => entry.slug), ["gemini-3.1-pro-low", "claude-sonnet-4-5"]);
+  assert.equal(preserved.models[1].visibility, "hide");
+  assert.equal(catalog.models.find((entry) => entry.slug === "claude-sonnet-4-5").visibility, "hide");
+  assert.equal(catalog.models.find((entry) => entry.slug === "gemini-3.1-pro-low").visibility, "list");
+
+  const source = readFileSync(supervisorPath, "utf8");
+  assert.match(source, /preserveHiddenCompatibilityModels\(currentAntigravityCatalog,\s*previousAntigravityCatalog\)/);
+  assert.match(source, /relayModelList:\s*\[ANTIGRAVITY_MODEL_SLOT,\s*\.\.\.antigravityModelIds\]/);
 });
 
 test("third-party context window rejects unsafe or malformed profile values", async () => {

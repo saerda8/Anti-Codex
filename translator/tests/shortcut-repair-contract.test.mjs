@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..", "..");
@@ -11,13 +11,82 @@ const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync
 const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 const launchTask = readFileSync(resolve(root, "scripts", "start-anticodex-task.mjs"), "utf8");
 const consoleHideScript = readFileSync(resolve(root, "scripts", "hide-anticodex-console.ps1"), "utf8");
+const shortcutBrokerPath = resolve(root, "scripts", "start-anticodex-shortcut-broker.ps1");
+const shortcutBroker = existsSync(shortcutBrokerPath) ? readFileSync(shortcutBrokerPath, "utf8") : "";
+const shortcutRestoreAcceptancePath = resolve(root, "scripts", "test-anticodex-shortcut-restore.ps1");
+const shortcutRestoreAcceptance = existsSync(shortcutRestoreAcceptancePath)
+  ? readFileSync(shortcutRestoreAcceptancePath, "utf8")
+  : "";
+
+test("interactive shortcut broker focuses only the exact installed Anti-Codex window", () => {
+  assert.equal(existsSync(shortcutBrokerPath), true);
+  assert.match(shortcutBroker, /codex-patched-app[\\/]Anti-Codex\.exe/);
+  assert.match(shortcutBroker, /Get-Process\s+-Name\s+"Anti-Codex"/);
+  assert.match(shortcutBroker, /\.Path/);
+  assert.match(shortcutBroker, /-ieq\s+\$expectedExecutable/);
+  assert.doesNotMatch(shortcutBroker, /Get-CimInstance|Win32_Process/);
+  assert.match(shortcutBroker, /MainWindowHandle/);
+  assert.match(shortcutBroker, /ShowWindowAsync/);
+  assert.match(shortcutBroker, /SetForegroundWindow/);
+  assert.match(shortcutBroker, /GetForegroundWindow/);
+  assert.match(shortcutBroker, /GetWindowThreadProcessId/);
+  assert.match(shortcutBroker, /IsIconic/);
+  assert.match(shortcutBroker, /IsWindowVisible/);
+  assert.match(shortcutBroker, /Get-ForegroundProcessId/);
+  assert.match(shortcutBroker, /foregroundStableSince/);
+  assert.doesNotMatch(shortcutBroker, /if \(\[AntiCodexShortcutWindow\]::SetForegroundWindow\(\$window\)\) \{ return \$true \}/);
+  const runningBranch = shortcutBroker.match(/if \(\$matchingProcesses\.Count -gt 0\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(runningBranch, /if \(Focus-ExactAntiCodexWindow -Processes \$matchingProcesses\) \{/);
+  assert.match(runningBranch, /exit 0/);
+  assert.doesNotMatch(runningBranch, /\[void\]\(Focus-ExactAntiCodexWindow/);
+  assert.doesNotMatch(runningBranch, /\.Run\(/);
+  assert.match(shortcutBroker, /Schedule\.Service/);
+  assert.match(shortcutBroker, /GetTask\("\\Anti-Codex Launcher"\)/);
+  assert.match(shortcutBroker, /\.Run\(\$null\)/);
+});
+
+test("installed shortcut restore acceptance proves one process, one page, and no blank frame", () => {
+  assert.equal(existsSync(shortcutRestoreAcceptancePath), true);
+  assert.match(shortcutRestoreAcceptance, /codex-patched-app[\\/]Anti-Codex\.exe/);
+  assert.match(shortcutRestoreAcceptance, /\[int\]\$ExpectedMainPid/);
+  assert.match(shortcutRestoreAcceptance, /\[int\]\$ExpectedOriginalCodexPid/);
+  assert.match(shortcutRestoreAcceptance, /\[int\]\$SampleDurationMs\s*=\s*3000/);
+  assert.match(shortcutRestoreAcceptance, /ShowWindowAsync\(\$windowHandle,\s*6\)/);
+  assert.match(shortcutRestoreAcceptance, /IsIconic/);
+  assert.match(shortcutRestoreAcceptance, /Anti-Codex\.lnk/);
+  assert.match(shortcutRestoreAcceptance, /Start-Process\s+-FilePath\s+\$desktopShortcut/);
+  assert.equal([...shortcutRestoreAcceptance.matchAll(/Start-Process\s+-FilePath\s+\$desktopShortcut/g)].length, 1);
+  assert.match(shortcutRestoreAcceptance, /Get-ExactAntiCodexSnapshot/);
+  assert.match(shortcutRestoreAcceptance, /app:\/\//);
+  assert.match(shortcutRestoreAcceptance, /StretchBlt/);
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$isVisible -and -not \$isMinimized\) \{\s*\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric -WindowHandle \$windowHandle/,
+  );
+  assert.doesNotMatch(
+    shortcutRestoreAcceptance,
+    /if \(\$isVisible -and -not \$isMinimized -and \$foregroundProcessId -eq \$ExpectedMainPid\) \{\s*\$metric = Get-FrameMetric/,
+  );
+  assert.match(shortcutRestoreAcceptance, /blankFrameCount/);
+  assert.match(shortcutRestoreAcceptance, /originalCodexAlive/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
+});
 
 test("shortcut repair resolves PowerShell without relying on a populated WINDIR", () => {
   assert.match(repairScript, /\[Environment\]::SystemDirectory/);
   assert.doesNotMatch(repairScript, /\$env:WINDIR/);
 });
 
-test("interactive Anti-Codex shortcuts use an isolated Windows task broker", () => {
+test("interactive restore shortcuts prefer the stable PowerShell 7 alias with a Windows PowerShell fallback", () => {
+  for (const source of [repairScript, syncReadiness]) {
+    assert.match(source, /Microsoft[\\/]WindowsApps[\\/]pwsh\.exe/);
+    assert.match(source, /Test-Path\s+-LiteralPath\s+\$interactivePowerShellCandidate/);
+    assert.match(source, /\$interactivePowerShell\s*=\s*\$powershell/);
+    assert.match(source, /expectedTarget\s*=\s*if \(\$UseLaunchTask\) \{ \$interactivePowerShell \} else \{ \$powershell \}/);
+  }
+});
+
+test("interactive Anti-Codex shortcuts use a short focus broker before the isolated launch task", () => {
   const mainSpecs = repairScript.match(/\$shortcutSpecs\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   const launchTaskRegistration = repairScript.match(/function Set-AntiCodexLaunchTask[\s\S]*?return Get-AntiCodexLaunchTaskEvidence\s*\n\}/)?.[0] ?? "";
   const interactiveSpecs = mainSpecs.split(/\r?\n/).filter((entry) => /-UseLaunchTask\b/.test(entry));
@@ -45,7 +114,8 @@ test("interactive Anti-Codex shortcuts use an isolated Windows task broker", () 
   assert.match(repairScript, /\$shortcut\.TargetPath\s*=\s*\[string\]\$Spec\.expectedTarget/);
   assert.match(repairScript, /schtasks\.exe/);
   assert.match(repairScript, /Schedule\.Service/);
-  assert.match(repairScript, /\.Run\(`\$null\)/);
+  assert.doesNotMatch(repairScript, /\.Run\(`\$null\)/);
+  assert.match(shortcutBroker, /\.Run\(\$null\)/);
   assert.doesNotMatch(repairScript, /Start-ScheduledTask -TaskName/);
   assert.match(repairScript, /-WindowStyle Hidden/);
   assert.doesNotMatch(repairScript, /\/Run \/TN/);
@@ -57,7 +127,8 @@ test("interactive Anti-Codex shortcuts use an isolated Windows task broker", () 
   assert.match(launchTask, /spawnSync\(powershell/);
   assert.match(consoleHideScript, /AttachConsole/);
   assert.match(consoleHideScript, /ShowWindow/);
-  assert.match(repairScript, /mode = "scheduled-task-broker"/);
+  assert.match(repairScript, /start-anticodex-shortcut-broker\.ps1/);
+  assert.match(repairScript, /mode = "shortcut-focus-broker"/);
 });
 
 test("Manager updates use a separate non-retrying scheduled task broker", () => {
@@ -114,17 +185,18 @@ test("shortcut refresh stages a unique link before replacing the visible entry",
   assert.match(repairScript, /FinalReleaseComObject\(\$shortcut\)/);
 });
 
-test("sync readiness verifies the isolated task broker for interactive shortcuts", () => {
+test("sync readiness verifies the short focus broker and isolated launch task", () => {
   assert.doesNotMatch(syncReadiness, /ExpectedNativeLauncher|Anti-Codex Launcher\.exe/);
   assert.match(syncReadiness, /Schedule\.Service/);
   assert.equal([...syncReadiness.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
   assert.match(syncReadiness, /\$script:antiCodexScheduleService/);
   assert.doesNotMatch(syncReadiness, /Get-ScheduledTask/);
-  assert.match(syncReadiness, /\.Run\(`\$null\)/);
+  assert.doesNotMatch(syncReadiness, /\.Run\(`\$null\)/);
   assert.doesNotMatch(syncReadiness, /Start-ScheduledTask -TaskName/);
   assert.match(syncReadiness, /\$actualExecute\s+-ieq\s+\$node/);
-  assert.match(syncReadiness, /expectedTarget = \$powershell/);
-  assert.match(syncReadiness, /launchMode = if \(\$UseLaunchTask\) \{ "scheduled-task" \}/);
+  assert.match(syncReadiness, /expectedTarget = if \(\$UseLaunchTask\) \{ \$interactivePowerShell \} else \{ \$powershell \}/);
+  assert.match(syncReadiness, /\$shortcutBrokerScript\s*=\s*Join-Path \$scriptsRoot "start-anticodex-shortcut-broker\.ps1"/);
+  assert.match(syncReadiness, /launchMode = if \(\$UseLaunchTask\) \{ "shortcut-broker" \}/);
   assert.match(syncReadiness, /expectedLauncherTarget = \$ExpectedScript/);
   assert.match(syncReadiness, /expectedArguments/);
   assert.match(syncReadiness, /argumentsMatches/);
@@ -143,6 +215,7 @@ test("runtime sync removes the retired native bootstrap source", () => {
   assert.match(requiredList, /scripts\\sync-anticodex-launcher\.ps1/);
   assert.match(requiredList, /scripts\\hide-anticodex-console\.ps1/);
   assert.match(requiredList, /scripts\\start-anticodex-task\.mjs/);
+  assert.match(requiredList, /scripts\\start-anticodex-shortcut-broker\.ps1/);
   assert.match(requiredList, /scripts\\start-anticodex-update-task\.mjs/);
 });
 

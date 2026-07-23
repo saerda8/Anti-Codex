@@ -63,15 +63,14 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 
 ## Current Verification Boundary
 
-- All nine patches replay on the pinned commit to accepted source head `cbea7671be790b907df8ee311de244d9e5a02636`, tree `5596c525d9adfa25e908de1a2f921e28156f3677`.
+- All nine patches replay on the pinned commit to accepted source head `36068438997136b8ebe3de1b8fc56a410b72977a`; the verified Windows build replay head is `7690ebea85d44c57b4cf279f2176de2b8009c9b6`, and independent replays share tree `19ea2a0f3ff87a20a473691575601390ff9c1358`.
 - Repository isolation audit: 9/9 checks passed.
-- Component regression tests: 16/16 passed.
+- Focused component, isolation, runtime-contract and security-boundary regressions pass 229/229; security-boundary contracts pass 4/4.
 - Targeted `rustfmt --check` passed for the changed protocol source and test; the pre-existing watcher import-order difference remains outside the protocol patch.
-- Pinned `messense/cargo-xwin:0.23.0` Windows cross-check: core and Manager passed.
-- Regression tests: current compaction routing passes 9/9 focused core tests and the protocol proxy suite passes 54/54; retained earlier evidence covers patch 0008's no-secret diagnostic test and patch 0009's 5/5 decoded/encoded body-boundary tests.
+- Pinned `messense/cargo-xwin:0.23.0` Windows x64 release build passed. The three new real TCP authorization/slow-body regressions ran in the pinned container and passed 3/3; the protocol proxy suite passes 56/56.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- Release launcher build: passed; 16,937,472 bytes; SHA-256 `23c23ca7e4960b2c9351fa15f62bccd89fda671acdef39cc26fef005c105e73b`.
+- Release launcher build: passed; 16,943,616 bytes; SHA-256 `b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136`.
 - Runtime isolation proof: 20/20 checks passed against copied Codex `26.715.4045.0`; invalid executable selection failed closed, original Codex and the active Anti-Codex stayed unchanged, and all test processes were removed.
-- Installed real-mouse model switching preserves the copied client, CodexPlusPlus process, original Codex process and current visible task. Repeated approximately 35 MiB same-task multimodal third-party requests now pass above the former 32 MiB limit, and the accepted task completed a real 50.342-second live-action video plus a hash-bound 19-entry package without 413 or reconnect.
+- The previous installed real-mouse/model-switch and long-multimodal task evidence is historical. The old task artifacts were deliberately deleted on user request, and the new binary still requires installed real-mouse, isolation and provider-switch verification before release readiness can be restored.
 
 The isolation component is runtime-ready for Gate 2. The isolated launcher must always receive explicit copied-client paths and child-only state environment variables; provider and long-task readiness remain separate later gates.

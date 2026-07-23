@@ -22,6 +22,10 @@ const FIXED_ROUTE_HEALTH_URL = "http://127.0.0.1:18487/anticodex/fixed-route/hea
 export const FIXED_ROUTE_PORTS = Object.freeze([8484, 18318, 18484, 18485, 18486, 18487, 18488, 18489]);
 export const ANTIGRAVITY_START_TIMEOUT_MS = 90_000;
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
+const HOST_SYNC_MUTEX_NAMES = Object.freeze([
+  "Global\\AntiCodexHostSync",
+  "Local\\AntiCodexHostSync",
+]);
 
 export function hideTaskConsole(env = process.env) {
   if (process.platform !== "win32") return { ok: true, skipped: true };
@@ -61,6 +65,132 @@ function text(value) {
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
+}
+
+export async function acquireHostSyncBarrier(options = {}) {
+  if (typeof options.factory === "function") {
+    return options.factory(options);
+  }
+  if ((options.platform ?? process.platform) !== "win32") {
+    const release = async () => {};
+    release.assertHeld = () => {};
+    return release;
+  }
+
+  const env = options.env ?? process.env;
+  const windowsRoot = text(env.SystemRoot) ?? text(env.WINDIR) ?? "C:\\Windows";
+  const powershell = join(windowsRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const timeoutMs = Number(options.timeoutMs ?? 180_000);
+  const helperScript = `
+$ErrorActionPreference = "Stop"
+$names = @("Global\\AntiCodexHostSync", "Local\\AntiCodexHostSync")
+$mutexes = [System.Collections.Generic.List[System.Threading.Mutex]]::new()
+$held = [System.Collections.Generic.List[System.Threading.Mutex]]::new()
+try {
+  foreach ($name in $names) {
+    $mutex = [System.Threading.Mutex]::new($false, $name)
+    $mutexes.Add($mutex)
+    try {
+      $acquired = $mutex.WaitOne(${Math.max(1, Math.trunc(timeoutMs))})
+    } catch [System.Threading.AbandonedMutexException] {
+      $acquired = $true
+    }
+    if (-not $acquired) {
+      throw "Timed out waiting for Anti-Codex host sync publication barrier: $name"
+    }
+    $held.Add($mutex)
+  }
+  [Console]::Out.WriteLine("ANTICODEX_HOST_SYNC_BARRIER_READY")
+  [Console]::Out.Flush()
+  [void][Console]::In.ReadLine()
+} finally {
+  for ($index = $held.Count - 1; $index -ge 0; $index--) {
+    try { $held[$index].ReleaseMutex() } catch {}
+  }
+  foreach ($mutex in $mutexes) {
+    try { $mutex.Dispose() } catch {}
+  }
+}
+`;
+  const helper = spawn(powershell, [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy", "Bypass",
+    "-WindowStyle", "Hidden",
+    "-EncodedCommand", Buffer.from(helperScript, "utf16le").toString("base64"),
+  ], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  let held = false;
+  let released = false;
+  let stderr = "";
+  await new Promise((resolveReady, rejectReady) => {
+    const timer = setTimeout(() => {
+      finish(new Error("Timed out acquiring the Anti-Codex host sync publication barrier."));
+    }, timeoutMs + 5_000);
+    const finish = (error) => {
+      clearTimeout(timer);
+      helper.stdout.removeListener("data", onStdout);
+      helper.stderr.removeListener("data", onStderr);
+      helper.removeListener("error", onError);
+      helper.removeListener("exit", onExit);
+      if (error) {
+        try { helper.stdin.end(); } catch {}
+        rejectReady(error);
+      } else {
+        held = true;
+        resolveReady();
+      }
+    };
+    const onStdout = (chunk) => {
+      if (String(chunk).includes("ANTICODEX_HOST_SYNC_BARRIER_READY")) finish();
+    };
+    const onStderr = (chunk) => {
+      stderr = `${stderr}${String(chunk)}`.slice(-2_000);
+    };
+    const onError = (error) => finish(error);
+    const onExit = (code) => finish(new Error(
+      `Anti-Codex host sync barrier helper exited before acquisition (code ${code ?? "signal"}): ${stderr.trim()}`,
+    ));
+    helper.stdout.on("data", onStdout);
+    helper.stderr.on("data", onStderr);
+    helper.once("error", onError);
+    helper.once("exit", onExit);
+  });
+
+  const release = async () => {
+    if (released) return;
+    released = true;
+    held = false;
+    await new Promise((resolveExit) => {
+      if (helper.exitCode !== null || helper.signalCode !== null) {
+        resolveExit();
+        return;
+      }
+      const timer = setTimeout(() => {
+        try { helper.kill(); } catch {}
+        resolveExit();
+      }, 5_000);
+      helper.once("exit", () => {
+        clearTimeout(timer);
+        resolveExit();
+      });
+      try { helper.stdin.end("\n"); } catch {
+        clearTimeout(timer);
+        resolveExit();
+      }
+    });
+  };
+  release.assertHeld = () => {
+    if (!held || released) {
+      throw new Error("Anti-Codex host sync publication barrier was released before runtime startup.");
+    }
+  };
+  return release;
 }
 
 function normalizeProfile(profile = {}) {
@@ -398,69 +528,92 @@ function publicError(error) {
     .slice(0, 1_000);
 }
 
+export function attachForwardedSignalHandlers(child, signalTarget = process) {
+  const forwardSigint = () => {
+    try { child.kill("SIGINT"); } catch {}
+  };
+  const forwardSigterm = () => {
+    try { child.kill("SIGTERM"); } catch {}
+  };
+  signalTarget.once("SIGINT", forwardSigint);
+  signalTarget.once("SIGTERM", forwardSigterm);
+  return () => {
+    signalTarget.removeListener("SIGINT", forwardSigint);
+    signalTarget.removeListener("SIGTERM", forwardSigterm);
+  };
+}
+
 export async function runTaskLauncher(options = {}) {
   const env = options.env ?? process.env;
   const plan = buildTaskLaunchPlan({ env, profile: options.profile });
   if (options.planOnly) return plan;
 
-  const startedAt = new Date().toISOString();
-  writeLauncherState(plan, startedAt, "initializing");
-  if (await fixedRouteReady()) {
-    writeLauncherState(plan, startedAt, "ready", "ready", "existing fixed route");
-    return { ok: true, reused: true };
-  }
-
-  const runtimeProfile = readThirdPartyRuntimeProfile(plan, env);
-  const childEnv = buildTaskLauncherEnvironment(plan, env, runtimeProfile);
-  mkdirSync(plan.stateRoot, { recursive: true });
-  if (plan.provider === "antigravity") {
-    const desktopPath = await ensureAntigravityDesktop(plan, childEnv);
-    if (desktopPath) childEnv.ANTIGRAVITY_DESKTOP_PATH = desktopPath;
-  }
-  runLogDatabaseGuard(plan, childEnv);
-
-  rmSync(plan.stdoutPath, { force: true });
-  rmSync(plan.stderrPath, { force: true });
-  const stdout = openSync(plan.stdoutPath, "a");
-  const stderr = openSync(plan.stderrPath, "a");
-  writeLauncherState(plan, startedAt, "supervising-fixed-route");
-  const child = spawn(process.execPath, plan.supervisorArgs, {
-    env: childEnv,
-    stdio: ["ignore", stdout, stderr],
-    windowsHide: true,
+  const releaseHostSyncBarrier = await acquireHostSyncBarrier({
+    env,
+    factory: options.acquireHostSyncBarrier,
   });
-  const forwardSignal = (signal) => {
-    try { child.kill(signal); } catch {}
-  };
-  process.once("SIGINT", () => forwardSignal("SIGINT"));
-  process.once("SIGTERM", () => forwardSignal("SIGTERM"));
-
-  const result = await new Promise((resolveExit, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolveExit({ code, signal }));
-  }).finally(() => {
-    closeSync(stdout);
-    closeSync(stderr);
-  });
-  const restartRequest = consumeRouteRestartRequest(plan.stateRoot, child.pid);
-  if (restartRequest) {
-    writeLauncherState(
-      plan,
-      startedAt,
-      "route-restart-requested",
-      "running",
-      String(restartRequest.requestId),
-    );
-    if (!await waitForFixedRoutePortsReleased()) {
-      throw new Error("Previous Anti-Codex route ports did not release before the controlled restart.");
+  try {
+    const startedAt = new Date().toISOString();
+    writeLauncherState(plan, startedAt, "initializing");
+    if (await fixedRouteReady()) {
+      writeLauncherState(plan, startedAt, "ready", "ready", "existing fixed route");
+      return { ok: true, reused: true };
     }
-    return runTaskLauncher({ env });
+
+    const runtimeProfile = readThirdPartyRuntimeProfile(plan, env);
+    const childEnv = buildTaskLauncherEnvironment(plan, env, runtimeProfile);
+    mkdirSync(plan.stateRoot, { recursive: true });
+    if (plan.provider === "antigravity") {
+      const desktopPath = await ensureAntigravityDesktop(plan, childEnv);
+      if (desktopPath) childEnv.ANTIGRAVITY_DESKTOP_PATH = desktopPath;
+    }
+    runLogDatabaseGuard(plan, childEnv);
+
+    rmSync(plan.stdoutPath, { force: true });
+    rmSync(plan.stderrPath, { force: true });
+    const stdout = openSync(plan.stdoutPath, "a");
+    const stderr = openSync(plan.stderrPath, "a");
+    writeLauncherState(plan, startedAt, "supervising-fixed-route");
+    const child = spawn(process.execPath, plan.supervisorArgs, {
+      env: childEnv,
+      stdio: ["ignore", stdout, stderr],
+      windowsHide: true,
+    });
+    const detachForwardedSignals = attachForwardedSignalHandlers(child);
+    const childExit = new Promise((resolveExit, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => resolveExit({ code, signal }));
+    });
+    releaseHostSyncBarrier.assertHeld();
+    await releaseHostSyncBarrier();
+
+    const result = await childExit.finally(() => {
+      detachForwardedSignals();
+      closeSync(stdout);
+      closeSync(stderr);
+    });
+    const restartRequest = consumeRouteRestartRequest(plan.stateRoot, child.pid);
+    if (restartRequest) {
+      writeLauncherState(
+        plan,
+        startedAt,
+        "route-restart-requested",
+        "running",
+        String(restartRequest.requestId),
+      );
+      if (!await waitForFixedRoutePortsReleased()) {
+        throw new Error("Previous Anti-Codex route ports did not release before the controlled restart.");
+      }
+      return runTaskLauncher({ env, acquireHostSyncBarrier: options.acquireHostSyncBarrier });
+    }
+    if (result.code !== 0) {
+      throw new Error(`Anti-Codex fixed-route supervisor exited with code ${result.code ?? "signal"}.`);
+    }
+    writeLauncherState(plan, startedAt, "closed", "stopped");
+    return { ok: true, reused: false };
+  } finally {
+    await releaseHostSyncBarrier();
   }
-  if (result.code !== 0) {
-    throw new Error(`Anti-Codex fixed-route supervisor exited with code ${result.code ?? "signal"}.`);
-  }
-  writeLauncherState(plan, startedAt, "closed", "stopped");
-  return { ok: true, reused: false };
 }
 
 async function main() {

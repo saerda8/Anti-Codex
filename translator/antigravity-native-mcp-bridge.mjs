@@ -1,5 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+
+import {
+  DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS,
+  MAX_NATIVE_MCP_BODY_BYTES,
+  boundedPositiveInteger,
+} from "./antigravity-contract.mjs";
 
 export async function createAntigravityNativeMcpBridge(options = {}) {
   const canonicalTools = normalizeTools(options.tools);
@@ -8,12 +14,34 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
   const calls = [];
   const waiters = [];
   const pending = new Map();
+  const secret = String(options.secret || randomBytes(32).toString("base64url"));
+  const secretPath = `/mcp/${encodeURIComponent(secret)}`;
+  const maxBodyBytes = boundedPositiveInteger(
+    options.maxBodyBytes,
+    MAX_NATIVE_MCP_BODY_BYTES,
+    MAX_NATIVE_MCP_BODY_BYTES,
+  );
+  const pendingCallTimeoutMs = positiveInteger(
+    options.pendingCallTimeoutMs ?? options.callTimeoutMs,
+    DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS,
+  );
   let closed = false;
 
   const server = createServer(async (request, response) => {
-    const body = await readJsonBody(request);
+    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    if (path !== secretPath) {
+      sendJson(response, 401, { error: "Unauthorized" });
+      return;
+    }
     if (request.method !== "POST") {
-      sendJson(response, request.url === "/.well-known/oauth-protected-resource" ? 404 : 405, { error: "POST required" });
+      sendJson(response, 405, { error: "POST required" });
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(request, maxBodyBytes);
+    } catch (error) {
+      sendJson(response, error?.statusCode ?? 400, { error: String(error?.message ?? error) });
       return;
     }
     if (body?.id === undefined || body?.id === null) {
@@ -46,7 +74,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     }
     const callId = `call_${randomUUID().replaceAll("-", "")}`;
     const completion = deferred();
-    const timeoutMs = Math.max(1, Number(options.pendingCallTimeoutMs ?? options.callTimeoutMs ?? 300_000) || 300_000);
+    const timeoutMs = pendingCallTimeoutMs;
     const timeout = setTimeout(() => {
       removeQueuedCall(callId);
       completion.reject(new Error(`Timed out waiting for Codex tool result after ${timeoutMs}ms.`));
@@ -54,6 +82,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     pending.set(callId, { completion, response, rpcId: body.id, timeout });
     enqueue({
       callId,
+      nativeCallId: String(body.id),
       name: canonicalNameByNativeName.get(name) ?? name,
       nativeName: name,
       arguments: body?.params?.arguments ?? {},
@@ -74,7 +103,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}`;
+  const url = `http://127.0.0.1:${address.port}${secretPath}`;
 
   const onAbort = () => void close(options.signal?.reason);
   options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -133,6 +162,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
 
   return {
     url,
+    secret,
     tools,
     customAgentSpec: withAntigravitySystemPromptSections({
       customizationConfig: {
@@ -145,6 +175,8 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     takeCalls,
     completeCall,
     close,
+    maxBodyBytes,
+    pendingCallTimeoutMs,
     get pendingCount() {
       return pending.size;
     },
@@ -212,19 +244,49 @@ function withAntigravityToolAliases(tools) {
 }
 
 function mcpToolResult(output, isError) {
-  const text = typeof output === "string" ? output : JSON.stringify(output ?? null);
-  return { content: [{ type: "text", text }], isError };
+  const content = Array.isArray(output)
+    ? output.map(mcpContentPart)
+    : [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output ?? null) }];
+  return { content, isError };
 }
 
-async function readJsonBody(request) {
+function mcpContentPart(part) {
+  const type = String(part?.type ?? "");
+  if (type === "text" || type === "input_text") {
+    return { type: "text", text: String(part?.text ?? "") };
+  }
+  if (type === "image_url") {
+    const source = typeof part?.image_url === "string" ? part.image_url : part?.image_url?.url;
+    const match = String(source ?? "").match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/i);
+    if (!match) throw new Error("MCP image result must be a base64 data image.");
+    return { type: "image", data: match[2].replace(/\s+/g, ""), mimeType: match[1].toLowerCase() };
+  }
+  throw new Error(`Unsupported MCP result content part: ${type || "missing"}`);
+}
+
+async function readJsonBody(request, maxBytes) {
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      const error = new Error(`Request body exceeds ${maxBytes} bytes.`);
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   if (!chunks.length) return null;
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
     return null;
   }
+}
+
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function sendResult(response, id, result) {

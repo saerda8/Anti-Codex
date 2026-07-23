@@ -23,6 +23,11 @@ $managerScript = Join-Path $runtimeRoot "scripts\manage-anticodex.ps1"
 $hostIcon = Join-Path $hostRoot "resources\icon.ico"
 $desktopIcon = Join-Path $runtimeRoot "assets\anticodex-desktop.ico"
 $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+$interactivePowerShell = $powershell
+$interactivePowerShellCandidate = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe" } else { "" }
+if ($interactivePowerShellCandidate -and (Test-Path -LiteralPath $interactivePowerShellCandidate -PathType Leaf)) {
+    $interactivePowerShell = [IO.Path]::GetFullPath($interactivePowerShellCandidate)
+}
 $schtasks = Join-Path ([Environment]::SystemDirectory) "schtasks.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
@@ -31,10 +36,10 @@ $launchTaskName = "Anti-Codex Launcher"
 $updateTaskName = "Anti-Codex Updater"
 $hideConsoleScript = Join-Path $runtimeRoot "scripts\hide-anticodex-console.ps1"
 $launchTaskScript = Join-Path $runtimeRoot "scripts\start-anticodex-task.mjs"
+$shortcutBrokerScript = Join-Path $runtimeRoot "scripts\start-anticodex-shortcut-broker.ps1"
 $launchTaskActionArguments = "`"$launchTaskScript`" --hide-console"
 $updateTaskScript = Join-Path $runtimeRoot "scripts\start-anticodex-update-task.mjs"
-$launchTaskShortcutCommand = "`$service = New-Object -ComObject 'Schedule.Service'; `$service.Connect(); `$task = `$service.GetFolder('\').GetTask('\$launchTaskName'); [void]`$task.Run(`$null)"
-$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$launchTaskShortcutCommand`""
+$launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shortcutBrokerScript`" -InstallRoot `"$installRootFull`""
 $updateTaskActionArguments = "`"$updateTaskScript`" --hide-console"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $programs = [Environment]::GetFolderPath("Programs")
@@ -72,7 +77,7 @@ function New-AntiCodexShortcutSpec {
         path = $Path
         displayName = $displayName
         expectedDisplayName = $displayName
-        expectedTarget = $powershell
+        expectedTarget = if ($UseLaunchTask) { $interactivePowerShell } else { $powershell }
         expectedScript = $Script
         expectedLauncherTarget = $Script
         expectedArguments = $expectedArguments
@@ -80,7 +85,7 @@ function New-AntiCodexShortcutSpec {
         expectedIconLocation = "$Icon,0"
         iconSource = $Icon
         inlineSupervisor = [bool]$InlineSupervisor
-        launchMode = if ($UseLaunchTask) { "scheduled-task" } else { "powershell-direct" }
+        launchMode = if ($UseLaunchTask) { "shortcut-broker" } else { "powershell-direct" }
         useNativeLauncher = $false
     }
 }
@@ -388,8 +393,8 @@ function Set-AntiCodexUpdateTask {
 }
 
 $shortcutSpecs = @(
-    New-AntiCodexShortcutSpec -Path (Join-Path $desktop "Anti-Codex.lnk") -Script $launchTaskScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $desktopShortcutIcon -UseLaunchTask
-    New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Anti-Codex.lnk") -Script $launchTaskScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $hostIcon -UseLaunchTask
+    New-AntiCodexShortcutSpec -Path (Join-Path $desktop "Anti-Codex.lnk") -Script $shortcutBrokerScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $desktopShortcutIcon -UseLaunchTask
+    New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Anti-Codex.lnk") -Script $shortcutBrokerScript -Description "Anti-Codex - Codex Desktop powered by Antigravity" -Icon $hostIcon -UseLaunchTask
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Sync Anti-Codex with Codex.lnk") -Script $syncScript -Description "Rebuild Anti-Codex from the installed Codex Desktop host after Codex updates" -Icon $hostIcon
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Rollback Anti-Codex.lnk") -Script $rollbackScript -Description "Rollback Anti-Codex to the previous patched Codex host version" -Icon $hostIcon
     New-AntiCodexShortcutSpec -Path (Join-Path $startMenuDir "Manage Anti-Codex.lnk") -Script $managerScript -Description "Open the Anti-Codex maintenance and account manager" -Icon $hostIcon
@@ -537,7 +542,7 @@ function Repair-AntiCodexResidualShortcuts {
 $residualShortcutEvidence = @(Repair-AntiCodexResidualShortcuts)
 $residualShortcutFailures = @($residualShortcutEvidence | Where-Object { $_.action -ne "removed" -and $_.action -ne "preserved-native-codex" })
 $failures = New-Object System.Collections.Generic.List[string]
-foreach ($path in @($startScript, $hideConsoleScript, $launchTaskScript, $updateTaskScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon, $node, $powershell, $schtasks)) {
+foreach ($path in @($startScript, $hideConsoleScript, $launchTaskScript, $shortcutBrokerScript, $updateTaskScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon, $node, $powershell, $schtasks)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         $failures.Add("Required Anti-Codex shortcut target is missing: $path") | Out-Null
     }
@@ -561,8 +566,8 @@ foreach ($residual in $residualShortcutFailures) {
 }
 $nativeLauncherBuild = [pscustomobject]@{
     path = $null
-    mode = "scheduled-task-broker"
-    reason = "Use a signed Windows broker so Anti-Codex never inherits the native Codex process job."
+    mode = "shortcut-focus-broker"
+    reason = "Focus the exact installed Anti-Codex window, or start it through the isolated Windows launch task."
 }
 if ($failures.Count -gt 0) {
     $result = [pscustomobject]@{

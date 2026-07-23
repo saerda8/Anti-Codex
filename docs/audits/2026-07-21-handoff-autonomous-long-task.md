@@ -1,5 +1,7 @@
 # Anti-Codex 自主长任务续跑交接
 
+> **SUPERSEDED FOR CURRENT EXECUTION - 2026-07-23:** This remains the historical handoff for the old task, not the current release state. The old deliverable tree was deleted on explicit user request, a real installed fatal page reopened acceptance, and the earlier 100% claim was withdrawn. Current execution must follow the 2026-07-23 overrides in `task_plan.md`, `findings.md`, `CURRENT_LONG_TASK_ACCEPTANCE.md` and `FINAL_MIGRATION_PLAN.md`: finish the P1 fixes, rebuild/synchronize once, pass installed real-UI/isolation/model-switch gates, then create one brand-new native task with one autonomous total objective. Do not reopen the deleted Stage 7 path or reuse the old task as current acceptance.
+
 更新时间：2026-07-21 14:20（Asia/Shanghai）
 工作目录：`G:\Trae-Project\Anti-Codex\deepcodex`
 分支：`main`

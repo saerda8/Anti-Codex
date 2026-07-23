@@ -60,6 +60,16 @@ test("Static code assertions: no prohibited basenames or model/task control word
   assert.match(code, /runUpstreamProfileScript\("SaveThirdParty",\s*\{[\s\S]{0,500}\bapiKey,\s*\n\s*testStatus/);
 });
 
+test("local connector verifier recognizes the deliberate offline Manager health response", () => {
+  const verifierPath = path.resolve(__dirname, "../../scripts/test-anticodex-local-connectors.mjs");
+  const code = fs.readFileSync(verifierPath, "utf8");
+
+  assert.match(code, /acceptedStatuses:\s*\[200, 503\]/);
+  assert.match(code, /managerHealth\.schema,\s*"anticodex-manager-service-v1"/);
+  assert.match(code, /managerHealth\.role,\s*"launcher-management-only"/);
+  assert.doesNotMatch(code, /response\.ok\s*\|\|\s*response\.status\s*===\s*503/);
+});
+
 test("Anti-Codex Manager Service API contract and security suite", async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-manager-test-"));
 
@@ -75,12 +85,31 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     "utf8"
   );
 
+  // Reserve and release an ephemeral port so the offline-health case cannot
+  // accidentally probe a real Anti-Codex route already running on this host.
+  const offlineHealthServer = createServer();
+  await listenOnLoopback(offlineHealthServer);
+  const offlineHealthPort = offlineHealthServer.address().port;
+  await new Promise((resolve, reject) => offlineHealthServer.close((error) => error ? reject(error) : resolve()));
+
+  let modelRefreshCalls = 0;
+
   // Initialize service on port 0
   const service = createAntiCodexManagerService({
     port: 0,
     host: "127.0.0.1",
     stateRoot: tempDir,
-    fixedHealthUrl: "http://127.0.0.1:18487/anticodex/fixed-route/health"
+    fixedHealthUrl: `http://127.0.0.1:${offlineHealthPort}/anticodex/fixed-route/health`,
+    refreshModels: async () => {
+      modelRefreshCalls += 1;
+      return {
+        ok: true,
+        refreshed: true,
+        source: "antigravity-cascade",
+        modelCount: 2,
+        models: ["gemini-3.1-pro-low", "claude-sonnet-4-6"],
+      };
+    },
   });
 
   const server = await service.listen();
@@ -92,10 +121,11 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
 
   await t.test("GET /health identity verification", async () => {
     const res = await fetch(`${baseUrl}/health`);
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.schema, "anticodex-manager-service-v1");
-    assert.equal(body.ok, true);
+    assert.equal(body.ok, false);
+    assert.equal(body.routeReady, false);
     assert.equal(body.role, "launcher-management-only");
     // Ensure it doesn't act as a model gateway
     assert.equal(body.choices, undefined);
@@ -159,7 +189,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const offlinePort = offlineServer.address().port;
     try {
       const res = await fetch(`http://127.0.0.1:${offlinePort}/anticodex/diagnostics`, {
-        headers: { origin: "http://127.0.0.1:8484" },
+        headers: { origin: `http://127.0.0.1:${offlinePort}` },
       });
       assert.equal(res.status, 200);
       const body = await res.json();
@@ -254,7 +284,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     // Should succeed with valid Origin
     const res = await fetch(`${baseUrl}/anticodex/manager/bootstrap`, {
       headers: {
-        origin: "http://127.0.0.1:8484"
+        origin: baseUrl
       }
     });
     assert.equal(res.status, 200);
@@ -299,6 +329,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       models: [
         { slug: "gemini-3-flash-agent", display_name: "Gemini 3.5 Flash (High)" },
         { slug: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6 (Thinking)" },
+        { slug: "claude-sonnet-4-5", display_name: "Claude Sonnet 4.5", visibility: "hide" },
       ],
     }), "utf8");
 
@@ -311,6 +342,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
         upstreamBaseUrl: "http://127.0.0.1:18488/v1",
         protocol: "chatCompletions",
         relayMode: "pureApi",
+        apiKey: "test-local-adapter-token",
         testModel: "gemini-3-flash-agent",
         modelList: "gemini-3-flash-agent\nclaude-sonnet-4-6",
       }],
@@ -334,6 +366,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       host: "127.0.0.1",
       stateRoot: tempDir,
       fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
+      ensureAntigravityReady: async () => ({ signedIn: true, identityAvailable: true }),
     });
     const selectionServer = await selectionService.listen();
     const selectionBaseUrl = `http://127.0.0.1:${selectionServer.address().port}`;
@@ -350,6 +383,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       const antigravityModelIds = before.antigravityModels.map((entry) => entry.id);
       assert.ok(antigravityModelIds.includes("gemini-3-flash-agent"));
       assert.ok(antigravityModelIds.includes("claude-sonnet-4-6"));
+      assert.equal(antigravityModelIds.includes("claude-sonnet-4-5"), false);
 
       const saveResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`, {
         method: "POST",
@@ -363,10 +397,61 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.equal(saveResponse.status, 200);
       const saved = await saveResponse.json();
       assert.equal(saved.saved.antigravityModel, "claude-sonnet-4-6");
+      assert.equal(saved.accountReady, true);
       assert.equal(saved.restartRequired, false);
       assert.equal(saved.hotSwitch, true);
+      const switchedSettings = JSON.parse(fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8"));
+      const switchedAntigravity = switchedSettings.relayProfiles.find((entry) => entry.id === "anticodex-antigravity");
+      assert.equal(switchedAntigravity.apiKey, "test-local-adapter-token");
     } finally {
       await selectionService.close();
+      await closeServer(healthServer);
+    }
+  });
+
+  await t.test("Antigravity hot switch fails before saving when Desktop is not ready", async () => {
+    const settingsPath = path.join(tempDir, "codexplusplus", "settings.json");
+    const settingsBefore = fs.readFileSync(settingsPath, "utf8");
+    const healthServer = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        state: "ready",
+        provider: "third-party",
+        model: "gpt-5.6-sol",
+        ports: { adapter: 18488 },
+      }));
+    });
+    await listenOnLoopback(healthServer);
+    const blockedService = createAntiCodexManagerService({
+      port: 0,
+      host: "127.0.0.1",
+      stateRoot: tempDir,
+      fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
+      ensureAntigravityReady: async () => { throw new Error("Desktop not ready"); },
+    });
+    const blockedServer = await blockedService.listen();
+    const blockedBaseUrl = `http://127.0.0.1:${blockedServer.address().port}`;
+    try {
+      const boot = await fetch(`${blockedBaseUrl}/anticodex/manager/bootstrap`, {
+        headers: { origin: blockedBaseUrl },
+      });
+      const blockedToken = (await boot.json()).token;
+      const response = await fetch(`${blockedBaseUrl}/anticodex/upstream-profile`, {
+        method: "POST",
+        headers: {
+          origin: blockedBaseUrl,
+          "content-type": "application/json",
+          "x-anticodex-manager-token": blockedToken,
+        },
+        body: JSON.stringify({ mode: "antigravity", antigravityModel: "claude-sonnet-4-6" }),
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 400, payload.message);
+      assert.match(payload.message, /Desktop not ready/);
+      assert.equal(fs.readFileSync(settingsPath, "utf8"), settingsBefore);
+    } finally {
+      await blockedService.close();
       await closeServer(healthServer);
     }
   });
@@ -398,13 +483,13 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const response = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "OPTIONS",
       headers: {
-        origin: "app://local-codex",
+        origin: "app://-",
         "access-control-request-method": "POST",
         "access-control-request-headers": "content-type,x-anticodex-manager-token"
       }
     });
     assert.equal(response.status, 204);
-    assert.equal(response.headers.get("access-control-allow-origin"), "app://local-codex");
+    assert.equal(response.headers.get("access-control-allow-origin"), "app://-");
     assert.match(response.headers.get("access-control-allow-methods") || "", /POST/);
     assert.match(response.headers.get("access-control-allow-headers") || "", /x-anticodex-manager-token/i);
   });
@@ -426,13 +511,25 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     });
     assert.equal(res2.status, 403);
 
-    // Allowed app: protocol Origin
+    // Arbitrary app: origins are not the copied client.
     const res3 = await fetch(`${baseUrl}/anticodex/manager/bootstrap`, {
       headers: {
         origin: "app://local-codex"
       }
     });
-    assert.equal(res3.status, 200);
+    assert.equal(res3.status, 403);
+
+    // The copied client has the exact app://- origin.
+    const res4 = await fetch(`${baseUrl}/anticodex/manager/bootstrap`, {
+      headers: { origin: "app://-" }
+    });
+    assert.equal(res4.status, 200);
+
+    // A different loopback port cannot claim a Manager action token.
+    const res5 = await fetch(`${baseUrl}/anticodex/manager/bootstrap`, {
+      headers: { origin: "http://127.0.0.1:65534" }
+    });
+    assert.equal(res5.status, 403);
   });
 
   await t.test("loopback diagnostics can read the static Manager page without browser headers", async () => {
@@ -454,7 +551,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const res1 = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
       headers: {
-        origin: "http://127.0.0.1:8484"
+        origin: baseUrl
       },
       body: JSON.stringify({ action: "refreshStatus" })
     });
@@ -464,7 +561,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const res2 = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
       headers: {
-        origin: "http://127.0.0.1:8484",
+        origin: baseUrl,
         "x-anticodex-manager-token": "bad-token"
       },
       body: JSON.stringify({ action: "refreshStatus" })
@@ -475,7 +572,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const res3 = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
       headers: {
-        origin: "http://127.0.0.1:8484",
+        origin: baseUrl,
         "x-anticodex-manager-token": token
       },
       body: JSON.stringify({ action: "refreshStatus" })
@@ -485,6 +582,22 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body3.ok, true);
     assert.equal(body3.action, "refreshStatus");
     assert.deepEqual(body3.result, { ok: true });
+
+    const refreshResponse = await fetch(`${baseUrl}/anticodex/manager/action`, {
+      method: "POST",
+      headers: {
+        origin: baseUrl,
+        "x-anticodex-manager-token": token,
+      },
+      body: JSON.stringify({ action: "refreshModels" }),
+    });
+    assert.equal(refreshResponse.status, 200);
+    const refreshBody = await refreshResponse.json();
+    assert.equal(refreshBody.ok, true);
+    assert.equal(refreshBody.action, "refreshModels");
+    assert.equal(refreshBody.result.refreshed, true);
+    assert.equal(refreshBody.result.modelCount, 2);
+    assert.equal(modelRefreshCalls, 1);
   });
 
   await t.test("viewLatestReports returns a summarized report payload", async () => {
@@ -501,7 +614,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       method: "POST",
       headers: {
         "content-type": "application/json",
-        origin: "http://127.0.0.1:8484",
+        origin: baseUrl,
         "x-anticodex-manager-token": token,
       },
       body: JSON.stringify({ action: "viewLatestReports" }),
@@ -532,13 +645,13 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
 
     // Invalid callback
     const res2 = await fetch(`${baseUrl}/anticodex/manager/action-script?callback=invalid-cb&action=refreshStatus&token=${token}`, {
-      headers: { origin: "http://127.0.0.1:8484" }
+      headers: { origin: baseUrl }
     });
     assert.equal(res2.status, 400);
 
     // Valid JSONP call
     const res3 = await fetch(`${baseUrl}/anticodex/manager/action-script?callback=onSuccess&action=refreshStatus&token=${token}`, {
-      headers: { origin: "http://127.0.0.1:8484" }
+      headers: { origin: baseUrl }
     });
     assert.equal(res3.status, 200);
     const text = await res3.text();
@@ -550,7 +663,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const res = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
       headers: {
-        origin: "http://127.0.0.1:8484",
+        origin: baseUrl,
         "x-anticodex-manager-token": token
       },
       body: JSON.stringify({ action: "invalid_action_name" })
@@ -571,7 +684,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
 
     for (const ep of endpoints) {
       const res = await fetch(`${baseUrl}${ep}`, {
-        headers: { origin: "http://127.0.0.1:8484" }
+        headers: { origin: baseUrl }
       });
       assert.equal(res.status, 200, `Endpoint ${ep} must return 200`);
       const body = await res.json();

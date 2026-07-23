@@ -11,6 +11,58 @@ const autonomousCompletionPrompt = readFileSync(
   resolve(root, "docs", "prompts", "2026-07-21-lipsync-stage7-autonomous-completion.md"),
   "utf8",
 );
+const freshAutonomousVideoPrompt = readFileSync(
+  resolve(root, "docs", "prompts", "2026-07-23-autonomous-live-action-lipsync-total-goal.md"),
+  "utf8",
+);
+
+function loadSingleSubmitRolloutReader({ files, recordsByPath }) {
+  const functionName = "readSingleSubmitRolloutEvidence";
+  const start = uiSmoke.indexOf(`function ${functionName}(`);
+  assert.ok(start >= 0, `${functionName} is missing`);
+  const openingBrace = uiSmoke.indexOf("{", start);
+  let depth = 0;
+  let end = -1;
+  for (let index = openingBrace; index < uiSmoke.length; index += 1) {
+    if (uiSmoke[index] === "{") depth += 1;
+    if (uiSmoke[index] === "}") depth -= 1;
+    if (depth === 0) {
+      end = index + 1;
+      break;
+    }
+  }
+  assert.ok(end > openingBrace, `${functionName} could not be extracted`);
+  const functionSource = uiSmoke.slice(start, end);
+  return new Function(
+    "recentCodexRolloutFiles",
+    "readJsonLines",
+    "sameNativePath",
+    "modelValueMatches",
+    "requiredModelNeedles",
+    "recordContainsExactPrompt",
+    `${functionSource}; return ${functionName};`,
+  )(
+    () => files,
+    (path) => recordsByPath.get(path) || [],
+    (left, right) => left === right,
+    (model, needles) => needles.includes(model),
+    () => ["gemini-3.1-pro-low"],
+    (record, prompt) => record?.type === "event_msg"
+      && record?.payload?.type === "user_message"
+      && record?.payload?.message === prompt,
+  );
+}
+
+function singleSubmitRolloutRecords({ sessionId, cwd, prompt }) {
+  return [
+    { type: "session_meta", payload: { id: sessionId, cwd } },
+    {
+      type: "turn_context",
+      payload: { turn_id: `${sessionId}-turn`, cwd, model: "gemini-3.1-pro-low" },
+    },
+    { type: "event_msg", payload: { type: "user_message", message: prompt } },
+  ];
+}
 
 test("autonomous completion contract requires model-owned planning and forbids milestone finalization", () => {
   assert.match(autonomousCompletionPrompt, /update_plan/);
@@ -18,6 +70,16 @@ test("autonomous completion contract requires model-owned planning and forbids m
   assert.match(autonomousCompletionPrompt, /中间阶段.*BLOCKED.*不是任务终点/);
   assert.match(autonomousCompletionPrompt, /每完成一个步骤.*更新计划.*自动进入下一项/);
   assert.match(autonomousCompletionPrompt, /仍有未完成项.*不得输出最终回复/);
+});
+
+test("fresh autonomous video goal is one self-planned deliverable contract", () => {
+  assert.match(freshAutonomousVideoPrompt, /update_plan/);
+  assert.match(freshAutonomousVideoPrompt, /连续执行、更新计划、诊断失败、返工并复验/);
+  assert.match(freshAutonomousVideoPrompt, /45 至 60 秒/);
+  assert.match(freshAutonomousVideoPrompt, /1080x1920/);
+  assert.match(freshAutonomousVideoPrompt, /真人.*口型.*同步/);
+  assert.match(freshAutonomousVideoPrompt, /UI_ANTICODEX_AUTONOMOUS_LIPSYNC_20260723_FINAL/);
+  assert.doesNotMatch(freshAutonomousVideoPrompt, /Stage\s*4|019f7379|逐阶段下指令/);
 });
 
 test("exact-marker submit closes model overlays before probing the send button", () => {
@@ -112,6 +174,150 @@ test("model picker prefers a menu trigger beside the composer over modelish hist
   assert.match(uiSmoke, /const outsideHistorySidebar = !composerRect \|\| rect\.right > composerRect\.left/);
   assert.match(uiSmoke, /\+ \(isMenuTrigger \? 260 : 0\)/);
   assert.match(uiSmoke, /\.filter\(\(item\) => item\.outsideHistorySidebar/);
+});
+
+test("frontend-only model switching waits for the lazily rendered native selector", () => {
+  assert.match(
+    uiSmoke,
+    /async function waitForFrontendModelSelector\(ws, requiredValues, timeoutMs[\s\S]*?while \(Date\.now\(\) < deadline\)[\s\S]*?currentModelProbeExpression\(requiredValues\)[\s\S]*?await new Promise/,
+  );
+  assert.match(
+    uiSmoke,
+    /async function selectFrontendModelWithPhysicalMouse[\s\S]*?waitForFrontendModelSelector\(ws, requiredValues, 5_000\)/,
+  );
+  assert.match(uiSmoke, /--expected-task-id/);
+  assert.match(uiSmoke, /--frontend-model-probe-only requires --expected-task-id/);
+  assert.match(uiSmoke, /sameChatEvidence\?\.taskId[\s\S]*?expectedTaskId/);
+});
+
+test("single-submit handoff is an exact-marker-only fresh-task mode", () => {
+  assert.match(uiSmoke, /--single-submit-handoff/);
+  assert.match(
+    uiSmoke,
+    /if \(singleSubmitHandoff && taskMode !== "exact-marker"\)[\s\S]*?--single-submit-handoff requires --task-mode exact-marker/,
+  );
+  assert.match(
+    uiSmoke,
+    /singleSubmitForbiddenArgs[\s\S]*?--same-chat[\s\S]*?--same-chat-title-contains[\s\S]*?--followup-prompt-file[\s\S]*?--followup-prompt[\s\S]*?--force-reset-same-chat/,
+  );
+  assert.match(uiSmoke, /--single-submit-handoff requires --project-root, --prompt-file, and --model/);
+  assert.match(uiSmoke, /--single-submit-handoff requires --require-native-single-task/);
+});
+
+test("single-submit handoff creates the fresh task with a re-probed native mouse hit", () => {
+  assert.match(
+    uiSmoke,
+    /function singleSubmitNewTaskProbeExpression[\s\S]*?selectedHit[\s\S]*?clicked: false/,
+  );
+  assert.match(
+    uiSmoke,
+    /async function createSingleSubmitTaskWithPhysicalMouse[\s\S]*?const probe = async[\s\S]*?singleSubmitNewTaskProbeExpression\(projectChatLabel\)[\s\S]*?initial = await probe\(\)[\s\S]*?await new Promise[\s\S]*?const live = await probe\(\)[\s\S]*?live\?\.selectedHit !== true[\s\S]*?Input\.dispatchMouseEvent", \{ type: "mousePressed"[\s\S]*?Input\.dispatchMouseEvent", \{ type: "mouseReleased"/,
+  );
+});
+
+test("single-submit snapshots existing rollouts before clicking the new-task control", () => {
+  assert.match(
+    uiSmoke,
+    /rolloutBaseline = snapshotSingleSubmitRollouts\(\);[\s\S]*?createSingleSubmitTaskWithPhysicalMouse\(ws\)[\s\S]*?sendSingleSubmitPromptWithPhysicalMouse\(ws\)/,
+  );
+});
+
+test("single-submit handoff sends exactly once and has no host continuation or cleanup path", () => {
+  const submitStart = uiSmoke.indexOf("async function sendSingleSubmitPromptWithPhysicalMouse(ws)");
+  const submitEnd = uiSmoke.indexOf("\nfunction sameChatClickExpression", submitStart);
+  assert.ok(submitStart >= 0 && submitEnd > submitStart, "dedicated single-submit click helper is missing");
+  const submit = uiSmoke.slice(submitStart, submitEnd);
+  assert.match(submit, /sendClickCount:\s*1/);
+  assert.equal((submit.match(/type: "mousePressed"/g) || []).length, 1);
+  assert.equal((submit.match(/type: "mouseReleased"/g) || []).length, 1);
+  assert.doesNotMatch(submit, /pressComposerEnter|retryDesktopSubmit/);
+
+  const start = uiSmoke.indexOf("async function runSingleSubmitHandoff()");
+  const end = uiSmoke.indexOf("\nasync function main()", start);
+  assert.ok(start >= 0 && end > start, "dedicated single-submit function is missing");
+  const handoff = uiSmoke.slice(start, end);
+
+  assert.match(handoff, /nativeActivityPreflight = await beginNativeSingleTaskWindow\(\)[\s\S]*?activateNativeProjectRoot/);
+  assert.match(handoff, /sendSingleSubmitPromptWithPhysicalMouse/);
+  assert.match(handoff, /maximumSendClicks:\s*1/);
+  assert.doesNotMatch(handoff, /pressComposerEnter|submitDesktopPromptAndWait|retryDesktopSubmit|resetBackendSessionLock|recoverStaleComposer|failureCleanup|repairPrompt|followupPrompt|autonomousContinuation/);
+});
+
+test("single-submit handoff exits after bounded read-only rollout and upstream receipts", () => {
+  assert.match(uiSmoke, /const SINGLE_SUBMIT_EVIDENCE_MS = 25_000/);
+  assert.match(
+    uiSmoke,
+    /readSingleSubmitRolloutEvidence[\s\S]*?session_meta[\s\S]*?turn_context[\s\S]*?sessionId[\s\S]*?cwd[\s\S]*?model/,
+  );
+  assert.match(
+    uiSmoke,
+    /readSingleSubmitUpstreamEvidence[\s\S]*?protocol_proxy\.upstream_request[\s\S]*?anticodex-antigravity[\s\S]*?requestTools[\s\S]*?upstreamTools[\s\S]*?protocol_proxy\.upstream_response[\s\S]*?statusCode/,
+  );
+  assert.match(
+    uiSmoke,
+    /readSingleSubmitRolloutEvidence[\s\S]*?if \(baseline\.has\(file\.path\)\) continue;/,
+  );
+  assert.match(uiSmoke, /Number\(record\?\.detail\?\.candidateCount[^\n]+=== 1/);
+  assert.match(uiSmoke, /protocol_proxy\.upstream_response[\s\S]*?Number\(record\?\.detail\?\.candidateCount[^\n]+=== Number\(requestRecord\.detail\.candidateCount/);
+  assert.match(
+    uiSmoke,
+    /runSingleSubmitHandoff[\s\S]*?codexPlusPlusLogOffset[\s\S]*?waitForSingleSubmitReadOnlyEvidence[\s\S]*?writeReport\(payload\)/,
+  );
+  assert.match(
+    uiSmoke,
+    /runSingleSubmitHandoff[\s\S]*?findPriorSingleSubmitTask\(projectChatRoot, promptText\)[\s\S]*?exact handoff goal was already submitted/,
+  );
+  assert.match(
+    uiSmoke,
+    /readSingleSubmitNativeEvidence[\s\S]*?expectedThreadIds:\s*\[rollout\.taskId\][\s\S]*?nativeExpectedRequestObserved/,
+  );
+  assert.match(
+    uiSmoke,
+    /waitForSingleSubmitReadOnlyEvidence[\s\S]*?rollout\.ok && native\.ok && upstream\.ok/,
+  );
+});
+
+test("single-submit rollout evidence rejects a pre-existing rollout even when it grows", () => {
+  const expectedCwd = "G:\\deliverables\\fresh-task";
+  const expectedPrompt = "one autonomous total goal";
+  const existingPath = "G:\\sessions\\rollout-existing.jsonl";
+  const reader = loadSingleSubmitRolloutReader({
+    files: [{ path: existingPath, size: 900, mtimeMs: 200 }],
+    recordsByPath: new Map([[
+      existingPath,
+      singleSubmitRolloutRecords({ sessionId: "existing-task", cwd: expectedCwd, prompt: expectedPrompt }),
+    ]]),
+  });
+
+  const evidence = reader(
+    new Map([[existingPath, { size: 400, mtimeMs: 100 }]]),
+    expectedCwd,
+    expectedPrompt,
+  );
+
+  assert.equal(evidence.ok, false);
+  assert.equal(evidence.newTask, false);
+  assert.equal(evidence.taskId, null);
+});
+
+test("single-submit rollout evidence accepts a valid rollout absent from the baseline", () => {
+  const expectedCwd = "G:\\deliverables\\fresh-task";
+  const expectedPrompt = "one autonomous total goal";
+  const freshPath = "G:\\sessions\\rollout-fresh.jsonl";
+  const reader = loadSingleSubmitRolloutReader({
+    files: [{ path: freshPath, size: 500, mtimeMs: 200 }],
+    recordsByPath: new Map([[
+      freshPath,
+      singleSubmitRolloutRecords({ sessionId: "fresh-task", cwd: expectedCwd, prompt: expectedPrompt }),
+    ]]),
+  });
+
+  const evidence = reader(new Map(), expectedCwd, expectedPrompt);
+
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.newTask, true);
+  assert.equal(evidence.taskId, "fresh-task");
+  assert.equal(evidence.file, freshPath);
 });
 
 test("history-only UI probe never submits model traffic", () => {

@@ -104,9 +104,8 @@ export async function createCodexPlusPlusAntigravityHarness(options) {
     const catalog = buildAntigravityModelCatalog(
       { ...bundledCatalog, models: [template] },
       availableModels.map((entry) => ({
-        id: entry.id,
-        model: entry.internalModel,
-        displayName: entry.displayName,
+        ...entry,
+        model: entry.internalModel ?? entry.model,
       })),
     );
     const selectedModel = catalog.models.find((entry) => entry.slug === model);
@@ -142,11 +141,12 @@ export async function createCodexPlusPlusAntigravityHarness(options) {
         id: "gate5-antigravity",
         name: "Gate 5 Antigravity",
         upstreamBaseUrl: provider.url,
+        apiKey: provider.authToken,
         protocol: "chatCompletions",
         relayMode: "pureApi",
         testModel: model,
         configContents: config,
-        authContents: `${JSON.stringify({ OPENAI_API_KEY: "gate5-local-key" }, null, 2)}\n`,
+        authContents: `${JSON.stringify({ OPENAI_API_KEY: provider.authToken }, null, 2)}\n`,
         useCommonConfig: false,
         modelList: model,
       }],

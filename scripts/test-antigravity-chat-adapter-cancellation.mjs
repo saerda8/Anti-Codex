@@ -114,7 +114,11 @@ if (!allowRealTraffic) {
     const controller = new AbortController();
     const pending = fetch(`${provider.url}/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json", connection: "close" },
+      headers: {
+        authorization: `Bearer ${provider.authToken}`,
+        "content-type": "application/json",
+        connection: "close",
+      },
       body: JSON.stringify({
         model,
         messages: [{
@@ -164,7 +168,7 @@ if (!allowRealTraffic) {
         { role: "user", content: "Return the required marker now." },
       ],
       tool_choice: "none",
-    }, timeoutMs);
+    }, timeoutMs, provider.authToken);
     const recoveryText = String(recovery.body?.choices?.[0]?.message?.content ?? "").trim();
     record("fresh_request_after_cancel_has_no_stale_409", recovery.status === 200
       && recovery.body?.choices?.[0]?.finish_reason === "stop", {
@@ -270,10 +274,14 @@ process.stdout.write(`${JSON.stringify(compact ? {
 } : report, null, compact ? 0 : 2)}\n`);
 if (!report.ok) process.exitCode = 1;
 
-async function postJson(url, body, requestTimeoutMs) {
+async function postJson(url, body, requestTimeoutMs, authToken) {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json", connection: "close" },
+    headers: {
+      authorization: `Bearer ${authToken}`,
+      "content-type": "application/json",
+      connection: "close",
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(requestTimeoutMs),
   });

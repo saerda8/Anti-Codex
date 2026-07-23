@@ -42,13 +42,18 @@ function requestTimeoutSignal(ms = 5_000) {
 }
 
 async function getJson(url, options = {}) {
-  const { controller, timer } = requestTimeoutSignal(options.timeoutMs || 5_000);
+  const {
+    timeoutMs: requestTimeoutMs = 5_000,
+    acceptedStatuses = [],
+    ...fetchOptions
+  } = options;
+  const { controller, timer } = requestTimeoutSignal(requestTimeoutMs);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
     const text = await response.text();
     let json = null;
     try { json = JSON.parse(text); } catch {}
-    if (!response.ok) {
+    if (!response.ok && !acceptedStatuses.includes(response.status)) {
       const error = new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
       error.status = response.status;
       throw error;
@@ -60,12 +65,12 @@ async function getJson(url, options = {}) {
   }
 }
 
-async function waitForEndpoint(baseUrl, pathname) {
+async function waitForEndpoint(baseUrl, pathname, options = {}) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      return await getJson(`${baseUrl}${pathname}`, { timeoutMs: 2_000 });
+      return await getJson(`${baseUrl}${pathname}`, { ...options, timeoutMs: 2_000 });
     } catch (error) {
       lastError = error;
       await new Promise((resolveWait) => setTimeout(resolveWait, 150));
@@ -290,7 +295,9 @@ async function main() {
   const managerServer = await managerService.listen();
   const managerUrl = `http://127.0.0.1:${managerServer.address().port}`;
 
-  await waitForEndpoint(managerUrl, "/health");
+  const managerHealth = await waitForEndpoint(managerUrl, "/health", { acceptedStatuses: [200, 503] });
+  assert.equal(managerHealth.schema, "anticodex-manager-service-v1");
+  assert.equal(managerHealth.role, "launcher-management-only");
   const upstreamRequestsBeforeLocalEndpoints = 0;
   const connectors = await getJson(`${managerUrl}/backend-api/aip/connectors`);
   const whamPost = await getJson(`${managerUrl}/backend-api/wham/apps`, {
@@ -348,6 +355,11 @@ async function main() {
     behaviorCovered: true,
     coverageKind: "local-manager-projection",
     endpointEvidence: {
+      managerHealth: {
+        ok: managerHealth.ok === true,
+        state: managerHealth.state,
+        routeReady: managerHealth.routeReady === true,
+      },
       connectors: connectors.connectors.length,
       exposedToolsPost: whamPost.tools.length,
       exposedToolsGet: whamGet.tools.length,

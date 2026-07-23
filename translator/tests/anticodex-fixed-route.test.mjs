@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 // 静态导入未来模块
@@ -77,6 +78,30 @@ test("Contract 2b: the default Antigravity route uses the currently validated Ge
 
   assert.equal(routeConfig.model, "gemini-3-flash-agent");
   assert.match(routeConfig.config, /model = "gemini-3-flash-agent"/);
+});
+
+test("Contract 2b-auth: the per-start local secret authenticates the Antigravity Chat upstream", () => {
+  const routeConfig = generateRouteConfig({
+    provider: "antigravity",
+    proxyPort: 41002,
+    adapterPort: 41003,
+    localProxyKey: "per-start-local-secret",
+  });
+
+  assert.equal(routeConfig.upstreamApiKey, "per-start-local-secret");
+  const settings = buildCodexPlusPlusSettings({
+    route: routeConfig,
+    userDataDir: path.resolve("G:\\mock-user-data-dir"),
+  });
+  assert.equal(settings.relayProfiles[0].apiKey, "per-start-local-secret");
+});
+
+test("Contract 2b-auth-chain: the supervisor gives that same secret to the Chat server", () => {
+  const supervisor = readFileSync(new URL("../../scripts/start-anticodex-fixed-route.mjs", import.meta.url), "utf8");
+  assert.match(
+    supervisor,
+    /startAntigravityChatProvider\(\{[\s\S]*?authToken:\s*plan\.route\.localProxyKey,[\s\S]*?\}\)/,
+  );
 });
 
 test("Contract 2c: the isolated Codex route disables the user login shell profile", () => {

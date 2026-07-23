@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,50 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
-import { dirname, resolve } from "node:path";
-
-const root = resolve(import.meta.dirname, "..");
-const args = parseArgs(process.argv.slice(2));
-const compact = args.has("--compact");
-const reportRoot = resolve(args.get("--report-root") || `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`);
-const auditPath = resolve(args.get("--audit-out") || resolve(root, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
-const fixedHealthUrl = args.get("--fixed-health-url") || "http://127.0.0.1:18487/anticodex/fixed-route/health";
-const maxSourceAgeMs = positiveInteger(args.get("--max-source-age-ms"), 12 * 60 * 60 * 1000);
-const expectedModel = "gemini-3-flash-agent";
-const expectedModelLabel = "Gemini 3.5 Flash (High)";
-const developmentWorkers = [
-  "deepseek-code-worker",
-  "mimo-claude-coworker",
-  "mimocode-worker",
-  "deveco-code-worker",
-  "opencode-worker",
-  "kilo-worker",
-  "codebuddy-worker",
-  "agnes-worker",
-  "antigravity-code-worker",
-];
-const sourceDefinitions = [
-  {
-    id: "visible_text",
-    file: "latest-gate5-visible-text-b-model-gemini-3-flash-agent.json",
-    taskMode: "exact-marker",
-    marker: "GATE5_VISIBLE_TEXT_20260715_B",
-  },
-  {
-    id: "visible_tool",
-    file: "latest-gate5-visible-tool-b-model-gemini-3-flash-agent.json",
-    taskMode: "local-project",
-    marker: "GATE5_VISIBLE_TOOL_20260715_B",
-  },
-  {
-    id: "history_continuation",
-    file: "latest-gate5-visible-history-b-model-gemini-3-flash-agent.json",
-    taskMode: "exact-marker",
-    marker: "GATE5_VISIBLE_TEXT_CONTINUE_20260715_B",
-  },
-];
-const checks = [];
-const sourceReports = {};
+import { basename, dirname, resolve } from "node:path";
 
 function parseArgs(values) {
   const parsed = new Map();
@@ -65,93 +21,92 @@ function parseArgs(values) {
       parsed.set(key, next);
       index += 1;
     } else {
-      parsed.set(key, "1");
+      parsed.set(key, true);
     }
   }
   return parsed;
 }
 
-function positiveInteger(value, fallback) {
+const args = parseArgs(process.argv.slice(2));
+if (args.has("--help") || args.has("-h")) {
+  console.log(`Usage: node scripts/test-anticodex-gate5-visible-integration.mjs [options]
+
+Offline aggregation only. This command never launches UI, processes, or model traffic.
+
+Required signed current evidence:
+  --task-manifest <path>              New native autonomous task manifest
+  --manager-evidence <path>           Manager actual-mouse matrix
+  --model-switch-evidence <path>      Three-provider physical hot-switch matrix
+  --shortcut-restore-evidence <path>  Three-or-more shortcut restore rounds
+  --release-binding-evidence <path>   Current release binding report
+
+Output:
+  --report-root <path>        Report directory
+  --audit-out <path>          Tracked Gate 5 audit destination
+  --max-source-age-hours <n>  Maximum evidence age (default: 48)
+  --compact                   Compact JSON output
+  --help, -h                  Show help without writing files`);
+  process.exit(0);
+}
+
+const sourceRoot = resolve(import.meta.dirname, "..");
+const compact = args.has("--compact");
+const reportRoot = resolve(args.get("--report-root") || `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`);
+const auditPath = resolve(args.get("--audit-out") || resolve(sourceRoot, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
+const maxSourceAgeHours = positiveNumber(args.get("--max-source-age-hours"), 48);
+const requiredInputs = {
+  taskManifest: "--task-manifest",
+  managerEvidence: "--manager-evidence",
+  modelSwitchEvidence: "--model-switch-evidence",
+  shortcutRestoreEvidence: "--shortcut-restore-evidence",
+  releaseBindingEvidence: "--release-binding-evidence",
+};
+const missingArguments = Object.values(requiredInputs).filter((flag) => !String(args.get(flag) || "").trim());
+if (missingArguments.length > 0) {
+  console.error(JSON.stringify({ ok: false, error: "missing_required_arguments", missingArguments }));
+  process.exit(2);
+}
+
+function positiveNumber(value, fallback) {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function record(id, ok, evidence = {}) {
-  checks.push({ id, ok: ok === true, ...evidence });
+function embeddedTimestampMs(data) {
+  for (const value of [data?.checkedAt, data?.generatedAt, data?.completedAt, data?.createdAt]) {
+    const parsed = Date.parse(String(value || ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Number.NaN;
 }
 
-function readSignedReport(fileName) {
-  const path = resolve(reportRoot, fileName);
+function readSignedCurrent(pathValue) {
+  const path = resolve(String(pathValue || ""));
   const sidecarPath = `${path}.sha256`;
-  if (!existsSync(path)) throw new Error(`missing report: ${path}`);
-  if (!existsSync(sidecarPath)) throw new Error(`missing report sidecar: ${sidecarPath}`);
+  if (!existsSync(path)) throw new Error(`missing evidence: ${path}`);
+  if (!existsSync(sidecarPath)) throw new Error(`missing evidence sidecar: ${sidecarPath}`);
   const bytes = readFileSync(path);
   const actualHash = sha256(bytes);
   const sidecar = readFileSync(sidecarPath, "ascii").trim();
   const match = sidecar.match(/^(?:sha256:)?([a-f0-9]{64})$/i);
-  const stats = statSync(path);
+  if (!match || match[1].toLowerCase() !== actualHash) throw new Error(`invalid evidence signature: ${path}`);
+  const data = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, ""));
+  const timestampMs = embeddedTimestampMs(data);
+  if (!Number.isFinite(timestampMs)) throw new Error(`evidence has no embedded timestamp: ${path}`);
+  const ageHours = (Date.now() - timestampMs) / 3_600_000;
+  if (ageHours < -(5 / 60) || ageHours > maxSourceAgeHours) throw new Error(`evidence is stale or future-dated: ${path}`);
   return {
     path,
     sidecarPath,
-    data: JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/, "")),
-    sha256: actualHash,
-    signed: Boolean(match) && match[1].toLowerCase() === actualHash,
-    modifiedAt: stats.mtime.toISOString(),
-    ageMs: Math.max(0, Date.now() - stats.mtimeMs),
-  };
-}
-
-function parseJsonOutput(raw) {
-  const text = String(raw || "").replace(/^\uFEFF/, "").trim();
-  if (!text) throw new Error("command returned no JSON output");
-  try {
-    return JSON.parse(text);
-  } catch {}
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
-  throw new Error("command output did not contain a JSON object");
-}
-
-function runJson(command, commandArgs, timeoutMs) {
-  const result = spawnSync(command, commandArgs, {
-    cwd: root,
-    encoding: "utf8",
-    timeout: timeoutMs,
-    windowsHide: true,
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  let data = null;
-  let parseError = "";
-  try {
-    data = parseJsonOutput(result.stdout);
-  } catch (error) {
-    parseError = String(error?.message || error);
-  }
-  return {
-    ok: result.status === 0 && data?.ok === true,
-    status: result.status,
-    signal: result.signal || "",
-    error: result.error?.message || parseError,
-    stderr: String(result.stderr || "").trim().slice(-1200),
     data,
+    sha256: actualHash,
+    checkedAt: new Date(timestampMs).toISOString(),
+    ageHours: Math.max(0, ageHours),
   };
-}
-
-async function fetchJson(url, timeoutMs = 10_000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function writeSignedAtomic(path, body) {
@@ -166,253 +121,308 @@ function stamp() {
   return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
 }
 
-for (const definition of sourceDefinitions) {
-  try {
-    const report = readSignedReport(definition.file);
-    const data = report.data;
-    const semanticallyValid = data.ok === true
-      && data.requestedRealTraffic === true
-      && data.usedRealTraffic === true
-      && data.coverageKind === "desktop-ui-real-traffic"
-      && data.taskMode === definition.taskMode
-      && data.marker === definition.marker
-      && data.requiredModel === expectedModel
-      && data.requiredModelLabel === expectedModelLabel
-      && data.preSubmitModelSelectionEvidence?.matched === true
-      && data.submitSucceeded === true
-      && data.behaviorCovered === true
-      && data.repairAttempted === false
-      && Array.isArray(data.failures)
-      && data.failures.length === 0
-      && Number(data.answerMarkerCount || 0) >= 1;
-    sourceReports[definition.id] = {
-      ...report,
-      summary: {
-        ok: data.ok,
-        reportName: data.reportName,
-        taskMode: data.taskMode,
-        marker: data.marker,
-        requiredModel: data.requiredModel,
-        elapsedMs: data.elapsedMs,
-        submitSucceeded: data.submitSucceeded,
-        repairAttempted: data.repairAttempted,
-      },
+function releaseBindingFrom(data) {
+  return data?.releaseBinding || data;
+}
+
+const releaseBindingFields = [
+  "schema",
+  "officialShellVersion",
+  "activeShellVersion",
+  "codexPlusPlusVersion",
+  "codexPlusPlusPatchCommit",
+  "codexPlusPlusBinarySha256",
+  "codexPlusPlusPatchTreeSha256",
+  "codexPlusPlusPatchCount",
+  "syncReadinessSha256",
+];
+
+function sameReleaseBinding(candidate, expected) {
+  return candidate?.valid === true
+    && expected?.valid === true
+    && releaseBindingFields.every((field) => String(candidate?.[field] ?? "") === String(expected?.[field] ?? ""));
+}
+
+function validReleaseBinding(binding) {
+  return binding?.schema === "anticodex-release-binding-v1"
+    && binding?.valid === true
+    && String(binding?.officialShellVersion || "") !== ""
+    && binding.officialShellVersion === binding.activeShellVersion
+    && String(binding?.codexPlusPlusVersion || "") !== ""
+    && /^[a-f0-9]{40}$/i.test(String(binding?.codexPlusPlusPatchCommit || ""))
+    && /^[a-f0-9]{64}$/i.test(String(binding?.codexPlusPlusBinarySha256 || ""))
+    && /^[a-f0-9]{64}$/i.test(String(binding?.codexPlusPlusPatchTreeSha256 || ""))
+    && Number(binding?.codexPlusPlusPatchCount) > 0
+    && /^[a-f0-9]{64}$/i.test(String(binding?.syncReadinessSha256 || ""));
+}
+
+function normalizeProtocol(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[_\s-]/g, "");
+  if (["chatcompletions", "openaicompatible"].includes(normalized)) return "chatCompletions";
+  if (normalized === "responses") return "responses";
+  return String(value || "");
+}
+
+function verifyArtifacts(artifacts) {
+  return (Array.isArray(artifacts) ? artifacts : []).map((artifact) => {
+    const path = resolve(String(artifact?.path || ""));
+    const expectedHash = String(artifact?.sha256 || artifact?.expectedHash || "").toLowerCase();
+    const expectedBytes = Number(artifact?.bytes || 0);
+    const exists = Boolean(path) && existsSync(path) && statSync(path).isFile();
+    const actualBytes = exists ? statSync(path).size : 0;
+    const actualHash = exists ? sha256(readFileSync(path)) : "";
+    return {
+      name: String(artifact?.name || basename(path)),
+      path,
+      exists,
+      bytes: expectedBytes,
+      actualBytes,
+      expectedHash,
+      actualHash,
+      ok: exists && expectedBytes > 0 && actualBytes === expectedBytes && /^[a-f0-9]{64}$/.test(expectedHash) && actualHash === expectedHash,
     };
-    record(`${definition.id}_signed_fresh_real_result`, report.signed && report.ageMs <= maxSourceAgeMs && semanticallyValid, {
-      path: report.path,
-      sha256: report.sha256,
-      signed: report.signed,
-      ageMs: report.ageMs,
-      semanticResult: semanticallyValid,
+  });
+}
+
+function verifyNativeRollout(data) {
+  const rollout = data?.rollout || {};
+  const path = resolve(String(rollout?.path || ""));
+  const expectedHash = String(rollout?.sha256 || "").toLowerCase();
+  const expectedBytes = Number(rollout?.bytes || 0);
+  if (!path || !existsSync(path) || !statSync(path).isFile()) {
+    return { ok: false, path, expectedHash, expectedBytes, actualHash: "", actualBytes: 0 };
+  }
+  const bytes = readFileSync(path);
+  const actualHash = sha256(bytes);
+  return {
+    ok: /^[a-f0-9]{64}$/.test(expectedHash)
+      && expectedBytes > 0
+      && bytes.length === expectedBytes
+      && actualHash === expectedHash,
+    path,
+    expectedHash,
+    expectedBytes,
+    actualHash,
+    actualBytes: bytes.length,
+  };
+}
+
+function validateTaskManifest(data, releaseBinding, artifactEvidence, rolloutEvidence) {
+  const continuationCount = Number(data?.continuationPromptCount);
+  const hostMessageCount = Number(data?.hostMessageCount);
+  const continuations = Array.isArray(data?.continuations) ? data.continuations : [];
+  const continuationTurnIds = continuations.map((entry) => String(entry?.turnId || ""));
+  const exactContinuationSha256 = sha256("继续");
+  return data?.schema === "anticodex-native-autonomous-task-manifest-v1"
+    && data?.reportName === "native-autonomous-task-manifest"
+    && data?.ok === true
+    && data?.newTask === true
+    && data?.nativeTask === true
+    && data?.sameTask === true
+    && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(String(data?.taskId || ""))
+    && Number(data?.promptSubmissionCount) === 1
+    && Number(data?.totalGoalPromptCount) === 1
+    && Number.isInteger(continuationCount)
+    && continuationCount >= 0
+    && hostMessageCount === 1 + continuationCount
+    && Number(data?.hostIntermediatePromptCount) === 0
+    && continuations.length === continuationCount
+    && new Set(continuationTurnIds).size === continuations.length
+    && continuations.every((entry, index) => String(entry?.turnId || "")
+      && Number(entry?.sequence) === index + 1
+      && String(entry?.previousTurnId || "") === (
+        index === 0
+          ? String(data?.turnId || "")
+          : String(continuations[index - 1]?.turnId || "")
+      )
+      && Number.isFinite(Date.parse(String(entry?.at || "")))
+      && Number.isFinite(Date.parse(String(entry?.interruptionAt || "")))
+      && Date.parse(String(entry?.interruptionAt || "")) <= Date.parse(String(entry?.at || ""))
+      && ["task_complete.error", "turn_aborted"].includes(String(entry?.interruptionKind || ""))
+      && /^[a-f0-9]{64}$/.test(String(entry?.interruptionErrorSha256 || ""))
+      && entry?.messageSha256 === exactContinuationSha256)
+    && Number(data?.rollout?.messageCount) === hostMessageCount
+    && Number(data?.rollout?.userTurnCount) === hostMessageCount
+    && rolloutEvidence?.ok === true
+    && data?.requestedRealTraffic === true
+    && data?.usedRealTraffic === true
+    && data?.route?.provider === "antigravity"
+    && normalizeProtocol(data?.route?.relayProtocol) === "chatCompletions"
+    && data?.route?.codexPlusPlusVersion === releaseBinding?.codexPlusPlusVersion
+    && artifactEvidence.length >= 3
+    && artifactEvidence.every((artifact) => artifact.ok);
+}
+
+function validateManager(data) {
+  const closes = Array.isArray(data?.closeProbes) ? data.closeProbes : [];
+  const closeByName = Object.fromEntries(closes.map((entry) => [String(entry?.name || ""), entry]));
+  const protocol = data?.protocolInteraction || {};
+  return data?.schema === "anticodex-manager-actual-mouse-matrix-v1"
+    && data?.ok === true
+    && data?.requestedRealTraffic === false
+    && data?.usedRealTraffic === false
+    && Number(data?.actionCount) >= 20
+    && data?.zeroSideEffects === true
+    && data?.actualMouse === true
+    && data?.profileEntryText === "管理"
+    && data?.forbiddenEnglishVisible === false
+    && data?.trayIconPreserved === true
+    && ["upper-center", "center", "lower-center"].every((name) => {
+      const entry = closeByName[name];
+      return entry?.ok === true
+        && entry?.actualMouse === true
+        && entry?.closed === true
+        && entry?.hasTextNode === false;
+    })
+    && normalizeProtocol(protocol?.before) === "chatCompletions"
+    && normalizeProtocol(protocol?.alternate) === "responses"
+    && normalizeProtocol(protocol?.restored) === "chatCompletions"
+    && protocol?.selectedAlternate === true
+    && protocol?.restoredOriginal === true
+    && protocol?.profileUnchanged === true;
+}
+
+function validateModelSwitch(data, taskId) {
+  const switches = Array.isArray(data?.switches) ? data.switches : [];
+  const providers = new Set(switches.map((entry) => String(entry?.provider || "")));
+  const pidKeys = ["supervisor", "codexPlusPlus", "antiCodexMain"];
+  const perSwitchValid = switches.every((entry) => entry?.ok === true
+    && entry?.actualMouse === true
+    && entry?.taskId === taskId
+    && Number(entry?.requestCountBefore) === Number(entry?.requestCountAfter)
+    && Number(entry?.latestRequestRowIdBefore) === Number(entry?.latestRequestRowIdAfter)
+    && entry?.originalCodexAlive === true
+    && pidKeys.every((key) => Number(entry?.[`${key}PidBefore`]) > 0
+      && Number(entry?.[`${key}PidBefore`]) === Number(entry?.[`${key}PidAfter`])));
+  const baselinePids = switches[0] || {};
+  const crossSwitchPidsStable = switches.every((entry) => pidKeys.every((key) => (
+    Number(entry?.[`${key}PidBefore`]) === Number(baselinePids?.[`${key}PidBefore`])
+  )));
+  return data?.schema === "anticodex-frontend-model-hot-switch-v1"
+    && data?.ok === true
+    && data?.requestedRealTraffic === false
+    && data?.usedRealTraffic === false
+    && data?.sameTask === true
+    && data?.taskId === taskId
+    && switches.length >= 3
+    && providers.has("gemini")
+    && providers.has("claude")
+    && providers.has("third-party")
+    && perSwitchValid
+    && crossSwitchPidsStable;
+}
+
+function validateShortcutRestore(data) {
+  const rounds = Array.isArray(data?.rounds) ? data.rounds : [];
+  const mainPid = Number(rounds[0]?.expectedMainPid || 0);
+  const originalCodexPid = Number(rounds[0]?.expectedOriginalCodexPid || 0);
+  return data?.schema === "anticodex-shortcut-restore-matrix-v1"
+    && data?.ok === true
+    && data?.requestedRealTraffic === false
+    && data?.usedRealTraffic === false
+    && rounds.length >= 3
+    && mainPid > 0
+    && originalCodexPid > 0
+    && rounds.every((round) => round?.ok === true
+      && Number(round?.expectedMainPid) === mainPid
+      && Number(round?.expectedOriginalCodexPid) === originalCodexPid
+      && round?.minimizedObserved === true
+      && Number(round?.restoredAtMs) > 0
+      && Number(round?.maxRootProcessCount) === 1
+      && Number(round?.maxVisibleWindowCount) === 1
+      && Number(round?.maxAppPageCount) === 1
+      && Number(round?.appPagesAfter) === 1
+      && Number(round?.blankFrameCount) === 0
+      && Number(round?.frameCount) >= 1
+      && round?.originalCodexAlive === true
+      && Array.isArray(round?.after?.rootProcessIds)
+      && round.after.rootProcessIds.length === 1
+      && Number(round.after.rootProcessIds[0]) === mainPid
+      && Array.isArray(round?.after?.visibleWindowProcessIds)
+      && round.after.visibleWindowProcessIds.length === 1
+      && Number(round.after.visibleWindowProcessIds[0]) === mainPid);
+}
+
+const checks = [];
+function record(id, ok, evidence = {}) {
+  checks.push({ id, ok: ok === true, ...evidence });
+}
+
+const sources = {};
+for (const [id, flag] of Object.entries(requiredInputs)) {
+  try {
+    sources[id] = readSignedCurrent(args.get(flag));
+    record(`${id}_signed_fresh`, true, {
+      path: sources[id].path,
+      sha256: sources[id].sha256,
+      checkedAt: sources[id].checkedAt,
+      ageHours: sources[id].ageHours,
     });
   } catch (error) {
-    record(`${definition.id}_signed_fresh_real_result`, false, { error: String(error?.message || error) });
+    sources[id] = null;
+    record(`${id}_signed_fresh`, false, { path: resolve(String(args.get(flag) || "")), error: String(error?.message || error) });
   }
 }
 
-const textReport = sourceReports.visible_text?.data || null;
-const toolReport = sourceReports.visible_tool?.data || null;
-const historyReport = sourceReports.history_continuation?.data || null;
+const releaseBinding = releaseBindingFrom(sources.releaseBindingEvidence?.data);
+const allEvidence = [sources.taskManifest, sources.managerEvidence, sources.modelSwitchEvidence, sources.shortcutRestoreEvidence]
+  .map((source) => source?.data)
+  .filter(Boolean);
+record("release_binding_current_and_shared", validReleaseBinding(releaseBinding)
+  && allEvidence.length === 4
+  && allEvidence.every((data) => sameReleaseBinding(releaseBindingFrom(data), releaseBinding)));
 
-record("history_reopened_by_actual_mouse_within_budget", Boolean(
-  historyReport?.sameChatEvidence?.actualMouseClick === true
-    && historyReport.sameChatEvidence.wanted === "GATE5_VISIBLE_TEXT_20260715_B"
-    && Number(historyReport.sameChatEvidence.openLatencyMs) > 0
-    && Number(historyReport.sameChatEvidence.openLatencyMs) <= 3000
-    && historyReport.sameChatEvidence.visibleIdleAfterClick?.ok === true,
-), {
-  actualMouseClick: historyReport?.sameChatEvidence?.actualMouseClick === true,
-  openLatencyMs: historyReport?.sameChatEvidence?.openLatencyMs ?? null,
-  sameTaskWanted: historyReport?.sameChatEvidence?.wanted || "",
+const taskManifest = sources.taskManifest?.data || {};
+const artifactEvidence = verifyArtifacts(taskManifest?.artifacts);
+const rolloutEvidence = verifyNativeRollout(taskManifest);
+const taskOk = validateTaskManifest(taskManifest, releaseBinding, artifactEvidence, rolloutEvidence);
+record("new_native_task_one_total_goal", taskOk, {
+  taskId: String(taskManifest?.taskId || ""),
+  promptSubmissionCount: taskManifest?.promptSubmissionCount ?? null,
+  totalGoalPromptCount: taskManifest?.totalGoalPromptCount ?? null,
+  continuationPromptCount: taskManifest?.continuationPromptCount ?? null,
+  hostMessageCount: taskManifest?.hostMessageCount ?? null,
+  hostIntermediatePromptCount: taskManifest?.hostIntermediatePromptCount ?? null,
 });
+record("native_rollout_rehashed", rolloutEvidence.ok, rolloutEvidence);
+record("current_task_artifacts_rehashed", artifactEvidence.length >= 3 && artifactEvidence.every((artifact) => artifact.ok), { artifacts: artifactEvidence });
+record("current_antigravity_route_bound", taskManifest?.route?.provider === "antigravity"
+  && normalizeProtocol(taskManifest?.route?.relayProtocol) === "chatCompletions"
+  && taskManifest?.route?.codexPlusPlusVersion === releaseBinding?.codexPlusPlusVersion);
 
-const artifactDir = toolReport?.artifactDir ? resolve(toolReport.artifactDir) : "";
-const expectedArtifacts = [
-  ["done.txt", "c3fd546b148c8614ec25e9dffc61287971386dda08dc215a9cd9b55e62f82052"],
-  ["index.html", "9b60ae55440e55646f2a5597b656ab7b1306ae0ba110e721de649cc146e4bdbd"],
-  ["README.md", "05c1f6ba87ee56341a25af63af7b029968bd88b42176af04187a7914c5756e69"],
-];
-const artifactEvidence = expectedArtifacts.map(([name, expectedHash]) => {
-  const path = artifactDir ? resolve(artifactDir, name) : "";
-  const bytes = path && existsSync(path) ? readFileSync(path) : null;
-  const actualHash = bytes ? sha256(bytes) : "";
-  return { name, path, exists: Boolean(bytes), bytes: bytes?.length || 0, expectedHash, actualHash, ok: actualHash === expectedHash };
-});
-record("tool_result_files_exist_with_exact_hashes", artifactEvidence.every((entry) => entry.ok), {
-  artifactDir,
-  files: artifactEvidence,
-});
-record("tool_turn_showed_progress_and_host_tool_results", Boolean(
-  toolReport?.artifactEvidence?.responseHistory?.visibleProgressCount >= 1
-    && toolReport.artifactEvidence.responseHistory.taskToolCallCount >= 1
-    && toolReport.artifactEvidence.responseHistory.taskToolOutputSeen === true
-    && toolReport.artifactEvidence.responseHistory.taskScopedToolOutputSeen === true
-    && toolReport.artifactEvidence.responseHistory.modelLedExecution === true,
-), {
-  visibleProgressCount: toolReport?.artifactEvidence?.responseHistory?.visibleProgressCount ?? 0,
-  taskToolCallCount: toolReport?.artifactEvidence?.responseHistory?.taskToolCallCount ?? 0,
-  taskToolOutputSeen: toolReport?.artifactEvidence?.responseHistory?.taskToolOutputSeen === true,
-});
+const manager = sources.managerEvidence?.data || {};
+const managerOk = validateManager(manager);
+const closeByName = Object.fromEntries((Array.isArray(manager?.closeProbes) ? manager.closeProbes : []).map((entry) => [entry?.name, entry]));
+record("manager_actual_mouse_matrix", managerOk, { actionCount: manager?.actionCount ?? null, zeroSideEffects: manager?.zeroSideEffects ?? null });
+record("profile_menu_uses_exact_chinese_manager_label", manager?.profileEntryText === "管理" && manager?.forbiddenEnglishVisible === false);
+record("manager_close_full_height_actual_mouse", ["upper-center", "center", "lower-center"].every((name) => closeByName[name]?.actualMouse === true && closeByName[name]?.closed === true && closeByName[name]?.hasTextNode === false));
+record("manager_protocol_physical_round_trip", normalizeProtocol(manager?.protocolInteraction?.before) === "chatCompletions"
+  && normalizeProtocol(manager?.protocolInteraction?.alternate) === "responses"
+  && normalizeProtocol(manager?.protocolInteraction?.restored) === "chatCompletions"
+  && manager?.protocolInteraction?.profileUnchanged === true);
+record("live_tray_icon_preserved", manager?.trayIconPreserved === true);
 
-let fixedHealth = null;
-try {
-  fixedHealth = await fetchJson(fixedHealthUrl);
-  record("fixed_three_layer_route_ready", Boolean(
-    fixedHealth.ok === true
-      && fixedHealth.state === "ready"
-      && fixedHealth.provider === "antigravity"
-      && fixedHealth.model === expectedModel
-      && fixedHealth.route?.adapterEnabled === true
-      && fixedHealth.route?.relayProtocol === "chatCompletions"
-      && fixedHealth.component?.version === "1.2.36"
-      && fixedHealth.antigravityReady === true
-      && Array.isArray(fixedHealth.processes?.copiedClient)
-      && fixedHealth.processes.copiedClient.length === 1,
-  ), {
-    url: fixedHealthUrl,
-    state: fixedHealth.state,
-    provider: fixedHealth.provider,
-    model: fixedHealth.model,
-    relayProtocol: fixedHealth.route?.relayProtocol || "",
-    codexPlusPlusVersion: fixedHealth.component?.version || "",
-    copiedClientPids: fixedHealth.processes?.copiedClient || [],
-  });
-} catch (error) {
-  record("fixed_three_layer_route_ready", false, { url: fixedHealthUrl, error: String(error?.message || error) });
-}
+const modelSwitch = sources.modelSwitchEvidence?.data || {};
+const switches = Array.isArray(modelSwitch?.switches) ? modelSwitch.switches : [];
+const modelSwitchOk = validateModelSwitch(modelSwitch, taskManifest?.taskId);
+record("frontend_model_hot_switch", modelSwitchOk, { switchCount: switches.length, providers: switches.map((entry) => entry?.provider) });
+record("frontend_model_hot_switch_same_task", switches.length >= 3 && switches.every((entry) => entry?.taskId === taskManifest?.taskId));
+record("frontend_model_hot_switch_zero_requests", switches.length >= 3 && switches.every((entry) => Number(entry?.requestCountBefore) === Number(entry?.requestCountAfter)
+  && Number(entry?.latestRequestRowIdBefore) === Number(entry?.latestRequestRowIdAfter)));
+record("frontend_model_hot_switch_stable_processes", switches.length >= 3 && modelSwitchOk);
 
-const configPath = resolve(
-  textReport?.configModelOverrideEvidence?.configPath
-    || `${process.env.APPDATA || os.tmpdir()}/anticodex/codex-home-deepseek-app/config.toml`,
-);
-let mcpNames = [];
-try {
-  const config = readFileSync(configPath, "utf8");
-  mcpNames = [...new Set([...config.matchAll(/^\[mcp_servers\.([^\.\]]+)/gm)].map((match) => match[1]))].sort();
-  const developmentNames = mcpNames.filter((name) => developmentWorkers.includes(name));
-  record("isolated_product_config_excludes_development_workers", mcpNames.includes("node_repl") && developmentNames.length === 0, {
-    configPath,
-    mcpNames,
-    developmentNames,
-  });
-} catch (error) {
-  record("isolated_product_config_excludes_development_workers", false, { configPath, error: String(error?.message || error) });
-}
+const shortcutRestore = sources.shortcutRestoreEvidence?.data || {};
+const restoreRounds = Array.isArray(shortcutRestore?.rounds) ? shortcutRestore.rounds : [];
+const shortcutOk = validateShortcutRestore(shortcutRestore);
+record("shortcut_restore_single_window_no_blank_frames", shortcutOk, { roundCount: restoreRounds.length });
+record("shortcut_restore_three_rounds", restoreRounds.length >= 3);
+record("original_codex_survived_all_ui_checks", switches.length >= 3
+  && switches.every((entry) => entry?.originalCodexAlive === true)
+  && restoreRounds.length >= 3
+  && restoreRounds.every((round) => round?.originalCodexAlive === true));
+record("aggregate_performed_no_traffic", true, { requestedRealTraffic: false, usedRealTraffic: false });
 
-const uiState = runJson(process.execPath, [
-  resolve(root, "scripts", "test-anticodex-ui-state.mjs"),
-  "--fast", "true",
-  "--skip-manager-action-probe", "true",
-  "--manager-probe-timeout-ms", "10000",
-  "--timeout-ms", "20000",
-], 30_000);
-record("official_shell_ui_and_current_model_visible", Boolean(
-  uiState.ok
-    && uiState.data?.target?.title === "Anti-Codex"
-    && uiState.data?.selectedContextProbe?.version === "native-panel-v107"
-    && uiState.data?.matchedModelText === expectedModelLabel
-    && uiState.data?.managerPage?.hasZhLang === true
-    && Number(uiState.data?.port) === Number(fixedHealth?.ports?.cdp || 18318),
-), {
-  status: uiState.status,
-  error: uiState.error,
-  title: uiState.data?.target?.title || "",
-  version: uiState.data?.selectedContextProbe?.version || "",
-  matchedModelText: uiState.data?.matchedModelText || "",
-  cdpPort: uiState.data?.port ?? null,
-});
-
-const profileEntry = runJson(process.execPath, [
-  resolve(root, "scripts", "test-anticodex-manager-button.mjs"),
-  "--profile-entry-only", "true",
-  "--timeout-ms", "30000",
-  "--compact",
-], 45_000);
-record("profile_menu_uses_exact_chinese_manager_label", Boolean(
-  profileEntry.ok
-    && profileEntry.data?.profileEntry?.profileEntryText === "\u7ba1\u7406"
-    && profileEntry.data.profileEntry.forbiddenEnglishVisible === false
-    && profileEntry.data.profileEntry.actualMouseOpened === true,
-), {
-  status: profileEntry.status,
-  error: profileEntry.error,
-  profileEntryText: profileEntry.data?.profileEntry?.profileEntryText || "",
-  forbiddenEnglishVisible: profileEntry.data?.profileEntry?.forbiddenEnglishVisible ?? null,
-  actualMouseOpened: profileEntry.data?.profileEntry?.actualMouseOpened ?? null,
-});
-
-const closeButton = runJson(process.execPath, [
-  resolve(root, "scripts", "test-anticodex-manager-button.mjs"),
-  "--close-only", "true",
-  "--timeout-ms", "30000",
-  "--compact",
-], 45_000);
-const closeProbes = closeButton.data?.closeActualMouse?.probes || [];
-record("manager_close_full_height_actual_mouse", Boolean(
-  closeButton.ok
-    && closeButton.data?.finalOverlayClosed === true
-    && closeButton.data?.closeActualMouse?.finalOverlayClosed === true
-    && closeProbes.length === 3
-    && closeProbes.map((entry) => entry.name).join(",") === "upper-center,center,lower-center"
-    && closeProbes.every((entry) => entry.ok === true && entry.closed === true && entry.hasTextNode === false && entry.webkitAppRegion === "no-drag"),
-), {
-  status: closeButton.status,
-  error: closeButton.error,
-  finalOverlayClosed: closeButton.data?.finalOverlayClosed === true,
-  probes: closeProbes.map((entry) => ({
-    name: entry.name,
-    target: entry.target,
-    closed: entry.closed,
-    hasTextNode: entry.hasTextNode,
-    webkitAppRegion: entry.webkitAppRegion,
-  })),
-});
-
-const processHygiene = runJson(process.execPath, [
-  resolve(root, "scripts", "test-anticodex-worker-process-hygiene.mjs"),
-  "--report-root", reportRoot,
-], 30_000);
-const antiAppServers = (processHygiene.data?.appServers || []).filter((entry) => entry.kind === "anticodex-app-server");
-record("one_anti_appserver_and_no_development_worker_multiplication", Boolean(
-  processHygiene.ok
-    && processHygiene.data?.workerProcessHygieneOk === true
-    && processHygiene.data?.anticodexWorkerProcessCount === 0
-    && processHygiene.data?.anticodexDuplicateWorkerProcessCount === 0
-    && antiAppServers.length === 1
-    && fixedHealth?.processes?.copiedClient?.includes(antiAppServers[0].parentPid),
-), {
-  status: processHygiene.status,
-  error: processHygiene.error,
-  anticodexWorkerProcessCount: processHygiene.data?.anticodexWorkerProcessCount ?? null,
-  anticodexDuplicateWorkerProcessCount: processHygiene.data?.anticodexDuplicateWorkerProcessCount ?? null,
-  antiAppServers,
-  originalCodexWorkerProcessCountInformational: processHygiene.data?.codexWorkerProcessCount ?? null,
-  originalCodexDuplicateWorkerProcessCountInformational: processHygiene.data?.codexDuplicateWorkerProcessCount ?? null,
-});
-
-const trayCapturePath = resolve(reportRoot, "gate5-live-tray-icon.png");
-const trayIcon = runJson("powershell.exe", [
-  "-NoProfile",
-  "-ExecutionPolicy", "Bypass",
-  "-File", resolve(root, "scripts", "test-anticodex-live-tray-icon.ps1"),
-  "-MinimumPinkPixels", "8",
-  "-CapturePath", trayCapturePath,
-], 30_000);
-record("live_tray_icon_preserved", Boolean(
-  trayIcon.ok
-    && trayIcon.data?.name === "Anti-Codex"
-    && Number(trayIcon.data?.pinkPixels || 0) >= 8
-    && existsSync(trayCapturePath),
-), {
-  status: trayIcon.status,
-  error: trayIcon.error,
-  name: trayIcon.data?.name || "",
-  pinkPixels: trayIcon.data?.pinkPixels ?? null,
-  minimumPinkPixels: trayIcon.data?.minimumPinkPixels ?? 8,
-  capturePath: trayCapturePath,
-});
-
-const failures = checks.filter((entry) => !entry.ok).map((entry) => entry.id);
+const failures = checks.filter((entry) => entry.ok !== true).map((entry) => entry.id);
 const latestPath = resolve(reportRoot, "latest-gate5-visible-integration.json");
 const historyPath = resolve(reportRoot, `${stamp()}-gate5-visible-integration.json`);
 const reportPaths = { latest: latestPath, history: historyPath, audit: auditPath };
@@ -425,52 +435,111 @@ const payload = {
   checkedAt: new Date().toISOString(),
   requestedRealTraffic: false,
   usedRealTraffic: false,
-  sourceEvidenceUsedRealTraffic: sourceDefinitions.every((definition) => sourceReports[definition.id]?.data?.usedRealTraffic === true),
-  coverageKind: "visible-desktop-integration-aggregate",
-  expectedModel,
-  expectedModelLabel,
-  sourceReports: Object.fromEntries(Object.entries(sourceReports).map(([id, entry]) => [id, {
-    path: entry.path,
-    sidecarPath: entry.sidecarPath,
-    sha256: entry.sha256,
-    signed: entry.signed,
-    modifiedAt: entry.modifiedAt,
-    ageMs: entry.ageMs,
-    summary: entry.summary,
-  }])),
+  sourceEvidenceUsedRealTraffic: taskManifest?.usedRealTraffic === true,
+  coverageKind: "current-release-explicit-evidence-aggregate",
+  task: {
+    taskId: String(taskManifest?.taskId || ""),
+    newTask: taskManifest?.newTask === true,
+    nativeTask: taskManifest?.nativeTask === true,
+    promptSubmissionCount: Number(taskManifest?.promptSubmissionCount || 0),
+    totalGoalPromptCount: Number(taskManifest?.totalGoalPromptCount || 0),
+    continuationPromptCount: Number(taskManifest?.continuationPromptCount || 0),
+    hostMessageCount: Number(taskManifest?.hostMessageCount || 0),
+    hostIntermediatePromptCount: Number(taskManifest?.hostIntermediatePromptCount || 0),
+  },
+  releaseBinding,
+  sourceEvidence: Object.fromEntries(Object.entries(sources).map(([id, source]) => [id, source ? {
+    path: source.path,
+    sidecarPath: source.sidecarPath,
+    sha256: source.sha256,
+    checkedAt: source.checkedAt,
+    ageHours: source.ageHours,
+  } : null])),
   artifactEvidence,
-  route: fixedHealth ? {
-    state: fixedHealth.state,
-    provider: fixedHealth.provider,
-    model: fixedHealth.model,
-    relayProtocol: fixedHealth.route?.relayProtocol || "",
-    codexPlusPlusVersion: fixedHealth.component?.version || "",
-    ports: fixedHealth.ports,
-    processes: fixedHealth.processes,
+  rolloutEvidence,
+  route: taskManifest?.route ? {
+    state: String(taskManifest.route.state || "ready"),
+    provider: taskManifest.route.provider,
+    model: String(taskManifest.route.model || ""),
+    relayProtocol: normalizeProtocol(taskManifest.route.relayProtocol),
+    codexPlusPlusVersion: taskManifest.route.codexPlusPlusVersion,
   } : null,
-  isolatedMcpConfig: { path: configPath, names: mcpNames, excludedDevelopmentWorkers: developmentWorkers.filter((name) => !mcpNames.includes(name)) },
+  currentUiEvidence: {
+    manager_actual_mouse_matrix: {
+      ok: managerOk,
+      usedRealTraffic: false,
+      actualMouse: manager?.actualMouse === true,
+      actionCount: Number(manager?.actionCount || 0),
+      zeroSideEffects: manager?.zeroSideEffects === true,
+      profileEntryText: String(manager?.profileEntryText || ""),
+      forbiddenEnglishVisible: manager?.forbiddenEnglishVisible === false,
+      trayIconPreserved: manager?.trayIconPreserved === true,
+      closeUpper: closeByName["upper-center"]?.ok === true,
+      closeCenter: closeByName.center?.ok === true,
+      closeLower: closeByName["lower-center"]?.ok === true,
+      closeHasTextNode: ["upper-center", "center", "lower-center"].every((name) => closeByName[name]?.hasTextNode === false),
+      closeProbes: ["upper-center", "center", "lower-center"].map((name) => ({
+        name,
+        ok: closeByName[name]?.ok === true,
+        actualMouse: closeByName[name]?.actualMouse === true,
+        closed: closeByName[name]?.closed === true,
+        hasTextNode: closeByName[name]?.hasTextNode,
+      })),
+      protocolInteraction: {
+        before: normalizeProtocol(manager?.protocolInteraction?.before),
+        alternate: normalizeProtocol(manager?.protocolInteraction?.alternate),
+        restored: normalizeProtocol(manager?.protocolInteraction?.restored),
+        selectedAlternate: manager?.protocolInteraction?.selectedAlternate === true,
+        restoredOriginal: manager?.protocolInteraction?.restoredOriginal === true,
+        profileUnchanged: manager?.protocolInteraction?.profileUnchanged === true,
+      },
+    },
+    frontend_model_hot_switch: {
+      ok: modelSwitchOk,
+      usedRealTraffic: false,
+      sameTask: modelSwitch?.sameTask === true,
+      taskId: String(modelSwitch?.taskId || ""),
+      noRestart: modelSwitchOk,
+      requestCountUnchanged: switches.length >= 3 && switches.every((entry) => Number(entry?.requestCountBefore) === Number(entry?.requestCountAfter)),
+      pidUnchanged: modelSwitchOk,
+      switchCount: switches.length,
+      providers: [...new Set(switches.map((entry) => String(entry?.provider || "")))],
+      originalCodexAlive: switches.length >= 3 && switches.every((entry) => entry?.originalCodexAlive === true),
+      switches,
+    },
+    shortcut_restore_single_window_no_blank_frames: {
+      ok: shortcutOk,
+      usedRealTraffic: false,
+      roundCount: restoreRounds.length,
+      sameMainPid: restoreRounds.length >= 3 && restoreRounds.every((round) => Number(round?.expectedMainPid) === Number(restoreRounds[0]?.expectedMainPid)),
+      mainPid: Number(restoreRounds[0]?.expectedMainPid || 0),
+      maxRootProcessCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxRootProcessCount || 0))),
+      maxVisibleWindowCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxVisibleWindowCount || 0))),
+      maxAppPageCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxAppPageCount || 0))),
+      blankFrameCount: restoreRounds.reduce((sum, round) => sum + Number(round?.blankFrameCount || 0), 0),
+      originalCodexAlive: restoreRounds.length >= 3 && restoreRounds.every((round) => round?.originalCodexAlive === true),
+      rounds: restoreRounds,
+    },
+  },
   checks,
   failures,
   report: reportPaths,
 };
+
 const body = `${JSON.stringify(payload, null, 2)}\n`;
 for (const path of [latestPath, historyPath, auditPath]) writeSignedAtomic(path, body);
 
-if (compact) {
-  console.log(JSON.stringify({
-    ok: payload.ok,
-    gateComplete: payload.gateComplete,
-    checks: checks.length,
-    passed: checks.length - failures.length,
-    failures,
-    model: payload.route?.model || "",
-    codexPlusPlusVersion: payload.route?.codexPlusPlusVersion || "",
-    anticodexWorkerProcessCount: processHygiene.data?.anticodexWorkerProcessCount ?? null,
-    historyOpenLatencyMs: historyReport?.sameChatEvidence?.openLatencyMs ?? null,
-    managerFinalOverlayClosed: closeButton.data?.finalOverlayClosed === true,
-    report: reportPaths,
-  }));
-} else {
-  console.log(JSON.stringify(payload));
-}
+console.log(JSON.stringify(compact ? {
+  ok: payload.ok,
+  gateComplete: payload.gateComplete,
+  checks: checks.length,
+  passed: checks.length - failures.length,
+  failures,
+  taskId: payload.task.taskId,
+  artifactCount: artifactEvidence.length,
+  managerActionCount: payload.currentUiEvidence.manager_actual_mouse_matrix.actionCount,
+  modelSwitchCount: payload.currentUiEvidence.frontend_model_hot_switch.switchCount,
+  shortcutRestoreRounds: payload.currentUiEvidence.shortcut_restore_single_window_no_blank_frames.roundCount,
+  report: reportPaths,
+} : payload));
 process.exit(payload.ok ? 0 : 1);

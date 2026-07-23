@@ -1,19 +1,32 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, resolve } from "node:path";
+import {
+  createCurrentReleaseBinding,
+  isFreshReleaseEvidence,
+  releaseBindingsEqual,
+} from "./lib/anticodex-release-binding.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+const options = parseOptions(process.argv.slice(2));
 const compact = process.argv.includes("--compact");
 const formalMode = process.argv.includes("--formal");
-const reportPath = resolve(root, "docs", "audits", formalMode
+const reportPath = resolve(options.get("--report") || resolve(root, "docs", "audits", formalMode
   ? "2026-07-15-gate6-edge-matrix.json"
-  : "2026-07-15-gate6-preparatory-edge-matrix.json");
-const gate5ReportPath = resolve(root, "docs", "audits", "2026-07-15-gate5-visible-integration.json");
+  : "2026-07-15-gate6-preparatory-edge-matrix.json"));
+const gate5ReportPath = resolve(options.get("--gate5-report")
+  || resolve(root, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
 const restartReportPath = resolve(root, "docs", "audits", "2026-07-15-gate6-adapter-restart-recovery.json");
 const cancellationReportPath = resolve(root, "docs", "audits", "2026-07-15-gate6-adapter-cancellation.json");
 const clientRestartReportPath = resolve(root, "docs", "audits", "2026-07-15-gate6-client-restart-resume.json");
+const releaseReportRoot = resolve(options.get("--release-report-root")
+  || resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
+const reportRoot = resolve(options.get("--output-report-root")
+  || resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "reports"));
+const maxAgeHours = Math.max(0.01, Number(options.get("--max-age-hours") || 48));
+const currentReleaseBinding = createCurrentReleaseBinding({ sourceRoot: root, reportRoot: releaseReportRoot });
 const testPaths = [
   "translator/tests/antigravity-cascade-client.test.mjs",
   "translator/tests/antigravity-chat-adapter.test.mjs",
@@ -36,6 +49,11 @@ function record(id, ok, detail = {}) {
 
 if (formalMode) {
   const gate5 = readSignedJsonReport(gate5ReportPath);
+  const gate5Fresh = isFreshReleaseEvidence(gate5.data, { maxAgeHours });
+  const gate5CurrentRelease = releaseBindingsEqual(gate5.data?.releaseBinding, currentReleaseBinding);
+  record("current_release_binding_available", currentReleaseBinding.valid === true, {
+    releaseBinding: currentReleaseBinding,
+  });
   record("gate5_visible_integration_signed", gate5.signed === true
     && gate5.data?.ok === true
     && gate5.data?.gateComplete === true
@@ -46,6 +64,14 @@ if (formalMode) {
     signed: gate5.signed,
     checkCount: gate5.data?.checks?.length ?? 0,
     failedIds: gate5.data?.failures ?? (gate5.error ? [gate5.error] : []),
+  });
+  record("gate5_visible_integration_fresh", gate5Fresh, {
+    generatedAtUtc: gate5.data?.generatedAtUtc ?? gate5.data?.checkedAt ?? null,
+    maxAgeHours,
+  });
+  record("gate5_visible_integration_current_release", gate5CurrentRelease, {
+    candidate: gate5.data?.releaseBinding ?? null,
+    expected: currentReleaseBinding,
   });
 }
 
@@ -140,7 +166,6 @@ record("real_copied_client_crash_same_task_resume", clientRestart.ok === true
 
 const failedIds = checks.filter((check) => !check.ok).map((check) => check.id);
 const formalGateAdvanced = formalMode && failedIds.length === 0;
-const reportRoot = resolve(process.env.APPDATA || os.tmpdir(), "anticodex", "reports");
 const latestPath = formalMode ? resolve(reportRoot, "latest-gate6-edge-matrix.json") : null;
 const historyPath = formalMode ? resolve(reportRoot, `${utcStamp()}-gate6-edge-matrix.json`) : null;
 const report = {
@@ -152,6 +177,7 @@ const report = {
   modelTraffic: "none; consumes existing accepted real reports",
   formalGateAdvanced,
   blockedBy: formalGateAdvanced ? null : (formalMode ? "failed Gate 5 or Gate 6 evidence checks" : "formal mode not requested"),
+  releaseBinding: currentReleaseBinding,
   checks,
   report: {
     audit: reportPath,
@@ -161,10 +187,10 @@ const report = {
 };
 mkdirSync(dirname(reportPath), { recursive: true });
 const reportBody = `${JSON.stringify(report, null, 2)}\n`;
-writeSignedReport(reportPath, reportBody);
+writeReport(reportPath, reportBody, !formalMode || formalGateAdvanced);
 if (formalMode) {
-  writeSignedReport(latestPath, reportBody);
-  writeSignedReport(historyPath, reportBody);
+  writeReport(latestPath, reportBody, formalGateAdvanced);
+  writeReport(historyPath, reportBody, formalGateAdvanced);
 }
 process.stdout.write(`${JSON.stringify(compact ? {
   ok: report.ok,
@@ -200,10 +226,14 @@ function readSignedJsonReport(path) {
   }
 }
 
-function writeSignedReport(path, body) {
+function writeReport(path, body, signed) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, body, "utf8");
-  writeFileSync(`${path}.sha256`, `sha256:${createHash("sha256").update(body).digest("hex")}`, "ascii");
+  if (signed) {
+    writeFileSync(`${path}.sha256`, `sha256:${createHash("sha256").update(body).digest("hex")}`, "ascii");
+  } else {
+    rmSync(`${path}.sha256`, { force: true });
+  }
 }
 
 function utcStamp() {
@@ -214,4 +244,20 @@ function tapCounts(output) {
   const text = String(output ?? "");
   const count = (name) => Number(text.match(new RegExp(`# ${name} (\\d+)`))?.[1] ?? 0);
   return { tests: count("tests"), pass: count("pass"), fail: count("fail") };
+}
+
+function parseOptions(values) {
+  const parsed = new Map();
+  for (let index = 0; index < values.length; index += 1) {
+    const key = values[index];
+    if (!key.startsWith("--")) continue;
+    const value = values[index + 1];
+    if (value && !value.startsWith("--")) {
+      parsed.set(key, value);
+      index += 1;
+    } else {
+      parsed.set(key, true);
+    }
+  }
+  return parsed;
 }

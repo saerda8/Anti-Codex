@@ -18,6 +18,204 @@ $antigravityHelper = Join-Path $scriptRoot "antigravity-desktop.ps1"
 $stateRoot = Join-Path $env:APPDATA "anticodex"
 $postVerificationReport = Join-Path $stateRoot "reports\latest-post-verification.json"
 
+if (-not ("AntiCodex.Manager.Native.VerifiedProcessHandle" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace AntiCodex.Manager.Native
+{
+    public sealed class VerifiedProcessHandle : IDisposable
+    {
+        private const uint ProcessTerminate = 0x0001;
+        private const uint ProcessQueryLimitedInformation = 0x1000;
+        private const uint Synchronize = 0x00100000;
+        private const uint WaitObject0 = 0x00000000;
+        private const uint WaitTimeout = 0x00000102;
+        private IntPtr handle;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FileTime
+        {
+            public uint Low;
+            public uint High;
+
+            public long ToInt64()
+            {
+                return ((long)High << 32) | Low;
+            }
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint access, bool inheritHandle, int processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr value);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint GetProcessId(IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetProcessTimes(
+            IntPtr process,
+            out FileTime creation,
+            out FileTime exit,
+            out FileTime kernel,
+            out FileTime user);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(
+            IntPtr process,
+            uint flags,
+            StringBuilder executablePath,
+            ref int size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObject(IntPtr value, uint milliseconds);
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CommandLineToArgvW(string commandLine, out int argumentCount);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr LocalFree(IntPtr value);
+
+        private VerifiedProcessHandle(
+            IntPtr value,
+            int processId,
+            long creationFileTimeUtcTicks,
+            string executablePath)
+        {
+            handle = value;
+            ProcessId = processId;
+            CreationFileTimeUtcTicks = creationFileTimeUtcTicks;
+            ExecutablePath = executablePath;
+        }
+
+        public int ProcessId { get; private set; }
+        public long CreationFileTimeUtcTicks { get; private set; }
+        public string ExecutablePath { get; private set; }
+
+        public bool HasExited
+        {
+            get
+            {
+                uint result = WaitForSingleObject(handle, 0);
+                if (result == WaitObject0) return true;
+                if (result == WaitTimeout) return false;
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "Could not inspect the bound manager process handle.");
+            }
+        }
+
+        public static VerifiedProcessHandle Open(int processId)
+        {
+            IntPtr value = OpenProcess(
+                ProcessTerminate | ProcessQueryLimitedInformation | Synchronize,
+                false,
+                processId);
+            if (value == IntPtr.Zero)
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "Could not open the exact manager process.");
+            try
+            {
+                uint boundProcessId = GetProcessId(value);
+                if (boundProcessId != (uint)processId)
+                    throw new InvalidOperationException(
+                        "The manager process handle did not retain the requested PID identity.");
+
+                FileTime creation;
+                FileTime exit;
+                FileTime kernel;
+                FileTime user;
+                if (!GetProcessTimes(value, out creation, out exit, out kernel, out user))
+                    throw new Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "Could not query manager process creation time through the bound handle.");
+
+                StringBuilder executablePath = new StringBuilder(32768);
+                int size = executablePath.Capacity;
+                if (!QueryFullProcessImageName(value, 0, executablePath, ref size))
+                    throw new Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "Could not query the manager executable through the bound handle.");
+
+                VerifiedProcessHandle result = new VerifiedProcessHandle(
+                    value,
+                    processId,
+                    creation.ToInt64(),
+                    executablePath.ToString());
+                value = IntPtr.Zero;
+                return result;
+            }
+            finally
+            {
+                if (value != IntPtr.Zero) CloseHandle(value);
+            }
+        }
+
+        public static string[] SplitCommandLine(string commandLine)
+        {
+            if (String.IsNullOrWhiteSpace(commandLine)) return new string[0];
+            int argumentCount;
+            IntPtr arguments = CommandLineToArgvW(commandLine, out argumentCount);
+            if (arguments == IntPtr.Zero)
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "Could not parse the manager bridge command line.");
+            try
+            {
+                string[] result = new string[argumentCount];
+                for (int index = 0; index < argumentCount; index++)
+                {
+                    IntPtr argument = Marshal.ReadIntPtr(arguments, index * IntPtr.Size);
+                    result[index] = Marshal.PtrToStringUni(argument);
+                }
+                return result;
+            }
+            finally
+            {
+                LocalFree(arguments);
+            }
+        }
+
+        public void TerminateAndWait(int timeoutMilliseconds)
+        {
+            if (HasExited) return;
+            if (!TerminateProcess(handle, 1))
+            {
+                if (HasExited) return;
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "Could not terminate the bound manager process.");
+            }
+            uint waitResult = WaitForSingleObject(handle, checked((uint)timeoutMilliseconds));
+            if (waitResult == WaitObject0) return;
+            if (waitResult == WaitTimeout)
+                throw new TimeoutException(
+                    "The bound manager process did not exit before the timeout.");
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "Could not wait on the bound manager process handle.");
+        }
+
+        public void Dispose()
+        {
+            if (handle == IntPtr.Zero) return;
+            CloseHandle(handle);
+            handle = IntPtr.Zero;
+        }
+    }
+}
+'@
+}
+
 function Resolve-ManagerBaseUrl {
     param([string]$BaseUrl)
     if (-not $BaseUrl) { return [string](& $baseUrlResolver) }
@@ -83,6 +281,23 @@ function Wait-AntiCodexManagerChildProcess {
     return [bool]$Process.HasExited
 }
 
+function Stop-AntiCodexManagerChildProcess {
+    param(
+        [Parameter(Mandatory = $true)][Diagnostics.Process]$Process,
+        [int]$TimeoutMs = 3000
+    )
+    try {
+        [void]$Process.Handle
+        if ($Process.HasExited) { return }
+        $Process.Kill()
+        if (-not $Process.WaitForExit($TimeoutMs)) {
+            throw "The bound manager child did not exit within $TimeoutMs ms."
+        }
+    } catch {
+        throw "The manager child could not be terminated through its bound Process object. $($_.Exception.Message)"
+    }
+}
+
 function Start-AntiCodexGatewayAndWait {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -131,6 +346,7 @@ function Invoke-ManagerScriptJson {
 
     $stdoutPath = [IO.Path]::GetTempFileName()
     $stderrPath = [IO.Path]::GetTempFileName()
+    $proc = $null
     try {
         $proc = Start-Process -FilePath $powerShell `
             -ArgumentList (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $path) + $Arguments) `
@@ -140,8 +356,7 @@ function Invoke-ManagerScriptJson {
             -PassThru
         [void]$proc.Handle
         if (-not (Wait-AntiCodexManagerChildProcess -Process $proc -TimeoutMs $TimeoutMs)) {
-            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
-            Wait-AntiCodexManagerChildProcess -Process $proc -TimeoutMs 3000 -PollMs 100 | Out-Null
+            Stop-AntiCodexManagerChildProcess -Process $proc -TimeoutMs 3000
             throw "$Name 超时未返回。"
         }
         $stdout = if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath -Raw } else { "" }
@@ -161,6 +376,7 @@ function Invoke-ManagerScriptJson {
         if ($json) { return $json }
         return ($stdout | ConvertFrom-Json)
     } finally {
+        if ($proc) { $proc.Dispose() }
         Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     }
 }
@@ -592,6 +808,91 @@ function Resolve-ManagerNode {
     throw "node.exe not found"
 }
 
+function Test-AntiCodexManagerNodePath {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    try {
+        $fullPath = [IO.Path]::GetFullPath($Path)
+    } catch {
+        return $false
+    }
+    if ($fullPath -match "\\WindowsApps\\OpenAI\.(?:Codex|ChatGPT)_") { return $false }
+    return [IO.Path]::GetFileName($fullPath).Equals(
+        "node.exe",
+        [StringComparison]::OrdinalIgnoreCase)
+}
+
+function ConvertTo-AntiCodexManagerCreationFileTimeUtcTicks {
+    param([Parameter(Mandatory = $true)]$CreationDate)
+    if ($CreationDate -is [DateTime]) {
+        return [long]$CreationDate.ToUniversalTime().ToFileTimeUtc()
+    }
+    $date = [Management.ManagementDateTimeConverter]::ToDateTime([string]$CreationDate)
+    return [long]$date.ToUniversalTime().ToFileTimeUtc()
+}
+
+function Get-EmbeddedManagerBridgeInvocation {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [Parameter(Mandatory = $true)][string]$BridgePath,
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+    $expectedBridgePath = [IO.Path]::GetFullPath($BridgePath)
+    $arguments = @([AntiCodex.Manager.Native.VerifiedProcessHandle]::SplitCommandLine($CommandLine))
+    if ($arguments.Count -lt 6) { return $null }
+
+    $bridgeMatches = 0
+    $portValues = @()
+    $baseUrlValues = @()
+    for ($index = 0; $index -lt $arguments.Count; $index++) {
+        $argument = [string]$arguments[$index]
+        if ($argument.Equals($expectedBridgePath, [StringComparison]::OrdinalIgnoreCase)) {
+            $bridgeMatches++
+            continue
+        }
+        if ($argument.Equals("--port", [StringComparison]::Ordinal)) {
+            if (($index + 1) -ge $arguments.Count) { return $null }
+            $portValues += [string]$arguments[$index + 1]
+            $index++
+            continue
+        }
+        if ($argument.Equals("--base-url", [StringComparison]::Ordinal)) {
+            if (($index + 1) -ge $arguments.Count) { return $null }
+            $baseUrlValues += [string]$arguments[$index + 1]
+            $index++
+        }
+    }
+
+    $expectedPort = $Port.ToString([Globalization.CultureInfo]::InvariantCulture)
+    if ($bridgeMatches -ne 1 -or
+        $portValues.Count -ne 1 -or
+        $baseUrlValues.Count -ne 1 -or
+        -not $portValues[0].Equals($expectedPort, [StringComparison]::Ordinal)) {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        BridgePath = $expectedBridgePath
+        Port = $Port
+        BaseUrl = [string]$baseUrlValues[0]
+    }
+}
+
+function Test-StaleEmbeddedManagerBridgeCommandLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [Parameter(Mandatory = $true)][string]$BridgePath,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$BaseUrl
+    )
+    $invocation = Get-EmbeddedManagerBridgeInvocation `
+        -CommandLine $CommandLine `
+        -BridgePath $BridgePath `
+        -Port $Port
+    if (-not $invocation) { return $false }
+    return -not ([string]$invocation.BaseUrl).Equals($BaseUrl, [StringComparison]::Ordinal)
+}
+
 function Test-EmbeddedManagerBridgeRunning {
     param([int]$Port, [string]$BaseUrl = "")
     $bridgeName = "anticodex-manager-bridge.mjs"
@@ -605,15 +906,104 @@ function Test-EmbeddedManagerBridgeRunning {
 }
 
 function Stop-StaleEmbeddedManagerBridge {
-    param([int]$Port, [string]$BaseUrl)
-    $bridgeName = "anticodex-manager-bridge.mjs"
-    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object {
-        $commandLine = [string]$_.CommandLine
-        $commandLine -match [regex]::Escape($bridgeName) -and
-        $commandLine -match "--port\s+$Port(\s|$)" -and
-        $commandLine -notmatch "--base-url\s+$([regex]::Escape($BaseUrl))(\s|$)"
-    } | ForEach-Object {
-        try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+    param(
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][string]$Node,
+        [Parameter(Mandatory = $true)][string]$BridgePath
+    )
+    $expectedNodePath = [IO.Path]::GetFullPath($Node)
+    $expectedBridgePath = [IO.Path]::GetFullPath($BridgePath)
+    if (-not (Test-AntiCodexManagerNodePath -Path $expectedNodePath)) {
+        throw "Refusing stale manager bridge cleanup because the expected executable is not node.exe."
+    }
+    if (-not (Test-Path -LiteralPath $expectedBridgePath -PathType Leaf)) {
+        throw "Refusing stale manager bridge cleanup because the exact bridge script is missing."
+    }
+
+    $candidates = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop | Where-Object {
+        if (-not $_.ExecutablePath -or -not $_.CreationDate) { return $false }
+        try {
+            $candidateExecutablePath = [IO.Path]::GetFullPath([string]$_.ExecutablePath)
+        } catch {
+            return $false
+        }
+        if (-not $candidateExecutablePath.Equals(
+            $expectedNodePath,
+            [StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+        return Test-StaleEmbeddedManagerBridgeCommandLine `
+            -CommandLine ([string]$_.CommandLine) `
+            -BridgePath $expectedBridgePath `
+            -Port $Port `
+            -BaseUrl $BaseUrl
+    })
+
+    foreach ($candidate in $candidates) {
+        $processId = [int]$candidate.ProcessId
+        if ($processId -le 0 -or $processId -eq $PID) {
+            throw "Refusing stale manager bridge cleanup for invalid PID $processId."
+        }
+        $candidateCreationFileTimeUtcTicks =
+            ConvertTo-AntiCodexManagerCreationFileTimeUtcTicks -CreationDate $candidate.CreationDate
+        $processHandle = $null
+        try {
+            try {
+                $processHandle = [AntiCodex.Manager.Native.VerifiedProcessHandle]::Open($processId)
+            } catch [ComponentModel.Win32Exception] {
+                if ($_.Exception.NativeErrorCode -in @(87, 1168)) { continue }
+                throw
+            }
+
+            $handleExecutablePath = [IO.Path]::GetFullPath([string]$processHandle.ExecutablePath)
+            if ([Math]::Abs(
+                    [long]$processHandle.CreationFileTimeUtcTicks -
+                    [long]$candidateCreationFileTimeUtcTicks) -ge 10 -or
+                -not $handleExecutablePath.Equals(
+                    $expectedNodePath,
+                    [StringComparison]::OrdinalIgnoreCase) -or
+                -not (Test-AntiCodexManagerNodePath -Path $handleExecutablePath)) {
+                throw "Refusing to stop PID $processId because its handle-bound creation time or executable path changed."
+            }
+            if ($processHandle.HasExited) { continue }
+
+            $liveRow = Get-CimInstance Win32_Process `
+                -Filter "ProcessId = $processId" `
+                -ErrorAction Stop |
+                Select-Object -First 1
+            if (-not $liveRow) {
+                if ($processHandle.HasExited) { continue }
+                throw "Refusing to stop PID $processId because its live process row disappeared."
+            }
+            $liveCreationFileTimeUtcTicks =
+                ConvertTo-AntiCodexManagerCreationFileTimeUtcTicks -CreationDate $liveRow.CreationDate
+            $liveExecutablePath = [IO.Path]::GetFullPath([string]$liveRow.ExecutablePath)
+            if ([Math]::Abs(
+                    [long]$processHandle.CreationFileTimeUtcTicks -
+                    [long]$liveCreationFileTimeUtcTicks) -ge 10 -or
+                -not $liveExecutablePath.Equals(
+                    $handleExecutablePath,
+                    [StringComparison]::OrdinalIgnoreCase) -or
+                -not $liveExecutablePath.Equals(
+                    $expectedNodePath,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to stop PID $processId because its handle-bound creation time or executable path changed."
+            }
+            if (-not (Test-StaleEmbeddedManagerBridgeCommandLine `
+                    -CommandLine ([string]$liveRow.CommandLine) `
+                    -BridgePath $expectedBridgePath `
+                    -Port $Port `
+                    -BaseUrl $BaseUrl)) {
+                throw "Refusing to stop PID $processId because its exact bridge command line changed."
+            }
+
+            $processHandle.TerminateAndWait(3000)
+        } catch {
+            throw "Verified manager bridge PID $processId could not be stopped through its bound handle. $($_.Exception.Message)"
+        } finally {
+            if ($processHandle) { $processHandle.Dispose() }
+        }
     }
 }
 
@@ -628,7 +1018,7 @@ function Start-EmbeddedManagerBridge {
         $script:LastManagerGatewayError = " 管理面板桥接组件缺失。"
         return
     }
-    Stop-StaleEmbeddedManagerBridge -Port $Port -BaseUrl $BaseUrl
+    Stop-StaleEmbeddedManagerBridge -Port $Port -BaseUrl $BaseUrl -Node $Node -BridgePath $bridge
     if (Test-EmbeddedManagerBridgeRunning -Port $Port -BaseUrl $BaseUrl) { return }
     New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
     $stdout = Join-Path $stateRoot "anticodex-manager-bridge.log"

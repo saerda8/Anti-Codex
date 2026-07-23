@@ -3,6 +3,7 @@
 param(
     [switch]$SkipUpdateCheck,
     [switch]$InlineSupervisor,
+    [switch]$SkipSyncBarrier,
     [string]$StateRootPath = "",
     [string]$NodeExecutablePath = "",
     [string]$UserProfilePath = ""
@@ -10,6 +11,147 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if (-not ("AntiCodex.Native.VerifiedProcessHandle" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace AntiCodex.Native
+{
+    public sealed class VerifiedProcessHandle : IDisposable
+    {
+        private const uint ProcessTerminate = 0x0001;
+        private const uint ProcessQueryLimitedInformation = 0x1000;
+        private const uint Synchronize = 0x00100000;
+        private const uint WaitObject0 = 0x00000000;
+        private const uint WaitTimeout = 0x00000102;
+        private IntPtr handle;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FileTime
+        {
+            public uint Low;
+            public uint High;
+            public long ToInt64()
+            {
+                return ((long)High << 32) | Low;
+            }
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint access, bool inheritHandle, int processId);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr value);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint GetProcessId(IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetProcessTimes(
+            IntPtr process,
+            out FileTime creation,
+            out FileTime exit,
+            out FileTime kernel,
+            out FileTime user);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(
+            IntPtr process,
+            uint flags,
+            StringBuilder executablePath,
+            ref int size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObject(IntPtr value, uint milliseconds);
+
+        private VerifiedProcessHandle(IntPtr value, int processId, long creationFileTimeUtcTicks, string executablePath)
+        {
+            handle = value;
+            ProcessId = processId;
+            CreationFileTimeUtcTicks = creationFileTimeUtcTicks;
+            ExecutablePath = executablePath;
+        }
+
+        public int ProcessId { get; private set; }
+        public long CreationFileTimeUtcTicks { get; private set; }
+        public string ExecutablePath { get; private set; }
+        public bool HasExited
+        {
+            get
+            {
+                uint result = WaitForSingleObject(handle, 0);
+                if (result == WaitObject0) return true;
+                if (result == WaitTimeout) return false;
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the bound process handle.");
+            }
+        }
+
+        public static VerifiedProcessHandle Open(int processId)
+        {
+            IntPtr value = OpenProcess(ProcessTerminate | ProcessQueryLimitedInformation | Synchronize, false, processId);
+            if (value == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not open the exact process.");
+            try
+            {
+                uint boundProcessId = GetProcessId(value);
+                if (boundProcessId != (uint)processId)
+                    throw new InvalidOperationException("The opened process handle did not retain the requested PID identity.");
+                FileTime creation;
+                FileTime exit;
+                FileTime kernel;
+                FileTime user;
+                if (!GetProcessTimes(value, out creation, out exit, out kernel, out user))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query process creation time through the bound handle.");
+                StringBuilder executablePath = new StringBuilder(32768);
+                int size = executablePath.Capacity;
+                if (!QueryFullProcessImageName(value, 0, executablePath, ref size))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query the executable through the bound handle.");
+                VerifiedProcessHandle result = new VerifiedProcessHandle(
+                    value,
+                    processId,
+                    creation.ToInt64(),
+                    executablePath.ToString());
+                value = IntPtr.Zero;
+                return result;
+            }
+            finally
+            {
+                if (value != IntPtr.Zero) CloseHandle(value);
+            }
+        }
+
+        public void TerminateAndWait(int timeoutMilliseconds)
+        {
+            if (HasExited) return;
+            if (!TerminateProcess(handle, 1))
+            {
+                if (HasExited) return;
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not terminate the bound process handle.");
+            }
+            uint waitResult = WaitForSingleObject(handle, checked((uint)timeoutMilliseconds));
+            if (waitResult == WaitObject0) return;
+            if (waitResult == WaitTimeout)
+                throw new TimeoutException("The bound process did not exit before the timeout.");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not wait on the bound process handle.");
+        }
+
+        public void Dispose()
+        {
+            if (handle == IntPtr.Zero) return;
+            CloseHandle(handle);
+            handle = IntPtr.Zero;
+        }
+    }
+}
+'@
+}
 
 $FIXED_ROUTE_HEALTH_PORT = 18487
 $FIXED_ROUTE_HEALTH_URL = "http://127.0.0.1:$FIXED_ROUTE_HEALTH_PORT/anticodex/fixed-route/health"
@@ -24,6 +166,54 @@ function Resolve-AntiCodexPath {
     return [IO.Path]::GetFullPath($Path).TrimEnd("\")
 }
 
+function Enter-AntiCodexHostSyncBarrier {
+    param([int]$TimeoutSeconds = 180)
+
+    $globalMutex = [Threading.Mutex]::new($false, "Global\AntiCodexHostSync")
+    $localMutex = [Threading.Mutex]::new($false, "Local\AntiCodexHostSync")
+    $globalAcquired = $false
+    $localAcquired = $false
+    try {
+        try {
+            $globalAcquired = $globalMutex.WaitOne([TimeSpan]::FromSeconds([Math]::Max(1, $TimeoutSeconds)))
+        } catch [Threading.AbandonedMutexException] {
+            $globalAcquired = $true
+        }
+        if (-not $globalAcquired) {
+            throw "Timed out waiting for the Anti-Codex runtime publication barrier."
+        }
+        try {
+            $localAcquired = $localMutex.WaitOne([TimeSpan]::FromSeconds([Math]::Max(1, $TimeoutSeconds)))
+        } catch [Threading.AbandonedMutexException] {
+            $localAcquired = $true
+        }
+        if (-not $localAcquired) {
+            throw "Timed out waiting for the Anti-Codex compatibility publication barrier."
+        }
+        return [pscustomobject]@{
+            GlobalMutex = $globalMutex
+            LocalMutex = $localMutex
+            GlobalAcquired = $globalAcquired
+            LocalAcquired = $localAcquired
+        }
+    } catch {
+        if ($localAcquired) { $localMutex.ReleaseMutex() }
+        if ($globalAcquired) { $globalMutex.ReleaseMutex() }
+        $localMutex.Dispose()
+        $globalMutex.Dispose()
+        throw
+    }
+}
+
+function Exit-AntiCodexHostSyncBarrier {
+    param($Barrier)
+    if (-not $Barrier) { return }
+    if ($Barrier.LocalAcquired) { $Barrier.LocalMutex.ReleaseMutex() }
+    if ($Barrier.GlobalAcquired) { $Barrier.GlobalMutex.ReleaseMutex() }
+    $Barrier.LocalMutex.Dispose()
+    $Barrier.GlobalMutex.Dispose()
+}
+
 function Invoke-InstalledAntiCodexLauncherIfAvailable {
     if (-not $env:LOCALAPPDATA) { return }
     $installedLauncher = Join-Path (Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime\scripts") "start-anticodex.ps1"
@@ -36,6 +226,7 @@ function Invoke-InstalledAntiCodexLauncherIfAvailable {
     $forwardArgs = @{}
     if ($SkipUpdateCheck) { $forwardArgs.SkipUpdateCheck = $true }
     if ($InlineSupervisor) { $forwardArgs.InlineSupervisor = $true }
+    $forwardArgs.SkipSyncBarrier = $true
     if ($StateRootPath) { $forwardArgs.StateRootPath = $StateRootPath }
     if ($NodeExecutablePath) { $forwardArgs.NodeExecutablePath = $NodeExecutablePath }
     if ($UserProfilePath) { $forwardArgs.UserProfilePath = $UserProfilePath }
@@ -47,6 +238,120 @@ function Invoke-InstalledAntiCodexLauncherIfAvailable {
 function Resolve-AntiCodexInstallRoot {
     $scriptParent = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
     return [IO.Path]::GetFullPath((Split-Path -Parent $scriptParent))
+}
+
+function Test-AntiCodexPathInsideRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+    try {
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd("\") + "\"
+        return $fullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
+}
+
+function Test-AntiCodexNativeCodexPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        return ([IO.Path]::GetFullPath($Path)).IndexOf("\WindowsApps\OpenAI.Codex_", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    } catch {
+        return $true
+    }
+}
+
+function Test-AntiCodexCommandLineHasExactPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $pattern = '(^|[\s"])' + [regex]::Escape($fullPath) + '($|[\s"])'
+    return [regex]::IsMatch($CommandLine, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
+
+function Get-AntiCodexScriptProcessSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][string]$ExpectedScriptPath,
+        [Parameter(Mandatory = $true)][string]$AllowedScriptRoot
+    )
+    $scriptPath = [IO.Path]::GetFullPath($ExpectedScriptPath)
+    if (-not (Test-AntiCodexPathInsideRoot -Path $scriptPath -Root $AllowedScriptRoot)) { return $null }
+    $processHandle = $null
+    try {
+        $processHandle = [AntiCodex.Native.VerifiedProcessHandle]::Open($ProcessId)
+        if ($processHandle.HasExited) { return $null }
+        $row = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $row -or -not $row.ExecutablePath) { return $null }
+        $executablePath = [IO.Path]::GetFullPath([string]$processHandle.ExecutablePath)
+        $rowExecutablePath = [IO.Path]::GetFullPath([string]$row.ExecutablePath)
+        $commandLine = [string]$row.CommandLine
+        if (-not $rowExecutablePath.Equals($executablePath, [StringComparison]::OrdinalIgnoreCase) -or
+            (Test-AntiCodexNativeCodexPath -Path $executablePath) -or
+            -not (Test-AntiCodexCommandLineHasExactPath -CommandLine $commandLine -Path $scriptPath)) {
+            return $null
+        }
+        return [pscustomobject]@{
+            ProcessId = [int]$processHandle.ProcessId
+            CreationFileTimeUtcTicks = [long]$processHandle.CreationFileTimeUtcTicks
+            ExecutablePath = $executablePath
+            CommandLine = $commandLine
+        }
+    } catch [ComponentModel.Win32Exception] {
+        if ($_.Exception.NativeErrorCode -in @(87, 1168)) { return $null }
+        return $null
+    } finally {
+        if ($processHandle) { $processHandle.Dispose() }
+    }
+}
+
+function Stop-AntiCodexVerifiedScriptProcess {
+    param(
+        [Parameter(Mandatory = $true)]$Snapshot,
+        [Parameter(Mandatory = $true)][string]$ExpectedScriptPath,
+        [Parameter(Mandatory = $true)][string]$AllowedScriptRoot
+    )
+    $processId = [int]$Snapshot.ProcessId
+    $scriptPath = [IO.Path]::GetFullPath($ExpectedScriptPath)
+    $expectedExecutablePath = [IO.Path]::GetFullPath([string]$Snapshot.ExecutablePath)
+    $expectedCreationFileTimeUtcTicks = [long]$Snapshot.CreationFileTimeUtcTicks
+    if ($processId -le 0 -or $processId -eq $PID -or
+        $expectedCreationFileTimeUtcTicks -le 0 -or
+        -not (Test-AntiCodexPathInsideRoot -Path $scriptPath -Root $AllowedScriptRoot) -or
+        (Test-AntiCodexNativeCodexPath -Path $expectedExecutablePath)) {
+        throw "Refusing to stop an unverified fixed-route process PID $processId."
+    }
+    $processHandle = $null
+    try {
+        try {
+            $processHandle = [AntiCodex.Native.VerifiedProcessHandle]::Open($processId)
+        } catch [ComponentModel.Win32Exception] {
+            if ($_.Exception.NativeErrorCode -in @(87, 1168)) { return $true }
+            throw
+        }
+        $liveExecutablePath = [IO.Path]::GetFullPath([string]$processHandle.ExecutablePath)
+        if ([long]$processHandle.CreationFileTimeUtcTicks -ne $expectedCreationFileTimeUtcTicks -or
+            -not $liveExecutablePath.Equals($expectedExecutablePath, [StringComparison]::OrdinalIgnoreCase) -or
+            (Test-AntiCodexNativeCodexPath -Path $liveExecutablePath)) {
+            throw "Refusing to stop PID $processId because its handle-bound creation time or executable path changed."
+        }
+        if ($processHandle.HasExited) { return $true }
+        $liveRow = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $liveRow -or
+            -not (Test-AntiCodexCommandLineHasExactPath -CommandLine ([string]$liveRow.CommandLine) -Path $scriptPath)) {
+            throw "Refusing to stop PID $processId because its script identity could not be proven while its handle was held."
+        }
+        $processHandle.TerminateAndWait(3000)
+        return $true
+    } catch {
+        throw "Verified fixed-route PID $processId could not be stopped through its bound handle; no descendants were targeted. $($_.Exception.Message)"
+    } finally {
+        if ($processHandle) { $processHandle.Dispose() }
+    }
 }
 
 function Get-RunningAntiCodexMain {
@@ -71,11 +376,14 @@ function Get-RunningFixedRouteSupervisor {
         $status = Get-Content -LiteralPath $statusPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $processId = [int]$status.pid
         if ($processId -le 0) { return $null }
-        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-        if (-not $process -or [string]$process.ProcessName -ine "node") { return $null }
+        $snapshot = Get-AntiCodexScriptProcessSnapshot `
+            -ProcessId $processId `
+            -ExpectedScriptPath $SupervisorScript `
+            -AllowedScriptRoot $PSScriptRoot
+        if (-not $snapshot) { return $null }
         $health = Get-AntiCodexFixedRouteHealth
         if (-not $health -or [int]$health.pid -ne $processId) { return $null }
-        return $process
+        return $snapshot
     } catch {
         return $null
     }
@@ -132,7 +440,7 @@ function Stop-AntiCodexHeadlessFixedRoute {
         [Parameter(Mandatory = $true)][string]$StateRoot,
         $Health
     )
-    $processId = [int]$SupervisorProcess.Id
+    $processId = [int]$SupervisorProcess.ProcessId
     if (-not $Health) { $Health = Get-AntiCodexFixedRouteHealth }
     if (-not $Health -or [int]$Health.pid -ne $processId -or $Health.headless -ne $true) {
         return $false
@@ -170,6 +478,27 @@ function Stop-AntiCodexHeadlessFixedRoute {
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $deadline)
     return $false
+}
+
+function Invoke-AntiCodexFixedRouteShutdown {
+    param([Parameter(Mandatory = $true)][string]$StateRoot)
+    $authPath = Join-Path $StateRoot "codex-home-deepseek-app\auth.json"
+    if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) { return $false }
+    try {
+        $controlToken = [string](Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json).OPENAI_API_KEY
+        if ([string]::IsNullOrWhiteSpace($controlToken)) { return $false }
+        $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:$FIXED_ROUTE_HEALTH_PORT/anticodex/fixed-route/shutdown")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = 3000
+        $request.ReadWriteTimeout = 3000
+        $request.ContentLength = 0
+        $request.Headers[[Net.HttpRequestHeader]::Authorization] = "Bearer $controlToken"
+        $response = $request.GetResponse()
+        try { return [int]$response.StatusCode -ge 200 -and [int]$response.StatusCode -lt 300 } finally { $response.Dispose() }
+    } catch {
+        return $false
+    }
 }
 
 function Ensure-AntigravityDesktop {
@@ -364,6 +693,11 @@ public static class AntiCodexLaunchBoundary
     return $false
 }
 
+$hostSyncBarrier = $null
+try {
+if (-not $SkipSyncBarrier) {
+    $hostSyncBarrier = Enter-AntiCodexHostSyncBarrier
+}
 Invoke-InstalledAntiCodexLauncherIfAvailable
 
 $installRoot = Resolve-AntiCodexInstallRoot
@@ -611,6 +945,10 @@ $supervisorProcess = Start-Process -FilePath $nodeExecutable `
     -RedirectStandardError $launcherErrLog `
     -WindowStyle Hidden `
     -PassThru
+$supervisorSnapshot = Get-AntiCodexScriptProcessSnapshot `
+    -ProcessId $supervisorProcess.Id `
+    -ExpectedScriptPath $supervisorScript `
+    -AllowedScriptRoot $PSScriptRoot
 
 $ready = Wait-AntiCodexFixedRouteReady `
     -SupervisorProcess $supervisorProcess `
@@ -620,15 +958,33 @@ $ready = Wait-AntiCodexFixedRouteReady `
     -TimeoutSeconds 120
 
 if (-not $ready) {
-    if (-not $supervisorProcess.HasExited) {
-        & taskkill.exe /PID $supervisorProcess.Id /T /F 2>$null | Out-Null
+    $cleanupError = ""
+    $null = Invoke-AntiCodexFixedRouteShutdown -StateRoot $stateRoot
+    $gracefulDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ((Get-CimInstance Win32_Process -Filter "ProcessId = $($supervisorProcess.Id)" -ErrorAction SilentlyContinue) -and
+        [DateTime]::UtcNow -lt $gracefulDeadline) {
+        Start-Sleep -Milliseconds 100
+    }
+    if (Get-CimInstance Win32_Process -Filter "ProcessId = $($supervisorProcess.Id)" -ErrorAction SilentlyContinue) {
+        if (-not $supervisorSnapshot) {
+            $cleanupError = "Refused to terminate an unverified supervisor PID $($supervisorProcess.Id)."
+        } else {
+            try {
+                Stop-AntiCodexVerifiedScriptProcess `
+                    -Snapshot $supervisorSnapshot `
+                    -ExpectedScriptPath $supervisorScript `
+                    -AllowedScriptRoot $PSScriptRoot | Out-Null
+            } catch {
+                $cleanupError = $_.Exception.Message
+            }
+        }
     }
     $errorTail = if (Test-Path -LiteralPath $launcherErrLog) {
         (Get-Content -LiteralPath $launcherErrLog -Tail 20 -ErrorAction SilentlyContinue) -join " "
     } else {
         ""
     }
-    Write-Error "Anti-Codex fixed route did not become ready. $errorTail"
+    Write-Error "Anti-Codex fixed route did not become ready. $errorTail $cleanupError"
     exit 1
 }
 
@@ -639,3 +995,6 @@ Write-Host "  Provider: $($selection.provider)"
 Write-Host "  Model:    $($selection.model)"
 Write-Host "  Monitor:  $($supervisorProcess.Id)"
 exit 0
+} finally {
+    Exit-AntiCodexHostSyncBarrier -Barrier $hostSyncBarrier
+}

@@ -13,6 +13,10 @@ function readSyncScript() {
   return readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
 }
 
+function readRuntimeScript(name) {
+  return readFileSync(resolve(root, "scripts", name), "utf8");
+}
+
 function extractFunction(text, name) {
   const marker = `function ${name}`;
   const start = text.indexOf(marker);
@@ -80,6 +84,16 @@ test("post-sync acceptance reads model availability from the models endpoint", (
   assert.match(acceptance, /Invoke-RestMethod[^\r\n]*\$baseUrl\/models/);
   assert.match(acceptance, /@\(\$models\.data\)\.Count/);
   assert.doesNotMatch(acceptance, /\$health\.modelCount/);
+});
+
+test("maintenance process ownership uses exact directory containment, not path prefixes", () => {
+  for (const name of ["sync-anticodex.ps1", "rollback-anticodex.ps1", "refresh-anticodex-models.ps1"]) {
+    const source = readRuntimeScript(name);
+    const containment = extractFunction(source, "Test-AntiCodexPathInsideRoot");
+    assert.match(containment, /TrimEnd\(["']\\["']\)\s*\+\s*["']\\["']/);
+    assert.match(containment, /StartsWith\(\$rootPrefix,\s*\[StringComparison\]::OrdinalIgnoreCase\)/);
+    assert.doesNotMatch(source, /GetFullPath\(\[string\]\$_\.ExecutablePath\)\)\.StartsWith\(\s*\$active(?:Host|Component)/);
+  }
 });
 
 test("rollback validates both hosts before swapping and again after activation", () => {

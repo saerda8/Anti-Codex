@@ -1,0 +1,1072 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+
+const builderPath = fileURLToPath(new URL("../../scripts/build-anticodex-gate5-evidence.mjs", import.meta.url));
+const aggregatePath = fileURLToPath(new URL("../../scripts/test-anticodex-gate5-visible-integration.mjs", import.meta.url));
+const uiChatPath = fileURLToPath(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url));
+const managerActions = [
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+];
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function writeJson(path, value, { signed = false } = {}) {
+  const body = `${JSON.stringify(value, null, 2)}\n`;
+  writeFileSync(path, body, "utf8");
+  if (signed) writeFileSync(`${path}.sha256`, `sha256:${sha256(body)}`, "ascii");
+  return sha256(body);
+}
+
+function buildRawEvidence(root) {
+  const taskId = "019f9000-1111-7222-8333-444444444444";
+  const prompt = "只提交一次完整自主总目标。";
+  const taskStartedAt = new Date(Date.now() - 60_000).toISOString();
+  const checkedAt = new Date().toISOString();
+  const projectRoot = join(root, "project");
+  const promptPath = join(root, "total-goal.md");
+  const rolloutPath = join(root, "rollout.jsonl");
+  writeFileSync(promptPath, prompt, "utf8");
+  mkdirSync(projectRoot, { recursive: true });
+
+  const artifactPaths = ["master.mp4", "manifest.json", "README.md"].map((name, index) => {
+    const path = join(projectRoot, name);
+    writeFileSync(path, `artifact-${index + 1}`, "utf8");
+    return path;
+  });
+  writeFileSync(rolloutPath, [
+    JSON.stringify({ timestamp: taskStartedAt, type: "session_meta", payload: { id: taskId, cwd: projectRoot } }),
+    JSON.stringify({ timestamp: taskStartedAt, type: "event_msg", payload: { type: "task_started", turn_id: "turn-1" } }),
+    JSON.stringify({ timestamp: taskStartedAt, type: "turn_context", payload: { turn_id: "turn-1", cwd: projectRoot, model: "gemini-3.1-pro-low" } }),
+    JSON.stringify({
+      timestamp: taskStartedAt,
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: prompt }],
+        internal_chat_message_metadata_passthrough: { turn_id: "turn-1" },
+      },
+    }),
+    JSON.stringify({ timestamp: taskStartedAt, type: "event_msg", payload: { type: "user_message", message: prompt } }),
+    JSON.stringify({
+      timestamp: checkedAt,
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        output: JSON.stringify({ created: artifactPaths }),
+      },
+    }),
+  ].join("\n") + "\n", "utf8");
+
+  const target = { id: "app-page-1", title: "Anti-Codex", url: "app://codex/index.html" };
+  const cdpPort = 18318;
+  const runtimeProcessIdentity = {
+    supervisorPid: 101,
+    codexPlusPlusPid: 102,
+    antiCodexMainPid: 103,
+    originalCodexPid: 201,
+    originalCodexAlive: true,
+  };
+  const runtimeSessionIdentity = {
+    cdpPort,
+    targetId: target.id,
+    targetUrl: target.url,
+  };
+  const taskReceipt = {
+    ok: true,
+    checkedAt,
+    taskStartedAt,
+    reportName: "ui-new-autonomous-long-task",
+    coverageKind: "desktop-ui-single-submit-handoff",
+    singleSubmitHandoff: true,
+    taskMode: "exact-marker",
+    requestedRealTraffic: true,
+    usedRealTraffic: true,
+    promptFile: promptPath,
+    promptSha256: sha256(prompt),
+    projectRoot,
+    requiredModel: "gemini-3.1-pro-low",
+    maximumSendClicks: 1,
+    sendClickCount: 1,
+    sendDispatched: true,
+    waitedForTaskCompletion: false,
+    harnessInterruptedTask: false,
+    harnessSubmittedAdditionalTurns: false,
+    cdpPort,
+    target,
+    processIdentity: runtimeProcessIdentity,
+    startupEvidence: {
+      ok: true,
+      rollout: {
+        ok: true,
+        newTask: true,
+        sessionId: taskId,
+        taskId,
+        turnId: "turn-1",
+        file: rolloutPath,
+        cwd: projectRoot,
+        cwdMatched: true,
+        model: "gemini-3.1-pro-low",
+        modelMatched: true,
+        promptSeen: true,
+      },
+      native: {
+        ok: true,
+        taskId,
+        reason: "task_bound_native_request",
+        expectedRequestObserved: true,
+        activity: {
+          expectedThreadIds: [taskId],
+          unexpectedRequestThreadIds: [],
+          unexpectedExecutionThreadIds: [],
+          titleThreadsUsedTools: false,
+          taskSuggestionThreadsUsedTools: false,
+        },
+      },
+      upstream: {
+        ok: true,
+        request: {
+          relayId: "anticodex-antigravity",
+          endpoint: "/v1/chat/completions",
+          wireApi: "chat-completions",
+          attempt: 1,
+          candidateCount: 1,
+          requestTools: { count: 17 },
+          upstreamTools: { count: 17 },
+        },
+        response: {
+          relayId: "anticodex-antigravity",
+          endpoint: "/v1/chat/completions",
+          statusCode: 200,
+          attempt: 1,
+          candidateCount: 1,
+        },
+      },
+    },
+  };
+
+  const actions = managerActions;
+  const managerMatrix = {
+    ok: true,
+    checkedAt,
+    reportName: "manager-ui-only-button-matrix",
+    processIdentity: runtimeProcessIdentity,
+    sessionIdentity: runtimeSessionIdentity,
+    managerButton: {
+      ok: true,
+      payload: {
+        ok: true,
+        mode: "ui-only-matrix",
+        target,
+        processIdentity: runtimeProcessIdentity,
+        sessionIdentity: runtimeSessionIdentity,
+        actions,
+        zeroSideEffects: true,
+        usedRealTraffic: false,
+        results: Object.fromEntries(actions.map((action) => [action, {
+          ok: true,
+          action,
+          lastUiOnly: true,
+          actionActualMouseOk: true,
+          managerOpenedNewPage: false,
+        }])),
+      },
+    },
+  };
+  const managerProfile = {
+    ok: true,
+    checkedAt,
+    target,
+    processIdentity: runtimeProcessIdentity,
+    sessionIdentity: runtimeSessionIdentity,
+    profileEntry: {
+      ok: true,
+      phase: "profile-entry-actual-mouse",
+      profileEntryText: "管理",
+      forbiddenEnglishVisible: false,
+      actualMouseOpened: true,
+    },
+  };
+  const managerClose = {
+    ok: true,
+    checkedAt,
+    target,
+    processIdentity: runtimeProcessIdentity,
+    sessionIdentity: runtimeSessionIdentity,
+    finalOverlayClosed: true,
+    closeActualMouse: {
+      ok: true,
+      phase: "actual-click",
+      finalOverlayClosed: true,
+      probes: ["upper-center", "center", "lower-center"].map((name) => ({
+        name,
+        ok: true,
+        closed: true,
+        hasTextNode: false,
+      })),
+    },
+  };
+  const managerProtocol = {
+    ok: true,
+    checkedAt,
+    target,
+    processIdentity: runtimeProcessIdentity,
+    sessionIdentity: runtimeSessionIdentity,
+    upstreamConfig: {
+      ok: true,
+      usedRealTraffic: false,
+      profileUnchanged: true,
+      closeActualMouse: true,
+      closeHasTextNode: false,
+      pageTargetCountBefore: 1,
+      pageTargetCountAfter: 1,
+      protocolInteraction: {
+        ok: true,
+        selectedAlternate: true,
+        restoredOriginal: true,
+        before: { value: "chatCompletions" },
+        alternate: { value: "responses" },
+        restored: { value: "chatCompletions" },
+      },
+    },
+  };
+
+  const processIdentity = {
+    supervisorBefore: 101,
+    supervisorAfter: 101,
+    codexPlusPlusBefore: 102,
+    codexPlusPlusAfter: 102,
+    antiCodexMainBefore: 103,
+    antiCodexMainAfter: 103,
+    expectedOriginalCodexPid: 201,
+    originalCodexAlive: true,
+  };
+  const modelSwitches = [
+    ["gemini", "gemini-3.1-pro-low"],
+    ["claude", "claude-sonnet-4-6"],
+    ["third-party", "third-party/gpt-5.6-sol"],
+  ].map(([provider, model]) => ({
+    ok: true,
+    checkedAt,
+    frontendModelProbeOnly: true,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    coverageKind: "desktop-ui-physical-model-switch-no-traffic",
+    taskId,
+    expectedTaskId: taskId,
+    sameChatEvidence: { actualMouseClick: true },
+    selection: { ok: true, actualMouseClick: true },
+    selectedModel: { model, label: model },
+    provider,
+    requestEvidence: {
+      beforeCount: 7,
+      afterCount: 7,
+      beforeLatestRequestRowId: 12,
+      afterLatestRequestRowId: 12,
+    },
+    processIdentity,
+    target,
+  }));
+
+  const shortcutRounds = [1, 2, 3].map((probeId) => ({
+    ok: true,
+    checkedAt,
+    probeId,
+    schema: "anticodex-shortcut-restore-acceptance-v1",
+    activationMode: "taskbar-button",
+    actualMouse: true,
+    taskbarActivationObserved: true,
+    taskbarActivationWaitMs: 120,
+    taskbarClickSentAtMs: 25,
+    frameCaptureOrigin: "taskbar-sendinput",
+    visibleWindowCriterion: "presentable-exact-executable-v1",
+    taskbarElement: {
+      name: "Anti-Codex",
+      accessibleName: "Anti-Codex - 1 个运行窗口",
+      provider: "MSAA",
+      role: 43,
+      state: 0x40100000,
+      childId: 16,
+      taskListWindowHandle: 5001,
+      taskbarClassName: "MSTaskListWClass",
+      candidateCount: 1,
+      isEnabled: true,
+      isOffscreen: false,
+      hitTestMatched: true,
+    },
+    taskbarRectangle: { left: 100, top: 1000, right: 148, bottom: 1048, width: 48, height: 48 },
+    taskbarClickPoint: { x: 124, y: 1024 },
+    windowHandleBefore: 7001,
+    windowHandleAfter: 7001,
+    samePid: true,
+    sameHwnd: true,
+    sameExecutable: true,
+    sameCdpTarget: true,
+    firstFrame: { elapsedMs: 40, mean: 180, standardDeviation: 25, darkRatio: 0.5, sampleCount: 640 },
+    firstFrameDelayMs: 15,
+    maxSampleIntervalMs: 45,
+    earlyFrameCount: 12,
+    frameSamplingThresholds: {
+      maximumFirstFrameDelayMs: 100,
+      maximumFrameSampleIntervalMs: 125,
+      minimumEarlyFrameCount: 8,
+      earlyWindowMs: 750,
+    },
+    failures: [],
+    expectedMainPid: 103,
+    expectedOriginalCodexPid: 201,
+    minimizedObserved: true,
+    reminimizedAfterRestore: false,
+    restoredAtMs: 900,
+    maxRootProcessCount: 1,
+    maxVisibleWindowCount: 1,
+    maxVisibleTopLevelWindowCount: 1,
+    maxAppPageCount: 1,
+    appPagesAfter: 1,
+    blankFrameCount: 0,
+    frameCount: 3,
+    originalCodexAlive: true,
+    after: { rootProcessIds: [103], visibleWindowProcessIds: [103], visibleTopLevelWindowHandles: [7001] },
+    seenVisibleTopLevelWindowHandles: [7001],
+    observedTopLevelWindows: [{
+      handle: 7001,
+      processId: 103,
+      className: "Chrome_WidgetWin_1",
+      title: "Anti-Codex",
+      auxiliaryWindow: false,
+      presentable: true,
+      productWindow: true,
+    }, {
+      handle: 7002,
+      processId: 103,
+      className: "SoPY_Status",
+      title: "",
+      auxiliaryWindow: true,
+      presentable: false,
+      productWindow: false,
+    }],
+    processIdentity: runtimeProcessIdentity,
+    sessionIdentity: runtimeSessionIdentity,
+  }));
+
+  const paths = {
+    taskReceipt: join(root, "task-receipt.json"),
+    managerMatrix: join(root, "manager-matrix.json"),
+    managerProfile: join(root, "manager-profile.json"),
+    managerClose: join(root, "manager-close.json"),
+    managerProtocol: join(root, "manager-protocol.json"),
+    modelSwitches: modelSwitches.map((_, index) => join(root, `model-switch-${index + 1}.json`)),
+    shortcutRounds: shortcutRounds.map((_, index) => join(root, `shortcut-round-${index + 1}.json`)),
+    syncReadiness: join(root, "sync-readiness.json"),
+    releaseBinding: join(root, "release-binding.json"),
+  };
+
+  writeJson(paths.taskReceipt, taskReceipt, { signed: true });
+  writeJson(paths.managerMatrix, managerMatrix, { signed: true });
+  writeJson(paths.managerProfile, managerProfile, { signed: true });
+  writeJson(paths.managerClose, managerClose, { signed: true });
+  writeJson(paths.managerProtocol, managerProtocol, { signed: true });
+  modelSwitches.forEach((value, index) => writeJson(paths.modelSwitches[index], value, { signed: true }));
+  shortcutRounds.forEach((value, index) => writeJson(paths.shortcutRounds[index], value, { signed: true }));
+
+  const syncReadiness = {
+    ok: true,
+    checkedAt,
+    reportName: "sync-readiness",
+    noTraffic: true,
+    usedRealTraffic: false,
+    activeHost: {
+      trayIconExists: true,
+      trayIconPalette: { ok: true },
+    },
+  };
+  const syncReadinessSha256 = writeJson(paths.syncReadiness, syncReadiness, { signed: true });
+  const releaseBinding = {
+    schema: "anticodex-release-binding-v1",
+    valid: true,
+    officialShellVersion: "26.715.10079.0",
+    activeShellVersion: "26.715.10079.0",
+    codexPlusPlusVersion: "1.2.39",
+    codexPlusPlusPatchCommit: "a".repeat(40),
+    codexPlusPlusBinarySha256: "b".repeat(64),
+    codexPlusPlusPatchTreeSha256: "c".repeat(64),
+    codexPlusPlusPatchCount: 9,
+    syncReadinessSha256,
+  };
+  writeJson(paths.releaseBinding, {
+    schema: "anticodex-release-gates-v1",
+    generatedAt: new Date().toISOString(),
+    releaseBinding,
+  }, { signed: true });
+
+  return {
+    taskId,
+    artifactPaths,
+    rolloutPath,
+    projectRoot,
+    prompt,
+    paths,
+    modelSwitches,
+    shortcutRounds,
+  };
+}
+
+function appendContinuationTurn(state, {
+  turnId,
+  message = "继续",
+  previousTurnId,
+  previousError = "unexpected status 503 Service Unavailable",
+  timestamp = new Date().toISOString(),
+} = {}) {
+  const records = readFileSync(state.rolloutPath, "utf8").trimEnd().split(/\r?\n/);
+  records.push(
+    JSON.stringify({
+      timestamp,
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        turn_id: previousTurnId,
+        error: previousError,
+      },
+    }),
+    JSON.stringify({ timestamp, type: "event_msg", payload: { type: "task_started", turn_id: turnId } }),
+    JSON.stringify({
+      timestamp,
+      type: "turn_context",
+      payload: { turn_id: turnId, cwd: state.projectRoot, model: "gemini-3.1-pro-low" },
+    }),
+    JSON.stringify({
+      timestamp,
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: message }],
+        internal_chat_message_metadata_passthrough: { turn_id: turnId },
+      },
+    }),
+    JSON.stringify({ timestamp, type: "event_msg", payload: { type: "user_message", message } }),
+  );
+  writeFileSync(state.rolloutPath, `${records.join("\n")}\n`, "utf8");
+}
+
+function appendAbortedContinuationTurn(state, {
+  turnId,
+  previousTurnId,
+  timestamp = new Date().toISOString(),
+} = {}) {
+  const records = readFileSync(state.rolloutPath, "utf8").trimEnd().split(/\r?\n/);
+  const abortedText = [
+    "<turn_aborted>",
+    "The user interrupted the previous turn on purpose. Any running unified exec processes may still be running in the background. If any tools/commands were aborted, they may have partially executed.",
+    "</turn_aborted>",
+  ].join("\n");
+  records.push(
+    JSON.stringify({
+      timestamp,
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: abortedText }],
+        internal_chat_message_metadata_passthrough: { turn_id: previousTurnId },
+      },
+    }),
+    JSON.stringify({ timestamp, type: "event_msg", payload: { type: "task_started", turn_id: turnId } }),
+    JSON.stringify({
+      timestamp,
+      type: "turn_context",
+      payload: { turn_id: turnId, cwd: state.projectRoot, model: "gemini-3.1-pro-low" },
+    }),
+    JSON.stringify({
+      timestamp,
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "继续" }],
+        internal_chat_message_metadata_passthrough: { turn_id: turnId },
+      },
+    }),
+    JSON.stringify({ timestamp, type: "event_msg", payload: { type: "user_message", message: "继续" } }),
+  );
+  writeFileSync(state.rolloutPath, `${records.join("\n")}\n`, "utf8");
+}
+
+function runBuilder(root, state, extraArgs = []) {
+  const outputRoot = join(root, "normalized");
+  const args = [
+    builderPath,
+    "--task-receipt", state.paths.taskReceipt,
+    ...state.artifactPaths.flatMap((path) => ["--task-artifact", path]),
+    "--manager-matrix", state.paths.managerMatrix,
+    "--manager-profile", state.paths.managerProfile,
+    "--manager-close", state.paths.managerClose,
+    "--manager-protocol", state.paths.managerProtocol,
+    ...state.paths.modelSwitches.flatMap((path) => ["--model-switch", path]),
+    ...state.paths.shortcutRounds.flatMap((path) => ["--shortcut-restore", path]),
+    "--release-binding-evidence", state.paths.releaseBinding,
+    "--sync-readiness-evidence", state.paths.syncReadiness,
+    "--output-root", outputRoot,
+    "--compact",
+    ...extraArgs,
+  ];
+  const child = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
+  const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
+  return { child, payload, outputRoot };
+}
+
+test("builder converts raw real-probe shapes into five signed inputs accepted by Gate 5", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-"));
+  try {
+    const state = buildRawEvidence(root);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
+    assert.equal(result.payload.ok, true);
+    assert.equal(result.payload.requestedRealTraffic, false);
+    assert.equal(result.payload.usedRealTraffic, false);
+    assert.equal(result.payload.taskId, state.taskId);
+    assert.deepEqual(Object.keys(result.payload.outputs).sort(), [
+      "managerEvidence",
+      "modelSwitchEvidence",
+      "releaseBindingEvidence",
+      "shortcutRestoreEvidence",
+      "taskManifest",
+    ]);
+    for (const output of Object.values(result.payload.outputs)) {
+      const body = readFileSync(output.path);
+      assert.equal(readFileSync(`${output.path}.sha256`, "ascii").trim(), `sha256:${sha256(body)}`);
+    }
+
+    const reportRoot = join(root, "aggregate");
+    const auditPath = join(root, "gate5.json");
+    const aggregate = spawnSync(process.execPath, [
+      aggregatePath,
+      "--task-manifest", result.payload.outputs.taskManifest.path,
+      "--manager-evidence", result.payload.outputs.managerEvidence.path,
+      "--model-switch-evidence", result.payload.outputs.modelSwitchEvidence.path,
+      "--shortcut-restore-evidence", result.payload.outputs.shortcutRestoreEvidence.path,
+      "--release-binding-evidence", result.payload.outputs.releaseBindingEvidence.path,
+      "--report-root", reportRoot,
+      "--audit-out", auditPath,
+      "--compact",
+    ], { encoding: "utf8", windowsHide: true });
+    assert.equal(aggregate.status, 0, aggregate.stderr || aggregate.stdout);
+    assert.equal(JSON.parse(aggregate.stdout).ok, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder accepts one total goal followed by exact continuation turns after explicit native errors", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-continuations-"));
+  try {
+    const state = buildRawEvidence(root);
+    appendContinuationTurn(state, {
+      turnId: "turn-2",
+      previousTurnId: "turn-1",
+      previousError: "exceeded retry limit, last status: 429 Too Many Requests",
+    });
+    appendContinuationTurn(state, {
+      turnId: "turn-3",
+      previousTurnId: "turn-2",
+      previousError: "unexpected status 503 Service Unavailable",
+    });
+
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
+    const manifest = JSON.parse(readFileSync(result.payload.outputs.taskManifest.path, "utf8"));
+    assert.equal(manifest.promptSubmissionCount, 1);
+    assert.equal(manifest.totalGoalPromptCount, 1);
+    assert.equal(manifest.continuationPromptCount, 2);
+    assert.equal(manifest.hostMessageCount, 3);
+    assert.equal(manifest.hostIntermediatePromptCount, 0);
+    assert.equal(manifest.continuations.length, 2);
+    assert.deepEqual(manifest.continuations.map((entry) => entry.turnId), ["turn-2", "turn-3"]);
+    assert.deepEqual(manifest.continuations.map((entry) => entry.interruptionKind), [
+      "task_complete.error",
+      "task_complete.error",
+    ]);
+    assert.match(manifest.rollout.sha256, /^[a-f0-9]{64}$/);
+    assert.equal(manifest.rollout.bytes, readFileSync(state.rolloutPath).length);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder accepts exact continuation after a native turn_aborted record without counting it as a host prompt", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-aborted-continuation-"));
+  try {
+    const state = buildRawEvidence(root);
+    appendAbortedContinuationTurn(state, { turnId: "turn-2", previousTurnId: "turn-1" });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
+    const manifest = JSON.parse(readFileSync(result.payload.outputs.taskManifest.path, "utf8"));
+    assert.equal(manifest.hostMessageCount, 2);
+    assert.equal(manifest.continuationPromptCount, 1);
+    assert.equal(manifest.continuations[0].interruptionKind, "turn_aborted");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder fails closed on malformed rollout JSON instead of silently dropping a record", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-rollout-json-"));
+  try {
+    const state = buildRawEvidence(root);
+    writeFileSync(state.rolloutPath, `${readFileSync(state.rolloutPath, "utf8")}not-json\n`, "utf8");
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /rollout.*invalid JSON|invalid JSON.*rollout/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder fails closed when event and response user-message ledgers disagree", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-rollout-ledgers-"));
+  try {
+    const state = buildRawEvidence(root);
+    const records = readFileSync(state.rolloutPath, "utf8").trimEnd().split(/\r?\n/);
+    records.push(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "执行下一个微阶段" }],
+        internal_chat_message_metadata_passthrough: { turn_id: "turn-1" },
+      },
+    }));
+    writeFileSync(state.rolloutPath, `${records.join("\n")}\n`, "utf8");
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /user-message ledgers disagree|rollout.*ledger/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects exact continuation text without an earlier task_complete error", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-continuation-order-"));
+  try {
+    const state = buildRawEvidence(root);
+    appendContinuationTurn(state, {
+      turnId: "turn-2",
+      previousTurnId: "turn-1",
+      previousError: "",
+    });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /continuation.*task_complete\.error|explicit.*interruption/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects any host message other than the one total goal or exact continuation text", () => {
+  for (const message of ["继续\n", " 继续", "继续一下", "continue", "执行 Stage 4P"]) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-continuation-text-"));
+    try {
+      const state = buildRawEvidence(root);
+      appendContinuationTurn(state, {
+        turnId: "turn-2",
+        previousTurnId: "turn-1",
+        message,
+      });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${JSON.stringify(message)}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /total-goal|exact continuation|host intermediate/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder fails closed when one raw probe is stale and writes no normalized inputs", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-stale-"));
+  try {
+    const state = buildRawEvidence(root);
+    const stale = JSON.parse(readFileSync(state.paths.shortcutRounds[1], "utf8"));
+    stale.checkedAt = new Date(Date.now() - 72 * 3_600_000).toISOString();
+    writeJson(state.paths.shortcutRounds[1], stale, { signed: true });
+    const result = runBuilder(root, state, ["--max-source-age-hours", "48"]);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /stale/i);
+    assert.equal(existsSync(result.outputRoot), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder fails closed when a model switch belongs to another task", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-task-"));
+  try {
+    const state = buildRawEvidence(root);
+    const mismatched = JSON.parse(readFileSync(state.paths.modelSwitches[1], "utf8"));
+    mismatched.taskId = "019f9000-1111-7222-8333-555555555555";
+    writeJson(state.paths.modelSwitches[1], mismatched, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /taskId/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder fails closed when the native request is not exclusively bound to the rollout task", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-native-"));
+  try {
+    const state = buildRawEvidence(root);
+    const receipt = JSON.parse(readFileSync(state.paths.taskReceipt, "utf8"));
+    receipt.startupEvidence.native.taskId = "019f9000-1111-7222-8333-555555555555";
+    receipt.startupEvidence.native.activity.expectedThreadIds = [receipt.startupEvidence.native.taskId];
+    writeJson(state.paths.taskReceipt, receipt, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /native request|taskId/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder requires every real Manager probe instead of inventing missing evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-"));
+  try {
+    const state = buildRawEvidence(root);
+    rmSync(state.paths.managerClose);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /manager-close|missing/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects duplicate artifact paths instead of counting one artifact three times", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-artifact-unique-"));
+  try {
+    const state = buildRawEvidence(root);
+    state.artifactPaths = Array(3).fill(state.artifactPaths[0]);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /artifact.*unique|duplicate artifact/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects one shortcut probe repeated as three restore rounds", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-shortcut-unique-"));
+  try {
+    const state = buildRawEvidence(root);
+    state.paths.shortcutRounds = Array(3).fill(state.paths.shortcutRounds[0]);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /shortcut.*unique|duplicate shortcut/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder accepts only signed actual-mouse taskbar-button restore rounds", () => {
+  const mutations = [
+    ["desktop shortcut", (round) => { round.activationMode = "desktop-shortcut"; }],
+    ["synthetic activation", (round) => { round.actualMouse = false; }],
+    ["activation never foregrounded", (round) => { round.taskbarActivationObserved = false; }],
+    ["missing taskbar element", (round) => { delete round.taskbarElement; }],
+    ["wrong accessibility provider", (round) => { round.taskbarElement.provider = "UIAutomation"; }],
+    ["wrong accessible name", (round) => { round.taskbarElement.accessibleName = "ChatGPT - 1 个运行窗口"; }],
+    ["missing hit-test confirmation", (round) => { round.taskbarElement.hitTestMatched = false; }],
+    ["missing taskbar rectangle", (round) => { delete round.taskbarRectangle; }],
+    ["missing click point", (round) => { delete round.taskbarClickPoint; }],
+    ["different PID", (round) => { round.samePid = false; }],
+    ["different HWND", (round) => { round.sameHwnd = false; }],
+    ["different executable", (round) => { round.sameExecutable = false; }],
+    ["different CDP target", (round) => { round.sameCdpTarget = false; }],
+    ["missing first frame", (round) => { delete round.firstFrame; }],
+    ["late capture origin", (round) => { round.frameCaptureOrigin = "first-presented-window"; }],
+    ["late first frame", (round) => { round.firstFrameDelayMs = 101; }],
+    ["forged first-frame delay", (round) => { round.firstFrameDelayMs = 14; }],
+    ["missing sample interval", (round) => { delete round.maxSampleIntervalMs; }],
+    ["slow frame cadence", (round) => { round.maxSampleIntervalMs = 126; }],
+    ["re-minimized after restore", (round) => { round.reminimizedAfterRestore = true; }],
+    ["insufficient early frames", (round) => { round.earlyFrameCount = 7; }],
+    ["second top-level window", (round) => {
+      round.maxVisibleTopLevelWindowCount = 2;
+      round.seenVisibleTopLevelWindowHandles = [7001, 7002];
+    }],
+    ["second presentable non-Chrome window", (round) => {
+      round.observedTopLevelWindows[1].auxiliaryWindow = false;
+      round.observedTopLevelWindows[1].presentable = true;
+    }],
+    ["insufficient frame samples", (round) => {
+      round.frameCount = 1;
+      round.maxSampleIntervalMs = 0;
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-taskbar-"));
+    try {
+      const state = buildRawEvidence(root);
+      const shortcut = JSON.parse(readFileSync(state.paths.shortcutRounds[1], "utf8"));
+      mutate(shortcut);
+      writeJson(state.paths.shortcutRounds[1], shortcut, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /shortcut.*taskbar|actual mouse|HWND|executable|frame|sample/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder requires exactly three signed taskbar-button restore rounds", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-taskbar-count-"));
+  try {
+    const state = buildRawEvidence(root);
+    const fourthPath = join(root, "shortcut-round-4.json");
+    const fourth = JSON.parse(readFileSync(state.paths.shortcutRounds[2], "utf8"));
+    fourth.probeId = 4;
+    fourth.taskbarElement.automationId = "Anti-Codex-4";
+    writeJson(fourthPath, fourth, { signed: true });
+    state.paths.shortcutRounds.push(fourthPath);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /exactly three.*taskbar|taskbar.*exactly three/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects artifacts older than the native task start", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-artifact-time-"));
+  try {
+    const state = buildRawEvidence(root);
+    const old = new Date(Date.now() - 10 * 60_000);
+    utimesSync(state.artifactPaths[0], old, old);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /artifact.*task start|predates/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects artifacts absent from native rollout tool evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-artifact-rollout-"));
+  try {
+    const state = buildRawEvidence(root);
+    const records = readFileSync(state.paths.taskReceipt, "utf8");
+    const receipt = JSON.parse(records);
+    const rolloutPath = receipt.startupEvidence.rollout.file;
+    const rollout = readFileSync(rolloutPath, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((record) => record?.payload?.type !== "function_call_output");
+    writeFileSync(rolloutPath, `${rollout.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /artifact.*tool evidence|rollout/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects signed input without a content-embedded timestamp even when mtime is fresh", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-content-time-"));
+  try {
+    const state = buildRawEvidence(root);
+    const receipt = JSON.parse(readFileSync(state.paths.taskReceipt, "utf8"));
+    delete receipt.checkedAt;
+    writeJson(state.paths.taskReceipt, receipt, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /embedded timestamp|content timestamp/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder requires signatures for Manager and shortcut raw evidence", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-all-signed-"));
+  try {
+    const state = buildRawEvidence(root);
+    rmSync(`${state.paths.managerClose}.sha256`);
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /signed source sidecar/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder requires the exact 20 unique Manager actions", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-actions-"));
+  try {
+    const state = buildRawEvidence(root);
+    const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+    const first = matrix.managerButton.payload.actions[0];
+    matrix.managerButton.payload.actions = Array(20).fill(first);
+    matrix.managerButton.payload.results = {
+      [first]: matrix.managerButton.payload.results[first],
+    };
+    writeJson(state.paths.managerMatrix, matrix, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /20 unique|action coverage/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder requires Manager close evidence to identify the actual-click phase", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-close-phase-"));
+  try {
+    const state = buildRawEvidence(root);
+    const close = JSON.parse(readFileSync(state.paths.managerClose, "utf8"));
+    close.closeActualMouse.phase = "synthetic";
+    writeJson(state.paths.managerClose, close, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /actual-click/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects evidence collected from another Anti-Codex runtime PID", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-runtime-pid-"));
+  try {
+    const state = buildRawEvidence(root);
+    const shortcut = JSON.parse(readFileSync(state.paths.shortcutRounds[1], "utf8"));
+    shortcut.expectedMainPid = 999;
+    shortcut.after.rootProcessIds = [999];
+    shortcut.after.visibleWindowProcessIds = [999];
+    writeJson(state.paths.shortcutRounds[1], shortcut, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /runtime|main pid|process baseline/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects shortcut rounds collected across renderer or proxy restarts", () => {
+  const mutations = [
+    ["renderer target", (round) => { round.sessionIdentity.targetId = "other-app-page"; }],
+    ["CDP endpoint", (round) => { round.sessionIdentity.cdpPort = 19999; }],
+    ["renderer URL", (round) => { round.sessionIdentity.targetUrl = "app://codex/reloaded.html"; }],
+    ["supervisor PID", (round) => { round.processIdentity.supervisorPid = 999; }],
+    ["CodexPlusPlus PID", (round) => { round.processIdentity.codexPlusPlusPid = 998; }],
+    ["main PID identity", (round) => { round.processIdentity.antiCodexMainPid = 997; }],
+    ["original Codex PID identity", (round) => { round.processIdentity.originalCodexPid = 996; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-shortcut-session-"));
+    try {
+      const state = buildRawEvidence(root);
+      const shortcut = JSON.parse(readFileSync(state.paths.shortcutRounds[1], "utf8"));
+      mutate(shortcut);
+      writeJson(state.paths.shortcutRounds[1], shortcut, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr}`);
+      assert.match(
+        result.payload.failures.join("\n"),
+        /shortcut.*(?:runtime|session|PID|target|CDP)/i,
+        label,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder rejects Manager evidence from another renderer session", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-runtime-session-"));
+  try {
+    const state = buildRawEvidence(root);
+    const profile = JSON.parse(readFileSync(state.paths.managerProfile, "utf8"));
+    profile.target.id = "other-app-page";
+    writeJson(state.paths.managerProfile, profile, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /target|renderer session/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder binds every Manager probe to the task runtime process and CDP endpoint", () => {
+  const mutations = [
+    ["manager process", (profile) => { profile.processIdentity.codexPlusPlusPid = 777; }],
+    ["manager CDP endpoint", (profile) => { profile.sessionIdentity.cdpPort = 17777; }],
+    ["manager session target", (profile) => { profile.sessionIdentity.targetId = "other-app-page"; }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-identity-"));
+    try {
+      const state = buildRawEvidence(root);
+      const profile = JSON.parse(readFileSync(state.paths.managerProfile, "utf8"));
+      mutate(profile);
+      writeJson(state.paths.managerProfile, profile, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr}`);
+      assert.match(result.payload.failures.join("\n"), /manager-profile.*(?:process|session|CDP)/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("failed rebuild invalidates all previously green normalized outputs", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-invalidate-"));
+  try {
+    const state = buildRawEvidence(root);
+    const first = runBuilder(root, state);
+    assert.equal(first.child.status, 0, first.child.stderr || JSON.stringify(first.payload));
+    rmSync(state.paths.managerClose);
+    rmSync(`${state.paths.managerClose}.sha256`);
+    const second = runBuilder(root, state);
+    assert.equal(second.child.status, 1, second.child.stderr);
+    for (const output of Object.values(first.payload.outputs)) {
+      assert.equal(existsSync(output.path), false, `stale output survived: ${output.path}`);
+      assert.equal(existsSync(`${output.path}.sha256`), false, `stale sidecar survived: ${output.path}.sha256`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("UI harness documents the original Codex PID required for release evidence", () => {
+  const source = readFileSync(uiChatPath, "utf8");
+  assert.match(source, /--expected-original-codex-pid <pid>/);
+  assert.match(source, /--expected-anticodex-main-pid <pid>/);
+  assert.match(source, /--expected-supervisor-pid <pid>/);
+  assert.match(source, /--expected-codexplusplus-pid <pid>/);
+});

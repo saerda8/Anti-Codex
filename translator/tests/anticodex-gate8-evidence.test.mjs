@@ -716,32 +716,29 @@ test("the diverse Gate 8 matrix exits on help before starting its scripted harne
   assert.match(source, /Usage: node scripts\/test-anticodex-gate8-diverse-result-matrix\.mjs/);
 });
 
-test("the release Gate 8 validator requires all eight turns and quota-safe preflight", async () => {
+test("the release Gate 8 validator delegates to autonomous video semantics and current files", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url), "utf8");
-  assert.match(source, /report\?\.preflight\?\.accountReady !== true/);
-  assert.match(source, /report\?\.preflight\?\.selectedModelPresent !== true/);
-  assert.match(source, /report\?\.preflight\?\.quotaProbeReady !== true/);
-  assert.match(source, /Number\(report\?\.interaction\?\.dialogueTurns\) < 8/);
-  assert.match(source, /Number\(report\?\.interaction\?\.passedDialogueTurns\) < 8/);
-  assert.match(source, /Number\(report\?\.interaction\?\.unexpectedLaunchCommands\) !== 0/);
-  assert.match(source, /Number\(report\?\.interaction\?\.postFinalToolCalls\) !== 0/);
-  assert.match(source, /Number\(report\?\.interaction\?\.postFinalToolOutputs\) !== 0/);
-  assert.match(source, /Number\(report\?\.interaction\?\.duplicateCommands\) !== 0/);
-  assert.match(source, /Number\(report\?\.interaction\?\.evidencedTurns\) < 8/);
-  assert.match(source, /Number\(report\?\.interaction\?\.preCommandExplanations\) < 8/);
-  assert.match(source, /Number\(report\?\.interaction\?\.nonEmptyToolResults\) < 8/);
-  assert.match(source, /Number\(report\?\.interaction\?\.modelProvenTurns\) < 8/);
-  assert.match(source, /report\?\.interaction\?\.turnContractsPassed !== true/);
+  assert.match(source, /validateGate8AutonomousVideoReport\(report\)/);
+  assert.match(source, /validateArtifactFiles\(report\?\.artifacts, failures, "gate8", "sha256"\)/);
+  assert.match(source, /validateReleaseBinding\(report\?\.releaseBinding, failures, "gate8"\)/);
+  assert.doesNotMatch(source, /dialogueTurns|userCorrections|quotaProbeReady/);
 });
 
-test("signed completed Gate 8 reports do not expire on the live-report clock", async () => {
+test("signed Gate 5 and Gate 8 evidence is current-release bound and expires", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url), "utf8");
-  assert.match(source, /id: "formalLongTask", signed: true, live: false/);
-  assert.match(source, /id: "multiStyleLongTasks", signed: true, live: false/);
-  assert.match(source, /Maximum age for live Gate 7 evidence/);
+  assert.match(source, /id: "gate5"[\s\S]*?freshnessRequired: true/);
+  assert.match(source, /id: "formalLongTask"[\s\S]*?freshnessRequired: true/);
+  assert.doesNotMatch(source, /id: "multiStyleLongTasks"/);
+  assert.match(source, /definition\.freshnessRequired === true/);
+  assert.match(source, /releaseBinding/);
+  assert.match(source, /gate5_artifact_file_missing/);
+  assert.match(source, /gate8_artifact_file_missing/);
+  assert.match(source, /manager_actual_mouse_matrix/);
+  assert.match(source, /frontend_model_hot_switch/);
+  assert.match(source, /shortcut_restore_single_window_no_blank_frames/);
 });
 
-test("multi-style release acceptance requires result-proven migration and greenfield journeys", async () => {
+test("legacy multi-style diagnostics cannot satisfy current release acceptance", async () => {
   const module = await import("../../scripts/lib/anticodex-gate8-evidence.mjs");
   assert.equal(typeof module.validateGate8MultiStyleReport, "function");
 
@@ -762,11 +759,11 @@ test("multi-style release acceptance requires result-proven migration and greenf
   assert.match(module.validateGate8MultiStyleReport(unprovenTurn).join(" "), /model proof/);
 
   const releaseSource = await readFile(new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url), "utf8");
-  assert.match(releaseSource, /latest-ui-human-long-journey\.json/);
-  assert.match(releaseSource, /validateGate8MultiStyleReport/);
+  assert.doesNotMatch(releaseSource, /latest-ui-human-long-journey\.json/);
+  assert.doesNotMatch(releaseSource, /validateGate8MultiStyleReport/);
   assert.match(releaseSource, /function gate8NextAction/);
   assert.match(releaseSource, /missingEvidence\.includes\("formalLongTask"\)/);
-  assert.match(releaseSource, /missingEvidence\.includes\("multiStyleLongTasks"\)/);
+  assert.doesNotMatch(releaseSource, /missingEvidence\.includes\("multiStyleLongTasks"\)/);
 });
 
 test("runtime sync carries every tracked release audit required by the installed Gate 8 preflight", async () => {
