@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [switch]$RecoveryAttempt
+    [switch]$RecoveryAttempt,
+    [switch]$ValidateOnly
 )
 
 Set-StrictMode -Version Latest
@@ -218,6 +219,20 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) { $env:ANTICODEX_HOST_SYN
 $env:ANTICODEX_HOST_SYNC_MARKER = $hostSyncMarker
 $stateRoot = if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Assert-FixedHostPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     $fullPath = [IO.Path]::GetFullPath($Path)
@@ -413,18 +428,56 @@ function Test-AntiCodexHost {
         (@($expectedCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
         throw "Anti-Codex host marker is missing critical compatibility patches."
     }
+    $recordedFiles = @()
+    $recordedFilesProperty = $manifest.PSObject.Properties["unpackedFiles"]
+    if ($recordedFilesProperty) {
+        $recordedFiles = @($recordedFilesProperty.Value)
+    }
+    if ($recordedFiles.Count -eq 0) {
+        throw "Anti-Codex host marker is missing unpacked file inventory."
+    }
+    $hostUnpackedRoot = [IO.Path]::GetFullPath((Join-Path $hostRootFull "resources\app.asar.unpacked")).TrimEnd("\")
+    $hostUnpackedPrefix = "$hostUnpackedRoot\"
+    $recordedPaths = New-Object "System.Collections.Generic.HashSet[string]" ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($recordedFile in $recordedFiles) {
+        $relativePath = [string]$recordedFile.path
+        $recordedHash = [string]$recordedFile.sha256
+        $recordedSizeProperty = $recordedFile.PSObject.Properties["size"]
+        if (-not $relativePath -or -not $recordedHash -or -not $recordedSizeProperty -or [IO.Path]::IsPathRooted($relativePath)) {
+            throw "Anti-Codex host marker contains an invalid unpacked file entry."
+        }
+        $unpackedFilePath = [IO.Path]::GetFullPath((Join-Path $hostRootFull $relativePath))
+        $unpackedFileAccessPath = "\\?\$unpackedFilePath"
+        if (-not $unpackedFilePath.StartsWith($hostUnpackedPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [IO.File]::Exists($unpackedFileAccessPath)) {
+            throw "Anti-Codex host unpacked file is missing or outside app.asar.unpacked: $relativePath"
+        }
+        if ([string](Get-AntiCodexSha256 -Path $unpackedFileAccessPath) -ne $recordedHash) {
+            throw "Anti-Codex host unpacked file hash mismatch: $relativePath"
+        }
+        if ([long](Get-Item -LiteralPath $unpackedFileAccessPath).Length -ne [long]$recordedSizeProperty.Value) {
+            throw "Anti-Codex host unpacked file size mismatch: $relativePath"
+        }
+        if (-not $recordedPaths.Add($unpackedFilePath)) {
+            throw "Anti-Codex host marker repeats an unpacked file path: $relativePath"
+        }
+    }
+    $actualFiles = @(Get-ChildItem -LiteralPath "\\?\$hostUnpackedRoot" -File -Recurse -Force -ErrorAction Stop)
+    if ($actualFiles.Count -ne $recordedFiles.Count) {
+        throw "Anti-Codex host unpacked file inventory is incomplete."
+    }
     Test-AntiCodexAsarPatches -Path $required.appAsar -PatchProfile $patchProfile
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
-        $actual = (Get-FileHash -LiteralPath $required[$name] -Algorithm SHA256).Hash
+        $actual = Get-AntiCodexSha256 -Path $required[$name]
         if ([string]$manifest.files.$name -ne [string]$actual) { throw "Anti-Codex host marker hash mismatch: $name" }
     }
     if (-not $manifest.source -or -not $manifest.source.codexHost -or -not $manifest.source.codexCli) {
         throw "Anti-Codex host marker is missing source Codex fingerprints."
     }
-    if ([string]$manifest.source.codexHost -ne [string](Get-FileHash -LiteralPath $required.codexHost -Algorithm SHA256).Hash) {
+    if ([string]$manifest.source.codexHost -ne [string](Get-AntiCodexSha256 -Path $required.codexHost)) {
         throw "Anti-Codex host source fingerprint mismatch: codexHost"
     }
-    if ([string]$manifest.source.codexCli -ne [string](Get-FileHash -LiteralPath $required.codexCli -Algorithm SHA256).Hash) {
+    if ([string]$manifest.source.codexCli -ne [string](Get-AntiCodexSha256 -Path $required.codexCli)) {
         throw "Anti-Codex host source fingerprint mismatch: codexCli"
     }
     foreach ($iconPath in @($required.hostIcon, $required.trayIcon, $required.appRootIcon)) {
@@ -468,7 +521,7 @@ function Test-AntiCodexComponent {
         throw "CodexPlusPlus component patch commit does not match its upstream metadata: $resolvedRoot"
     }
     $expectedHash = ([string]$manifest.binary.sha256).ToLowerInvariant()
-    $actualHash = (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actualHash = (Get-AntiCodexSha256 -Path $binaryPath).ToLowerInvariant()
     if ($expectedHash -notmatch '^[0-9a-f]{64}$' -or $actualHash -ne $expectedHash) {
         throw "CodexPlusPlus component binary hash is invalid: $resolvedRoot"
     }
@@ -767,8 +820,7 @@ function Get-AntiCodexLaunchTaskEvidence {
         -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
         -not [bool]$definition.Settings.DisallowStartIfOnBatteries -and
         -not [bool]$definition.Settings.StopIfGoingOnBatteries -and
-        [int]$definition.Settings.RestartCount -eq 1 -and
-        [string]$definition.Settings.RestartInterval -eq "PT1M" -and
+        [int]$definition.Settings.RestartCount -eq 0 -and
         [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
     )
     return [pscustomobject]@{ ok = $ok; state = [int]$task.State; task = $task }
@@ -827,6 +879,41 @@ function Wait-AntiCodexPostRollbackReady {
     return $false
 }
 
+function Commit-AntiCodexRollbackCheckpoint {
+    $rollbackHostCommitted = $false
+    $rollbackMarkerCommitted = $false
+    $rollbackComponentCommitted = $false
+    try {
+        Move-FixedHostDirectory -Source $swapHost -Destination $rollbackHost
+        $rollbackHostCommitted = $true
+        Move-FixedMarker -Source $swapMarker -Destination $rollbackMarker
+        $rollbackMarkerCommitted = $true
+        Move-FixedComponentDirectory -Source $swapComponent -Destination $rollbackComponent
+        $rollbackComponentCommitted = $true
+        Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
+        Test-AntiCodexComponent -ComponentRoot $rollbackComponent
+    } catch {
+        $commitError = $_.Exception.Message
+        try {
+            if ($rollbackComponentCommitted) {
+                Move-FixedComponentDirectory -Source $rollbackComponent -Destination $swapComponent
+                $rollbackComponentCommitted = $false
+            }
+            if ($rollbackMarkerCommitted) {
+                Move-FixedMarker -Source $rollbackMarker -Destination $swapMarker
+                $rollbackMarkerCommitted = $false
+            }
+            if ($rollbackHostCommitted) {
+                Move-FixedHostDirectory -Source $rollbackHost -Destination $swapHost
+                $rollbackHostCommitted = $false
+            }
+        } catch {
+            throw "Rollback checkpoint commit failed. Reverse recovery also failed: $commitError; recovery error: $($_.Exception.Message)"
+        }
+        throw "Rollback checkpoint commit failed; reverse recovery restored the pre-commit swap state: $commitError"
+    }
+}
+
 function Restore-OriginalActiveRelease {
     if ([IO.Directory]::Exists("\\?\$activeHost") -and -not [IO.Directory]::Exists("\\?\$rollbackHost")) { Move-FixedHostDirectory -Source $activeHost -Destination $rollbackHost }
     if ([IO.File]::Exists($activeMarker) -and -not [IO.File]::Exists($rollbackMarker)) { Move-FixedMarker -Source $activeMarker -Destination $rollbackMarker }
@@ -834,6 +921,15 @@ function Restore-OriginalActiveRelease {
     if ([IO.File]::Exists($swapMarker) -and -not [IO.File]::Exists($activeMarker)) { Move-FixedMarker -Source $swapMarker -Destination $activeMarker }
     if ([IO.Directory]::Exists("\\?\$activeComponent") -and -not [IO.Directory]::Exists("\\?\$rollbackComponent")) { Move-FixedComponentDirectory -Source $activeComponent -Destination $rollbackComponent }
     if ([IO.Directory]::Exists("\\?\$swapComponent") -and -not [IO.Directory]::Exists("\\?\$activeComponent")) { Move-FixedComponentDirectory -Source $swapComponent -Destination $activeComponent }
+}
+
+if ($ValidateOnly) {
+    if ($RecoveryAttempt) {
+        throw "ValidateOnly and RecoveryAttempt cannot be combined."
+    }
+    Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
+    Test-AntiCodexComponent -ComponentRoot $rollbackComponent
+    return
 }
 
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
@@ -874,11 +970,7 @@ try {
             Move-FixedComponentDirectory -Source $rollbackComponent -Destination $activeComponent
             Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
             Test-AntiCodexComponent -ComponentRoot $activeComponent
-            Move-FixedHostDirectory -Source $swapHost -Destination $rollbackHost
-            Move-FixedMarker -Source $swapMarker -Destination $rollbackMarker
-            Move-FixedComponentDirectory -Source $swapComponent -Destination $rollbackComponent
-            Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
-            Test-AntiCodexComponent -ComponentRoot $rollbackComponent
+            Commit-AntiCodexRollbackCheckpoint
         } catch {
             $swapError = $_.Exception.Message
             try {

@@ -231,6 +231,17 @@ test("Manager renderer lease survives a lost dequeue response until explicit ack
   );
 });
 
+test("silent Manager snapshot refresh never reopens a panel the user closed", () => {
+  const deliverStart = source.indexOf("async function deliver(request, session)");
+  const deliverEnd = source.indexOf("controller = new ManagerBridgeRecoveryController", deliverStart);
+  const deliverBlock = source.slice(deliverStart, deliverEnd);
+
+  assert.match(
+    deliverBlock,
+    /if \(!isManagerRequest && !suppressRefreshStatusResult && !result && typeof globalThis\.__ANTICODEX_OPEN_MANAGER__ === "function"\)/,
+  );
+});
+
 test("installed readiness requires lease and acknowledgement instead of destructive dequeue", () => {
   assert.match(syncReadiness, /manager bridge missing explicit action acknowledgement/);
   assert.match(syncReadiness, /manager bridge missing action queue leasing/);

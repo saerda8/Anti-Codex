@@ -24,6 +24,19 @@ $bundleRoot = Join-Path $OutputRoot $stamp
 $sensitivePattern = "(?i)(?<![A-Za-z])prompt(?![A-Za-z])|(?<![A-Za-z])messages(?![A-Za-z])|input_items|tool output|return exactly this|api[_-]?key|authorization"
 $forbiddenArchitecturePattern = "(?i)second.?account|xiaoqiang|windows.?user.?login|antigravity.?cli|goal.?readiness|adaptive.?translator"
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Has-Property {
     param($Value, [string]$Name)
     return $null -ne $Value -and $Value.PSObject.Properties.Name -contains $Name
@@ -62,7 +75,7 @@ function Get-ReportIntegrity {
             return [pscustomobject]@{ signed = $true; valid = $false; error = "invalid_hash_sidecar" }
         }
         $expected = $Matches[1].ToLowerInvariant()
-        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actual = (Get-AntiCodexSha256 -Path $Path).ToLowerInvariant()
         return [pscustomobject]@{
             signed = $true
             valid = ($actual -eq $expected)

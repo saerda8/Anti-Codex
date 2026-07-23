@@ -9,6 +9,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 $expectedInstallRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 $resolvedInstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $allowedInstallRoots = @(
@@ -69,7 +83,7 @@ foreach ($candidate in $sourceCandidates) {
     if ($seenSourceCandidates.ContainsKey($candidateKey)) { continue }
     $seenSourceCandidates[$candidateKey] = $true
     if (-not (Test-Path -LiteralPath $resolvedCandidate -PathType Leaf)) { continue }
-    $candidateHash = (Get-FileHash -LiteralPath $resolvedCandidate -Algorithm SHA256).Hash.ToLowerInvariant()
+    $candidateHash = (Get-AntiCodexSha256 -Path $resolvedCandidate).ToLowerInvariant()
     if ($candidateHash -eq $expectedHash) {
         $resolvedSourceBinary = $resolvedCandidate
         $actualHash = $candidateHash
@@ -98,7 +112,7 @@ foreach ($patch in @($metadata.patches)) {
         throw "CodexPlusPlus patch escapes the trusted metadata root: $relativePatch"
     }
     if (Test-Path -LiteralPath $patchPath -PathType Leaf) {
-        $patchHash = (Get-FileHash -LiteralPath $patchPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $patchHash = (Get-AntiCodexSha256 -Path $patchPath).ToLowerInvariant()
         if ($patchHash -ne ([string]$patch.sha256).ToLowerInvariant()) {
             throw "CodexPlusPlus patch SHA256 mismatch: $($patch.file)"
         }
@@ -219,7 +233,7 @@ try {
     Assert-NoInstallReparsePoint -Path $stagingComponent
 
     Copy-Item -LiteralPath $resolvedSourceBinary -Destination $stagingBinary
-    $stagedHash = (Get-FileHash -LiteralPath $stagingBinary -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stagedHash = (Get-AntiCodexSha256 -Path $stagingBinary).ToLowerInvariant()
     if ($stagedHash -ne $expectedHash) {
         throw "CodexPlusPlus staged binary hash changed during copy."
     }
@@ -239,7 +253,7 @@ Anti-Codex keeps this executable, metadata and state at a separate component bou
     $result.installedAt = [DateTime]::UtcNow.ToString("o")
     Write-Utf8NoBomAtomic -Path $stagingManifest -Text (($result | ConvertTo-Json -Depth 10) + "`n")
 
-    if ((Get-FileHash -LiteralPath $stagingBinary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
+    if ((Get-AntiCodexSha256 -Path $stagingBinary).ToLowerInvariant() -ne $expectedHash) {
         throw "CodexPlusPlus staged component verification failed."
     }
     $stagedMetadataRaw = [IO.File]::ReadAllText($stagingMetadata, [Text.Encoding]::UTF8)
@@ -258,7 +272,7 @@ Anti-Codex keeps this executable, metadata and state at a separate component bou
     $newActivated = $true
 
     Assert-NoInstallReparsePoint -Path $componentRoot
-    $installedHash = (Get-FileHash -LiteralPath $destinationBinary -Algorithm SHA256).Hash.ToLowerInvariant()
+    $installedHash = (Get-AntiCodexSha256 -Path $destinationBinary).ToLowerInvariant()
     if ($installedHash -ne $expectedHash) {
         throw "Installed CodexPlusPlus binary hash verification failed."
     }

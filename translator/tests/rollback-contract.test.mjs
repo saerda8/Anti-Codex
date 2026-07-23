@@ -1,7 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..", "..");
 
@@ -21,8 +32,282 @@ function extractFunction(text, name) {
   const marker = `function ${name}`;
   const start = text.indexOf(marker);
   assert.notEqual(start, -1, `missing function: ${name}`);
-  const next = text.indexOf("\nfunction ", start + marker.length);
-  return text.slice(start, next === -1 ? undefined : next);
+  const candidates = [
+    text.indexOf("\nfunction ", start + marker.length),
+    text.indexOf("\nif ($ValidateOnly)", start + marker.length),
+    text.indexOf("\n$syncMutex", start + marker.length),
+  ].filter((value) => value !== -1);
+  return text.slice(start, candidates.length > 0 ? Math.min(...candidates) : undefined);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex").toUpperCase();
+}
+
+function snapshotTree(root) {
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile()) {
+        files.push({
+          path: relative(root, path).replaceAll("/", "\\"),
+          sha256: sha256(readFileSync(path)),
+          size: statSync(path).size,
+        });
+      }
+    }
+  };
+  visit(root);
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function quotePowerShell(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function createRollbackRepairFixture({ sameHostCli, legacyInventory }) {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-inventory-"));
+  const rollbackHost = join(fixture, "rollback-host");
+  const activeHost = join(fixture, "active-host");
+  const rollbackUnpacked = join(rollbackHost, "resources", "app.asar.unpacked");
+  const activeUnpacked = join(activeHost, "resources", "app.asar.unpacked");
+  const rollbackMarker = join(fixture, "rollback-host.ok");
+  const activeMarker = join(fixture, "active-host.ok");
+  mkdirSync(rollbackUnpacked, { recursive: true });
+  mkdirSync(activeUnpacked, { recursive: true });
+
+  const rollbackFiles = {
+    "module-a.node": "rollback-node-a",
+    "module-b.node": "rollback-node-b",
+    "module-c.node": "rollback-node-c",
+    "companion.dll": "rollback-dll",
+    "runtime.js": "rollback-js",
+  };
+  const activeFiles = {
+    "module-a.node": "active-node-a",
+    "module-b.node": "active-node-b",
+    "module-c.node": "active-node-c",
+    "companion.dll": "active-dll",
+    "runtime.js": "active-js",
+  };
+  for (const [name, content] of Object.entries(rollbackFiles)) {
+    writeFileSync(join(rollbackUnpacked, name), content);
+  }
+  for (const [name, content] of Object.entries(activeFiles)) {
+    writeFileSync(join(activeUnpacked, name), content);
+  }
+
+  const rollbackInventory = Object.entries(rollbackFiles).map(([name, content]) => ({
+    path: `resources\\app.asar.unpacked\\${name}`,
+    sha256: sha256(content),
+    size: Buffer.byteLength(content),
+  }));
+  const rollbackNativeInventory = Object.entries(rollbackFiles)
+    .filter(([name]) => name.endsWith(".node"))
+    .map(([name, content]) => ({
+      path: `resources\\app.asar.unpacked\\${name}`,
+      sha256: sha256(content),
+      size: Buffer.byteLength(content),
+    }));
+  const activeNativeInventory = Object.entries(activeFiles)
+    .filter(([name]) => name.endsWith(".node"))
+    .map(([name, content]) => ({
+      path: `resources\\app.asar.unpacked\\${name}`,
+      sha256: sha256(content),
+      size: Buffer.byteLength(content),
+    }));
+  writeFileSync(rollbackMarker, JSON.stringify({
+    schema: legacyInventory ? "anticodex-host-manifest-v1" : "anticodex-host-manifest-v2",
+    source: {
+      packageVersion: "1.0.0.0",
+      codexHost: "rollback-host-hash",
+      codexCli: "rollback-cli-hash",
+    },
+    unpackedNativeModules: rollbackNativeInventory,
+    ...(legacyInventory ? {} : { unpackedFiles: rollbackInventory }),
+  }));
+  writeFileSync(activeMarker, JSON.stringify({
+    schema: "anticodex-host-manifest-v2",
+    source: {
+      packageVersion: "2.0.0.0",
+      codexHost: sameHostCli ? "rollback-host-hash" : "active-host-hash",
+      codexCli: sameHostCli ? "rollback-cli-hash" : "active-cli-hash",
+    },
+    unpackedNativeModules: activeNativeInventory,
+  }));
+
+  const syncScript = readSyncScript();
+  const sha256Function = extractFunction(syncScript, "Get-AntiCodexSha256");
+  const repair = extractFunction(syncScript, "Repair-RollbackHostUnpackedFileManifest");
+  const harness = join(fixture, "repair.ps1");
+  writeFileSync(harness, `$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$rollbackHost = ${quotePowerShell(rollbackHost)}
+$rollbackMarker = ${quotePowerShell(rollbackMarker)}
+$activeHost = ${quotePowerShell(activeHost)}
+$activeMarker = ${quotePowerShell(activeMarker)}
+${sha256Function}
+${repair}
+Repair-RollbackHostUnpackedFileManifest
+`);
+  return { fixture, rollbackHost, rollbackMarker, harness };
+}
+
+function runRollbackRepair(options) {
+  const fixture = createRollbackRepairFixture(options);
+  const before = snapshotTree(fixture.rollbackHost);
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fixture.harness],
+    { encoding: "utf8", timeout: 10_000, windowsHide: true },
+  );
+  const after = snapshotTree(fixture.rollbackHost);
+  const manifest = JSON.parse(readFileSync(fixture.rollbackMarker, "utf8"));
+  return { ...fixture, before, after, result, manifest };
+}
+
+function createRollbackCommitFailureFixture(failStep) {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-commit-"));
+  const slots = {
+    activeHost: join(fixture, "active-host"),
+    rollbackHost: join(fixture, "rollback-host"),
+    swapHost: join(fixture, "swap-host"),
+    activeMarker: join(fixture, "active-host.ok"),
+    rollbackMarker: join(fixture, "rollback-host.ok"),
+    swapMarker: join(fixture, "swap-host.ok"),
+    activeComponent: join(fixture, "active-component"),
+    rollbackComponent: join(fixture, "rollback-component"),
+    swapComponent: join(fixture, "swap-component"),
+  };
+  for (const [path, version] of [
+    [slots.activeHost, "previous"],
+    [slots.activeComponent, "previous"],
+    [slots.swapHost, "current"],
+    [slots.swapComponent, "current"],
+  ]) {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, "version.txt"), version);
+  }
+  writeFileSync(slots.activeMarker, "previous");
+  writeFileSync(slots.swapMarker, "current");
+
+  const rollback = readRollbackScript();
+  const commit = extractFunction(rollback, "Commit-AntiCodexRollbackCheckpoint");
+  const restore = extractFunction(rollback, "Restore-OriginalActiveRelease");
+  const harness = join(fixture, "commit-failure.ps1");
+  const slotAssignments = Object.entries(slots)
+    .map(([name, path]) => `$${name} = ${quotePowerShell(path)}`)
+    .join("\n");
+  writeFileSync(harness, `$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+${slotAssignments}
+$failStep = ${quotePowerShell(failStep)}
+$failureInjected = $false
+$moveLog = New-Object "System.Collections.Generic.List[string]"
+
+function Get-SlotName {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    foreach ($name in @("activeHost", "rollbackHost", "swapHost", "activeMarker", "rollbackMarker", "swapMarker", "activeComponent", "rollbackComponent", "swapComponent")) {
+        if ([string](Get-Variable -Name $name -ValueOnly) -eq $Path) { return $name }
+    }
+    throw "Unexpected test path: $Path"
+}
+
+function Move-FixedHostDirectory {
+    param([Parameter(Mandatory = $true)][string]$Source, [Parameter(Mandatory = $true)][string]$Destination)
+    [void]$moveLog.Add("host:$(Get-SlotName $Source)->$(Get-SlotName $Destination)")
+    [IO.Directory]::Move($Source, $Destination)
+}
+
+function Move-FixedMarker {
+    param([Parameter(Mandatory = $true)][string]$Source, [Parameter(Mandatory = $true)][string]$Destination)
+    [void]$moveLog.Add("marker:$(Get-SlotName $Source)->$(Get-SlotName $Destination)")
+    if (-not $script:failureInjected -and $failStep -eq "marker" -and $Source -eq $swapMarker -and $Destination -eq $rollbackMarker) {
+        $script:failureInjected = $true
+        throw "Injected marker move failure."
+    }
+    [IO.File]::Move($Source, $Destination)
+}
+
+function Move-FixedComponentDirectory {
+    param([Parameter(Mandatory = $true)][string]$Source, [Parameter(Mandatory = $true)][string]$Destination)
+    [void]$moveLog.Add("component:$(Get-SlotName $Source)->$(Get-SlotName $Destination)")
+    if (-not $script:failureInjected -and $failStep -eq "component" -and $Source -eq $swapComponent -and $Destination -eq $rollbackComponent) {
+        $script:failureInjected = $true
+        throw "Injected component move failure."
+    }
+    [IO.Directory]::Move($Source, $Destination)
+}
+
+function Get-DirectoryVersion {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-Content -LiteralPath (Join-Path $Path "version.txt") -Raw).Trim()
+}
+
+function Test-AntiCodexHost {
+    param([Parameter(Mandatory = $true)][string]$HostRoot, [Parameter(Mandatory = $true)][string]$MarkerPath)
+    if ((Get-DirectoryVersion $HostRoot) -ne (Get-Content -LiteralPath $MarkerPath -Raw).Trim()) {
+        throw "Injected fixture host and marker versions differ."
+    }
+}
+
+function Test-AntiCodexComponent {
+    param([Parameter(Mandatory = $true)][string]$ComponentRoot)
+    [void](Get-DirectoryVersion $ComponentRoot)
+}
+
+${commit}
+${restore}
+
+$caught = $null
+try {
+    Commit-AntiCodexRollbackCheckpoint
+} catch {
+    $caught = $_.Exception.Message
+    Restore-OriginalActiveRelease
+}
+if (-not $caught -or -not $failureInjected) { throw "The requested commit failure was not injected." }
+
+[ordered]@{
+    caught = $caught
+    moves = @($moveLog)
+    activeHost = Get-DirectoryVersion $activeHost
+    activeMarker = (Get-Content -LiteralPath $activeMarker -Raw).Trim()
+    activeComponent = Get-DirectoryVersion $activeComponent
+    rollbackHost = Get-DirectoryVersion $rollbackHost
+    rollbackMarker = (Get-Content -LiteralPath $rollbackMarker -Raw).Trim()
+    rollbackComponent = Get-DirectoryVersion $rollbackComponent
+    swapHostExists = [IO.Directory]::Exists($swapHost)
+    swapMarkerExists = [IO.File]::Exists($swapMarker)
+    swapComponentExists = [IO.Directory]::Exists($swapComponent)
+} | ConvertTo-Json -Depth 5 -Compress
+`);
+  return { fixture, harness };
+}
+
+function runRollbackCommitFailure(failStep) {
+  const fixture = createRollbackCommitFailureFixture(failStep);
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fixture.harness],
+    { encoding: "utf8", timeout: 10_000, windowsHide: true },
+  );
+  const output = result.status === 0 ? JSON.parse(result.stdout.trim()) : null;
+  return { ...fixture, result, output };
+}
+
+function assertOriginalReleasePairRestored(output) {
+  assert.equal(output.activeHost, "current");
+  assert.equal(output.activeMarker, "current");
+  assert.equal(output.activeComponent, "current");
+  assert.equal(output.rollbackHost, "previous");
+  assert.equal(output.rollbackMarker, "previous");
+  assert.equal(output.rollbackComponent, "previous");
+  assert.equal(output.swapHostExists, false);
+  assert.equal(output.swapMarkerExists, false);
+  assert.equal(output.swapComponentExists, false);
 }
 
 test("rollback host validation covers Anti-Codex branding, icons, manifest, hashes, and critical patches", () => {
@@ -66,7 +351,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
 
   assert.match(validator, /resources\\codex-tray\.ico/);
   assert.match(validator, /trayIcon/);
-  assert.match(validator, /Get-FileHash/);
+  assert.match(validator, /Get-AntiCodexSha256/);
+  assert.doesNotMatch(rollback, /\bGet-FileHash\b/);
   assert.match(validator, /manifest\.files\.\$name/);
   assert.match(validator, /manifest\.source\.codexHost/);
   assert.match(validator, /manifest\.source\.codexCli/);
@@ -119,4 +405,83 @@ test("rollback validates both hosts before swapping and again after activation",
       rollback.indexOf("Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker", rollback.indexOf("Move-FixedMarker -Source $swapMarker -Destination $rollbackMarker")),
     "new rollback checkpoint must be validated after the swap completes",
   );
+});
+
+test("host sync validates the exact rollback contract and separates activation recovery from advertised rollback", () => {
+  const sync = readSyncScript();
+  const rollback = readRollbackScript();
+  assert.match(rollback, /\[switch\]\$ValidateOnly/);
+  assert.match(rollback, /if\s*\(\$ValidateOnly\)\s*\{[\s\S]*?Test-AntiCodexHost\s+-HostRoot\s+\$rollbackHost\s+-MarkerPath\s+\$rollbackMarker[\s\S]*?Test-AntiCodexComponent\s+-ComponentRoot\s+\$rollbackComponent[\s\S]*?return\s*\}/);
+  assert.ok(rollback.indexOf("if ($ValidateOnly)") < rollback.indexOf("$syncMutex ="));
+  assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\([\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable[\s\S]*?\[IO\.File\]::Exists\(\$rollbackMarker\)/);
+  assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);
+  assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\s+-and\s+\$rollbackManifestSchemaCompatible\)\s*\{[\s\S]*?Repair-RollbackHostIconManifest[\s\S]*?&\s+\$rollbackScript\s+-ValidateOnly[\s\S]*?\$rollbackAvailable\s*=\s*\$true/);
+  assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\)\s*\{[\s\S]*?\$activationRestored\s*=\s*\$true[\s\S]*?\$rollbackAvailable\s*=\s*\$false/);
+  assert.match(sync, /-State\s+"rolled_back"\s+-Stage\s+"activation"[\s\S]*?-RollbackAvailable\s+\$false/);
+  assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{\s*throw[\s\S]*?No compatible rollback release was available\./);
+  assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{[\s\S]*?Remove-Item\s+-LiteralPath\s+\$rollbackMarker[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackHost[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackComponent/);
+  assert.match(sync, /No compatible previous release is available for rollback\./);
+});
+
+test("cross-version sync with matching host and CLI hashes leaves the rollback tree byte-identical", () => {
+  const fixture = runRollbackRepair({ sameHostCli: true, legacyInventory: false });
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.deepEqual(fixture.after, fixture.before);
+    assert.equal(fixture.manifest.source.packageVersion, "1.0.0.0");
+    assert.equal(fixture.manifest.unpackedFiles.length, fixture.before.length);
+    assert.equal(fixture.result.stdout.trim(), "True");
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
+});
+
+test("legacy rollback inventory migrates from its own tree even when host and CLI hashes changed", () => {
+  const fixture = runRollbackRepair({ sameHostCli: false, legacyInventory: true });
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.deepEqual(fixture.after, fixture.before);
+    assert.equal(fixture.manifest.source.packageVersion, "1.0.0.0");
+    assert.deepEqual(
+      fixture.manifest.unpackedFiles.map(({ path, sha256: hash, size }) => ({ path, sha256: hash, size })),
+      fixture.before,
+    );
+    assert.equal(fixture.result.stdout.trim(), "False");
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
+});
+
+test("rollback checkpoint reverses a committed host before recovering from marker move failure", () => {
+  const fixture = runRollbackCommitFailure("marker");
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.match(fixture.output.caught, /reverse recovery restored the pre-commit swap state/i);
+    assert.deepEqual(fixture.output.moves.slice(0, 3), [
+      "host:swapHost->rollbackHost",
+      "marker:swapMarker->rollbackMarker",
+      "host:rollbackHost->swapHost",
+    ]);
+    assertOriginalReleasePairRestored(fixture.output);
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
+});
+
+test("rollback checkpoint reverses marker then host after component move failure", () => {
+  const fixture = runRollbackCommitFailure("component");
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.match(fixture.output.caught, /reverse recovery restored the pre-commit swap state/i);
+    assert.deepEqual(fixture.output.moves.slice(0, 5), [
+      "host:swapHost->rollbackHost",
+      "marker:swapMarker->rollbackMarker",
+      "component:swapComponent->rollbackComponent",
+      "marker:rollbackMarker->swapMarker",
+      "host:rollbackHost->swapHost",
+    ]);
+    assertOriginalReleasePairRestored(fixture.output);
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
 });

@@ -6,6 +6,8 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..", "..");
 const repairScript = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+const productSync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+const productRollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
 const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
 const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
 const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
@@ -88,6 +90,7 @@ test("interactive restore shortcuts prefer the stable PowerShell 7 alias with a 
 
 test("interactive Anti-Codex shortcuts use a short focus broker before the isolated launch task", () => {
   const mainSpecs = repairScript.match(/\$shortcutSpecs\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  const launchTaskEvidence = repairScript.match(/function Get-AntiCodexLaunchTaskEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   const launchTaskRegistration = repairScript.match(/function Set-AntiCodexLaunchTask[\s\S]*?return Get-AntiCodexLaunchTaskEvidence\s*\n\}/)?.[0] ?? "";
   const interactiveSpecs = mainSpecs.split(/\r?\n/).filter((entry) => /-UseLaunchTask\b/.test(entry));
   assert.equal(interactiveSpecs.length, 2);
@@ -103,9 +106,9 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /<LogonType>InteractiveToken<\/LogonType>/);
   assert.match(repairScript, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
   assert.match(repairScript, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
-  assert.match(repairScript, /<RestartOnFailure>[\s\S]*?<Interval>PT1M<\/Interval>[\s\S]*?<Count>1<\/Count>[\s\S]*?<\/RestartOnFailure>/);
-  assert.match(repairScript, /\$definition\.Settings\.RestartCount\s+-eq\s+1/);
-  assert.match(repairScript, /\[string\]\$definition\.Settings\.RestartInterval\s+-eq\s+"PT1M"/);
+  assert.doesNotMatch(launchTaskRegistration, /<RestartOnFailure>/);
+  assert.match(launchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
+  assert.doesNotMatch(launchTaskEvidence, /RestartInterval\s+-eq\s+"PT1M"/);
   assert.match(repairScript, /\$definition\.Triggers\.Count\s+-eq\s+0/);
   assert.match(repairScript, /\$definition\.Settings\.AllowDemandStart/);
   assert.match(repairScript, /<Command>\$nodeXml<\/Command>/);
@@ -131,7 +134,7 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /mode = "shortcut-focus-broker"/);
 });
 
-test("Manager updates use a separate non-retrying scheduled task broker", () => {
+test("launch and Manager update tasks never retry failed product operations", () => {
   const launchTaskEvidence = repairScript.match(/function Get-AntiCodexLaunchTaskEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   const updateTaskEvidence = repairScript.match(/function Get-AntiCodexUpdateTaskEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   const updateTaskRegistration = repairScript.match(/function Set-AntiCodexUpdateTask[\s\S]*?return Get-AntiCodexUpdateTaskEvidence\s*\n\}/)?.[0] ?? "";
@@ -147,6 +150,7 @@ test("Manager updates use a separate non-retrying scheduled task broker", () => 
   assert.match(repairScript, /\$updateTaskActionArguments\s*=\s*"`"\$updateTaskScript`" --hide-console"/);
   assert.match(launchTaskEvidence, /\$task\.Enabled/);
   assert.match(updateTaskEvidence, /\$task\.Enabled/);
+  assert.match(launchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.match(updateTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.match(updateTaskEvidence, /\[string\]\$definition\.Settings\.ExecutionTimeLimit\s+-eq\s+"PT0S"/);
   assert.match(updateTaskEvidence, /\$definition\.Triggers\.Count\s+-eq\s+0/);
@@ -159,8 +163,13 @@ test("Manager updates use a separate non-retrying scheduled task broker", () => 
   assert.match(syncReadiness, /function Get-AntiCodexUpdateTaskEvidence/);
   assert.match(readinessLaunchTaskEvidence, /\$task\.Enabled/);
   assert.match(readinessUpdateTaskEvidence, /\$task\.Enabled/);
+  assert.match(readinessLaunchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.match(readinessUpdateTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.match(readinessUpdateTaskEvidence, /\[string\]\$definition\.Settings\.ExecutionTimeLimit\s+-eq\s+"PT0S"/);
+  assert.match(productSync, /\[int\]\$definition\.Settings\.RestartCount\s+-ne\s+0/);
+  assert.doesNotMatch(productSync, /RestartInterval\s+-ne\s+"PT1M"/);
+  assert.match(productRollback, /\[int\]\$definition\.Settings\.RestartCount\s+-eq\s+0/);
+  assert.doesNotMatch(productRollback, /RestartInterval\s+-eq\s+"PT1M"/);
 });
 
 test("interactive startup rejects only a verified Codex-owned parent chain", () => {

@@ -24,6 +24,19 @@ $script:ExistingAntiBefore = $null
 $script:StableBefore = $null
 $script:Failure = $null
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Get-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     return [IO.Path]::GetFullPath($Path).TrimEnd('\')
@@ -273,7 +286,7 @@ function Get-FileFingerprint {
     $item = Get-Item -LiteralPath $Path
     $hash = $null
     if (-not $MetadataOnly) {
-        $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = (Get-AntiCodexSha256 -Path $Path).ToLowerInvariant()
     }
     return [pscustomobject]@{
         path = $item.FullName
@@ -549,7 +562,7 @@ if ($LASTEXITCODE -ne 0 -or -not $releaseBindingJson) {
     throw 'Gate 1 could not derive the current Anti-Codex release binding.'
 }
 $releaseBinding = $releaseBindingJson | ConvertFrom-Json
-$actualLauncherHash = (Get-FileHash -LiteralPath $script:LauncherPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$actualLauncherHash = (Get-AntiCodexSha256 -Path $script:LauncherPath).ToLowerInvariant()
 $expectedLauncherHash = ([string]$upstream.verification.launcherReleaseBuild).Replace('sha256:', '').ToLowerInvariant()
 if ($actualLauncherHash -ne $expectedLauncherHash) { throw "Launcher hash does not match the sealed build." }
 
@@ -590,7 +603,7 @@ if ($PreflightOnly) {
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllText($reportFull, ($preflightReport | ConvertTo-Json -Depth 12), $utf8)
     if ($preflightReport.ok -eq $true) {
-        $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+        $reportHash = (Get-AntiCodexSha256 -Path $reportFull).ToLowerInvariant()
         [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
     } elseif (Test-Path -LiteralPath "$reportFull.sha256") {
         Remove-Item -LiteralPath "$reportFull.sha256" -Force
@@ -759,7 +772,7 @@ New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($reportFull, ($report | ConvertTo-Json -Depth 16), $utf8)
 if ($report.ok -eq $true) {
-    $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+    $reportHash = (Get-AntiCodexSha256 -Path $reportFull).ToLowerInvariant()
     [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
 } elseif (Test-Path -LiteralPath "$reportFull.sha256") {
     Remove-Item -LiteralPath "$reportFull.sha256" -Force

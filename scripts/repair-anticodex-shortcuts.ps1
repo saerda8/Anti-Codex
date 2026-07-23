@@ -167,8 +167,7 @@ function Get-AntiCodexLaunchTaskEvidence {
         -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
         [bool]$definition.Settings.DisallowStartIfOnBatteries -eq $false -and
         [bool]$definition.Settings.StopIfGoingOnBatteries -eq $false -and
-        [int]$definition.Settings.RestartCount -eq 1 -and
-        [string]$definition.Settings.RestartInterval -eq "PT1M" -and
+        [int]$definition.Settings.RestartCount -eq 0 -and
         [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
     )
     $stateCode = [int]$task.State
@@ -222,10 +221,6 @@ function Set-AntiCodexLaunchTask {
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowStartOnDemand>true</AllowStartOnDemand>
     <Enabled>true</Enabled>
-    <RestartOnFailure>
-      <Interval>PT1M</Interval>
-      <Count>1</Count>
-    </RestartOnFailure>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>

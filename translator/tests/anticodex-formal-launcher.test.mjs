@@ -403,7 +403,8 @@ test("runtime sync restarts only the fixed three-layer supervisor", () => {
 
 test("runtime sync no-restart mode verifies copied files without polling live health", () => {
   assert.match(runtimeSync, /\$runtimeHashMismatches\s*=\s*@\(/);
-  assert.match(runtimeSync, /Get-FileHash[^\r\n]*SHA256/);
+  assert.match(runtimeSync, /function Get-AntiCodexSha256/);
+  assert.doesNotMatch(runtimeSync, /\bGet-FileHash\b/);
   assert.match(runtimeSync, /if \(-not \$NoRestart\) \{[\s\S]*?Wait-AntiCodexHealth/);
   assert.match(runtimeSync, /mode = if \(\$NoRestart\) \{ "synced_without_restart" \}/);
   assert.match(runtimeSync, /verifiedFileCount = \$requiredSourceFiles\.Count/);

@@ -142,7 +142,8 @@ test("CodexPlusPlus component installer is hash-pinned and isolated", () => {
   const installer = readFileSync(resolve(root, "scripts", "install-codexplusplus-component.ps1"), "utf8");
   assert.match(installer, /third_party\\codexplusplus\\upstream\.json/);
   assert.match(installer, /verification\.launcherReleaseBuild/);
-  assert.match(installer, /Get-FileHash[^\n]+SHA256/);
+  assert.match(installer, /function Get-AntiCodexSha256/);
+  assert.doesNotMatch(installer, /\bGet-FileHash\b/);
   assert.match(installer, /Join-Path \$resolvedInstallRoot "components\\codexplusplus"/);
   assert.match(installer, /Join-Path \$componentRoot "codex-plus-plus\.exe"/);
   assert.match(installer, /path = "codex-plus-plus\.exe"/);
@@ -151,6 +152,34 @@ test("CodexPlusPlus component installer is hash-pinned and isolated", () => {
   assert.match(installer, /patchCommit/);
   assert.match(installer, /-ne \$expectedHash/);
   assert.doesNotMatch(installer, /Invoke-WebRequest|Start-BitsTransfer|git clone/i);
+});
+
+test("CodexPlusPlus component SHA-256 works without Utility module autoload", (t) => {
+  const installer = readFileSync(installerSource, "utf8");
+  const helper = installer.match(/^function Get-AntiCodexSha256 \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(helper, "installer must define a local SHA-256 helper");
+
+  const fixture = createInstallerSandbox(t);
+  const samplePath = join(fixture.sandboxRoot, "hash-sample.bin");
+  const harnessPath = join(fixture.sandboxRoot, "hash-without-utility.ps1");
+  writeBytes(samplePath, trustedBinary);
+  writeFileSync(
+    harnessPath,
+    `$ErrorActionPreference = "Stop"
+$PSModuleAutoLoadingPreference = "None"
+Remove-Module Microsoft.PowerShell.Utility -Force -ErrorAction SilentlyContinue
+${helper}
+[Console]::Out.Write((Get-AntiCodexSha256 -Path '${samplePath.replaceAll("'", "''")}'))
+`,
+  );
+
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harnessPath],
+    { encoding: "utf8", timeout: 10_000, windowsHide: true },
+  );
+  assert.equal(result.status, 0, combinedOutput(result));
+  assert.equal(result.stdout.trim(), sha256(trustedBinary).toUpperCase());
 });
 
 test("CodexPlusPlus update candidate is staged under the fixed install root only", () => {

@@ -31,6 +31,19 @@ $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
 $checks = [ordered]@{}
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Normalize-Path {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
@@ -167,7 +180,7 @@ try {
     } else {
         Join-Path (Split-Path -Parent $componentManifestPath) $componentBinaryReference
     })
-    $componentActualHash = (Get-FileHash -LiteralPath $componentBinaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $componentActualHash = (Get-AntiCodexSha256 -Path $componentBinaryPath).ToLowerInvariant()
     $componentOk = [bool](
         $component.ok -eq $true -and
         [string]$component.schema -eq "codexplusplus-component-manifest-v1" -and

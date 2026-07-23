@@ -7,6 +7,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 $installRoot = [IO.Path]::GetFullPath((Split-Path -Parent $RuntimeRoot))
 $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 if ($installRoot -ne $expectedRoot) {
@@ -29,8 +42,8 @@ if ($candidateFull -ne [IO.Path]::GetFullPath((Join-Path $expectedRoot "update-c
     throw "Refusing to clean an unexpected candidate path."
 }
 
-$activeMarkerHashBefore = (Get-FileHash -LiteralPath $activeMarker -Algorithm SHA256).Hash
-$activeAsarHashBefore = (Get-FileHash -LiteralPath $activeAsar -Algorithm SHA256).Hash
+$activeMarkerHashBefore = Get-AntiCodexSha256 -Path $activeMarker
+$activeAsarHashBefore = Get-AntiCodexSha256 -Path $activeAsar
 if (Test-Path -LiteralPath $candidateRoot) {
     [IO.Directory]::Delete("\\?\$candidateFull", $true)
 }
@@ -66,10 +79,10 @@ try {
 if (Test-Path -LiteralPath $candidateMarker) {
     throw "Failed candidate retained a valid host marker."
 }
-if ((Get-FileHash -LiteralPath $activeMarker -Algorithm SHA256).Hash -ne $activeMarkerHashBefore) {
+if ((Get-AntiCodexSha256 -Path $activeMarker) -ne $activeMarkerHashBefore) {
     throw "Failed candidate build changed the active host marker."
 }
-if ((Get-FileHash -LiteralPath $activeAsar -Algorithm SHA256).Hash -ne $activeAsarHashBefore) {
+if ((Get-AntiCodexSha256 -Path $activeAsar) -ne $activeAsarHashBefore) {
     throw "Failed candidate build changed the active host."
 }
 if (Test-Path -LiteralPath $candidateRoot) {

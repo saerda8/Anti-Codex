@@ -430,7 +430,8 @@ function Get-ForegroundProcessId {
 function Get-ExactAntiCodexTaskbarButton {
     param([string]$ExpectedAutomationName)
 
-    $expectedAccessibleName = "$ExpectedAutomationName - 1 个运行窗口"
+    $windowCountSuffix = -join ([char[]]@(0x4E2A, 0x8FD0, 0x884C, 0x7A97, 0x53E3))
+    $expectedAccessibleName = "$ExpectedAutomationName - 1 $windowCountSuffix"
     $taskListHandles = @([AntiCodexShortcutRestoreProbe]::GetTaskListWindowHandles())
     if ($taskListHandles.Count -eq 0) {
         throw "Windows taskbar task list was not found; no click was sent"

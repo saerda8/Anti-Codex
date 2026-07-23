@@ -241,6 +241,20 @@ $expectedUpdateTaskArguments = "`"$updateTaskScript`" --hide-console"
 $script:antiCodexScheduleService = $null
 $script:antiCodexScheduleRoot = $null
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Get-AntiCodexScheduleRoot {
     if ($null -eq $script:antiCodexScheduleService -or $null -eq $script:antiCodexScheduleRoot) {
         $service = New-Object -ComObject "Schedule.Service"
@@ -519,7 +533,7 @@ function Test-AntiCodexComponent {
         throw "CodexPlusPlus component patch commit does not match its upstream metadata: $resolvedRoot"
     }
     $expectedHash = ([string]$manifest.binary.sha256).ToLowerInvariant()
-    $actualHash = (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actualHash = (Get-AntiCodexSha256 -Path $binaryPath).ToLowerInvariant()
     if ($expectedHash -notmatch '^[0-9a-f]{64}$' -or $actualHash -ne $expectedHash) {
         throw "CodexPlusPlus component binary hash is invalid: $resolvedRoot"
     }
@@ -631,8 +645,7 @@ function Assert-AntiCodexLaunchTaskContract {
         [bool]$definition.Settings.RunOnlyIfNetworkAvailable -or
         [bool]$definition.Settings.DisallowStartIfOnBatteries -or
         [bool]$definition.Settings.StopIfGoingOnBatteries -or
-        [int]$definition.Settings.RestartCount -ne 1 -or
-        [string]$definition.Settings.RestartInterval -ne "PT1M" -or
+        [int]$definition.Settings.RestartCount -ne 0 -or
         [string]$definition.Settings.ExecutionTimeLimit -ne "PT0S") {
         throw "The isolated Anti-Codex launch task is missing or does not match the installed runtime."
     }
@@ -811,14 +824,103 @@ function Repair-RollbackHostIconManifest {
     if (-not $manifest.files) {
         throw "Anti-Codex rollback host marker is missing file hashes."
     }
-    $manifest.files | Add-Member -NotePropertyName hostIcon -NotePropertyValue (Get-FileHash -LiteralPath $rollbackResourceIcon -Algorithm SHA256).Hash -Force
-    $manifest.files | Add-Member -NotePropertyName trayIcon -NotePropertyValue (Get-FileHash -LiteralPath $rollbackTrayIcon -Algorithm SHA256).Hash -Force
-    $manifest.files | Add-Member -NotePropertyName appRootIcon -NotePropertyValue (Get-FileHash -LiteralPath $rollbackAppRootIcon -Algorithm SHA256).Hash -Force
+    $manifest.files | Add-Member -NotePropertyName hostIcon -NotePropertyValue (Get-AntiCodexSha256 -Path $rollbackResourceIcon) -Force
+    $manifest.files | Add-Member -NotePropertyName trayIcon -NotePropertyValue (Get-AntiCodexSha256 -Path $rollbackTrayIcon) -Force
+    $manifest.files | Add-Member -NotePropertyName appRootIcon -NotePropertyValue (Get-AntiCodexSha256 -Path $rollbackAppRootIcon) -Force
     $temporaryMarker = "$rollbackMarker.tmp"
     Remove-Item -LiteralPath $temporaryMarker -Force -ErrorAction SilentlyContinue
     $json = $manifest | ConvertTo-Json -Depth 8
     [System.IO.File]::WriteAllText($temporaryMarker, $json, [System.Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $temporaryMarker -Destination $rollbackMarker -Force
+}
+
+function Repair-RollbackHostUnpackedFileManifest {
+    if (-not ([IO.Directory]::Exists("\\?\$rollbackHost")) -or
+        -not ([IO.File]::Exists($rollbackMarker))) {
+        return $false
+    }
+
+    $rollbackManifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
+    $rollbackSchema = [string]$rollbackManifest.schema
+    if ($rollbackSchema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
+        throw "Anti-Codex rollback host marker schema is invalid."
+    }
+    $rollbackManifestCompatible = $rollbackSchema -eq "anticodex-host-manifest-v2"
+    $rollbackRootFull = [IO.Path]::GetFullPath($rollbackHost).TrimEnd("\")
+    $rollbackUnpackedRoot = [IO.Path]::GetFullPath((Join-Path $rollbackRootFull "resources\app.asar.unpacked")).TrimEnd("\")
+    $rollbackUnpackedAccessRoot = "\\?\$rollbackUnpackedRoot"
+    if (-not [IO.Directory]::Exists($rollbackUnpackedAccessRoot)) {
+        throw "Anti-Codex rollback unpacked resources are missing."
+    }
+
+    $actualRollbackFiles = @(Get-ChildItem -LiteralPath $rollbackUnpackedAccessRoot -File -Recurse -Force -ErrorAction Stop | Sort-Object FullName)
+    if ($actualRollbackFiles.Count -eq 0) {
+        throw "Anti-Codex rollback unpacked resources contain no files."
+    }
+
+    $rollbackUnpackedPrefix = "$rollbackUnpackedRoot\"
+    $inventory = New-Object System.Collections.Generic.List[object]
+    foreach ($rollbackFile in $actualRollbackFiles) {
+        $rollbackAccessPath = [string]$rollbackFile.FullName
+        $rollbackComparablePath = if ($rollbackAccessPath.StartsWith("\\?\", [StringComparison]::Ordinal)) {
+            $rollbackAccessPath.Substring(4)
+        } else {
+            $rollbackAccessPath = "\\?\$rollbackAccessPath"
+            [string]$rollbackFile.FullName
+        }
+        if (-not $rollbackComparablePath.StartsWith($rollbackUnpackedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Anti-Codex refused an unpacked rollback file outside the rollback tree."
+        }
+        $relativePath = $rollbackComparablePath.Substring($rollbackRootFull.Length).TrimStart("\")
+        $inventory.Add([pscustomobject]@{
+            path = $relativePath
+            sha256 = Get-AntiCodexSha256 -Path $rollbackAccessPath
+            size = [long]$rollbackFile.Length
+        }) | Out-Null
+    }
+
+    $recordedFiles = @()
+    $recordedFilesProperty = $rollbackManifest.PSObject.Properties["unpackedFiles"]
+    if ($recordedFilesProperty) {
+        $recordedFiles = @($recordedFilesProperty.Value)
+    }
+    if ($recordedFiles.Count -gt 0) {
+        if ($recordedFiles.Count -ne $actualRollbackFiles.Count) {
+            throw "Anti-Codex rollback unpacked file inventory is incomplete."
+        }
+        $recordedPaths = New-Object "System.Collections.Generic.HashSet[string]" ([StringComparer]::OrdinalIgnoreCase)
+        foreach ($recordedFile in $recordedFiles) {
+            $relativePath = [string]$recordedFile.path
+            $recordedHash = [string]$recordedFile.sha256
+            $recordedSizeProperty = $recordedFile.PSObject.Properties["size"]
+            if (-not $relativePath -or -not $recordedHash -or -not $recordedSizeProperty -or [IO.Path]::IsPathRooted($relativePath)) {
+                throw "Anti-Codex rollback marker contains an invalid unpacked file entry."
+            }
+            $recordedPath = [IO.Path]::GetFullPath((Join-Path $rollbackRootFull $relativePath))
+            if (-not $recordedPath.StartsWith($rollbackUnpackedPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+                -not $recordedPaths.Add($recordedPath)) {
+                throw "Anti-Codex rollback marker contains an invalid unpacked file path."
+            }
+            $recordedAccessPath = "\\?\$recordedPath"
+            if (-not [IO.File]::Exists($recordedAccessPath)) {
+                throw "Anti-Codex rollback unpacked file is missing: $relativePath"
+            }
+            $actualHash = Get-AntiCodexSha256 -Path $recordedAccessPath
+            $actualSize = [long](Get-Item -LiteralPath $recordedAccessPath).Length
+            if ([string]$actualHash -ne $recordedHash -or $actualSize -ne [long]$recordedSizeProperty.Value) {
+                throw "Anti-Codex rollback unpacked file does not match its marker: $relativePath"
+            }
+        }
+        return $rollbackManifestCompatible
+    }
+
+    $rollbackManifest | Add-Member -NotePropertyName unpackedFiles -NotePropertyValue $inventory.ToArray() -Force
+    $temporaryMarker = "$rollbackMarker.tmp"
+    Remove-Item -LiteralPath $temporaryMarker -Force -ErrorAction SilentlyContinue
+    $json = $rollbackManifest | ConvertTo-Json -Depth 8
+    [IO.File]::WriteAllText($temporaryMarker, $json, [Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporaryMarker -Destination $rollbackMarker -Force
+    return $rollbackManifestCompatible
 }
 
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
@@ -831,6 +933,7 @@ $syncError = $null
 $syncCompleted = $false
 $restartAfterSync = $false
 $rollbackAvailable = $false
+$rollbackRestoreAvailable = $false
 $activationRestored = $false
 $originalCodexBeforeSync = @()
 $updateStage = "candidate_build"
@@ -921,7 +1024,12 @@ try {
                 $rollbackComponentAvailable = $true
                 $activationStarted = $true
             }
-            $rollbackAvailable = $rollbackHostAvailable -and $rollbackComponentAvailable
+            $rollbackRestoreAvailable = (
+                $rollbackHostAvailable -and
+                $rollbackComponentAvailable -and
+                [IO.File]::Exists($rollbackMarker)
+            )
+            $rollbackAvailable = $false
 
             Move-FixedUpdateDirectory -Source $candidateHost -Destination $activeHost
             $activeHostChanged = $true
@@ -930,7 +1038,12 @@ try {
             Move-FixedUpdateDirectory -Source $candidateComponent -Destination $activeComponent
             $activeComponentChanged = $true
             Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
-            Repair-RollbackHostIconManifest
+            $rollbackManifestSchemaCompatible = [bool](Repair-RollbackHostUnpackedFileManifest)
+            if ($rollbackRestoreAvailable -and $rollbackManifestSchemaCompatible) {
+                Repair-RollbackHostIconManifest
+                & $rollbackScript -ValidateOnly
+                $rollbackAvailable = $true
+            }
             Remove-FixedUpdateDirectory -Path $candidateRoot
             $syncCompleted = $true
         } catch {
@@ -954,11 +1067,12 @@ try {
                         Move-FixedUpdateDirectory -Source $rollbackComponent -Destination $activeComponent
                     }
                 } catch {
-                    $recoveryState = if ($rollbackAvailable) { "the previous host and component were preserved" } else { "a complete previous release was not available" }
+                    $recoveryState = if ($rollbackRestoreAvailable) { "the previous host and component were preserved" } else { "a complete previous release was not available" }
                     throw "Anti-Codex activation failed. Automatic recovery also failed; ${recoveryState}: $activationError; recovery error: $($_.Exception.Message)"
                 }
-                if ($rollbackAvailable) {
+                if ($rollbackRestoreAvailable) {
                     $activationRestored = $true
+                    $rollbackAvailable = $false
                     throw "Anti-Codex activation failed and the previous host/component release was restored: $activationError"
                 }
                 throw "Anti-Codex activation failed and the incomplete first-install release was removed: $activationError"
@@ -989,7 +1103,7 @@ if ($syncError) {
         }
     }
     if ($activationRestored) {
-        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $true -StateRoot $stateRoot
+        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $false -StateRoot $stateRoot
     } else {
         Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
     }
@@ -1049,6 +1163,9 @@ if ($syncCompleted) {
 }
 
 if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $true)) {
+    if (-not $rollbackAvailable) {
+        throw "$([string]$postSyncAcceptance.message) No compatible rollback release was available."
+    }
     $rollbackFailure = $null
     $failureReason = [string]$postSyncAcceptance.message
     try {
@@ -1068,23 +1185,36 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
 }
 
 if ($syncCompleted) {
+    if (-not $rollbackAvailable) {
+        if ([IO.File]::Exists($rollbackMarker)) {
+            Remove-Item -LiteralPath $rollbackMarker -Force -ErrorAction Stop
+        }
+        Remove-FixedUpdateDirectory -Path $rollbackHost
+        Remove-FixedUpdateDirectory -Path $rollbackComponent
+    }
     try {
         & $updateChecker -InstallRoot $installRoot -StateRoot $stateRoot | Out-Null
     } catch {
         Write-Warning "Anti-Codex sync succeeded, but the update fingerprint refresh needs a later Manager retry: $($_.Exception.Message)"
     }
-    $completionMessage = if ($NoRestart) {
-        "Anti-Codex is synced with the installed Codex version and will use it on the next launch."
+    $rollbackCompletionMessage = if ($rollbackAvailable) {
+        "The previous release is available for rollback."
     } else {
-        "Anti-Codex is synced with the installed Codex version."
+        "No compatible previous release is available for rollback."
+    }
+    $completionMessage = if ($NoRestart) {
+        "Anti-Codex is synced with the installed Codex version and will use it on the next launch. $rollbackCompletionMessage"
+    } else {
+        "Anti-Codex is synced with the installed Codex version. $rollbackCompletionMessage"
     }
     Set-AntiCodexUpdateOperation -State "succeeded" -Stage "complete" -Message $completionMessage -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
     if ($NoRestart) {
         Write-Host $completionMessage
     } else {
         $shell = New-Object -ComObject WScript.Shell
+        $popupMessage = "Anti-Codex passed compatibility checks and is now synced with the installed Codex version. $rollbackCompletionMessage"
         $shell.Popup(
-            "Anti-Codex passed compatibility checks and is now synced with the installed Codex version. The previous host is available for rollback.",
+            $popupMessage,
             8,
             "Anti-Codex Sync Complete",
             64

@@ -243,8 +243,13 @@ function Test-ActiveHostGuardrails {
     $failures = New-Object System.Collections.Generic.List[string]
     if ($null -eq $Manifest) {
         $failures.Add("active host marker is missing or unreadable") | Out-Null
-    } elseif ([string]$Manifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
-        $failures.Add("active host marker schema is invalid") | Out-Null
+    } else {
+        $manifestSchema = [string](Get-ObjectPropertyValue -InputObject $Manifest -Name "schema")
+        if ($manifestSchema -eq "anticodex-host-manifest-v1") {
+            $failures.Add("active host requires unpacked file inventory migration") | Out-Null
+        } elseif ($manifestSchema -ne "anticodex-host-manifest-v2") {
+            $failures.Add("active host marker schema is invalid") | Out-Null
+        }
     }
     $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"
     $manifestSource = Get-ObjectPropertyValue -InputObject $Manifest -Name "source"
@@ -274,6 +279,61 @@ function Test-ActiveHostGuardrails {
             $recorded = Get-ObjectPropertyValue -InputObject $manifestFiles -Name $name
             if (-not $recorded -or [string]$recorded -ne [string]$actual) {
                 $failures.Add("active host marker hash mismatch: $name") | Out-Null
+            }
+        }
+    }
+
+    $manifestSchema = [string](Get-ObjectPropertyValue -InputObject $Manifest -Name "schema")
+    if ($manifestSchema -eq "anticodex-host-manifest-v2") {
+        $recordedFilesValue = Get-ObjectPropertyValue -InputObject $Manifest -Name "unpackedFiles"
+        $recordedFiles = @()
+        if ($null -ne $recordedFilesValue) {
+            $recordedFiles = @($recordedFilesValue)
+        }
+        if ($recordedFiles.Count -eq 0) {
+            $failures.Add("active host requires unpacked file inventory migration") | Out-Null
+        } else {
+            try {
+                $hostRootFull = [IO.Path]::GetFullPath($HostRoot).TrimEnd("\")
+                $unpackedRoot = [IO.Path]::GetFullPath((Join-Path $hostRootFull "resources\app.asar.unpacked")).TrimEnd("\")
+                $unpackedRootPrefix = "$unpackedRoot\"
+                $recordedPaths = New-Object "System.Collections.Generic.HashSet[string]" ([StringComparer]::OrdinalIgnoreCase)
+                foreach ($recordedFile in $recordedFiles) {
+                    $relativePath = [string](Get-ObjectPropertyValue -InputObject $recordedFile -Name "path")
+                    $recordedHash = [string](Get-ObjectPropertyValue -InputObject $recordedFile -Name "sha256")
+                    $recordedSize = Get-ObjectPropertyValue -InputObject $recordedFile -Name "size"
+                    if (-not $relativePath -or -not $recordedHash -or $null -eq $recordedSize -or [IO.Path]::IsPathRooted($relativePath)) {
+                        $failures.Add("active host marker contains an invalid unpacked file entry") | Out-Null
+                        continue
+                    }
+                    $unpackedFilePath = [IO.Path]::GetFullPath((Join-Path $hostRootFull $relativePath))
+                    $unpackedFileAccessPath = "\\?\$unpackedFilePath"
+                    if (-not $unpackedFilePath.StartsWith($unpackedRootPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+                        -not [IO.File]::Exists($unpackedFileAccessPath)) {
+                        $failures.Add("active host unpacked file is missing or outside app.asar.unpacked: $relativePath") | Out-Null
+                        continue
+                    }
+                    if ([string](Get-AntiCodexSha256 -Path $unpackedFileAccessPath) -ne $recordedHash) {
+                        $failures.Add("active host unpacked file hash mismatch: $relativePath") | Out-Null
+                    }
+                    if ([long](Get-Item -LiteralPath $unpackedFileAccessPath).Length -ne [long]$recordedSize) {
+                        $failures.Add("active host unpacked file size mismatch: $relativePath") | Out-Null
+                    }
+                    if (-not $recordedPaths.Add($unpackedFilePath)) {
+                        $failures.Add("active host marker repeats an unpacked file path: $relativePath") | Out-Null
+                    }
+                }
+                $unpackedAccessRoot = "\\?\$unpackedRoot"
+                if (-not [IO.Directory]::Exists($unpackedAccessRoot)) {
+                    $failures.Add("active host unpacked resource directory is missing") | Out-Null
+                } else {
+                    $actualFiles = @(Get-ChildItem -LiteralPath $unpackedAccessRoot -File -Recurse -Force -ErrorAction Stop)
+                    if ($actualFiles.Count -ne $recordedFiles.Count) {
+                        $failures.Add("active host unpacked file inventory is incomplete") | Out-Null
+                    }
+                }
+            } catch {
+                $failures.Add("active host unpacked file inventory validation failed: $($_.Exception.Message)") | Out-Null
             }
         }
     }

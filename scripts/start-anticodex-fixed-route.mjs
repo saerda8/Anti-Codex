@@ -169,6 +169,113 @@ $result = [AntiCodex.Native.ExactProcessTermination]::TerminateExact(
     3000)
 [Console]::Out.Write([string]$result)
 `;
+const WINDOWS_PROCESS_TABLE_SCANNER = String.raw`
+$ErrorActionPreference = "Stop"
+$assembly = [System.Diagnostics.Process].Assembly
+$native = $assembly.GetType("Microsoft.Win32.NativeMethods")
+$infoType = $assembly.GetType("Microsoft.Win32.NativeMethods+NtProcessBasicInfo")
+$queryMethod = $native.GetMethod(
+    "NtQueryInformationProcess",
+    [Reflection.BindingFlags]"Public,NonPublic,Static")
+$timesMethod = $native.GetMethod(
+    "GetProcessTimes",
+    [Reflection.BindingFlags]"Public,NonPublic,Static")
+$parentField = $infoType.GetField(
+    "InheritedFromUniqueProcessId",
+    [Reflection.BindingFlags]"Public,Instance")
+if (!$queryMethod -or !$timesMethod -or !$parentField) {
+    throw "Native process inspection is unavailable."
+}
+
+$ownerProcessId = [int]$env:ANTICODEX_SCAN_OWNER_PID
+$seedProcessIds = @()
+if (![string]::IsNullOrWhiteSpace($env:ANTICODEX_SCAN_SEED_PIDS)) {
+    $seedProcessIds = @(
+        $env:ANTICODEX_SCAN_SEED_PIDS -split "," |
+            ForEach-Object { [int]$_ } |
+            Where-Object { $_ -gt 0 })
+}
+$queue = New-Object "System.Collections.Generic.Queue[int]"
+$seen = New-Object "System.Collections.Generic.HashSet[int]"
+$rows = New-Object "System.Collections.Generic.List[object]"
+@(
+    Get-Process -Name "Anti-Codex" -ErrorAction SilentlyContinue |
+        ForEach-Object { [int]$_.Id }
+    $seedProcessIds
+) | ForEach-Object {
+    if ([int]$_ -gt 0) {
+        $queue.Enqueue([int]$_)
+    }
+}
+
+while ($queue.Count -gt 0) {
+    $currentId = [int]$queue.Dequeue()
+    if (!$seen.Add($currentId)) {
+        continue
+    }
+    $current = Get-Process -Id $currentId -ErrorAction SilentlyContinue
+    if (!$current) {
+        continue
+    }
+    try {
+        $info = [Activator]::CreateInstance($infoType)
+        $returnLength = [int[]]::new(1)
+        $queryArguments = [object[]]::new(5)
+        $queryArguments[0] = $current.SafeHandle
+        $queryArguments[1] = [int]0
+        $queryArguments[2] = $info
+        $queryArguments[3] = [int][Runtime.InteropServices.Marshal]::SizeOf($info)
+        $queryArguments[4] = $returnLength
+        if ([int]$queryMethod.Invoke($null, $queryArguments) -ne 0) {
+            throw "NtQueryInformationProcess failed for PID $currentId."
+        }
+        $parentProcessId = [int]$parentField.GetValue($info).ToInt64()
+
+        $timeArguments = [object[]]@(
+            $current.SafeHandle,
+            [long]0,
+            [long]0,
+            [long]0,
+            [long]0)
+        if (![bool]$timesMethod.Invoke($null, $timeArguments)) {
+            throw "GetProcessTimes failed for PID $currentId."
+        }
+        $creationFileTime = [long]$timeArguments[1]
+        if ($creationFileTime -le 0) {
+            throw "Invalid native creation time for PID $currentId."
+        }
+        $createdAtMs = ([DateTimeOffset](
+            [DateTime]::FromFileTimeUtc($creationFileTime))).ToUnixTimeMilliseconds()
+        [void]$rows.Add([pscustomobject]@{
+            processId = $currentId
+            parentProcessId = $parentProcessId
+            executablePath = [string]$current.Path
+            createdAtMs = [long]$createdAtMs
+            creationFileTimeUtcTicks = [string]$creationFileTime
+            name = [string]($current.ProcessName + ".exe")
+        })
+
+        if (
+            $parentProcessId -gt 0 -and
+            $parentProcessId -ne $ownerProcessId -and
+            !$seen.Contains($parentProcessId)
+        ) {
+            $queue.Enqueue($parentProcessId)
+        }
+    } catch {
+        $stillRunning = Get-Process -Id $currentId -ErrorAction SilentlyContinue
+        if ($stillRunning) {
+            $stillRunning.Dispose()
+            throw
+        }
+    } finally {
+        $current.Dispose()
+    }
+}
+
+[Console]::Out.Write(
+    [string](ConvertTo-Json -InputObject $rows.ToArray() -Compress -Depth 3))
+`;
 const DEFAULT_PORTS = Object.freeze({
   cdp: 18318,
   proxy: 18484,
@@ -321,8 +428,9 @@ export function sanitizeFixedRoutePlan(plan) {
       headlessProtocolProxy: true,
       codexPlusPlusOwnsClient: false,
       clientOwner: plan.headless ? null : "fixed-route-supervisor",
-      automaticallyRelaunchesClient: !plan.headless,
-      automaticClientRecoveryLimit: plan.headless ? 0 : 1,
+      automaticallyRelaunchesClient: false,
+      ordinaryMissingClientAction: plan.headless ? null : "shutdown",
+      fatalRendererRecoveryLimit: plan.headless ? 0 : 1,
       ownsTaskControl: false,
       cleansOnlyOwnedChildren: true,
     },
@@ -733,6 +841,18 @@ async function runSupervisor(plan) {
         env: childEnvironment,
         windowsHide: false,
         stdio: "ignore",
+      });
+      child.once("exit", (code, signal) => {
+        status = recordClientExitSafely(
+          status,
+          {
+            processId: child.pid,
+            code: Number.isInteger(code) ? code : null,
+            signal: signal || null,
+            exitedAt: new Date().toISOString(),
+          },
+          (nextStatus) => writeStatus(plan.paths.statusFile, nextStatus),
+        );
       });
       const rootIdentity = await captureSpawnedProcessIdentity(child, {
         expectedExecutablePath: plan.paths.appExecutable,
@@ -1533,10 +1653,32 @@ export function recoveryLaunchIsSafe(processRows = [], expectedExecutablePath = 
   for (const row of processRows) {
     const name = String(row?.name ?? row?.Name ?? "").trim().toLowerCase();
     const executablePath = normalizedExecutablePath(row?.executablePath ?? row?.ExecutablePath);
-    if (executablePath === expectedPath) return false;
-    if (name === "anti-codex.exe" && !executablePath) return false;
+    if (
+      name === "anti-codex.exe"
+      || executablePath === expectedPath
+      || executablePath.endsWith("\\anti-codex.exe")
+    ) return false;
   }
   return true;
+}
+
+export function recordClientExitSafely(status, exit, persist) {
+  const nextStatus = {
+    ...status,
+    lastClientExit: { ...exit },
+  };
+  try {
+    persist(nextStatus);
+    return nextStatus;
+  } catch (error) {
+    return {
+      ...nextStatus,
+      lastClientExit: {
+        ...nextStatus.lastClientExit,
+        statusWriteError: String(error?.message ?? error),
+      },
+    };
+  }
 }
 
 function exactProcessIdentityMatches(row, identity, expectedExecutablePath = "") {
@@ -1645,21 +1787,25 @@ export function scanClientProcessTableSafely(scan = getClientProcessTableRows) {
   }
 }
 
-function getClientProcessTableRows() {
+function getClientProcessTableRows(seedProcessIds = []) {
   if (process.platform !== "win32") return [];
-  const command = [
-    "$ErrorActionPreference = 'Stop'",
-    "$rows = @(Get-CimInstance Win32_Process | ForEach-Object {",
-    "  $created = if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() } else { 0 }",
-    "  $creationFileTime = if ($_.CreationDate) { ([DateTimeOffset]$_.CreationDate).UtcDateTime.ToFileTimeUtc() } else { 0 }",
-    "  [pscustomobject]@{ processId = [int]$_.ProcessId; parentProcessId = [int]$_.ParentProcessId; executablePath = [string]$_.ExecutablePath; createdAtMs = [long]$created; creationFileTimeUtcTicks = [string]$creationFileTime; name = [string]$_.Name }",
-    "})",
-    "@($rows) | ConvertTo-Json -Compress",
-  ].join("; ");
-  const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+  const normalizedSeeds = [...new Set(seedProcessIds
+    .map(Number)
+    .filter((processId) => Number.isInteger(processId) && processId > 0))];
+  const output = execFileSync("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    WINDOWS_PROCESS_TABLE_SCANNER,
+  ], {
     encoding: "utf8",
     windowsHide: true,
-    timeout: 5_000,
+    timeout: 10_000,
+    env: {
+      ...process.env,
+      ANTICODEX_SCAN_OWNER_PID: String(process.pid),
+      ANTICODEX_SCAN_SEED_PIDS: normalizedSeeds.join(","),
+    },
   }).trim();
   if (!output) return [];
   const parsed = JSON.parse(output);
@@ -1671,7 +1817,7 @@ export async function captureSpawnedProcessIdentity(child, options = {}) {
   const expectedExecutablePath = normalizedExecutablePath(options.expectedExecutablePath);
   const expectedParentProcessId = Number(options.expectedParentProcessId ?? process.pid);
   const startedAtMs = Number(options.startedAtMs ?? Date.now());
-  const scan = options.scan ?? getClientProcessTableRows;
+  const scan = options.scan ?? (() => getClientProcessTableRows([processId]));
   if (!Number.isInteger(processId) || processId <= 0 || !expectedExecutablePath) {
     throw new TypeError("A spawned process PID and exact executable path are required.");
   }
@@ -1693,6 +1839,7 @@ export async function captureSpawnedProcessIdentity(child, options = {}) {
       || current.createdAtMs < startedAtMs - 2_000
       || current.createdAtMs > Date.now() + 2_000
       || !current.creationFileTimeUtcTicks
+      || current.creationFileTimeUtcTicks === "0"
     ) {
       throw new Error(`Owned process ${processId} identity did not match its spawn.`);
     }

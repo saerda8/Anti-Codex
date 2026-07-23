@@ -957,7 +957,7 @@ async function main() {
       const suppressRefreshStatusResult = deliveredAction === "refreshStatus" && globalThis.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
       if (!isManagerRequest && !suppressRefreshStatusResult) globalThis.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload;
       let result = document.querySelector('[data-anticodex-result="action"]');
-      if (!isManagerRequest && !result && typeof globalThis.__ANTICODEX_OPEN_MANAGER__ === "function") {
+      if (!isManagerRequest && !suppressRefreshStatusResult && !result && typeof globalThis.__ANTICODEX_OPEN_MANAGER__ === "function") {
         document.querySelector("#anticodex-manager-overlay")?.remove();
         globalThis.__ANTICODEX_OPEN_MANAGER__();
         result = document.querySelector('[data-anticodex-result="action"]');

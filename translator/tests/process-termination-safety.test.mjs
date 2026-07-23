@@ -316,6 +316,13 @@ test("fixed-route cleanup revalidates owned identities and never uses a name or 
   assert.match(source, /QueryFullProcessImageName/);
   assert.match(source, /TerminateProcess/);
   assert.match(source, /WaitForSingleObject/);
+  assert.doesNotMatch(source, /Get-CimInstance Win32_Process/);
+  assert.match(source, /Get-Process -Name ["']Anti-Codex["']/);
+  assert.match(source, /NtQueryInformationProcess/);
+  assert.match(source, /InheritedFromUniqueProcessId/);
+  assert.match(source, /GetProcessTimes/);
+  assert.match(source, /ANTICODEX_SCAN_SEED_PIDS/);
+  assert.match(source, /getClientProcessTableRows\(\[processId\]\)/);
 });
 
 test("all maintenance force-stops query identity and terminate through the same Windows handle", () => {

@@ -47,6 +47,9 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.match(source, /getLauncherArgs/);
   assert.match(source, /getCopiedClientArgs/);
   assert.match(source, /spawn\(plan\.paths\.appExecutable, plan\.clientArgs/);
+  assert.match(source, /child\.once\("exit",\s*\(code,\s*signal\)\s*=>/);
+  assert.match(source, /lastClientExit:\s*\{/);
+  assert.match(source, /processId:\s*child\.pid/);
   assert.match(source, /CODEX_PLUS_STATE_DIR/);
   assert.match(source, /CODEX_PLUS_APP_EXECUTABLE/);
   assert.match(source, /CODEX_PLUS_PROTOCOL_PROXY_PORT/);
@@ -223,7 +226,32 @@ test("owned client discovery never launders a reused root PID over its captured 
   }), []);
 });
 
-test("single-window recovery fails closed for the same executable or an uninspectable Anti-Codex process", () => {
+test("spawn identity capture rejects a zero native creation timestamp", async () => {
+  const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
+  await assert.rejects(
+    fixedRoute.captureSpawnedProcessIdentity(
+      { pid: 101, exitCode: null, signalCode: null },
+      {
+        expectedExecutablePath,
+        expectedParentProcessId: 900,
+        startedAtMs: 950,
+        timeoutMs: 100,
+        intervalMs: 10,
+        scan: () => [{
+          processId: 101,
+          parentProcessId: 900,
+          executablePath: expectedExecutablePath,
+          createdAtMs: 1_000,
+          creationFileTimeUtcTicks: "0",
+          name: "Anti-Codex.exe",
+        }],
+      },
+    ),
+    /identity did not match its spawn/i,
+  );
+});
+
+test("single-window recovery rejects every Anti-Codex process but ignores native Codex", () => {
   assert.equal(typeof fixedRoute.recoveryLaunchIsSafe, "function");
   const expectedExecutablePath = "G:\\Install-A\\codex-patched-app\\Anti-Codex.exe";
   assert.equal(fixedRoute.recoveryLaunchIsSafe([
@@ -234,8 +262,29 @@ test("single-window recovery fails closed for the same executable or an uninspec
   ], expectedExecutablePath), false);
   assert.equal(fixedRoute.recoveryLaunchIsSafe([
     { name: "Anti-Codex.exe", executablePath: "G:\\Install-B\\codex-patched-app\\Anti-Codex.exe" },
+  ], expectedExecutablePath), false);
+  assert.equal(fixedRoute.recoveryLaunchIsSafe([
     { name: "ChatGPT.exe", executablePath: "C:\\Program Files\\WindowsApps\\OpenAI.Codex_1\\app\\ChatGPT.exe" },
   ], expectedExecutablePath), true);
+});
+
+test("client exit status persistence failure is contained without losing the exit evidence", () => {
+  const status = { state: "ready" };
+  const exit = {
+    processId: 101,
+    code: 0,
+    signal: null,
+    exitedAt: "2026-07-23T00:00:00.000Z",
+  };
+  const recorded = fixedRoute.recordClientExitSafely(status, exit, () => {
+    throw new Error("status path is temporarily unavailable");
+  });
+
+  assert.equal(recorded.state, "ready");
+  assert.deepEqual(recorded.lastClientExit, {
+    ...exit,
+    statusWriteError: "status path is temporarily unavailable",
+  });
 });
 
 test("client handoff uses CDP and requires a sustained exit", async () => {
@@ -559,8 +608,9 @@ test("plan-json proves third-party bypass without starting processes or exposing
     headlessProtocolProxy: true,
     codexPlusPlusOwnsClient: false,
     clientOwner: "fixed-route-supervisor",
-    automaticallyRelaunchesClient: true,
-    automaticClientRecoveryLimit: 1,
+    automaticallyRelaunchesClient: false,
+    ordinaryMissingClientAction: "shutdown",
+    fatalRendererRecoveryLimit: 1,
     ownsTaskControl: false,
     cleansOnlyOwnedChildren: true,
   });

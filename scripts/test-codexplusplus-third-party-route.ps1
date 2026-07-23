@@ -28,6 +28,19 @@ $script:ProbeResult = $null
 $script:NativeCliResult = $null
 $script:Ports = @()
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Get-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     return [IO.Path]::GetFullPath($Path).TrimEnd('\')
@@ -149,7 +162,7 @@ function Get-FileFingerprint {
     $item = Get-Item -LiteralPath $Path
     $hash = $null
     if (-not $MetadataOnly) {
-        $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = (Get-AntiCodexSha256 -Path $Path).ToLowerInvariant()
     }
     return [pscustomobject]@{
         path = $item.FullName
@@ -174,7 +187,7 @@ function Get-TreeMetadata {
             relativePath = $item.FullName.Substring($prefix.Length)
             length = [long]$item.Length
             lastWriteTimeUtc = $item.LastWriteTimeUtc.ToString('o')
-            sha256 = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256 = (Get-AntiCodexSha256 -Path $item.FullName).ToLowerInvariant()
         }
     }
     return [pscustomobject]@{ path = $root; exists = $true; files = $files }
@@ -662,7 +675,7 @@ remote_plugin = false
     }
     Write-Utf8NoBom $reportFull ($report | ConvertTo-Json -Depth 20)
     if ($report.ok -eq $true) {
-        $reportHash = (Get-FileHash -LiteralPath $reportFull -Algorithm SHA256).Hash.ToLowerInvariant()
+        $reportHash = (Get-AntiCodexSha256 -Path $reportFull).ToLowerInvariant()
         [IO.File]::WriteAllText("$reportFull.sha256", "sha256:$reportHash", [Text.Encoding]::ASCII)
     } elseif (Test-Path -LiteralPath "$reportFull.sha256") {
         Remove-Item -LiteralPath "$reportFull.sha256" -Force

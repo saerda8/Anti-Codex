@@ -168,6 +168,19 @@ $transactionId = "{0}-{1}" -f ([DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ"
 $stagedRuntimeFull = [IO.Path]::GetFullPath((Join-Path $runtimeVersionsRoot "staged-$transactionId"))
 $rollbackRuntimeFull = [IO.Path]::GetFullPath((Join-Path $runtimeVersionsRoot "rollback-$transactionId"))
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Test-AntiCodexRuntimeSyncFixture {
     if ([string]::IsNullOrWhiteSpace([string]$env:ANTICODEX_RUNTIME_SYNC_TEST_ROOT)) {
         return $false
@@ -661,7 +674,7 @@ function Get-AntiCodexRuntimeInventory {
             $entries[$relative] = [ordered]@{
                 type = "file"
                 length = [long]$item.Length
-                sha256 = (Get-FileHash -LiteralPath $itemFull -Algorithm SHA256).Hash.ToLowerInvariant()
+                sha256 = (Get-AntiCodexSha256 -Path $itemFull).ToLowerInvariant()
             }
         } else {
             throw "Anti-Codex runtime inventory found an unsupported filesystem entry: $itemFull"
@@ -674,7 +687,7 @@ function Write-AntiCodexStagedRuntimeManifest {
     $inventory = Get-AntiCodexRuntimeInventory -Directory $stagedRuntimeFull
     $fileHashes = [ordered]@{}
     foreach ($relative in $requiredSourceFiles) {
-        $fileHashes[$relative] = (Get-FileHash -LiteralPath (Join-Path $stagedRuntimeFull $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $fileHashes[$relative] = (Get-AntiCodexSha256 -Path (Join-Path $stagedRuntimeFull $relative)).ToLowerInvariant()
     }
     $manifest = [ordered]@{
         schema = "anticodex-runtime-manifest-v2"
@@ -774,7 +787,7 @@ function Get-AntiCodexTrustedRuntimeVersion {
             $filePath = [IO.Path]::GetFullPath((Join-Path $directoryFull $relative))
             if (-not (Test-AntiCodexPathInsideRoot -Path $filePath -Root $directoryFull) -or
                 -not (Test-Path -LiteralPath $filePath -PathType Leaf) -or
-                -not (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.Equals(
+                -not (Get-AntiCodexSha256 -Path $filePath).Equals(
                     $expectedHash,
                     [StringComparison]::OrdinalIgnoreCase
                 )) {
@@ -1351,8 +1364,8 @@ try {
         $runtimeHashMismatches = @($requiredSourceFiles | Where-Object {
             $sourcePath = Join-Path $sourceRootFull $_
             $targetPath = Join-Path $stagedRuntimeFull $_
-            (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -ne
-                (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash
+            (Get-AntiCodexSha256 -Path $sourcePath) -ne
+                (Get-AntiCodexSha256 -Path $targetPath)
         })
         if ($runtimeHashMismatches.Count -gt 0) {
             throw "Anti-Codex staged runtime hash verification failed: $($runtimeHashMismatches -join ', ')"
@@ -1435,8 +1448,8 @@ try {
             $sourcePath = Join-Path $sourceRootFull $_
             $targetPath = Join-Path $targetRuntimeFull $_
             -not (Test-Path -LiteralPath $targetPath -PathType Leaf) -or
-                (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -ne
-                (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash
+                (Get-AntiCodexSha256 -Path $sourcePath) -ne
+                    (Get-AntiCodexSha256 -Path $targetPath)
         })
         if ($runtimeHashMismatches.Count -gt 0) {
             throw "Anti-Codex activated runtime hash verification failed: $($runtimeHashMismatches -join ', ')"

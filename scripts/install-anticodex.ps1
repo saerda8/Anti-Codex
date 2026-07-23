@@ -32,7 +32,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ROOT = Split-Path -Parent $PSScriptRoot
-$PATCH_EXE_ICON_SCRIPT = Join-Path $ROOT "scripts\patch-exe-icon.ps1"
 $SOURCE_PREFLIGHT_SCRIPT = Join-Path $ROOT "scripts\test-anticodex-source-preflight.ps1"
 $fixedShellCriticalPatches = @(
     "package-json",
@@ -57,6 +56,20 @@ if ($resolvedTarget -ne $expectedRoot -and (-not $HostOnly -or $resolvedTarget -
 $existingActiveMarker = Join-Path $expectedRoot "codex-patched-app.ok"
 if (-not $HostOnly -and (Test-Path -LiteralPath $existingActiveMarker -PathType Leaf)) {
     throw "Anti-Codex is already installed. Use Sync Anti-Codex with Codex for host updates so the active installation and rollback checkpoint stay protected."
+}
+
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
 }
 
 function Invoke-AntiCodexSourcePreflight {
@@ -98,7 +111,8 @@ function Find-PhantomDirectories {
     param([Parameter(Mandatory = $true)][string]$Root)
 
     return @(Get-ChildItem -LiteralPath $Root -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
-        -not (Test-Path -LiteralPath $_.FullName -PathType Container)
+        $directoryPath = [IO.Path]::GetFullPath([string]$_.FullName)
+        -not [IO.Directory]::Exists("\\?\$directoryPath")
     } | ForEach-Object {
         [string]$_.FullName
     })
@@ -159,6 +173,63 @@ function Copy-Tree {
         throw "Copy failed after 3 attempts while excluding $($phantomDirectories.Count) unreadable packaged directories (robocopy exit $copyExitCode): $Source; $copyTail"
     }
     Copy-Item -Path (Join-Path $Source "*") -Destination $Destination -Recurse -Force -ErrorAction Stop
+}
+
+function Sync-UnpackedNativeModules {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot
+    )
+
+    $sourceRootFull = [IO.Path]::GetFullPath($SourceRoot).TrimEnd("\")
+    $destinationRootFull = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd("\")
+    $sourceUnpacked = Join-Path $sourceRootFull "resources\app.asar.unpacked"
+    $sourceUnpackedExtended = "\\?\$sourceUnpacked"
+    if (-not [IO.Directory]::Exists($sourceUnpackedExtended)) {
+        throw "Official Codex unpacked resources are missing: $sourceUnpacked"
+    }
+
+    $sourceFiles = @(Get-ChildItem -LiteralPath $sourceUnpackedExtended -File -Recurse -Force -ErrorAction Stop | Sort-Object FullName)
+    if ($sourceFiles.Count -eq 0) {
+        throw "Official Codex unpacked resources contain no files."
+    }
+
+    $inventory = New-Object System.Collections.Generic.List[object]
+    foreach ($sourceFile in $sourceFiles) {
+        $sourceAccessPath = [string]$sourceFile.FullName
+        $sourceComparablePath = if ($sourceAccessPath.StartsWith("\\?\", [StringComparison]::Ordinal)) {
+            $sourceAccessPath.Substring(4)
+        } else {
+            $sourceAccessPath = "\\?\$sourceAccessPath"
+            [string]$sourceFile.FullName
+        }
+        $relativePath = $sourceComparablePath.Substring($sourceRootFull.Length).TrimStart("\")
+        $destinationPath = [IO.Path]::GetFullPath((Join-Path $destinationRootFull $relativePath))
+        if (-not $destinationPath.StartsWith("$destinationRootFull\", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to copy an unpacked file outside the staged host: $relativePath"
+        }
+        $destinationAccessPath = "\\?\$destinationPath"
+        $sourceHash = Get-AntiCodexSha256 -Path $sourceAccessPath
+        $destinationHash = if ([IO.File]::Exists($destinationAccessPath)) {
+            Get-AntiCodexSha256 -Path $destinationAccessPath
+        } else {
+            $null
+        }
+        if ([string]$destinationHash -ne [string]$sourceHash) {
+            [IO.Directory]::CreateDirectory("\\?\$(Split-Path -Parent $destinationPath)") | Out-Null
+            [IO.File]::Copy($sourceAccessPath, $destinationAccessPath, $true)
+            $destinationHash = Get-AntiCodexSha256 -Path $destinationAccessPath
+        }
+        if ([string]$destinationHash -ne [string]$sourceHash) {
+            throw "Anti-Codex unpacked file copy failed verification: $relativePath"
+        }
+        $inventory.Add([pscustomobject]@{
+            path = $relativePath
+            sha256 = $sourceHash
+            size = [long]$sourceFile.Length
+        }) | Out-Null
+    }
+    return $inventory.ToArray()
 }
 
 function Find-CSharpCompiler {
@@ -257,10 +328,7 @@ function Resolve-AntiCodexIconPath {
 }
 
 function Install-AntiCodexHostIcon {
-    param(
-        [Parameter(Mandatory = $true)][string]$HostRoot,
-        [Parameter(Mandatory = $true)][string]$ExePath
-    )
+    param([Parameter(Mandatory = $true)][string]$HostRoot)
 
     $icon = Resolve-AntiCodexIconPath
     $resourceIcon = Join-Path $HostRoot "resources\icon.ico"
@@ -274,10 +342,9 @@ function Install-AntiCodexHostIcon {
     Copy-Item -LiteralPath $icon -Destination $trayIcon -Force
     Copy-Item -LiteralPath $icon -Destination $appRootIcon -Force
 
-    if (-not (Test-Path -LiteralPath $PATCH_EXE_ICON_SCRIPT -PathType Leaf)) {
-        throw "Anti-Codex icon patcher is missing: $PATCH_EXE_ICON_SCRIPT"
-    }
-    & $PATCH_EXE_ICON_SCRIPT -ExePath $ExePath -IconPath $icon | Out-Null
+    # The executable keeps its original embedded icon resources. Rewriting them
+    # makes current endpoint protection remove the copied host on first launch.
+    # Window, shortcut, taskbar, and tray branding use the isolated icon files.
     try { & ie4uinit.exe -show | Out-Null } catch {}
 }
 
@@ -286,7 +353,8 @@ function Write-HostManifest {
         [Parameter(Mandatory = $true)][string]$TargetRoot,
         [Parameter(Mandatory = $true)][string]$HostRoot,
         [Parameter(Mandatory = $true)][string]$SourceRoot,
-        [Parameter(Mandatory = $true)][string]$DesktopHostName
+        [Parameter(Mandatory = $true)][string]$DesktopHostName,
+        [Parameter(Mandatory = $true)][object[]]$UnpackedFiles
     )
 
     $marker = Join-Path $TargetRoot "codex-patched-app.ok"
@@ -306,17 +374,18 @@ function Write-HostManifest {
             packageName = if ($sourcePackage) { [string]$sourcePackage.Name } else { $null }
             packageVersion = if ($sourcePackage) { [string]$sourcePackage.Version } else { $null }
             desktopHostName = $DesktopHostName
-            codexHost = (Get-FileHash -LiteralPath (Join-Path $SourceRoot $DesktopHostName) -Algorithm SHA256).Hash
-            codexCli = (Get-FileHash -LiteralPath (Join-Path $SourceRoot "resources\codex.exe") -Algorithm SHA256).Hash
+            codexHost = Get-AntiCodexSha256 -Path (Join-Path $SourceRoot $DesktopHostName)
+            codexCli = Get-AntiCodexSha256 -Path (Join-Path $SourceRoot "resources\codex.exe")
         }
         criticalPatches = @($fixedShellCriticalPatches)
+        unpackedFiles = @($UnpackedFiles)
         files = [ordered]@{
-            antiCodexExe = (Get-FileHash -LiteralPath (Join-Path $HostRoot "Anti-Codex.exe") -Algorithm SHA256).Hash
-            appAsar = (Get-FileHash -LiteralPath (Join-Path $HostRoot "resources\app.asar") -Algorithm SHA256).Hash
-            codexCli = (Get-FileHash -LiteralPath (Join-Path $HostRoot "resources\codex.exe") -Algorithm SHA256).Hash
-            hostIcon = (Get-FileHash -LiteralPath (Join-Path $HostRoot "resources\icon.ico") -Algorithm SHA256).Hash
-            trayIcon = (Get-FileHash -LiteralPath (Join-Path $HostRoot "resources\codex-tray.ico") -Algorithm SHA256).Hash
-            appRootIcon = (Get-FileHash -LiteralPath (Join-Path $HostRoot "icon.ico") -Algorithm SHA256).Hash
+            antiCodexExe = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "Anti-Codex.exe")
+            appAsar = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\app.asar")
+            codexCli = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\codex.exe")
+            hostIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\icon.ico")
+            trayIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\codex-tray.ico")
+            appRootIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "icon.ico")
         }
     }
     Remove-Item -LiteralPath $temporaryMarker -Force -ErrorAction SilentlyContinue
@@ -487,6 +556,7 @@ if (Test-Path -LiteralPath $copiedCodexStaging) {
     [IO.Directory]::Delete("\\?\$([IO.Path]::GetFullPath($copiedCodexStaging))", $true)
 }
 Copy-Tree $sourceCodex $copiedCodexStaging -Mirror
+$unpackedFiles = @(Sync-UnpackedNativeModules -SourceRoot $sourceCodex -DestinationRoot $copiedCodexStaging)
 
 $stagedDesktopHost = Resolve-CodexDesktopHost -AppRoot $copiedCodexStaging
 if (-not $stagedDesktopHost) {
@@ -505,7 +575,7 @@ $sourceDesktopHostPath = Join-Path $copiedCodex $stagedDesktopHost
 $antiCodexHost = Join-Path $copiedCodex "Anti-Codex.exe"
 Copy-Item -LiteralPath $sourceDesktopHostPath -Destination $antiCodexHost -Force
 Update-ExeVersionInfo $antiCodexHost
-Install-AntiCodexHostIcon -HostRoot $copiedCodex -ExePath $antiCodexHost
+Install-AntiCodexHostIcon -HostRoot $copiedCodex
 $brandScript = Join-Path $ROOT "scripts\brand-patched-asar.mjs"
 $brandProfileDropdown = Join-Path $ROOT "scripts\brand-profile-dropdown.mjs"
 foreach ($requiredBrandScript in @($brandScript, $brandProfileDropdown)) {
@@ -518,7 +588,7 @@ $node = (Get-Command node.exe -ErrorAction Stop).Source
 if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
 }
-Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost
+Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -UnpackedFiles $unpackedFiles
 
 $snapshotSync = Join-Path $runtime "scripts\sync-shared-codex-plugin-host.mjs"
 if (Test-Path -LiteralPath $snapshotSync -PathType Leaf) {

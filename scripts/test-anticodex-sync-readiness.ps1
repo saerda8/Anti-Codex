@@ -17,6 +17,19 @@ if ($Fast) { $SkipIconPaletteProbe = $true }
 
 Add-Type -AssemblyName System.Drawing
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
@@ -31,6 +44,72 @@ function Has-Text {
     param([string]$Path, [string]$Pattern)
     if (-not (Test-Path -LiteralPath $Path)) { return $false }
     return ((Get-Content -LiteralPath $Path -Raw) -match $Pattern)
+}
+
+function Test-UnpackedNativeModuleInventory {
+    param(
+        [Parameter(Mandatory = $true)]$Manifest,
+        [Parameter(Mandatory = $true)][string]$HostRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $valid = $true
+    $recordedFiles = @()
+    $recordedFilesProperty = $Manifest.PSObject.Properties["unpackedFiles"]
+    if ($recordedFilesProperty) {
+        $recordedFiles = @($recordedFilesProperty.Value)
+    }
+    if ($recordedFiles.Count -eq 0) {
+        Add-Failure "$Label host marker is missing unpacked file inventory"
+        return $false
+    }
+
+    $hostRootFull = [IO.Path]::GetFullPath($HostRoot).TrimEnd("\")
+    $unpackedRoot = [IO.Path]::GetFullPath((Join-Path $hostRootFull "resources\app.asar.unpacked")).TrimEnd("\")
+    $unpackedRootPrefix = "$unpackedRoot\"
+    $recordedPaths = New-Object "System.Collections.Generic.HashSet[string]" ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($recordedFile in $recordedFiles) {
+        $relativePath = [string]$recordedFile.path
+        $recordedHash = [string]$recordedFile.sha256
+        $recordedSizeProperty = $recordedFile.PSObject.Properties["size"]
+        if (-not $relativePath -or -not $recordedHash -or -not $recordedSizeProperty -or [IO.Path]::IsPathRooted($relativePath)) {
+            Add-Failure "$Label host marker contains an invalid unpacked file entry"
+            $valid = $false
+            continue
+        }
+        $unpackedFilePath = [IO.Path]::GetFullPath((Join-Path $hostRootFull $relativePath))
+        $unpackedFileAccessPath = "\\?\$unpackedFilePath"
+        if (-not $unpackedFilePath.StartsWith($unpackedRootPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [IO.File]::Exists($unpackedFileAccessPath)) {
+            Add-Failure "$Label host unpacked file is missing or outside app.asar.unpacked: $relativePath"
+            $valid = $false
+            continue
+        }
+        if ([string](Get-AntiCodexSha256 -Path $unpackedFileAccessPath) -ne $recordedHash) {
+            Add-Failure "$Label host unpacked file hash mismatch: $relativePath"
+            $valid = $false
+        }
+        if ([long](Get-Item -LiteralPath $unpackedFileAccessPath).Length -ne [long]$recordedSizeProperty.Value) {
+            Add-Failure "$Label host unpacked file size mismatch: $relativePath"
+            $valid = $false
+        }
+        if (-not $recordedPaths.Add($unpackedFilePath)) {
+            Add-Failure "$Label host marker repeats an unpacked file path: $relativePath"
+            $valid = $false
+        }
+    }
+
+    $unpackedAccessRoot = "\\?\$unpackedRoot"
+    if (-not [IO.Directory]::Exists($unpackedAccessRoot)) {
+        Add-Failure "$Label host unpacked resource directory is missing"
+        return $false
+    }
+    $actualFiles = @(Get-ChildItem -LiteralPath $unpackedAccessRoot -File -Recurse -Force -ErrorAction Stop)
+    if ($actualFiles.Count -ne $recordedFiles.Count) {
+        Add-Failure "$Label host unpacked file inventory is incomplete"
+        $valid = $false
+    }
+    return $valid
 }
 
 function Test-AntiCodexIconPalette {
@@ -306,12 +385,17 @@ if (-not (Has-Text $validatorScript "ProductName")) { Add-Failure "candidate val
 if (-not (Has-Text $validatorScript "FileDescription")) { Add-Failure "candidate validator missing executable file-description check" }
 if (-not (Has-Text $validatorScript "OriginalFilename")) { Add-Failure "candidate validator missing executable original-filename check" }
 if (-not (Has-Text $validatorScript "anticodex-host-manifest-v2")) { Add-Failure "candidate validator missing fixed-shell signed host manifest check" }
-if (-not (Has-Text $validatorScript "Get-FileHash")) { Add-Failure "candidate validator missing host content hash checks" }
+if (-not (Has-Text $validatorScript "Get-AntiCodexSha256")) { Add-Failure "candidate validator missing local host content hash checks" }
+$utilityHashCommand = "Get-" + "FileHash"
+if (Has-Text $validatorScript $utilityHashCommand) { Add-Failure "candidate validator still depends on Utility module hashing" }
 if (-not (Has-Text $installScript "Anti-Codex is already installed")) { Add-Failure "installer can overwrite an existing active installation without the safe sync flow" }
 if (-not (Has-Text $installScript "Windows branding verification failed")) { Add-Failure "installer does not hard-fail when Windows branding verification fails" }
 if (-not (Has-Text $installScript "Install-AntiCodexHostIcon")) { Add-Failure "installer does not install the Anti-Codex host icon" }
 if (-not (Has-Text $installScript "assets\\anticodex\.ico")) { Add-Failure "installer does not prefer the Anti-Codex pink icon asset" }
-if (-not (Has-Text $installScript "patch-exe-icon\.ps1")) { Add-Failure "installer does not patch the Anti-Codex executable icon" }
+if (Has-Text $installScript "patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT") { Add-Failure "installer still rewrites executable icon resources instead of using isolated external icons" }
+if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$resourceIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex window icon" }
+if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$trayIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex tray icon" }
+if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$appRootIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex app-root icon" }
 if (-not (Has-Text $installScript '\$cached\s*=\s*Join-Path\s+\$toolRoot\s+"rcedit\.exe"')) { Add-Failure "installer does not cache the Windows branding tool for future offline syncs" }
 if (-not (Has-Text $installScript "Copy failed after 3 attempts and fallback copy failed")) { Add-Failure "installer does not retry and safely fall back after transient Codex host copy failures" }
 if (-not (Has-Text $installScript "Find-PhantomDirectories")) { Add-Failure "installer does not detect unreadable phantom directories in packaged Codex hosts" }
@@ -521,8 +605,7 @@ function Get-AntiCodexLaunchTaskEvidence {
             -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
             [bool]$definition.Settings.DisallowStartIfOnBatteries -eq $false -and
             [bool]$definition.Settings.StopIfGoingOnBatteries -eq $false -and
-            [int]$definition.Settings.RestartCount -eq 1 -and
-            [string]$definition.Settings.RestartInterval -eq "PT1M" -and
+            [int]$definition.Settings.RestartCount -eq 0 -and
             [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
         )
         $stateCode = [int]$task.State
@@ -896,7 +979,7 @@ if (-not $startMenuManagerShortcutExists) {
 try {
     if (Test-Path -LiteralPath $activeMarker) {
         $activeManifest = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
-        if ([string]$activeManifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
+        if ([string]$activeManifest.schema -ne "anticodex-host-manifest-v2") {
             Add-Failure "active host marker schema is invalid"
         } else {
             if ($activeManifest.source) {
@@ -906,12 +989,12 @@ try {
                 $activeSourceCliHash = [string]$activeManifest.source.codexCli
             }
             $activeHashes = [ordered]@{
-                antiCodexExe = (Get-FileHash -LiteralPath $activeExe -Algorithm SHA256).Hash
-                appAsar = (Get-FileHash -LiteralPath $activeAsar -Algorithm SHA256).Hash
-                codexCli = (Get-FileHash -LiteralPath $activeCodexCli -Algorithm SHA256).Hash
-                hostIcon = (Get-FileHash -LiteralPath $activeHostIcon -Algorithm SHA256).Hash
-                trayIcon = (Get-FileHash -LiteralPath $activeTrayIcon -Algorithm SHA256).Hash
-                appRootIcon = (Get-FileHash -LiteralPath $activeAppRootIcon -Algorithm SHA256).Hash
+                antiCodexExe = Get-AntiCodexSha256 -Path $activeExe
+                appAsar = Get-AntiCodexSha256 -Path $activeAsar
+                codexCli = Get-AntiCodexSha256 -Path $activeCodexCli
+                hostIcon = Get-AntiCodexSha256 -Path $activeHostIcon
+                trayIcon = Get-AntiCodexSha256 -Path $activeTrayIcon
+                appRootIcon = Get-AntiCodexSha256 -Path $activeAppRootIcon
             }
             $activeManifestValid = $true
             foreach ($name in $activeHashes.Keys) {
@@ -919,6 +1002,9 @@ try {
                     $activeManifestValid = $false
                     Add-Failure "active host marker hash mismatch: $name"
                 }
+            }
+            if (-not (Test-UnpackedNativeModuleInventory -Manifest $activeManifest -HostRoot $activeHost -Label "active")) {
+                $activeManifestValid = $false
             }
             $activeHostIconPalette = Test-AntiCodexIconPalette -Path $activeHostIcon
             $activeTrayIconPalette = Test-AntiCodexIconPalette -Path $activeTrayIcon
@@ -964,7 +1050,7 @@ try {
             }
         }
         $rollbackManifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
-        if ([string]$rollbackManifest.schema -notin @("anticodex-host-manifest-v1", "anticodex-host-manifest-v2")) {
+        if ([string]$rollbackManifest.schema -ne "anticodex-host-manifest-v2") {
             Add-Failure "rollback host marker schema is invalid"
         } else {
             if ($rollbackManifest.source) {
@@ -974,12 +1060,12 @@ try {
                 $rollbackSourceCliHash = [string]$rollbackManifest.source.codexCli
             }
             $rollbackHashes = [ordered]@{
-                antiCodexExe = (Get-FileHash -LiteralPath $rollbackExe -Algorithm SHA256).Hash
-                appAsar = (Get-FileHash -LiteralPath $rollbackAsar -Algorithm SHA256).Hash
-                codexCli = (Get-FileHash -LiteralPath $rollbackCodexCli -Algorithm SHA256).Hash
-                hostIcon = (Get-FileHash -LiteralPath $rollbackHostIcon -Algorithm SHA256).Hash
-                trayIcon = (Get-FileHash -LiteralPath $rollbackTrayIcon -Algorithm SHA256).Hash
-                appRootIcon = (Get-FileHash -LiteralPath $rollbackAppRootIcon -Algorithm SHA256).Hash
+                antiCodexExe = Get-AntiCodexSha256 -Path $rollbackExe
+                appAsar = Get-AntiCodexSha256 -Path $rollbackAsar
+                codexCli = Get-AntiCodexSha256 -Path $rollbackCodexCli
+                hostIcon = Get-AntiCodexSha256 -Path $rollbackHostIcon
+                trayIcon = Get-AntiCodexSha256 -Path $rollbackTrayIcon
+                appRootIcon = Get-AntiCodexSha256 -Path $rollbackAppRootIcon
             }
             $rollbackManifestValid = $true
             foreach ($name in $rollbackHashes.Keys) {
@@ -987,6 +1073,9 @@ try {
                     $rollbackManifestValid = $false
                     Add-Failure "rollback host marker hash mismatch: $name"
                 }
+            }
+            if (-not (Test-UnpackedNativeModuleInventory -Manifest $rollbackManifest -HostRoot $rollbackHost -Label "rollback")) {
+                $rollbackManifestValid = $false
             }
             $rollbackHostIconPalette = Test-AntiCodexIconPalette -Path $rollbackHostIcon
             $rollbackTrayIconPalette = Test-AntiCodexIconPalette -Path $rollbackTrayIcon

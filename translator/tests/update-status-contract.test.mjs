@@ -218,9 +218,10 @@ test("update check clears stale running operation when active host is already sy
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
       appRootIcon: "fake-root-icon",
+      unpackedRuntime: "fake-unpacked-runtime",
     };
     fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
-    fs.mkdirSync(resolve(activeRoot, "resources"), { recursive: true });
+    fs.mkdirSync(resolve(activeRoot, "resources", "app.asar.unpacked"), { recursive: true });
     fs.mkdirSync(stateRoot, { recursive: true });
     fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
     fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
@@ -230,9 +231,11 @@ test("update check clears stale running operation when active host is already sy
     fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
     fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
     fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar.unpacked", "runtime.js"), fileContents.unpackedRuntime);
     fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
-    fs.writeFileSync(resolve(installRoot, "codex-patched-app.ok"), JSON.stringify({
-      schema: "anticodex-host-manifest-v1",
+    const markerPath = resolve(installRoot, "codex-patched-app.ok");
+    const validManifest = {
+      schema: "anticodex-host-manifest-v2",
       source: {
         packageName: "explicit",
         packageVersion: "test-version",
@@ -247,7 +250,13 @@ test("update check clears stale running operation when active host is already sy
         trayIcon: sha256(fileContents.trayIcon),
         appRootIcon: sha256(fileContents.appRootIcon),
       },
-    }));
+      unpackedFiles: [{
+        path: "resources\\app.asar.unpacked\\runtime.js",
+        sha256: sha256(fileContents.unpackedRuntime),
+        size: Buffer.byteLength(fileContents.unpackedRuntime),
+      }],
+    };
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
     fs.writeFileSync(resolve(stateRoot, "update-status.json"), JSON.stringify({
       updateNeeded: false,
       operation: {
@@ -274,6 +283,163 @@ test("update check clears stale running operation when active host is already sy
     assert.equal(parsed.operation?.stage, "complete");
     assert.equal(persisted.operation?.state, "succeeded");
     assert.equal(persisted.operation?.stage, "complete");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("v1 or v2 without a full unpacked inventory requires migration even when source hashes match", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-legacy-inventory-"));
+  try {
+    const sourceRoot = resolve(tempDir, "source");
+    const installRoot = resolve(tempDir, "install");
+    const stateRoot = resolve(tempDir, "state");
+    const activeRoot = resolve(installRoot, "codex-patched-app");
+    const fileContents = {
+      antiCodexExe: "same-host",
+      appAsar: "patched-asar",
+      codexCli: "same-cli",
+      hostIcon: "fake-icon",
+      trayIcon: "fake-tray-icon",
+      appRootIcon: "fake-root-icon",
+    };
+    fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
+    fs.mkdirSync(resolve(activeRoot, "resources"), { recursive: true });
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "Anti-Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
+    fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
+    for (const schema of ["anticodex-host-manifest-v1", "anticodex-host-manifest-v2"]) {
+      fs.writeFileSync(resolve(installRoot, "codex-patched-app.ok"), JSON.stringify({
+        schema,
+        source: {
+          packageName: "explicit",
+          codexHost: sha256(fileContents.antiCodexExe),
+          codexCli: sha256(fileContents.codexCli),
+        },
+        files: {
+          antiCodexExe: sha256(fileContents.antiCodexExe),
+          appAsar: sha256(fileContents.appAsar),
+          codexCli: sha256(fileContents.codexCli),
+          hostIcon: sha256(fileContents.hostIcon),
+          trayIcon: sha256(fileContents.trayIcon),
+          appRootIcon: sha256(fileContents.appRootIcon),
+        },
+      }));
+
+      const result = spawnSync("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
+        "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot, "-NoPersist",
+      ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const parsed = JSON.parse(result.stdout.trim());
+      assert.equal(parsed.updateNeeded, true);
+      assert.equal(parsed.reason, "active_host_guardrail_failed");
+      assert.ok(parsed.guardrails.failures.some((failure) => /unpacked file inventory migration/i.test(failure)));
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("update guardrail rejects missing non-node companion files from app.asar.unpacked", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-unpacked-companions-"));
+  try {
+    const sourceRoot = resolve(tempDir, "source");
+    const installRoot = resolve(tempDir, "install");
+    const stateRoot = resolve(tempDir, "state");
+    const activeRoot = resolve(installRoot, "codex-patched-app");
+    const unpackedRoot = resolve(activeRoot, "resources", "app.asar.unpacked");
+    const fileContents = {
+      antiCodexExe: "same-host",
+      appAsar: "patched-asar",
+      codexCli: "same-cli",
+      hostIcon: "fake-icon",
+      trayIcon: "fake-tray-icon",
+      appRootIcon: "fake-root-icon",
+    };
+    const unpackedContents = {
+      "native.node": "native-module",
+      "winpty.dll": "dll-companion",
+      "winpty-agent.exe": "exe-companion",
+      "runtime.js": "js-companion",
+    };
+    fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
+    fs.mkdirSync(unpackedRoot, { recursive: true });
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "Anti-Codex.exe"), fileContents.antiCodexExe);
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
+    fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
+    for (const [name, content] of Object.entries(unpackedContents)) {
+      fs.writeFileSync(resolve(unpackedRoot, name), content);
+    }
+    const markerPath = resolve(installRoot, "codex-patched-app.ok");
+    const validManifest = {
+      schema: "anticodex-host-manifest-v2",
+      source: {
+        packageName: "explicit",
+        codexHost: sha256(fileContents.antiCodexExe),
+        codexCli: sha256(fileContents.codexCli),
+      },
+      files: {
+        antiCodexExe: sha256(fileContents.antiCodexExe),
+        appAsar: sha256(fileContents.appAsar),
+        codexCli: sha256(fileContents.codexCli),
+        hostIcon: sha256(fileContents.hostIcon),
+        trayIcon: sha256(fileContents.trayIcon),
+        appRootIcon: sha256(fileContents.appRootIcon),
+      },
+      unpackedFiles: Object.entries(unpackedContents).map(([name, content]) => ({
+        path: `resources\\app.asar.unpacked\\${name}`,
+        sha256: sha256(content),
+        size: Buffer.byteLength(content),
+      })),
+    };
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
+
+    const runCheck = () => {
+      const result = spawnSync("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
+        "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot, "-NoPersist",
+      ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      return JSON.parse(result.stdout.trim());
+    };
+
+    assert.equal(runCheck().updateNeeded, false);
+    for (const name of ["winpty.dll", "winpty-agent.exe", "runtime.js"]) {
+      const path = resolve(unpackedRoot, name);
+      fs.rmSync(path);
+      const parsed = runCheck();
+      assert.equal(parsed.updateNeeded, true, `${name} must be release-gated`);
+      assert.equal(parsed.reason, "active_host_guardrail_failed");
+      assert.ok(parsed.guardrails.failures.some((failure) => failure.includes(name)));
+      fs.writeFileSync(path, unpackedContents[name]);
+    }
+    for (const malformedEntry of [
+      { ...validManifest.unpackedFiles[0], size: "not-a-number" },
+      { ...validManifest.unpackedFiles[0], path: "resources\\app.asar.unpacked\\bad\u0000path.js" },
+    ]) {
+      fs.writeFileSync(markerPath, JSON.stringify({ ...validManifest, unpackedFiles: [malformedEntry] }));
+      const parsed = runCheck();
+      assert.equal(parsed.updateNeeded, true);
+      assert.equal(parsed.reason, "active_host_guardrail_failed");
+      assert.ok(parsed.guardrails.failures.some((failure) => /inventory validation failed/i.test(failure)));
+    }
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

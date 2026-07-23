@@ -9,6 +9,20 @@ $ErrorActionPreference = "Stop"
 
 Add-Type -AssemblyName System.Drawing
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($stream)
+        return [BitConverter]::ToString($hash).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 function Test-AntiCodexIconPalette {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -137,6 +151,45 @@ if (($recordedCriticalPatches.Count -ne $expectedFixedShellCriticalPatches.Count
     (@($expectedFixedShellCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
     throw "Anti-Codex candidate marker is missing critical compatibility patches."
 }
+$recordedFiles = @()
+$recordedFilesProperty = $manifest.PSObject.Properties["unpackedFiles"]
+if ($recordedFilesProperty) {
+    $recordedFiles = @($recordedFilesProperty.Value)
+}
+if ($recordedFiles.Count -eq 0) {
+    throw "Anti-Codex candidate marker is missing unpacked file inventory."
+}
+$candidateAppRootFull = [IO.Path]::GetFullPath($candidateAppRoot).TrimEnd("\")
+$candidateUnpackedRoot = [IO.Path]::GetFullPath((Join-Path $candidateAppRootFull "resources\app.asar.unpacked")).TrimEnd("\")
+$candidateUnpackedPrefix = "$candidateUnpackedRoot\"
+$recordedPaths = New-Object "System.Collections.Generic.HashSet[string]" ([StringComparer]::OrdinalIgnoreCase)
+foreach ($recordedFile in $recordedFiles) {
+    $relativePath = [string]$recordedFile.path
+    $recordedHash = [string]$recordedFile.sha256
+    $recordedSizeProperty = $recordedFile.PSObject.Properties["size"]
+    if (-not $relativePath -or -not $recordedHash -or -not $recordedSizeProperty -or [IO.Path]::IsPathRooted($relativePath)) {
+        throw "Anti-Codex candidate marker contains an invalid unpacked file entry."
+    }
+    $unpackedFilePath = [IO.Path]::GetFullPath((Join-Path $candidateAppRootFull $relativePath))
+    $unpackedFileAccessPath = "\\?\$unpackedFilePath"
+    if (-not $unpackedFilePath.StartsWith($candidateUnpackedPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [IO.File]::Exists($unpackedFileAccessPath)) {
+        throw "Anti-Codex candidate unpacked file is missing or outside app.asar.unpacked: $relativePath"
+    }
+    if ([string](Get-AntiCodexSha256 -Path $unpackedFileAccessPath) -ne $recordedHash) {
+        throw "Anti-Codex candidate unpacked file hash mismatch: $relativePath"
+    }
+    if ([long](Get-Item -LiteralPath $unpackedFileAccessPath).Length -ne [long]$recordedSizeProperty.Value) {
+        throw "Anti-Codex candidate unpacked file size mismatch: $relativePath"
+    }
+    if (-not $recordedPaths.Add($unpackedFilePath)) {
+        throw "Anti-Codex candidate marker repeats an unpacked file path: $relativePath"
+    }
+}
+$actualFiles = @(Get-ChildItem -LiteralPath "\\?\$candidateUnpackedRoot" -File -Recurse -Force -ErrorAction Stop)
+if ($actualFiles.Count -ne $recordedFiles.Count) {
+    throw "Anti-Codex candidate unpacked file inventory is incomplete."
+}
 
 $antiCodex = Join-Path $candidateAppRoot "Anti-Codex.exe"
 $asarPath = Join-Path $candidateAppRoot "resources\app.asar"
@@ -181,12 +234,12 @@ if ($appRootIconPalette.ok -ne $true) {
     throw "Anti-Codex candidate app-root icon is not the pink Codex cloud with white command marks."
 }
 $expectedHashes = [ordered]@{
-    antiCodexExe = (Get-FileHash -LiteralPath $antiCodex -Algorithm SHA256).Hash
-    appAsar = (Get-FileHash -LiteralPath $asarPath -Algorithm SHA256).Hash
-    codexCli = (Get-FileHash -LiteralPath $codex -Algorithm SHA256).Hash
-    hostIcon = (Get-FileHash -LiteralPath $hostIcon -Algorithm SHA256).Hash
-    trayIcon = (Get-FileHash -LiteralPath $trayIcon -Algorithm SHA256).Hash
-    appRootIcon = (Get-FileHash -LiteralPath $appRootIcon -Algorithm SHA256).Hash
+    antiCodexExe = Get-AntiCodexSha256 -Path $antiCodex
+    appAsar = Get-AntiCodexSha256 -Path $asarPath
+    codexCli = Get-AntiCodexSha256 -Path $codex
+    hostIcon = Get-AntiCodexSha256 -Path $hostIcon
+    trayIcon = Get-AntiCodexSha256 -Path $trayIcon
+    appRootIcon = Get-AntiCodexSha256 -Path $appRootIcon
 }
 foreach ($name in $expectedHashes.Keys) {
     if ([string]$manifest.files.$name -ne [string]$expectedHashes[$name]) {
@@ -196,7 +249,7 @@ foreach ($name in $expectedHashes.Keys) {
 if (-not $manifest.source -or -not $manifest.source.codexHost -or -not $manifest.source.codexCli) {
     throw "Anti-Codex candidate marker is missing source Codex fingerprints."
 }
-if ([string]$manifest.source.codexHost -ne [string](Get-FileHash -LiteralPath $copiedSourceHost -Algorithm SHA256).Hash) {
+if ([string]$manifest.source.codexHost -ne [string](Get-AntiCodexSha256 -Path $copiedSourceHost)) {
     throw "Anti-Codex candidate source host fingerprint does not match the copied Codex host."
 }
 if ([string]$manifest.source.codexCli -ne [string]$expectedHashes.codexCli) {
