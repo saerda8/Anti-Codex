@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-25 Restore Sampler Self-Interference Removed
+
+- The rejected candidate's third report had zero blank frames and its first nonblank frame at `9 ms`; its only hard failure was the `136 ms` first-to-second sample interval against the unchanged `125 ms` limit. Source tracing showed that the verifier captured the first frame and then performed topology work including a synchronous CDP page-count request before the next frame. A separate 30-read no-mouse timing probe measured the first CDP read at `576.71 ms`, later reads around `2-4 ms`, and a `22.49 ms` average, so the defensible root cause was mixed blocking verifier work rather than proven product blanking.
+- TDD added a contract that forbids `Get-AppPageCount` inside the frame loop while requiring before/after page evidence. It failed `22/23` before the production change and passed `23/23` after the existing after-sample result was reused outside the loop. No threshold, product window behavior or architecture layer changed. Full no-traffic source preflight passes `766/766`.
+- Runtime transaction `20260724T193339261Z-ae3be1d4e1eb48c6a5e617249fcff9f3` verified and activated 120 files. Installed/source hashes for the verifier and its contract match; active and rollback are official `26.721.3996.0`, exact 12-patch releases with zero rejected repaint hooks. Update status is `up_to_date`; installed sync-readiness, installed-overall and source/installed legacy-zero-hit are green without model traffic. One visible PID `40992` is ready on `gemini-3.6-flash-low`, original Codex PID `33196` is alive, and Docker Anti-Codex container count is zero.
+- Operational lessons: the first background-preflight setup used unsupported `New-Item -LiteralPath`, so no directory or process was created; use `New-Item -Path` for that command shape. A later read-only report inspection piped a `foreach` block directly and hit a parser error; collect the rows in an array before piping. Both were corrected immediately and changed no product state.
+- No physical mouse round, model request or autonomous task was started. The sampler repair improves the validity of the next authorized measurement but is not new physical Gate 5 evidence; Gates 5, 6 and 8 remain open and overall stays `97%`.
+
 ## 2026-07-25 Rejected Repaint Candidate Fully Removed
 
 - Built-in rollback had restored the safe active client, but the source/runtime updater still contained the rejected thirteenth patch and the rollback slot still held that candidate. Commit `0b66c71` removes the generator, manifest requirement, candidate gate and rollback compatibility branch; a negative regression prevents the patch from returning. Early frame evidence remains unchanged.
