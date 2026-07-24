@@ -861,7 +861,6 @@ try {
                     productWindow = [bool]$observedWindow.ProductWindow
                 }
             }
-            $maxAppPageCount = [Math]::Max($maxAppPageCount, (Get-AppPageCount -CdpPort $cdpPort))
             $nextTopologySampleMs = $stopwatch.ElapsedMilliseconds + 90
         }
         Start-Sleep -Milliseconds 5
@@ -894,6 +893,7 @@ try {
 
 $after = Get-ExactAntiCodexSnapshot
 $pagesAfter = Get-AppPageCount -CdpPort $cdpPort
+$maxAppPageCount = [Math]::Max($maxAppPageCount, $pagesAfter)
 $sessionAfter = Get-AppPageIdentity -CdpPort $cdpPort
 $foregroundAfter = Get-ForegroundProcessId
 $originalCodexAlive = $null -ne (Get-Process -Id $ExpectedOriginalCodexPid -ErrorAction SilentlyContinue)

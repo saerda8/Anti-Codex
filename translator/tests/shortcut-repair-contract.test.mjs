@@ -159,9 +159,21 @@ test("taskbar restore samples transient topology after each due frame capture", 
 
   assert.match(sampling, /\$nextTopologySampleMs/);
   assert.ok(frame >= 0 && topology > frame, "frame capture must run before each due topology sample");
-  assert.match(sampling, /\$maxAppPageCount[\s\S]*?Get-AppPageCount -CdpPort \$cdpPort/);
   assert.match(sampling, /\$nextTopologySampleMs = \$stopwatch\.ElapsedMilliseconds \+ 90/);
   assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
+});
+
+test("taskbar restore keeps blocking CDP reads outside the frame sampling loop", () => {
+  const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
+  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const sampling = samplingStart >= 0 && finallyStart > samplingStart
+    ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
+    : "";
+
+  assert.doesNotMatch(sampling, /Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.match(shortcutRestoreAcceptance, /\$pagesBefore = Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.match(shortcutRestoreAcceptance, /\$pagesAfter = Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.match(shortcutRestoreAcceptance, /\$maxAppPageCount = \[Math\]::Max\(\$maxAppPageCount, \$pagesAfter\)/);
 });
 
 test("taskbar restore reports the early blank-to-painted transition without recovery", () => {
