@@ -176,8 +176,10 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /Remove-Item -LiteralPath \$taskXmlPath -Force/);
   assert.match(repairScript, /<LogonType>InteractiveToken<\/LogonType>/);
   assert.match(repairScript, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
+  assert.match(launchTaskRegistration, /<Priority>4<\/Priority>/);
   assert.match(repairScript, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
   assert.doesNotMatch(launchTaskRegistration, /<RestartOnFailure>/);
+  assert.match(launchTaskEvidence, /\$definition\.Settings\.Priority\s+-eq\s+4/);
   assert.match(launchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.doesNotMatch(launchTaskEvidence, /RestartInterval\s+-eq\s+"PT1M"/);
   assert.match(repairScript, /\$definition\.Triggers\.Count\s+-eq\s+0/);
@@ -235,6 +237,7 @@ test("launch and Manager update tasks never retry failed product operations", ()
   assert.match(readinessLaunchTaskEvidence, /\$task\.Enabled/);
   assert.match(readinessUpdateTaskEvidence, /\$task\.Enabled/);
   assert.match(readinessLaunchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
+  assert.match(readinessLaunchTaskEvidence, /\$definition\.Settings\.Priority\s+-eq\s+4/);
   assert.match(readinessUpdateTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
   assert.match(readinessUpdateTaskEvidence, /\[string\]\$definition\.Settings\.ExecutionTimeLimit\s+-eq\s+"PT0S"/);
   assert.match(productSync, /\[int\]\$definition\.Settings\.RestartCount\s+-ne\s+0/);

@@ -167,6 +167,7 @@ function Get-AntiCodexLaunchTaskEvidence {
         -not [bool]$definition.Settings.RunOnlyIfNetworkAvailable -and
         [bool]$definition.Settings.DisallowStartIfOnBatteries -eq $false -and
         [bool]$definition.Settings.StopIfGoingOnBatteries -eq $false -and
+        [int]$definition.Settings.Priority -eq 4 -and
         [int]$definition.Settings.RestartCount -eq 0 -and
         [string]$definition.Settings.ExecutionTimeLimit -eq "PT0S"
     )
@@ -221,6 +222,7 @@ function Set-AntiCodexLaunchTask {
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowStartOnDemand>true</AllowStartOnDemand>
     <Enabled>true</Enabled>
+    <Priority>4</Priority>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>

@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-07-25 Launcher Priority and Current Taskbar Evidence
+
+- The durable Launcher task omitted an explicit priority. Windows therefore assigned priority `7`; the task, fixed-route supervisor and Anti-Codex main process inherited `BelowNormal`, while native Codex ran at `Normal`. This is the smallest current explanation for delayed restored painting; official and patched window/compositor paths remain aligned, so no ASAR change was made.
+- Launcher task XML now sets priority `4`, and both shortcut repair and installed sync-readiness reject stale priorities. The updater task remains unchanged. Focused contracts pass `68/68`, installed no-traffic sync-readiness passes, and transaction `20260724T165800294Z-a2b299c5622240ad95ef5f8788fb58fb` deployed 120 files with one graceful shutdown/restart.
+- Live state is one visible responsive Anti-Codex PID `2056` at `Normal`, Launcher priority `4`, Manager/fixed-route healthy on Gemini 3.6 Flash Low, and original Codex PID `33196` alive. The first authorized taskbar round had zero blank frames and a nonblank first frame after 14 ms, preserving PID/HWND/CDP identity. It still failed closed because Tabbit PID `13528` took foreground at 2.4 s and the maximum sampling interval was 228 ms. No second mouse round was run; Gate 5 remains open.
+
 ## 2026-07-24 Durable Launcher and Restore Closure
 
 - The updater failure was a mutex self-deadlock, not an official Codex incompatibility: `sync-anticodex.ps1` kept the host-sync mutex while the scheduled Launcher waited for that same barrier. Publishing the activated host before Launcher/readiness/rollback removes the cycle.
