@@ -164,6 +164,18 @@ test("taskbar restore samples transient topology after each due frame capture", 
   assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
 });
 
+test("taskbar restore reports the early blank-to-painted transition without recovery", () => {
+  assert.match(shortcutRestoreAcceptance, /\$firstNonBlankFrame\s*=/);
+  assert.match(shortcutRestoreAcceptance, /\$lastBlankFrame\s*=/);
+  assert.match(shortcutRestoreAcceptance, /\$firstNonBlankFrameDelayMs\s*=/);
+  assert.match(shortcutRestoreAcceptance, /\$lastBlankFrameDelayMs\s*=/);
+  assert.match(shortcutRestoreAcceptance, /\$restoreDurationMs\s*=/);
+  assert.match(shortcutRestoreAcceptance, /\[int\]\$firstVisibleAtMs - \[int\]\$activationSentAtMs/);
+  assert.match(shortcutRestoreAcceptance, /\$earlyFrameTimeline\s*=/);
+  assert.match(shortcutRestoreAcceptance, /isBlank\s*=\s*\(\$frame\.standardDeviation -lt 5 -or \$frame\.darkRatio -lt 0\.005\)/);
+  assert.match(shortcutRestoreAcceptance, /earlyFrameTimeline = \$earlyFrameTimeline/);
+});
+
 test("shortcut repair resolves PowerShell without relying on a populated WINDIR", () => {
   assert.match(repairScript, /\[Environment\]::SystemDirectory/);
   assert.doesNotMatch(repairScript, /\$env:WINDIR/);

@@ -370,6 +370,10 @@ function Test-AntiCodexAsarPatches {
     if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
         throw "Anti-Codex host app.asar still selects a ChatGPT-branded Windows tray icon."
     }
+    $primaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)'
+    if ([regex]::Matches($text, $primaryRestoreRepaintPattern).Count -ne 1) {
+        throw "Anti-Codex host app.asar is missing the single primary-window restore repaint."
+    }
 }
 
 function Test-AntiCodexHost {
@@ -386,6 +390,7 @@ function Test-AntiCodexHost {
         "app-route-gate",
         "profile-dropdown-settings",
         "browser-window-icon",
+        "primary-window-restore-repaint",
         "windows-tray-icon",
         "local-model-availability"
     )

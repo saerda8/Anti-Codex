@@ -405,10 +405,12 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "profile-dropdown-settings",
     "browser-window-icon",
     "windows-tray-icon",
+    "primary-window-restore-repaint",
     "local-model-availability",
   ]) {
     assert.match(validator, new RegExp(`"${patchName}"`));
   }
+  assert.match(asarValidator, /invalidate/);
 
   assert.match(validator, /resources\\codex-tray\.ico/);
   assert.match(validator, /trayIcon/);

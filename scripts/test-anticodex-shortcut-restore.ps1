@@ -937,6 +937,43 @@ $maximumFirstFrameDelayMs = 100
 $maximumFrameSampleIntervalMs = 125
 $minimumEarlyFrameCount = 8
 $blankFrames = @($frames | Where-Object { $_.standardDeviation -lt 5 -or $_.darkRatio -lt 0.005 })
+$firstNonBlankFrame = $frames |
+    Where-Object { $_.standardDeviation -ge 5 -and $_.darkRatio -ge 0.005 } |
+    Select-Object -First 1
+$lastBlankFrame = $blankFrames | Select-Object -Last 1
+$firstNonBlankFrameDelayMs = if ($null -ne $firstNonBlankFrame -and $null -ne $frameCaptureOriginMs) {
+    [int]$firstNonBlankFrame.elapsedMs - [int]$frameCaptureOriginMs
+} else {
+    $null
+}
+$lastBlankFrameDelayMs = if ($null -ne $lastBlankFrame -and $null -ne $frameCaptureOriginMs) {
+    [int]$lastBlankFrame.elapsedMs - [int]$frameCaptureOriginMs
+} else {
+    $null
+}
+$restoreDurationMs = if ($null -ne $firstVisibleAtMs -and $null -ne $activationSentAtMs) {
+    [int]$firstVisibleAtMs - [int]$activationSentAtMs
+} else {
+    $null
+}
+$earlyFrameTimeline = @()
+if ($null -ne $frameCaptureOriginMs) {
+    $earlyFrameTimeline = @(
+        $frames |
+            Where-Object { [int]$_.elapsedMs -le ([int]$frameCaptureOriginMs + 750) } |
+            ForEach-Object {
+                $frame = $_
+                [pscustomobject]@{
+                    elapsedMs = [int]$frame.elapsedMs
+                    relativeToForegroundMs = [int]$frame.elapsedMs - [int]$frameCaptureOriginMs
+                    mean = $frame.mean
+                    standardDeviation = $frame.standardDeviation
+                    darkRatio = $frame.darkRatio
+                    isBlank = ($frame.standardDeviation -lt 5 -or $frame.darkRatio -lt 0.005)
+                }
+            }
+    )
+}
 $failures = New-Object System.Collections.Generic.List[string]
 if ($probeError) { $failures.Add($probeError) | Out-Null }
 if (-not $minimizedObserved) { $failures.Add("minimized state was not observed") | Out-Null }
@@ -1032,6 +1069,12 @@ $result = [ordered]@{
     blankFrameCount = $blankFrames.Count
     firstFrame = $firstFrame
     firstFrameDelayMs = $firstFrameDelayMs
+    firstNonBlankFrame = $firstNonBlankFrame
+    firstNonBlankFrameDelayMs = $firstNonBlankFrameDelayMs
+    lastBlankFrame = $lastBlankFrame
+    lastBlankFrameDelayMs = $lastBlankFrameDelayMs
+    restoreDurationMs = $restoreDurationMs
+    earlyFrameTimeline = $earlyFrameTimeline
     maxSampleIntervalMs = $maxSampleIntervalMs
     earlyFrameCount = $earlyFrameCount
     frameSamplingThresholds = [pscustomobject]@{
