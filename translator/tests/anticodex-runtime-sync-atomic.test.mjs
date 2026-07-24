@@ -506,6 +506,7 @@ test("restart failure restores and relaunches the old runtime before returning f
   const launchLog = join(fixture.installRoot, "launch-attempts.jsonl");
   const activeBefore = snapshotTree(fixture.activeRuntime);
   try {
+    assert.equal(existsSync(join(fixture.activeRuntime, ".anticodex-runtime-manifest.json")), false);
     const result = runSync(fixture, {
       noRestart: false,
       env: {
@@ -518,6 +519,7 @@ test("restart failure restores and relaunches the old runtime before returning f
     assert.notEqual(result.status, 0, result.stdout);
     assert.match(`${result.stderr}\n${result.stdout}`, /restart failed/i);
     assert.equal(existsSync(fixture.activeRuntime), true);
+    assert.equal(existsSync(join(fixture.activeRuntime, ".anticodex-runtime-manifest.json")), false);
     assert.deepEqual(snapshotTree(fixture.activeRuntime), activeBefore);
     const attempts = readFileSync(launchLog, "utf8")
       .trim()

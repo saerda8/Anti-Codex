@@ -305,6 +305,7 @@ command = "node"
   // Verify codexExtraArgs use isolated user-data directory
   const hasUserDataArg = settings.codexExtraArgs.some(arg => arg.startsWith(`--user-data-dir=${mockUserDataDir}`));
   assert.ok(hasUserDataArg, `codexExtraArgs must contain the isolated user-data-dir path, got: ${settings.codexExtraArgs.join(" ")}`);
+  assert.equal(settings.codexExtraArgs.includes("--no-sandbox"), false, "Copied Codex must retain the official Chromium sandbox");
 
   // Verify disabling enhancements and provider sync
   assert.equal(settings.enhancementsEnabled, false, "CodexPlusPlus enhancements must be disabled");

@@ -129,6 +129,22 @@ test("taskbar restore keeps the cursor off hover-activated apps until the sampli
   assert.ok(deadlineStart >= 0 && cursorRestore > deadlineStart);
 });
 
+test("taskbar restore samples transient topology after each due frame capture", () => {
+  const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
+  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const sampling = samplingStart >= 0 && finallyStart > samplingStart
+    ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
+    : "";
+  const frame = sampling.indexOf("Get-FrameMetric -WindowHandle $windowHandle");
+  const topology = sampling.indexOf("$snapshot = Get-ExactAntiCodexSnapshot");
+
+  assert.match(sampling, /\$nextTopologySampleMs/);
+  assert.ok(frame >= 0 && topology > frame, "frame capture must run before each due topology sample");
+  assert.match(sampling, /\$maxAppPageCount[\s\S]*?Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.match(sampling, /\$nextTopologySampleMs = \$stopwatch\.ElapsedMilliseconds \+ 90/);
+  assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
+});
+
 test("shortcut repair resolves PowerShell without relying on a populated WINDIR", () => {
   assert.match(repairScript, /\[Environment\]::SystemDirectory/);
   assert.doesNotMatch(repairScript, /\$env:WINDIR/);

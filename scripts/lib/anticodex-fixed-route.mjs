@@ -186,7 +186,6 @@ export function buildCodexPlusPlusSettings(options = {}) {
   const codexExtraArgs = [
     `--user-data-dir=${resolve(userDataDir)}`,
     "--no-first-run",
-    "--no-sandbox",
     "--lang=zh-CN",
   ];
   if (options.disableGpu === true) {

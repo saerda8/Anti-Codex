@@ -8,7 +8,6 @@ import {
   hasStartupMcpConfigReload,
   hasWindowsTrayIconSelection,
   patchComputerUseLegacyNotifyOptOut,
-  patchPrimaryWindowBackgroundThrottling,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchWindowsTrayIconSelection,
@@ -359,7 +358,7 @@ function patchBrowserWindowIcon(text) {
   const replacement = '...process.platform===`win32`?{icon:`icon.ico`}:{},';
   if (next.includes(search)) next = replacePadded(next, search, replacement);
   if (!next.includes("icon:`icon.ico`")) throw new Error("BrowserWindow icon pattern not found");
-  return patchPrimaryWindowBackgroundThrottling(next);
+  return next;
 }
 
 function patchLocalModelAvailability(text) {

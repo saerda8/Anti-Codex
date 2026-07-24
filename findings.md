@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-24 Durable Launcher and Restore Closure
+
+- The updater failure was a mutex self-deadlock, not an official Codex incompatibility: `sync-anticodex.ps1` kept the host-sync mutex while the scheduled Launcher waited for that same barrier. Publishing the activated host before Launcher/readiness/rollback removes the cycle.
+- Runtime sync's apparent success followed by Anti-Codex disappearing was a separate ownership defect: it launched a direct `Win32_Process`/`InlineSupervisor` tree that was collected when the caller exited. Runtime sync now reuses the Task Scheduler-owned Launcher, releases Local then Global before launch, reclaims Global then Local, and refuses acceptance, cleanup or recovery when either runtime state or active generation belongs to another transaction. Queued/running Launcher requests are reused, and legacy runtimes without a manifest remain byte-exact on recovery.
+- The installed 120-file transaction `20260724T163350378Z-6257a06ee57f45c99b399e369cdd5550` survived caller exit. After ten seconds one visible root PID `32216` remained, Launcher was `Running`, Manager and fixed-route health were ready on Gemini 3.6 Flash Low, and original Codex PID `33196` was still alive. Official and active Codex remain `26.721.3996.0` with `updateNeeded:false`.
+- The restore flash correlated with the copied shell's nonofficial `--no-sandbox` switch. Removing that switch produced three physical taskbar rounds with zero blank frames. The ineffective background-throttling patch was deleted; the restore verifier samples transient process/window/CDP topology every 90 ms after due frame capture and fails closed above a 125 ms frame interval.
+- Complete no-traffic source regression passes `763/763`. Isolated installed sync-readiness, installed-overall and both source/installed legacy-zero-hit checks pass; all 11 changed source/installed runtime files have matching hashes. Current-bound Gate 5 remains unclaimed because the durable sync changed the runtime PID after the earlier physical taskbar rounds. Gates 5, 6 and the brand-new Gate 8 task still block 100%.
+
 ## 2026-07-24 Official 3996 Compatibility Closure
 
 - Official and active Codex are both `26.721.3996.0`; host and CLI fingerprints match, update detection reports `up_to_date`, and the protected runtime copy is activated. The official `ChatGPT.exe` root stayed alive throughout. One Anti-Codex root is ready on the Antigravity route with Gemini 3.6 Flash Low.

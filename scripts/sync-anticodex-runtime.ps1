@@ -656,7 +656,7 @@ function Get-AntiCodexRuntimeInventory {
 
     $directoryPrefix = $directoryFull + "\"
     $entries = [ordered]@{}
-    foreach ($item in @(Get-ChildItem -LiteralPath $directoryFull -Recurse -Force -ErrorAction Stop)) {
+    foreach ($item in @(Get-ChildItem -LiteralPath $directoryFull -Recurse -Force -ErrorAction Stop | Sort-Object FullName)) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Refusing an Anti-Codex runtime version containing a reparse point: $($item.FullName)"
         }
@@ -681,6 +681,53 @@ function Get-AntiCodexRuntimeInventory {
         }
     }
     return $entries
+}
+
+function Get-AntiCodexRuntimeGenerationFingerprint {
+    param([Parameter(Mandatory = $true)][string]$Directory)
+
+    $manifestPath = Join-Path $Directory ".anticodex-runtime-manifest.json"
+    $manifestSha256 = if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        Get-AntiCodexSha256 -Path $manifestPath
+    } else {
+        "legacy-no-manifest"
+    }
+    $inventoryJson = Get-AntiCodexRuntimeInventory -Directory $Directory | ConvertTo-Json -Depth 8 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetBytes("$manifestSha256`n$inventoryJson")
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace("-", "")
+    } finally {
+        $hasher.Dispose()
+    }
+}
+
+function Test-AntiCodexRuntimeSyncStateOwned {
+    param([Parameter(Mandatory = $true)][string]$ExpectedTransactionId)
+
+    try {
+        if (-not (Test-Path -LiteralPath $runtimeSyncStatePath -PathType Leaf)) { return $false }
+        $state = Get-Content -LiteralPath $runtimeSyncStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        return [string]$state.transactionId -ceq $ExpectedTransactionId
+    } catch {
+        return $false
+    }
+}
+
+function Test-AntiCodexActiveRuntimeOwned {
+    param([Parameter(Mandatory = $true)][string]$ExpectedTransactionId)
+
+    try {
+        if (-not (Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId $ExpectedTransactionId)) {
+            return $false
+        }
+        $manifestPath = Join-Path $targetRuntimeFull ".anticodex-runtime-manifest.json"
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        return [string]$manifest.transactionId -ceq $ExpectedTransactionId
+    } catch {
+        return $false
+    }
 }
 
 function Write-AntiCodexStagedRuntimeManifest {
@@ -1202,75 +1249,47 @@ function Invoke-AntiCodexFixedRouteLauncher {
         }
     }
 
-    $launcher = Join-Path $targetRuntimeFull "scripts\start-anticodex.ps1"
-    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-        throw "Anti-Codex fixed-route launcher is missing: $launcher"
-    }
-    $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
-    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
-    if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
-    if (-not $nodeCommand) { throw "Node.js is required to relaunch the fixed Anti-Codex route." }
-    $nodeExecutable = [IO.Path]::GetFullPath([string]$nodeCommand.Source)
-    $userProfilePath = if ($env:USERPROFILE) {
-        [IO.Path]::GetFullPath($env:USERPROFILE)
-    } else {
-        [IO.Path]::GetFullPath((Join-Path $antiCodexStateRoot "..\..\.."))
-    }
-    $launchCommandLine = "`"$powershell`" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`" -SkipUpdateCheck -InlineSupervisor -SkipSyncBarrier -StateRootPath `"$antiCodexStateRoot`" -NodeExecutablePath `"$nodeExecutable`" -UserProfilePath `"$userProfilePath`""
-    $launched = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-        CommandLine = $launchCommandLine
-        CurrentDirectory = (Split-Path -Parent $launcher)
-    }
-    if ([int]$launched.ReturnValue -ne 0 -or [int]$launched.ProcessId -le 0) {
+    try {
+        $service = New-Object -ComObject "Schedule.Service"
+        $service.Connect()
+        $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
+        if ([int]$task.State -eq 3) {
+            [void]$task.Run($null)
+        } elseif ([int]$task.State -notin @(2, 4)) {
+            throw "The isolated Anti-Codex launch task is not ready, queued, or running."
+        }
+    } catch {
         return [pscustomobject]@{
             ok = $false
-            exitCode = [int]$launched.ReturnValue
-            stderr = "Could not create the inline fixed-route launcher."
+            exitCode = 1
+            stderr = $_.Exception.Message
         }
     }
 
-    $launcherPid = [int]$launched.ProcessId
-    $launcherSnapshot = Get-AntiCodexScriptProcessSnapshot `
-        -ProcessId $launcherPid `
-        -ExpectedScriptPath $launcher `
-        -AllowedScriptRoot $targetRuntimeFull
-    $proc = Get-Process -Id $launcherPid -ErrorAction SilentlyContinue
     $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(10, $Seconds))
     $health = $null
     $fixedRoute = $null
     do {
         $health = Wait-AntiCodexHealth -Seconds 1
         $fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds 1
-        if ($health -and $fixedRoute) { break }
-        if ($proc) {
-            try { $proc.Refresh() } catch {}
-            if ($proc.HasExited) { break }
-        }
+        $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
+        if ($health -and $fixedRoute -and [int]$task.State -eq 4) { break }
+        if ([int]$task.State -notin @(2, 4)) { break }
     } while ([DateTime]::UtcNow -lt $deadline)
 
-    $ready = ($null -ne $health -and $null -ne $fixedRoute)
-    if (-not $ready -and $proc -and -not $proc.HasExited) {
+    $ready = ($null -ne $health -and $null -ne $fixedRoute -and [int]$task.State -eq 4)
+    if (-not $ready -and [int]$task.State -in @(2, 4)) {
         $null = Invoke-AntiCodexFixedRouteShutdown
-        $gracefulDeadline = [DateTime]::UtcNow.AddSeconds(5)
-        while ((Get-CimInstance Win32_Process -Filter "ProcessId = $launcherPid" -ErrorAction SilentlyContinue) -and
-            [DateTime]::UtcNow -lt $gracefulDeadline) {
-            Start-Sleep -Milliseconds 100
-        }
-        if (Get-CimInstance Win32_Process -Filter "ProcessId = $launcherPid" -ErrorAction SilentlyContinue) {
-            if (-not $launcherSnapshot) {
-                throw "Refusing to terminate an unverified Anti-Codex launcher PID $launcherPid."
-            }
-            Stop-AntiCodexVerifiedScriptProcess `
-                -Snapshot $launcherSnapshot `
-                -ExpectedScriptPath $launcher `
-                -AllowedScriptRoot $targetRuntimeFull | Out-Null
-        }
-        try { $proc.Refresh() } catch {}
+        $task.Stop(0)
+        $stopDeadline = [DateTime]::UtcNow.AddSeconds(15)
+        do {
+            Start-Sleep -Milliseconds 250
+            $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
+        } while ([int]$task.State -ne 3 -and [DateTime]::UtcNow -lt $stopDeadline)
     }
-    $exitCode = if ($proc -and $proc.HasExited) { [int]$proc.ExitCode } else { $null }
     return [pscustomobject]@{
-        ok = $ready -and ($null -eq $exitCode -or $exitCode -eq 0)
-        exitCode = $exitCode
+        ok = $ready
+        exitCode = if ($ready) { $null } else { 1 }
         stderr = ""
     }
 }
@@ -1425,6 +1444,7 @@ try {
 
     $activeMoved = $false
     $stageActivated = $false
+    $supersededByAnotherSync = $false
     $health = $null
     $fixedRoute = $null
     try {
@@ -1467,6 +1487,10 @@ try {
         }
 
         if (-not $NoRestart) {
+            $compatibilitySyncMutex.ReleaseMutex()
+            $compatibilitySyncMutexAcquired = $false
+            $syncMutex.ReleaseMutex()
+            $syncMutexAcquired = $false
             $launch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(30, $TimeoutSec))
             $launchExitCode = $launch.exitCode
             if (-not $launch.ok) {
@@ -1477,14 +1501,69 @@ try {
             if (-not $health -or -not $fixedRoute) {
                 throw "Anti-Codex fixed-route restart did not pass post-activation health checks."
             }
+            try {
+                $syncMutexAcquired = $syncMutex.WaitOne(300000)
+            } catch [Threading.AbandonedMutexException] {
+                $syncMutexAcquired = $true
+            }
+            if (-not $syncMutexAcquired) {
+                $supersededByAnotherSync = $true
+                throw "Another Anti-Codex runtime sync remained active after restart."
+            }
+            try {
+                $compatibilitySyncMutexAcquired = $compatibilitySyncMutex.WaitOne(300000)
+            } catch [Threading.AbandonedMutexException] {
+                $compatibilitySyncMutexAcquired = $true
+            }
+            if (-not $compatibilitySyncMutexAcquired) {
+                $supersededByAnotherSync = $true
+                throw "Another Anti-Codex host sync remained active after restart."
+            }
+        }
+        if (-not (Test-AntiCodexActiveRuntimeOwned -ExpectedTransactionId $transactionId)) {
+            $supersededByAnotherSync = $true
+            throw "The active Anti-Codex runtime or sync state changed after activation. This sync will not accept or clean up another transaction."
         }
         Set-AntiCodexRuntimeSyncState -State "active" -Message "The complete staged runtime is active and the previous directory is preserved for rollback."
         $runtimeCleanup = Invoke-AntiCodexRuntimeVersionCleanup -KeepRollback $rollbackRuntimeFull
     } catch {
         $activationError = $_
+        if ($supersededByAnotherSync) {
+            throw $activationError
+        }
         $restoreError = ""
         $restoredRuntimeReady = $false
+        $restoredRuntimeFingerprint = ""
         try {
+            if (-not $syncMutexAcquired) {
+                try {
+                    $syncMutexAcquired = $syncMutex.WaitOne(300000)
+                } catch [Threading.AbandonedMutexException] {
+                    $syncMutexAcquired = $true
+                }
+                if (-not $syncMutexAcquired) {
+                    $supersededByAnotherSync = $true
+                    throw "Another Anti-Codex sync started before runtime recovery."
+                }
+            }
+            if (-not $compatibilitySyncMutexAcquired) {
+                try {
+                    $compatibilitySyncMutexAcquired = $compatibilitySyncMutex.WaitOne(300000)
+                } catch [Threading.AbandonedMutexException] {
+                    $compatibilitySyncMutexAcquired = $true
+                }
+                if (-not $compatibilitySyncMutexAcquired) {
+                    $supersededByAnotherSync = $true
+                    throw "Another Anti-Codex sync started before runtime recovery."
+                }
+            }
+            if (($stageActivated -and
+                    -not (Test-AntiCodexActiveRuntimeOwned -ExpectedTransactionId $transactionId)) -or
+                (-not $stageActivated -and
+                    -not (Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId $transactionId))) {
+                $supersededByAnotherSync = $true
+                throw "The active Anti-Codex runtime or sync state changed before automatic restoration."
+            }
             if ($stageActivated -and -not $NoRestart) {
                 $null = Stop-AntiCodexFixedRouteSupervisor
             }
@@ -1500,11 +1579,16 @@ try {
                 Move-AntiCodexRuntimeDirectory -Source $rollbackRuntimeFull -Destination $targetRuntimeFull
                 $activeMoved = $false
             }
+            $restoredRuntimeFingerprint = Get-AntiCodexRuntimeGenerationFingerprint -Directory $targetRuntimeFull
             if (-not $NoRestart -and [IO.Directory]::Exists($targetRuntimeFull)) {
                 $restoredBaseUrlScript = Join-Path $targetRuntimeFull "scripts\resolve-anticodex-base-url.ps1"
                 if (Test-Path -LiteralPath $restoredBaseUrlScript -PathType Leaf) {
                     $BaseUrl = & $restoredBaseUrlScript
                 }
+                $compatibilitySyncMutex.ReleaseMutex()
+                $compatibilitySyncMutexAcquired = $false
+                $syncMutex.ReleaseMutex()
+                $syncMutexAcquired = $false
                 $restoredLaunch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(30, $TimeoutSec))
                 if (-not $restoredLaunch.ok) {
                     throw "The previous Anti-Codex runtime was restored but could not be relaunched. exit=$($restoredLaunch.exitCode) $($restoredLaunch.stderr)"
@@ -1514,12 +1598,68 @@ try {
                 if (-not $restoredHealth -or -not $restoredFixedRoute) {
                     throw "The previous Anti-Codex runtime was restored but did not pass recovery health checks."
                 }
+                try {
+                    $syncMutexAcquired = $syncMutex.WaitOne(300000)
+                } catch [Threading.AbandonedMutexException] {
+                    $syncMutexAcquired = $true
+                }
+                if (-not $syncMutexAcquired) {
+                    $supersededByAnotherSync = $true
+                    throw "Another Anti-Codex sync started during automatic restoration."
+                }
+                try {
+                    $compatibilitySyncMutexAcquired = $compatibilitySyncMutex.WaitOne(300000)
+                } catch [Threading.AbandonedMutexException] {
+                    $compatibilitySyncMutexAcquired = $true
+                }
+                if (-not $compatibilitySyncMutexAcquired) {
+                    $supersededByAnotherSync = $true
+                    throw "Another Anti-Codex sync started during automatic restoration."
+                }
+                if (-not (Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId $transactionId) -or
+                    (Get-AntiCodexRuntimeGenerationFingerprint -Directory $targetRuntimeFull) -ine $restoredRuntimeFingerprint) {
+                    $supersededByAnotherSync = $true
+                    throw "The active runtime changed during automatic restoration. Recovery status was not written."
+                }
                 $restoredRuntimeReady = $true
             }
         } catch {
             $restoreError = $_.Exception.Message
         }
 
+        if ($supersededByAnotherSync) {
+            throw $activationError
+        }
+        if ($restoreError -and (-not $syncMutexAcquired -or -not $compatibilitySyncMutexAcquired)) {
+            try {
+                if (-not $syncMutexAcquired) {
+                    try {
+                        $syncMutexAcquired = $syncMutex.WaitOne(300000)
+                    } catch [Threading.AbandonedMutexException] {
+                        $syncMutexAcquired = $true
+                    }
+                }
+                if (-not $compatibilitySyncMutexAcquired) {
+                    try {
+                        $compatibilitySyncMutexAcquired = $compatibilitySyncMutex.WaitOne(300000)
+                    } catch [Threading.AbandonedMutexException] {
+                        $compatibilitySyncMutexAcquired = $true
+                    }
+                }
+                if (-not $syncMutexAcquired -or -not $compatibilitySyncMutexAcquired) {
+                    $supersededByAnotherSync = $true
+                } elseif (-not (Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId $transactionId) -or
+                    ($restoredRuntimeFingerprint -and
+                        (Get-AntiCodexRuntimeGenerationFingerprint -Directory $targetRuntimeFull) -ine $restoredRuntimeFingerprint)) {
+                    $supersededByAnotherSync = $true
+                }
+            } catch {
+                $supersededByAnotherSync = $true
+            }
+        }
+        if ($supersededByAnotherSync) {
+            throw $activationError
+        }
         if ($restoreError) {
             try {
                 Set-AntiCodexRuntimeSyncState -State "activation_failed" -Message "Activation failed and automatic restoration could not finish." -ErrorMessage "$($activationError.Exception.Message); restore error: $restoreError"

@@ -58,7 +58,7 @@ test("normal launchers hold the host sync publication barrier while runtime star
   assert.match(launcher, /Enter-AntiCodexHostSyncBarrier/);
   assert.match(launcher, /Exit-AntiCodexHostSyncBarrier/);
   assert.match(launcher, /\[switch\]\$SkipSyncBarrier/);
-  assert.match(runtimeSync, /-SkipSyncBarrier/);
+  assert.doesNotMatch(runtimeSync, /-SkipSyncBarrier/);
 
   assert.match(taskLauncherSource, /acquireHostSyncBarrier/);
   assert.match(taskLauncherSource, /Global\\\\AntiCodexHostSync/);
@@ -138,6 +138,8 @@ test("host sync restarts outside native Codex process ownership", () => {
   assert.equal([...hostSync.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
   assert.match(hostSync, /\$script:antiCodexScheduleService/);
   assert.match(restart, /\.Run\(\$null\)/);
+  assert.match(restart, /\$task\.State -eq 3[\s\S]*?\.Run\(\$null\)/);
+  assert.match(restart, /\$task\.State -notin @\(2, 4\)/);
   assert.doesNotMatch(restart, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
   assert.doesNotMatch(restart, /Start-Process -FilePath \$powershell|cmd\.exe/);
 });
@@ -212,6 +214,39 @@ test("host sync gracefully releases the old launch task before starting the new 
   assert.match(contract, /Settings\.AllowDemandStart/);
 });
 
+test("host sync publishes the activated release before the Launcher waits on its barrier", () => {
+  const activationEnd = hostSync.indexOf("Remove-Item -LiteralPath $hostSyncMarker");
+  const syncErrorBranch = hostSync.indexOf("if ($syncError) {", activationEnd);
+  const publication = activationEnd >= 0 && syncErrorBranch > activationEnd
+    ? hostSync.slice(activationEnd, syncErrorBranch)
+    : "";
+
+  assert.match(publication, /\$syncMutex\.ReleaseMutex\(\)/);
+  assert.match(publication, /\$syncMutexAcquired = \$false/);
+});
+
+test("host sync binds acceptance and rollback to the activated marker generation", () => {
+  const activation = hostSync.indexOf("$activatedMarkerSha256 = Get-AntiCodexSha256");
+  const publication = hostSync.indexOf("$syncMutex.ReleaseMutex()", activation);
+  const acceptance = hostSync.indexOf("Invoke-AntiCodexPostSyncAcceptance", publication);
+  const reclaim = hostSync.indexOf("$syncMutex.WaitOne(", acceptance);
+  const generationCheck = hostSync.indexOf("active release changed after activation", reclaim);
+  const rollbackRelease = hostSync.indexOf("$syncMutex.ReleaseMutex()", generationCheck);
+  const rollbackCall = hostSync.indexOf(
+    "& $rollbackScript -ExpectedActiveMarkerSha256 $activatedMarkerSha256",
+    rollbackRelease,
+  );
+
+  assert.ok(activation >= 0, "activated marker generation is not captured");
+  assert.ok(publication > activation, "Launcher publication must follow generation capture");
+  assert.ok(reclaim > acceptance, "host sync must reclaim the mutex after acceptance");
+  assert.ok(generationCheck > reclaim, "host sync must reject a superseded active generation");
+  assert.ok(rollbackRelease > generationCheck, "host sync must release the Launcher barrier before rollback");
+  assert.ok(rollbackCall > rollbackRelease, "rollback must receive the accepted marker generation");
+  assert.match(rollback, /\[string\]\$ExpectedActiveMarkerSha256/);
+  assert.match(rollback, /Get-AntiCodexSha256 -Path \$activeMarker[\s\S]*?ExpectedActiveMarkerSha256/);
+});
+
 test("automatic rollback stops and restarts only through the isolated Launcher task", () => {
   assert.match(rollback, /fixed-route\/shutdown/);
   assert.match(rollback, /function Stop-AntiCodexLaunchTaskForMaintenance/);
@@ -223,6 +258,36 @@ test("automatic rollback stops and restarts only through the isolated Launcher t
   assert.match(rollback, /\.Run\(\$null\)/);
   assert.doesNotMatch(rollback, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
   assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
+});
+
+test("rollback binds restart acceptance and recovery to its activated marker generation", () => {
+  const activation = rollback.indexOf("$activatedMarkerSha256 = Get-AntiCodexSha256");
+  const publication = rollback.indexOf("$syncMutex.ReleaseMutex()", activation);
+  const readiness = rollback.indexOf("Wait-AntiCodexPostRollbackReady", publication);
+  const reclaim = rollback.indexOf("$syncMutex.WaitOne(", readiness);
+  const generationCheck = rollback.indexOf("active release changed after rollback activation", reclaim);
+  const recoveryRelease = rollback.indexOf("$syncMutex.ReleaseMutex()", generationCheck);
+  const recovery = rollback.indexOf(
+    "& $PSCommandPath -RecoveryAttempt -ExpectedActiveMarkerSha256 $activatedMarkerSha256",
+    recoveryRelease,
+  );
+  const hostRollback = hostSync.indexOf(
+    "& $rollbackScript -ExpectedActiveMarkerSha256 $activatedMarkerSha256",
+  );
+  const hostAfterRollback = hostRollback >= 0 ? hostSync.slice(hostRollback) : "";
+
+  assert.ok(activation >= 0, "rollback activation marker generation is not captured");
+  assert.ok(publication > activation, "rollback must capture its generation before publishing the Launcher barrier");
+  assert.ok(readiness > publication, "rollback readiness must run after publishing the Launcher barrier");
+  assert.ok(reclaim > readiness, "rollback must reclaim the mutex after readiness");
+  assert.ok(generationCheck > reclaim, "rollback must reject a superseded generation");
+  assert.ok(recoveryRelease > generationCheck, "rollback must publish before recursive recovery");
+  assert.ok(recovery > recoveryRelease, "recursive recovery must receive the active marker generation");
+  assert.doesNotMatch(
+    hostAfterRollback,
+    /Set-AntiCodexUpdateOperation -State "rolled_back"/,
+    "host sync must not overwrite rollback's generation-bound terminal status",
+  );
 });
 
 test("a failed host sync restores a valid active release before surfacing the error", () => {
@@ -399,6 +464,96 @@ test("runtime sync restarts only the fixed three-layer supervisor", () => {
   assert.match(runtimeSync, /Invoke-AntiCodexFixedRouteLauncher/);
   assert.match(runtimeSync, /start-anticodex\.ps1/);
   assert.doesNotMatch(runtimeSync, /Start-AntiCodexTranslatorDirect|Set-AntiCodexTranslatorRestartEnvironment|Get-AntiCodexTranslatorProcesses|ANTICODEX_TRANSLATOR_RESTART/);
+});
+
+test("runtime sync relaunches through the durable isolated Launcher task", () => {
+  const start = runtimeSync.indexOf("function Invoke-AntiCodexFixedRouteLauncher");
+  const end = runtimeSync.indexOf("$syntaxCheckedJavaScriptFiles", start);
+  const relaunch = start >= 0 && end > start ? runtimeSync.slice(start, end) : "";
+
+  assert.match(relaunch, /Schedule\.Service/);
+  assert.match(relaunch, /Anti-Codex Launcher/);
+  assert.match(relaunch, /\.Run\(\$null\)/);
+  assert.doesNotMatch(relaunch, /Win32_Process|InlineSupervisor|start-anticodex\.ps1/);
+});
+
+test("runtime sync publishes the staged runtime before waiting for the durable Launcher", () => {
+  const launch = runtimeSync.indexOf("$launch = Invoke-AntiCodexFixedRouteLauncher");
+  const publication = launch >= 0 ? runtimeSync.slice(Math.max(0, launch - 1_200), launch) : "";
+
+  assert.match(publication, /\$compatibilitySyncMutex\.ReleaseMutex\(\)/);
+  assert.match(publication, /\$syncMutex\.ReleaseMutex\(\)/);
+});
+
+test("runtime sync publishes the restored runtime before its recovery Launcher", () => {
+  const launch = runtimeSync.indexOf("$restoredLaunch = Invoke-AntiCodexFixedRouteLauncher");
+  const publication = launch >= 0 ? runtimeSync.slice(Math.max(0, launch - 1_200), launch) : "";
+
+  assert.match(publication, /\$compatibilitySyncMutex\.ReleaseMutex\(\)/);
+  assert.match(publication, /\$compatibilitySyncMutexAcquired = \$false/);
+  assert.match(publication, /\$syncMutex\.ReleaseMutex\(\)/);
+  assert.match(publication, /\$syncMutexAcquired = \$false/);
+});
+
+test("runtime sync reclaims both locks and binds its active transaction before cleanup", () => {
+  const launch = runtimeSync.indexOf("$launch = Invoke-AntiCodexFixedRouteLauncher");
+  const activeState = runtimeSync.indexOf('Set-AntiCodexRuntimeSyncState -State "active"', launch);
+  const cleanup = runtimeSync.indexOf("Invoke-AntiCodexRuntimeVersionCleanup", activeState);
+  const acceptance = launch >= 0 && cleanup > launch ? runtimeSync.slice(launch, cleanup) : "";
+  const ownershipStart = runtimeSync.indexOf("function Test-AntiCodexActiveRuntimeOwned");
+  const ownershipEnd = runtimeSync.indexOf("function Write-AntiCodexStagedRuntimeManifest", ownershipStart);
+  const ownership = ownershipStart >= 0 && ownershipEnd > ownershipStart
+    ? runtimeSync.slice(ownershipStart, ownershipEnd)
+    : "";
+
+  assert.match(acceptance, /\$syncMutex\.WaitOne\(300000\)/);
+  assert.match(acceptance, /\$compatibilitySyncMutex\.WaitOne\(300000\)/);
+  assert.match(acceptance, /Test-AntiCodexActiveRuntimeOwned -ExpectedTransactionId \$transactionId/);
+  assert.match(ownership, /\.anticodex-runtime-manifest\.json/);
+  assert.match(ownership, /Test-AntiCodexRuntimeSyncStateOwned/);
+  assert.match(ownership, /\$manifest\.transactionId[\s\S]*?\$ExpectedTransactionId/);
+  assert.ok(activeState > launch, "active state must follow generation-bound acceptance");
+  assert.ok(cleanup > activeState, "runtime cleanup must remain inside the reclaimed transaction locks");
+});
+
+test("runtime recovery verifies transaction ownership before stopping or moving active", () => {
+  const recoveryStart = runtimeSync.indexOf("$restoreError =");
+  const stop = runtimeSync.indexOf("Stop-AntiCodexFixedRouteSupervisor", recoveryStart);
+  const move = runtimeSync.indexOf("Move-AntiCodexRuntimeDirectory", recoveryStart);
+  const destructive = Math.min(...[stop, move].filter((value) => value >= 0));
+  const beforeDestruction = recoveryStart >= 0 && destructive > recoveryStart
+    ? runtimeSync.slice(recoveryStart, destructive)
+    : "";
+
+  assert.match(beforeDestruction, /Test-AntiCodexActiveRuntimeOwned -ExpectedTransactionId \$transactionId/);
+  assert.match(beforeDestruction, /Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId \$transactionId/);
+  assert.match(beforeDestruction, /\$supersededByAnotherSync = \$true/);
+});
+
+test("runtime recovery reclaims both locks and binds the restored generation before status", () => {
+  const launch = runtimeSync.indexOf("$restoredLaunch = Invoke-AntiCodexFixedRouteLauncher");
+  const restoredState = runtimeSync.indexOf("$restoredState =", launch);
+  const acceptance = launch >= 0 && restoredState > launch ? runtimeSync.slice(launch, restoredState) : "";
+
+  assert.match(acceptance, /\$restoredRuntimeFingerprint/);
+  assert.match(acceptance, /\$syncMutex\.WaitOne\(300000\)/);
+  assert.match(acceptance, /\$compatibilitySyncMutex\.WaitOne\(300000\)/);
+  assert.match(acceptance, /Get-AntiCodexRuntimeGenerationFingerprint -Directory \$targetRuntimeFull/);
+  assert.match(acceptance, /Test-AntiCodexRuntimeSyncStateOwned -ExpectedTransactionId \$transactionId/);
+  assert.match(acceptance, /active runtime changed during automatic restoration/);
+});
+
+test("runtime sync starts a Ready Launcher or reuses a queued/running Launcher", () => {
+  const start = runtimeSync.indexOf("function Invoke-AntiCodexFixedRouteLauncher");
+  const end = runtimeSync.indexOf("$syntaxCheckedJavaScriptFiles", start);
+  const relaunch = start >= 0 && end > start ? runtimeSync.slice(start, end) : "";
+  const stop = relaunch.indexOf("$task.Stop(0)");
+  const afterStop = stop >= 0 ? relaunch.slice(stop) : "";
+
+  assert.match(relaunch, /\$task\.State -eq 3[\s\S]*?\$task\.Run\(\$null\)/);
+  assert.match(relaunch, /\$task\.State -notin @\(2, 4\)/);
+  assert.match(relaunch, /\$task\.State -in @\(2, 4\)[\s\S]*?\$task\.Stop\(0\)/);
+  assert.match(afterStop, /while \(\[int\]\$task\.State -ne 3/);
 });
 
 test("runtime sync no-restart mode verifies copied files without polling live health", () => {

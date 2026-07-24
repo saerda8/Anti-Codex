@@ -111,41 +111,8 @@ test("does not accept a generic app.getName reference as session-title proof", (
   );
 });
 
-test("keeps the primary BrowserWindow drawing while minimized without changing bundle size", () => {
-  const source = [
-    "let A={preload:this.options.preloadPath,",
-    "backgroundThrottling:o===`avatarOverlay`?!1:void 0,",
-    "contextIsolation:!0};",
-  ].join("");
-  const patched = brandPatchCompat.patchPrimaryWindowBackgroundThrottling(source);
-
-  assert.equal(patched.length, source.length);
-  assert.match(
-    patched,
-    /preload:this\.options\.preloadPath,backgroundThrottling:o===`primary`\?!1:void 0,\s*contextIsolation/,
-  );
-  assert.equal(
-    brandPatchCompat.patchPrimaryWindowBackgroundThrottling(patched),
-    patched,
-  );
-});
-
-test("fails closed for mixed or duplicate primary BrowserWindow throttling targets", () => {
-  const legacy = "preload:this.options.preloadPath,backgroundThrottling:o===`avatarOverlay`?!1:void 0,";
-  const patched = "preload:this.options.preloadPath,backgroundThrottling:o===`primary`?!1:void 0,";
-
-  assert.throws(
-    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${legacy}${patched}`),
-    /not found or ambiguous/,
-  );
-  assert.throws(
-    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${legacy}${legacy}`),
-    /not found or ambiguous/,
-  );
-  assert.throws(
-    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${patched}${patched}`),
-    /not found or ambiguous/,
-  );
+test("keeps Codex's official primary BrowserWindow throttling policy", () => {
+  assert.doesNotMatch(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
 });
 
 test("routes every Windows tray brand to the Anti-Codex tray resource", () => {

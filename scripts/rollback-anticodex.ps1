@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [switch]$RecoveryAttempt,
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [string]$ExpectedActiveMarkerSha256 = ""
 )
 
 Set-StrictMode -Version Latest
@@ -1053,6 +1054,7 @@ if ($ValidateOnly) {
 
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
 if (-not $syncMutex.WaitOne(0)) { $syncMutex.Dispose(); throw "Another Anti-Codex sync or rollback is already running." }
+$syncMutexAcquired = $true
 
 if ($ValidateOnly) {
     try {
@@ -1068,9 +1070,25 @@ if ($ValidateOnly) {
 
 $rollbackError = $null
 $restartAfterRollback = $false
+$activatedMarkerSha256 = ""
+$supersededByAnotherSync = $false
 $rollbackStage = "rollback_validation"
 try {
     try {
+        if ($ExpectedActiveMarkerSha256) {
+            if ($ExpectedActiveMarkerSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+                throw "Expected active marker SHA-256 is invalid."
+            }
+            $currentActiveMarkerSha256 = if ([IO.File]::Exists($activeMarker)) {
+                Get-AntiCodexSha256 -Path $activeMarker
+            } else {
+                ""
+            }
+            if ($currentActiveMarkerSha256 -ine $ExpectedActiveMarkerSha256) {
+                $supersededByAnotherSync = $true
+                throw "The active Anti-Codex release changed after rollback was requested. Rollback was refused."
+            }
+        }
         Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_validation" -Message "Validating both active and rollback releases." -RollbackAvailable $true -StateRoot $stateRoot
         if ([IO.Directory]::Exists("\\?\$swapHost") -or [IO.File]::Exists($swapMarker) -or [IO.Directory]::Exists("\\?\$swapComponent")) { throw "A stale rollback swap is present. Anti-Codex was not changed." }
         Repair-LegacyRollbackHostBinaryManifest
@@ -1103,6 +1121,9 @@ try {
             Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
             Test-AntiCodexComponent -ComponentRoot $activeComponent
             Commit-AntiCodexRollbackCheckpoint
+            $activatedMarkerSha256 = Get-AntiCodexSha256 -Path $activeMarker
+            $rollbackStage = "rollback_restart"
+            Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_restart" -Message "Restarting Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
         } catch {
             $swapError = $_.Exception.Message
             try {
@@ -1118,35 +1139,67 @@ try {
 } finally {
     Remove-Item -LiteralPath $hostSyncMarker -Force -ErrorAction SilentlyContinue
     $syncMutex.ReleaseMutex()
-    $syncMutex.Dispose()
-}
-
-if ($restartAfterRollback -and (Test-Path -LiteralPath $startAntiCodex)) {
-    $rollbackStage = "rollback_restart"
-    Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_restart" -Message "Restarting Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
-    Start-AntiCodexThroughTask
+    $syncMutexAcquired = $false
 }
 
 if ($rollbackError) {
-    Set-AntiCodexUpdateOperation -State "failed" -Stage $rollbackStage -Message $rollbackError.Exception.Message -FailureCode "rollback_failed" -RollbackAvailable $true -StateRoot $stateRoot
+    if (-not $supersededByAnotherSync) {
+        Set-AntiCodexUpdateOperation -State "failed" -Stage $rollbackStage -Message $rollbackError.Exception.Message -FailureCode "rollback_failed" -RollbackAvailable $true -StateRoot $stateRoot
+    }
+    $syncMutex.Dispose()
     throw $rollbackError
 }
 
-$rollbackStage = "rollback_acceptance"
-Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_acceptance" -Message "Checking Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
-if ($restartAfterRollback -and -not (Wait-AntiCodexPostRollbackReady -TimeoutSeconds 90)) {
-    if ($RecoveryAttempt) {
-        Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "Anti-Codex did not become ready after rollback recovery." -FailureCode "rollback_recovery_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
-        throw "Anti-Codex did not become ready after rollback recovery."
+try {
+    if ($restartAfterRollback -and (Test-Path -LiteralPath $startAntiCodex)) {
+        Start-AntiCodexThroughTask
     }
-    try {
-        & $PSCommandPath -RecoveryAttempt
-    } catch {
-        Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message $_.Exception.Message -FailureCode "rollback_recovery_failed" -RollbackAvailable $true -StateRoot $stateRoot
-        throw "The rolled-back Anti-Codex host did not become ready, and automatic recovery failed: $($_.Exception.Message)"
-    }
-    Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "The rolled-back host was not ready; automatic recovery restored the original active version." -FailureCode "rollback_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
-    throw "The rolled-back Anti-Codex host did not become ready. Automatic recovery restored the original active version."
-}
+    $postRollbackReady = -not $restartAfterRollback -or (Wait-AntiCodexPostRollbackReady -TimeoutSeconds 90)
 
-Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component successfully." -RollbackAvailable $true -StateRoot $stateRoot
+    try {
+        $syncMutexAcquired = $syncMutex.WaitOne(300000)
+    } catch [Threading.AbandonedMutexException] {
+        $syncMutexAcquired = $true
+    }
+    if (-not $syncMutexAcquired) {
+        $supersededByAnotherSync = $true
+        throw "Another Anti-Codex sync remained active after rollback readiness."
+    }
+    $currentActiveMarkerSha256 = if ([IO.File]::Exists($activeMarker)) {
+        Get-AntiCodexSha256 -Path $activeMarker
+    } else {
+        ""
+    }
+    if (-not $activatedMarkerSha256 -or $currentActiveMarkerSha256 -ine $activatedMarkerSha256) {
+        $supersededByAnotherSync = $true
+        throw "The active release changed after rollback activation. This rollback will not accept or recover another generation."
+    }
+
+    $rollbackStage = "rollback_acceptance"
+    Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_acceptance" -Message "Checking Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
+    if (-not $postRollbackReady) {
+        if ($RecoveryAttempt) {
+            Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "Anti-Codex did not become ready after rollback recovery." -FailureCode "rollback_recovery_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
+            throw "Anti-Codex did not become ready after rollback recovery."
+        }
+        $syncMutex.ReleaseMutex()
+        $syncMutexAcquired = $false
+        try {
+            & $PSCommandPath -RecoveryAttempt -ExpectedActiveMarkerSha256 $activatedMarkerSha256
+        } catch {
+            throw "The rolled-back Anti-Codex host did not become ready, and automatic recovery failed: $($_.Exception.Message)"
+        }
+        throw "The rolled-back Anti-Codex host did not become ready. Automatic recovery restored the original active version."
+    }
+
+    if ($RecoveryAttempt) {
+        Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "The requested rollback was not ready; automatic recovery restored the original active version." -FailureCode "rollback_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
+    } else {
+        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component successfully." -RollbackAvailable $true -StateRoot $stateRoot
+    }
+} finally {
+    if ($syncMutexAcquired) {
+        $syncMutex.ReleaseMutex()
+    }
+    $syncMutex.Dispose()
+}

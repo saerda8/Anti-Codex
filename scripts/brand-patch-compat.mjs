@@ -101,25 +101,6 @@ export function patchProductNameDrivenSessionTitle(text) {
   return next;
 }
 
-export function patchPrimaryWindowBackgroundThrottling(text) {
-  const source = String(text ?? "");
-  const legacyPattern = /preload:this\.options\.preloadPath,backgroundThrottling:(?<appearance>[\w$]+)===`avatarOverlay`\?!1:void 0,/g;
-  const patchedPattern = /preload:this\.options\.preloadPath,backgroundThrottling:[\w$]+===`primary`\?!1:void 0,/g;
-  const legacyMatches = [...source.matchAll(legacyPattern)];
-  const patchedMatches = [...source.matchAll(patchedPattern)];
-  if (legacyMatches.length === 0 && patchedMatches.length === 1) return source;
-  if (legacyMatches.length !== 1 || patchedMatches.length !== 0) {
-    throw new Error("Primary BrowserWindow background throttling pattern not found or ambiguous");
-  }
-
-  const [match] = legacyMatches;
-  const replacement =
-    `preload:this.options.preloadPath,backgroundThrottling:${match.groups.appearance}===\`primary\`?!1:void 0,`;
-  return source.slice(0, match.index) +
-    padReplacement(match[0], replacement) +
-    source.slice(match.index + match[0].length);
-}
-
 function findWindowsTrayIconSelector(text) {
   let anchor = text.indexOf(ANTI_CODEX_TRAY_ICON);
   while (anchor >= 0) {

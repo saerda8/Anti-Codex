@@ -671,11 +671,12 @@ function Start-AntiCodexAfterSync {
     if (-not (Test-Path -LiteralPath $taskLauncher -PathType Leaf)) {
         throw "The isolated Anti-Codex task launcher is missing: $taskLauncher"
     }
-    if (-not (Wait-AntiCodexLaunchTaskStopped -TimeoutSeconds 30)) {
-        throw "The previous isolated Anti-Codex launch task did not stop before restart."
-    }
     $task = Assert-AntiCodexLaunchTaskContract
-    [void]$task.Run($null)
+    if ([int]$task.State -eq 3) {
+        [void]$task.Run($null)
+    } elseif ([int]$task.State -notin @(2, 4)) {
+        throw "The isolated Anti-Codex launch task is not ready, queued, or running."
+    }
 }
 
 function Get-OriginalCodexProcessSnapshot {
@@ -928,9 +929,13 @@ if (-not $syncMutex.WaitOne(0)) {
     $syncMutex.Dispose()
     throw "Another Anti-Codex sync is already running."
 }
+$syncMutexAcquired = $true
 
 $syncError = $null
 $syncCompleted = $false
+$activatedMarkerSha256 = ""
+$supersededByAnotherSync = $false
+$terminalStatusOwnedByRollback = $false
 $restartAfterSync = $false
 $rollbackAvailable = $false
 $rollbackRestoreAvailable = $false
@@ -1045,6 +1050,7 @@ try {
                 $rollbackAvailable = $true
             }
             Remove-FixedUpdateDirectory -Path $candidateRoot
+            $activatedMarkerSha256 = Get-AntiCodexSha256 -Path $activeMarker
             $syncCompleted = $true
         } catch {
             $activationError = $_.Exception.Message
@@ -1085,30 +1091,34 @@ try {
 } finally {
     Remove-Item -LiteralPath $hostSyncMarker -Force -ErrorAction SilentlyContinue
 }
+$syncMutex.ReleaseMutex()
+$syncMutexAcquired = $false
 
 if ($syncError) {
-    $recoveryRestartError = ""
-    if (-not $NoRestart -and $restartAfterSync) {
-        try {
-            $activeExecutable = Join-Path $activeHost "Anti-Codex.exe"
-            if ((Test-Path -LiteralPath $activeExecutable -PathType Leaf) -and
-                (Test-Path -LiteralPath $activeMarker -PathType Leaf) -and
-                (Test-Path -LiteralPath (Join-Path $activeComponent "codex-plus-plus.exe") -PathType Leaf)) {
-                Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
-                Start-AntiCodexAfterSync -StartScript $startAntiCodex
+    try {
+        $recoveryRestartError = ""
+        if (-not $NoRestart -and $restartAfterSync) {
+            try {
+                $activeExecutable = Join-Path $activeHost "Anti-Codex.exe"
+                if ((Test-Path -LiteralPath $activeExecutable -PathType Leaf) -and
+                    (Test-Path -LiteralPath $activeMarker -PathType Leaf) -and
+                    (Test-Path -LiteralPath (Join-Path $activeComponent "codex-plus-plus.exe") -PathType Leaf)) {
+                    Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
+                    Start-AntiCodexAfterSync -StartScript $startAntiCodex
+                }
+            } catch {
+                $recoveryRestartError = $_.Exception.Message
+                $syncError.Exception.Data["AntiCodexRecoveryRestartError"] = $recoveryRestartError
             }
-        } catch {
-            $recoveryRestartError = $_.Exception.Message
-            $syncError.Exception.Data["AntiCodexRecoveryRestartError"] = $recoveryRestartError
         }
+        if ($activationRestored) {
+            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $false -StateRoot $stateRoot
+        } else {
+            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+        }
+    } finally {
+        $syncMutex.Dispose()
     }
-    if ($activationRestored) {
-        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $false -StateRoot $stateRoot
-    } else {
-        Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
-    }
-    $syncMutex.ReleaseMutex()
-    $syncMutex.Dispose()
     throw $syncError
 }
 
@@ -1162,6 +1172,27 @@ if ($syncCompleted) {
     }
 }
 
+if ($syncCompleted) {
+    try {
+        $syncMutexAcquired = $syncMutex.WaitOne(300000)
+    } catch [Threading.AbandonedMutexException] {
+        $syncMutexAcquired = $true
+    }
+    if (-not $syncMutexAcquired) {
+        $supersededByAnotherSync = $true
+        throw "Another Anti-Codex sync remained active after post-sync acceptance."
+    }
+    $currentActiveMarkerSha256 = if ([IO.File]::Exists($activeMarker)) {
+        Get-AntiCodexSha256 -Path $activeMarker
+    } else {
+        ""
+    }
+    if (-not $activatedMarkerSha256 -or $currentActiveMarkerSha256 -ine $activatedMarkerSha256) {
+        $supersededByAnotherSync = $true
+        throw "The active release changed after activation. This sync will not accept, clean up, or roll back another generation."
+    }
+}
+
 if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $true)) {
     if (-not $rollbackAvailable) {
         throw "$([string]$postSyncAcceptance.message) No compatible rollback release was available."
@@ -1169,8 +1200,10 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
     $rollbackFailure = $null
     $failureReason = [string]$postSyncAcceptance.message
     try {
+        $syncMutex.ReleaseMutex()
+        $syncMutexAcquired = $false
         $global:LASTEXITCODE = 0
-        & $rollbackScript
+        & $rollbackScript -ExpectedActiveMarkerSha256 $activatedMarkerSha256
         if ($LASTEXITCODE -ne 0) {
             throw "rollback exited with code $LASTEXITCODE"
         }
@@ -1178,9 +1211,26 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
         $rollbackFailure = $_.Exception.Message
     }
     if ($rollbackFailure) {
+        try {
+            $syncMutexAcquired = $syncMutex.WaitOne(0)
+        } catch [Threading.AbandonedMutexException] {
+            $syncMutexAcquired = $true
+        }
+        if (-not $syncMutexAcquired) {
+            $supersededByAnotherSync = $true
+        } else {
+            $currentActiveMarkerSha256 = if ([IO.File]::Exists($activeMarker)) {
+                Get-AntiCodexSha256 -Path $activeMarker
+            } else {
+                ""
+            }
+            if ($currentActiveMarkerSha256 -ine $activatedMarkerSha256) {
+                $supersededByAnotherSync = $true
+            }
+        }
         throw "$failureReason Automatic rollback also failed: $rollbackFailure"
     }
-    Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "acceptance" -Message "$failureReason Automatic rollback restored the previous host." -RollbackAvailable $true -StateRoot $stateRoot
+    $terminalStatusOwnedByRollback = $true
     throw "$failureReason Automatic rollback restored the previous host."
 }
 
@@ -1222,12 +1272,16 @@ if ($syncCompleted) {
     }
 }
 } catch {
-    $terminalStatus = Get-AntiCodexUpdateStatus -StateRoot $stateRoot
-    if ($terminalStatus.operation.state -ne "rolled_back") {
-        Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $_.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+    if (-not $supersededByAnotherSync -and -not $terminalStatusOwnedByRollback) {
+        $terminalStatus = Get-AntiCodexUpdateStatus -StateRoot $stateRoot
+        if ($terminalStatus.operation.state -ne "rolled_back") {
+            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $_.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+        }
     }
     throw
 } finally {
-    $syncMutex.ReleaseMutex()
+    if ($syncMutexAcquired) {
+        $syncMutex.ReleaseMutex()
+    }
     $syncMutex.Dispose()
 }
