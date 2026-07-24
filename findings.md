@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-25 Primary Restore Repaint Candidate
+
+- Commit `1a5e60a` added one primary-window-only `restore -> webContents.invalidate()` ASAR patch plus early frame-timeline evidence. Candidate validation requires exactly one handler; focus/show/hide remain unchanged. Full source preflight later passed `768/768`.
+- The first built-in update exposed a real migration bug and automatically restored the previous release: rollback validation had applied the new 13-patch contract to the signed 12-patch predecessor. Commit `9ea3945` now accepts only two exact matrices: current `13 + hook count 1`, or immediate predecessor `12 + hook count 0`. A real PowerShell matrix rejects missing, duplicate, extra and cross-version combinations. The second built-in update completed successfully and retained a verified rollback.
+- Physical rounds `20260724-185716880-shortcut-restore-a88e41e3b4a7437ea2b1ac528516c0dc.json` and `20260724-185737292-shortcut-restore-466c6b25a72e4187924fbc31feb36f86.json` passed. Round `20260724-185757081-shortcut-restore-1268dd38f2be4df991d586345f230d47.json` had zero blank frames, a first nonblank frame at `9 ms`, stable PID/HWND/CDP and a live original Codex, but its maximum sample interval was `136 ms` against the unchanged `125 ms` gate. The candidate was rejected without a fourth round or threshold change.
+- Built-in rollback completed successfully. Active is the prior 12-patch/zero-hook release; rollback holds the 13-patch/one-hook candidate. There is one visible Anti-Codex PID `41724`, fixed route is ready on `gemini-3.6-flash-low`, original Codex PID `33196` is alive, installed sync-readiness and installed-overall are green without traffic, update status is `up_to_date`, source/installed legacy-zero-hit are green, and Docker Anti-Codex container count is zero.
+- One read-only rollback-receipt command initially had a PowerShell pipeline parse error and was rerun with an explicit array; no product state changed. A later monitor initially saw the previous update operation record, but task timestamps prevented treating that stale record as the new run.
+
 ## 2026-07-25 Taskbar White-Frame A/B
 
 - Priority `4` did not close the defect: report `20260724-174319078-shortcut-restore-14e1c4366a2345f5ba3879670decff69.json` captured a pure-white first frame on the same PID/HWND/CDP target. `ShellExperienceHost` took foreground about 150 ms later, so it shortened that sample but did not cause the first white frame.
