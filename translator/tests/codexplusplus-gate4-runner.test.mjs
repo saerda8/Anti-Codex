@@ -177,6 +177,14 @@ test("Gate 4 owns its forbidden-route baseline and captures launcher termination
   assert.match(installerSource, /scripts\\test-codexplusplus-antigravity-route-switch\.mjs/);
 });
 
+test("Gate 4 proof evidence lists both accepted line-ending hashes", () => {
+  assert.match(
+    runnerSource,
+    /acceptedSha256:\s*\[\s*sha256\(marker\),\s*sha256\(`\$\{marker\}\\n`\),?\s*\]/,
+  );
+  assert.doesNotMatch(runnerSource, /expectedSha256:\s*sha256\(marker\)/);
+});
+
 async function statusServer(statusForRequest) {
   const server = createHttpServer((request, response) => {
     const status = statusForRequest(request);

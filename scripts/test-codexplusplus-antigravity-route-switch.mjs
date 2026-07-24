@@ -580,7 +580,7 @@ async function main() {
     const proofContentAccepted = proofContent === marker || proofContent === `${marker}\n`;
     addCheck("exact_proof_artifact", proofContentAccepted, {
       path: proofPath,
-      expectedSha256: sha256(marker),
+      acceptedSha256: [sha256(marker), sha256(`${marker}\n`)],
       actualSha256: proofContent === null ? null : sha256(proofContent),
     });
     addCheck("workspace_has_only_proof_artifact", JSON.stringify(workspaceFiles) === JSON.stringify(["proof.txt"]), {
