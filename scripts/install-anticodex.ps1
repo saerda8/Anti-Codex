@@ -44,7 +44,6 @@ $fixedShellCriticalPatches = @(
     "app-route-gate",
     "profile-dropdown-settings",
     "browser-window-icon",
-    "primary-window-restore-repaint",
     "windows-tray-icon",
     "local-model-availability"
 )

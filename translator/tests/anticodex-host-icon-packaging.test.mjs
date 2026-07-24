@@ -42,11 +42,6 @@ test("host packaging preserves official host bytes and uses external Anti-Codex 
   assert.doesNotMatch(installer, /patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT|&\s+\$PATCH_EXE_ICON_SCRIPT/);
 });
 
-test("candidate validation requires exactly one primary-window restore repaint", () => {
-  assert.match(candidateValidator, /primaryRestoreRepaintPattern/);
-  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryRestoreRepaintPattern\)\.Count -ne 1/);
-});
-
 test("shortcuts continue to use the external Anti-Codex icon", () => {
   assert.match(shortcutRepair, /\$hostIcon\s*=\s*Join-Path\s+\$hostRoot\s+"resources\\icon\.ico"/);
   assert.match(shortcutRepair, /\$shortcut\.IconLocation\s*=\s*\[string\]\$Spec\.expectedIconLocation/);

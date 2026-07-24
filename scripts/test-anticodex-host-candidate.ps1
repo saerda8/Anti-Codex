@@ -143,7 +143,6 @@ $expectedFixedShellCriticalPatches = @(
     "app-route-gate",
     "profile-dropdown-settings",
     "browser-window-icon",
-    "primary-window-restore-repaint",
     "windows-tray-icon",
     "local-model-availability"
 )
@@ -207,10 +206,6 @@ $codexTraySelectorCount = [regex]::Matches($asarText, 'codex-tray\.ico').Count
 $alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico').Count
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
     throw "Anti-Codex candidate still selects a ChatGPT-branded Windows tray icon."
-}
-$primaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)'
-if ([regex]::Matches($asarText, $primaryRestoreRepaintPattern).Count -ne 1) {
-    throw "Anti-Codex candidate is missing the single primary-window restore repaint."
 }
 foreach ($managerMarker in @("__ANTICODEX_OPEN_MANAGER__", "\u7ba1\u7406")) {
     if (-not $asarText.Contains($managerMarker)) {

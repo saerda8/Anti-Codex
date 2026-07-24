@@ -4,12 +4,10 @@ import path from "node:path";
 import {
   hasPatchedAuthRequirement,
   hasPatchedLocalModelAvailability,
-  hasPrimaryWindowRestoreRepaint,
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
   hasWindowsTrayIconSelection,
   patchComputerUseLegacyNotifyOptOut,
-  patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchWindowsTrayIconSelection,
@@ -680,19 +678,6 @@ function findBrowserWindowIconPatch(fd, header, dataOffset) {
   throw new Error("Could not find BrowserWindow options under .vite/build/main-*.js");
 }
 
-function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
-  for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
-    const { buf } = readFileFromAsar(fd, entry, dataOffset);
-    const text = buf.toString("utf8");
-    if (hasPrimaryWindowRestoreRepaint(text) || text.includes("trackPrimaryWindow(")) {
-      patchPrimaryWindowRestoreRepaint(text);
-      return [rel, patchPrimaryWindowRestoreRepaint];
-    }
-  }
-  throw new Error("Could not find the supported primary-window tracker under .vite/build/main-*.js");
-}
-
 function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if ((!rel.startsWith("webview/assets/model-list-filter-") &&
@@ -842,7 +827,6 @@ const patchSpecs = [
   ["appearance-settings", () => findAppearanceSettingsPatch(fd, header, dataOffset)],
   ["profile-dropdown-settings", () => findProfileDropdownSettingsPatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
-  ["primary-window-restore-repaint", () => findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset)],
   ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
   ["computer-use-legacy-notify-opt-out", () => findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset)],
   ["local-model-availability", () => findLocalModelAvailabilityPatch(fd, header, dataOffset)],
@@ -865,7 +849,6 @@ const fixedShellCriticalPatchNames = new Set([
   "app-route-gate",
   "profile-dropdown-settings",
   "browser-window-icon",
-  "primary-window-restore-repaint",
   "windows-tray-icon",
   "local-model-availability",
 ]);

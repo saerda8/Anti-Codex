@@ -377,12 +377,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
 
   assert.match(validator, /anticodex-host-manifest-v2/);
   assert.match(validator, /fixed-shell-v1/);
-  assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full/);
+  assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full|legacyCriticalPatches/);
   assert.match(validator, /criticalPatches/);
   assert.match(validator, /expectedCriticalPatches/);
-  assert.match(validator, /previousCriticalPatches/);
-  assert.match(validator, /currentManifestCompatible/);
-  assert.match(validator, /previousManifestCompatible/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   for (const marker of [
@@ -396,9 +393,6 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   }
   assert.doesNotMatch(asarValidator, /legacyRequiredMarkers|authMethod:`apikey`|requiresAuth:!1|marketplaces:\[\]/);
   assert.match(asarValidator, /fixed shell host contains a retired feature patch/i);
-  assert.match(asarValidator, /\[int\]\$ExpectedPrimaryWindowRestoreRepaintCount/);
-  assert.match(asarValidator, /\.Count -ne \$ExpectedPrimaryWindowRestoreRepaintCount/);
-  assert.match(validator, /-ExpectedPrimaryWindowRestoreRepaintCount \$expectedPrimaryWindowRestoreRepaintCount/);
   for (const patchName of [
     "package-json",
     "webview-html-title",
@@ -411,13 +405,10 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "profile-dropdown-settings",
     "browser-window-icon",
     "windows-tray-icon",
-    "primary-window-restore-repaint",
     "local-model-availability",
   ]) {
     assert.match(validator, new RegExp(`"${patchName}"`));
   }
-  assert.match(asarValidator, /invalidate/);
-
   assert.match(validator, /resources\\codex-tray\.ico/);
   assert.match(validator, /trayIcon/);
   assert.match(validator, /Get-AntiCodexSha256/);
@@ -431,76 +422,6 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /required\.codexHost/);
   assert.match(validator, /Anti-Codex\.exe/);
   assert.match(validator, /Anti-Codex/);
-});
-
-test("rollback patch compatibility accepts only the current or immediate predecessor matrix", () => {
-  const rollback = readRollbackScript();
-  const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
-  const patchSetValidator = extractFunction(rollback, "Test-AntiCodexCriticalPatchSet");
-  const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-patch-matrix-"));
-  try {
-    const base = [
-      ".app.name=`Anti-Codex`",
-      "AntiCodex",
-      "icon:`icon.ico`",
-      "__ANTICODEX_OPEN_MANAGER__",
-      "\\u7ba1\\u7406",
-      "codex-tray.ico codex-tray.ico codex-tray.ico codex-tray.ico",
-    ].join(";");
-    const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
-    const paths = {
-      zero: join(fixture, "zero.asar"),
-      one: join(fixture, "one.asar"),
-      two: join(fixture, "two.asar"),
-    };
-    writeFileSync(paths.zero, base);
-    writeFileSync(paths.one, `${base};${hook}`);
-    writeFileSync(paths.two, `${base};${hook};${hook}`);
-    const quote = (value) => `'${value.replaceAll("'", "''")}'`;
-    const harness = join(fixture, "matrix.ps1");
-    writeFileSync(harness, `$ErrorActionPreference = "Stop"
-${asarValidator}
-${patchSetValidator}
-function Accept-Asar([string]$Path, [int]$Expected) {
-    try {
-        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedPrimaryWindowRestoreRepaintCount $Expected
-        return $true
-    } catch {
-        return $false
-    }
-}
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","auth-requirement","app-route-gate","profile-dropdown-settings","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
-$previous = @($current | Where-Object { $_ -ne "primary-window-restore-repaint" })
-[pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1
-    previousNoHook = Accept-Asar ${quote(paths.zero)} 0
-    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0
-    currentManifest = Test-AntiCodexCriticalPatchSet -Recorded $current -Expected $current
-    previousManifest = Test-AntiCodexCriticalPatchSet -Recorded $previous -Expected $previous
-    missingManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "browser-window-icon" }) -Expected $current
-    extraManifest = Test-AntiCodexCriticalPatchSet -Recorded @($previous + "unexpected") -Expected $previous
-} | ConvertTo-Json -Compress
-`);
-    const result = spawnSync("powershell.exe", [
-      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
-    ], { encoding: "utf8", timeout: 15_000, windowsHide: true });
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.deepEqual(JSON.parse(result.stdout.trim()), {
-      currentHook: true,
-      currentMissingHook: false,
-      currentDuplicateHook: false,
-      previousNoHook: true,
-      previousUnexpectedHook: false,
-      currentManifest: true,
-      previousManifest: true,
-      missingManifest: false,
-      extraManifest: false,
-    });
-  } finally {
-    rmSync(fixture, { recursive: true, force: true });
-  }
 });
 
 test("post-sync acceptance reads model availability from the models endpoint", () => {
