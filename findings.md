@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-25 Rejected Repaint Candidate Fully Removed
+
+- Built-in rollback had restored the safe active client, but the source/runtime updater still contained the rejected thirteenth patch and the rollback slot still held that candidate. Commit `0b66c71` removes the generator, manifest requirement, candidate gate and rollback compatibility branch; a negative regression prevents the patch from returning. Early frame evidence remains unchanged.
+- Focused checks pass `49/49`; full no-traffic source preflight passes `765/765`; read-only review found no P0/P1 and confirmed every production patch contract is the same exact 12-item set.
+- Runtime sync transaction `20260724T191154947Z-25719936a8a54c1ba87e3f262a9af698` verified 120 files. The installed built-in updater then completed operation `886e2d17f2cd44a8948230f383bb056a`, replacing both active and rollback with official `26.721.3996.0`, 12 patches and zero restore repaint hooks.
+- Installed sync-readiness and installed-overall are green with `usedRealTraffic:false`; update status is `up_to_date`; source and installed legacy-zero-hit are green. One visible responsive Anti-Codex PID `20704` is ready on `gemini-3.6-flash-low`, original Codex PID `33196` is alive, and Docker Anti-Codex container count is zero.
+- No additional mouse round, model request or autonomous task was started. The third physical round remains a valid rejection receipt, Gate 5 remains red, and overall remains `97%`.
+
 ## 2026-07-25 Primary Restore Repaint Candidate
 
 - Commit `1a5e60a` added one primary-window-only `restore -> webContents.invalidate()` ASAR patch plus early frame-timeline evidence. Candidate validation requires exactly one handler; focus/show/hide remain unchanged. Full source preflight later passed `768/768`.
