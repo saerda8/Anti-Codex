@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-25 Taskbar White-Frame A/B
+
+- Priority `4` did not close the defect: report `20260724-174319078-shortcut-restore-14e1c4366a2345f5ba3879670decff69.json` captured a pure-white first frame on the same PID/HWND/CDP target. `ShellExperienceHost` took foreground about 150 ms later, so it shortened that sample but did not cause the first white frame.
+- `--disable-backgrounding-occluded-windows` was tested as one shared launch variable. Reports `20260724-175126660-shortcut-restore-a4bb91bf0b324669b602f50a3bc36821.json` and `20260724-175554282-shortcut-restore-61fad5a61691495299c8328ce6974196.json` passed with zero blank frames; report `20260724-175607626-shortcut-restore-fa996e2f0662401dbd21ad3e94cc2bb7.json` then captured a pure-white first frame after `8 ms` while exact foreground and PID/HWND/CDP identity remained stable. The switch therefore failed its retention rule and was removed rather than stacked with another renderer/GPU switch.
+- Reversion transaction `20260724T175929340Z-f153ff72a8af470283ea3b54e7f46b84` verified 120 files. Source and installed switch counts are zero, the shared fixed-route source/installed hashes match, one visible Anti-Codex PID `38008` is ready on Gemini 3.6 Flash Low, Launcher priority is `4`, and original Codex PID `33196` remains alive.
+- The first graceful shutdown took slightly longer than the 25-second observation bound; the endpoint had accepted the request and the listener exited immediately after the bound, so no force-kill occurred. A subsequent source search also used an invalid PowerShell wildcard operand once and was corrected to `--glob`; neither event changed product state.
+- Taskbar targeting no longer trusts an unreliable accessibility hot-track bit. The verifier nudges one pixel, returns to the exact point, then rechecks the same MSAA identity/rectangle and the actual cursor coordinates immediately before `SendInput`. Its focused contract is green. Mouse testing stays stopped until a new source-backed single-variable restore/repaint candidate exists.
+
 ## 2026-07-25 Launcher Priority and Current Taskbar Evidence
 
 - The durable Launcher task omitted an explicit priority. Windows therefore assigned priority `7`; the task, fixed-route supervisor and Anti-Codex main process inherited `BelowNormal`, while native Codex ran at `Normal`. This is the smallest current explanation for delayed restored painting; official and patched window/compositor paths remain aligned, so no ASAR change was made.

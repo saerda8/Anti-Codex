@@ -556,6 +556,12 @@ function Invoke-TaskbarButtonActualMouseClick {
     }
     try {
         if (-not [AntiCodexShortcutRestoreProbe]::SetCursorPos(
+            [int]$Target.clickPoint.x - 1,
+            [int]$Target.clickPoint.y
+        )) {
+            throw "Could not nudge the mouse onto the exact Anti-Codex taskbar button"
+        }
+        if (-not [AntiCodexShortcutRestoreProbe]::SetCursorPos(
             [int]$Target.clickPoint.x,
             [int]$Target.clickPoint.y
         )) {
@@ -570,6 +576,16 @@ function Invoke-TaskbarButtonActualMouseClick {
             [int]$confirmedTarget.clickPoint.y -ne [int]$Target.clickPoint.y
         ) {
             throw "Anti-Codex taskbar button changed before activation; no click was sent"
+        }
+        $confirmedCursor = New-Object AntiCodexShortcutRestoreProbe+POINT
+        if (-not [AntiCodexShortcutRestoreProbe]::GetCursorPos([ref]$confirmedCursor)) {
+            throw "Could not confirm the Anti-Codex taskbar cursor position"
+        }
+        if (
+            $confirmedCursor.X -ne [int]$Target.clickPoint.x -or
+            $confirmedCursor.Y -ne [int]$Target.clickPoint.y
+        ) {
+            throw "Mouse moved away from the Anti-Codex taskbar button; no click was sent"
         }
         $clickSentAtMs = [int]$Stopwatch.ElapsedMilliseconds
         if (-not [AntiCodexShortcutRestoreProbe]::SendLeftClick()) {

@@ -129,6 +129,25 @@ test("taskbar restore keeps the cursor off hover-activated apps until the sampli
   assert.ok(deadlineStart >= 0 && cursorRestore > deadlineStart);
 });
 
+test("taskbar restore nudges and reconfirms the exact cursor target before clicking", () => {
+  const clickStart = shortcutRestoreAcceptance.indexOf("function Invoke-TaskbarButtonActualMouseClick");
+  const clickEnd = shortcutRestoreAcceptance.indexOf("\nfunction Get-MainAppPages", clickStart);
+  const click = clickStart >= 0 && clickEnd > clickStart
+    ? shortcutRestoreAcceptance.slice(clickStart, clickEnd)
+    : "";
+  const nudge = click.indexOf("[int]$Target.clickPoint.x - 1");
+  const exactTarget = click.indexOf("[int]$Target.clickPoint.x,", nudge + 1);
+  const cursorCheck = click.indexOf("GetCursorPos([ref]$confirmedCursor)");
+  const send = click.indexOf("SendLeftClick()");
+
+  assert.ok(nudge >= 0 && exactTarget > nudge);
+  assert.match(click, /Start-Sleep -Milliseconds 40/);
+  assert.match(click, /GetCursorPos\(\[ref\]\$confirmedCursor\)/);
+  assert.match(click, /\$confirmedCursor\.X\s+-ne\s+\[int\]\$Target\.clickPoint\.x/);
+  assert.ok(cursorCheck > exactTarget && send > cursorCheck);
+  assert.doesNotMatch(click, /hotTrackDeadline|hotTracked/);
+});
+
 test("taskbar restore samples transient topology after each due frame capture", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
