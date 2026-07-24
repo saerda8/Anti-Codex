@@ -16,6 +16,19 @@ test("profile dropdown patch supports the latest compiled onOpenSettings menu st
   assert.equal(patchCompiledProfileDropdownSettings(patched), patched);
 });
 
+test("profile dropdown patch cannot consume unrelated code in a consolidated bundle", () => {
+  const source = "const before=`keep-before`;let w;const decoy=`keep-decoy`;" +
+    latestProfileDropdownFixture +
+    "const after=`keep-after`;";
+  const patched = patchCompiledProfileDropdownSettings(source);
+
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /const before=`keep-before`;let w;const decoy=`keep-decoy`;function dn\(e\)/);
+  assert.match(patched, /const after=`keep-after`;/);
+  assert.ok(patched.indexOf("anticodex-manager") > patched.indexOf("codex.profileDropdown.settingsPage"));
+  assert.ok(patched.indexOf("anticodex-manager") - patched.indexOf("codex.profileDropdown.settingsPage") < 1_000);
+});
+
 test("profile dropdown patch leaves unrelated bundles unchanged", () => {
   const source = "function unrelated(){return `Settings`}";
   assert.equal(patchCompiledProfileDropdownSettings(source), source);

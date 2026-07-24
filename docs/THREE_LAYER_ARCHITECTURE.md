@@ -5,6 +5,8 @@
 - Decision owner: user-approved product direction
 - Upstream reference: `BigPizzaV3/CodexPlusPlus` commit `37c628e58b21cd3698b68a72c15133c91ccc5f92` (`v1.2.39`)
 
+> **Acceptance update - 2026-07-24 22:06:** Codex `26.721.3996.0` compatibility stayed inside Layer 1 acceptance glue: primary-page selectors ignore the new avatar overlay, and the shortcut broker waits for the existing window to be painted before foreground activation. CodexPlusPlus remains the general translation/provider layer and Antigravity remains a thin Chat-to-Cascade adapter. No fourth controller, replacement task loop or provider rewrite was added. Source and installed no-traffic gates are green, but overall release remains `97%` until current-bound Gates 3-6 and the new autonomous Gate 8 task pass.
+
 > **Acceptance update - 2026-07-23 16:20:** The latest Manager, taskbar-restore and exact-continuation work remains acceptance-only around the same three layers. MSAA/SendInput verifies the copied shell without launching another client; the continuation ledger audits native Codex turns but does not plan, retry or execute production work. No fourth controller was added. Architecture checks and installed UI evidence are green, but the new real task and external result acceptance are still required before 100%.
 
 > **Acceptance override - 2026-07-23:** The three-layer architecture remains unchanged, but later 100% completion statements in this document are historical and currently withdrawn. An installed fatal page plus P1 review findings reopened the shell and integration gates. Architecture compliance is not release proof; current 100% requires the rebuilt installed client, real UI/isolation/provider-switch checks and a new autonomous long task to pass.

@@ -11,6 +11,16 @@ import { startAntigravityChatProvider } from "../../translator/provider/start-an
 
 const OLD_ROUTE_URL = "http://127.0.0.1:8484/anticodex/model-routes";
 
+function pickPrimaryAppTarget(targets) {
+  const pages = targets.filter((target) => target?.type === "page"
+    && target.webSocketDebuggerUrl
+    && !String(target.url || "").toLowerCase().includes("avatar-overlay"));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => String(target.url || "").startsWith("app://"))
+    || pages[0]
+    || null;
+}
+
 export async function createCodexPlusPlusAntigravityHarness(options) {
   const launcherPath = resolveRequired(options?.launcherPath, "launcherPath");
   const candidateRoot = resolveRequired(options?.candidateRoot, "candidateRoot");
@@ -215,9 +225,7 @@ export async function createCodexPlusPlusAntigravityHarness(options) {
         });
         if (!response.ok) return null;
         const targets = await response.json();
-        return targets.find((entry) => String(entry?.url ?? "").startsWith("app://"))
-          ?? targets.find((entry) => entry?.webSocketDebuggerUrl)
-          ?? null;
+        return pickPrimaryAppTarget(targets);
       }, { timeout: 90_000, description: "visible copied Anti-Codex CDP target" });
     }
 

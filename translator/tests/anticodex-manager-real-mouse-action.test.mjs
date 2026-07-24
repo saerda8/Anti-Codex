@@ -15,6 +15,11 @@ test("Manager update runner uses only real CDP mouse clicks and requires explici
   assert.match(source, /\u540c\u6b65 Codex \u66f4\u65b0/);
   assert.doesNotMatch(source, /\u4e00\u952e\u66f4\u65b0/);
   assert.match(source, /data-confirming-high-impact/);
+  assert.match(source, /function pickPrimaryAppTarget\(targets\)/);
+  assert.match(source, /avatar-overlay/);
+  assert.match(source, /\^app:\\\/\\\/-\\\/index\\\.html/);
+  assert.match(source, /const target = pickPrimaryAppTarget\(targets\)/);
+  assert.doesNotMatch(source, /targets\.find\(\(item\).*Anti-Codex\|app:/);
   assert.match(source, /existingManagerClosePoint/);
   assert.match(source, /button\.anticodex-close\[aria-label="\u5173\u95ed"\]/);
   assert.match(source, /--confirm/);

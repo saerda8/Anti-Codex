@@ -508,9 +508,17 @@ async function cdpTargets() {
   return httpJson(`http://127.0.0.1:${port}/json`, { timeout: 3000 });
 }
 
+function isAvatarOverlayTarget(target) {
+  return String(target?.url || "").toLowerCase().includes("avatar-overlay");
+}
+
 function pickTarget(targets) {
-  return targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl && `${target.title} ${target.url}`.toLowerCase().includes("codex"))
-    || targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl);
+  const pages = targets.filter((target) => target.type === "page" && target.webSocketDebuggerUrl && !isAvatarOverlayTarget(target));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => target.title === "Anti-Codex")
+    || pages.find((target) => `${target.title || ""} ${target.url || ""}`.toLowerCase().includes("codex"))
+    || pages[0]
+    || null;
 }
 
 async function managerSnapshot() {

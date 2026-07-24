@@ -465,12 +465,12 @@ function validateSyncReadiness(report, failures) {
   if (contract?.mode !== "codex-client-copy-plus-anticodex-patches" || contract?.nativeClientBehaviorCarriedByHostSync !== true || contract?.forbidsFeatureByFeatureReimplementation !== true || contract?.sourceHostHashMatches !== true || contract?.sourceCliHashMatches !== true) failures.push("sync_readiness_client_contract");
   const expectedPatchScope = ["branding", "icons", "shortcuts", "isolation", "launcher", "model-adapter"];
   if (JSON.stringify(contract?.antiCodexPatchScope) !== JSON.stringify(expectedPatchScope)) failures.push("sync_readiness_patch_scope");
-  if (report?.activeHost?.manifestValid !== true || report?.activeHost?.productName !== "Anti-Codex" || report?.activeHost?.trayIconPalette?.ok !== true) failures.push("sync_readiness_active_host");
+  if (report?.activeHost?.manifestValid !== true || report?.activeHost?.hostBinaryPreserved !== true || report?.activeHost?.trayIconPalette?.ok !== true) failures.push("sync_readiness_active_host");
   const sync = report?.sync;
   if (sync?.scriptExists !== true || sync?.launcherExists !== true || sync?.rollbackScriptExists !== true || sync?.rollbackLauncherExists !== true || sync?.updateCheckExists !== true) failures.push("sync_readiness_entrypoints");
   if (sync?.updateStatus?.ok !== true || sync?.updateStatus?.guardrails?.brandPreserved !== true || sync?.updateStatus?.guardrails?.rollbackOnFailure !== true) failures.push("sync_readiness_update_status");
   if (["failed", "running"].includes(String(sync?.updateStatus?.operation?.state || "").toLowerCase())) failures.push("sync_readiness_operation_state");
-  if (sync?.rollbackHost?.manifestValid !== true || sync?.rollbackHost?.productName !== "Anti-Codex" || sync?.rollbackHost?.trayIconPalette?.ok !== true) failures.push("sync_readiness_rollback_host");
+  if (sync?.rollbackHost?.manifestValid !== true || sync?.rollbackHost?.hostBinaryPreserved !== true || sync?.rollbackHost?.trayIconPalette?.ok !== true) failures.push("sync_readiness_rollback_host");
   if (sync?.hostSyncMarkerExists !== false || sync?.staleCandidateExists !== false || sync?.rollbackSwapHostExists !== false || sync?.rollbackSwapMarkerExists !== false) failures.push("sync_readiness_stale_state");
 }
 

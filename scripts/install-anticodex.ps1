@@ -245,82 +245,6 @@ function Find-CSharpCompiler {
     return $null
 }
 
-function Find-Rcedit {
-    $found = Get-Command rcedit.exe -ErrorAction SilentlyContinue
-    if ($found) { return $found.Source }
-
-    $toolRoot = Join-Path $expectedRoot "tools"
-    $cached = Join-Path $toolRoot "rcedit.exe"
-    if (Test-Path -LiteralPath $cached -PathType Leaf) { return $cached }
-
-    $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if (-not $npm) { $npm = Get-Command npm.exe -ErrorAction SilentlyContinue }
-    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if (-not $npm -or -not $tar) { return $null }
-
-    $temp = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-rcedit-" + [Guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $temp -Force | Out-Null
-    try {
-        & $npm.Source pack rcedit@5.0.2 --silent --pack-destination $temp | Out-Null
-        $package = Get-ChildItem -LiteralPath $temp -Filter "rcedit-*.tgz" | Select-Object -First 1
-        if (-not $package) { return $null }
-        & $tar.Source -xf $package.FullName -C $temp
-        $candidate = Join-Path $temp "package\bin\rcedit-x64.exe"
-        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            $candidate = Join-Path $temp "package\bin\rcedit.exe"
-        }
-        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { return $null }
-        New-Item -ItemType Directory -Path $toolRoot -Force | Out-Null
-        Copy-Item -LiteralPath $candidate -Destination $cached -Force
-        return $cached
-    } catch {
-        return $null
-    } finally {
-        Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function Update-ExeVersionInfo {
-    param([string]$Path)
-    $rcedit = Find-Rcedit
-    if (-not $rcedit) {
-        throw "Anti-Codex Windows branding tool was not available. The copied host was not activated."
-    }
-    & $rcedit $Path `
-        --set-version-string "ProductName" "Anti-Codex" `
-        --set-version-string "FileDescription" "Anti-Codex" `
-        --set-version-string "InternalName" "Anti-Codex.exe" `
-        --set-version-string "OriginalFilename" "Anti-Codex.exe" `
-        --set-version-string "CompanyName" "Anti-Codex"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to update Anti-Codex Windows version information. The copied host was not activated."
-    }
-    $versionInfo = (Get-Item -LiteralPath $Path).VersionInfo
-    if ([string]$versionInfo.ProductName -eq "Anti-Codex" -and
-        [string]$versionInfo.FileDescription -eq "Anti-Codex" -and
-        [string]$versionInfo.OriginalFilename -eq "Anti-Codex.exe") {
-        return
-    }
-
-    # Newer Windows packages can leave FileVersionInfo stale after rcedit writes.
-    $productName = ([string](& $rcedit $Path --get-version-string "ProductName" 2>$null)).Trim()
-    $productNameExitCode = $LASTEXITCODE
-    $fileDescription = ([string](& $rcedit $Path --get-version-string "FileDescription" 2>$null)).Trim()
-    $fileDescriptionExitCode = $LASTEXITCODE
-    $originalFilename = ([string](& $rcedit $Path --get-version-string "OriginalFilename" 2>$null)).Trim()
-    $originalFilenameExitCode = $LASTEXITCODE
-    if ($productNameExitCode -eq 0 -and
-        $fileDescriptionExitCode -eq 0 -and
-        $originalFilenameExitCode -eq 0 -and
-        $productName -eq "Anti-Codex" -and
-        $fileDescription -eq "Anti-Codex" -and
-        $originalFilename -eq "Anti-Codex.exe") {
-        return
-    }
-
-    throw "Anti-Codex Windows branding verification failed. The copied host was not activated."
-}
-
 function Resolve-AntiCodexIconPath {
     $icon = Join-Path $ROOT "assets\anticodex.ico"
     if (Test-Path -LiteralPath $icon -PathType Leaf) { return $icon }
@@ -574,7 +498,6 @@ Move-Item -LiteralPath $copiedCodexStaging -Destination $copiedCodex
 $sourceDesktopHostPath = Join-Path $copiedCodex $stagedDesktopHost
 $antiCodexHost = Join-Path $copiedCodex "Anti-Codex.exe"
 Copy-Item -LiteralPath $sourceDesktopHostPath -Destination $antiCodexHost -Force
-Update-ExeVersionInfo $antiCodexHost
 Install-AntiCodexHostIcon -HostRoot $copiedCodex
 $brandScript = Join-Path $ROOT "scripts\brand-patched-asar.mjs"
 $brandProfileDropdown = Join-Path $ROOT "scripts\brand-profile-dropdown.mjs"
@@ -584,9 +507,12 @@ foreach ($requiredBrandScript in @($brandScript, $brandProfileDropdown)) {
     }
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
-& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") $antiCodexHost --profile fixed-shell-v1
+& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") --profile fixed-shell-v1
 if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
+}
+if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path $antiCodexHost)) {
+    throw "Anti-Codex copied host bytes changed during activation."
 }
 Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -UnpackedFiles $unpackedFiles
 

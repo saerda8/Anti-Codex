@@ -480,15 +480,14 @@ function Test-AntiCodexHost {
     if ([string]$manifest.source.codexCli -ne [string](Get-AntiCodexSha256 -Path $required.codexCli)) {
         throw "Anti-Codex host source fingerprint mismatch: codexCli"
     }
+    if ([string](Get-AntiCodexSha256 -Path $required.antiCodexExe) -ne [string](Get-AntiCodexSha256 -Path $required.codexHost)) {
+        throw "Anti-Codex host must preserve the copied source Codex host bytes."
+    }
     foreach ($iconPath in @($required.hostIcon, $required.trayIcon, $required.appRootIcon)) {
         if ((Test-AntiCodexIconPalette -Path $iconPath) -ne $true) {
             throw "Anti-Codex host icon is not the Anti-Codex tray/icon artwork: $iconPath"
         }
     }
-    $versionInfo = (Get-Item -LiteralPath $required.antiCodexExe).VersionInfo
-    if ([string]$versionInfo.ProductName -ne "Anti-Codex") { throw "Anti-Codex host ProductName is invalid." }
-    if ([string]$versionInfo.FileDescription -ne "Anti-Codex") { throw "Anti-Codex host FileDescription is invalid." }
-    if ([string]$versionInfo.OriginalFilename -ne "Anti-Codex.exe") { throw "Anti-Codex host OriginalFilename is invalid." }
 }
 
 function Test-AntiCodexComponent {
@@ -879,6 +878,129 @@ function Wait-AntiCodexPostRollbackReady {
     return $false
 }
 
+function Repair-LegacyRollbackHostBinaryManifest {
+    if (-not [IO.Directory]::Exists("\\?\$rollbackHost") -or -not [IO.File]::Exists($rollbackMarker)) {
+        return
+    }
+
+    $manifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
+    if ([string]$manifest.schema -ne "anticodex-host-manifest-v2") {
+        return
+    }
+    if (-not $manifest.files -or -not $manifest.source -or -not $manifest.source.codexHost) {
+        throw "Anti-Codex rollback host marker cannot preserve the source host bytes."
+    }
+
+    $desktopHostName = [string]$manifest.source.desktopHostName
+    if ($desktopHostName -notin @("ChatGPT.exe", "Codex.exe") -or
+        -not (Test-Path -LiteralPath (Join-Path $rollbackHost $desktopHostName) -PathType Leaf)) {
+        $desktopHostName = @("ChatGPT.exe", "Codex.exe") | Where-Object {
+            Test-Path -LiteralPath (Join-Path $rollbackHost $_) -PathType Leaf
+        } | Select-Object -First 1
+    }
+    if (-not $desktopHostName) {
+        throw "Anti-Codex rollback source desktop host is missing."
+    }
+
+    $sourceHost = Join-Path $rollbackHost $desktopHostName
+    $antiCodexHost = Join-Path $rollbackHost "Anti-Codex.exe"
+    if (-not (Test-Path -LiteralPath $antiCodexHost -PathType Leaf)) {
+        throw "Anti-Codex rollback host executable is missing."
+    }
+    $sourceHash = Get-AntiCodexSha256 -Path $sourceHost
+    $originalBinaryHash = Get-AntiCodexSha256 -Path $antiCodexHost
+    $recordedBinaryHash = [string]$manifest.files.antiCodexExe
+    if ([string]$sourceHash -ne [string]$manifest.source.codexHost) {
+        throw "Anti-Codex rollback source desktop host differs from its marker."
+    }
+    if (-not $recordedBinaryHash -or [string]$originalBinaryHash -ne $recordedBinaryHash) {
+        throw "Anti-Codex rollback host executable differs from its marker."
+    }
+    if ([string]$originalBinaryHash -eq [string]$sourceHash) {
+        return
+    }
+
+    $manifest.files | Add-Member -NotePropertyName antiCodexExe -NotePropertyValue $sourceHash -Force
+    $originalMarkerHash = Get-AntiCodexSha256 -Path $rollbackMarker
+    $binaryTemporary = "$antiCodexHost.rollback-migration.tmp"
+    $binaryBackup = "$antiCodexHost.rollback-migration.bak"
+    $binaryDiscard = "$antiCodexHost.rollback-migration.discard"
+    $markerTemporary = "$rollbackMarker.rollback-migration.tmp"
+    $markerBackup = "$rollbackMarker.rollback-migration.bak"
+    $markerDiscard = "$rollbackMarker.rollback-migration.discard"
+    $migrationPaths = @($binaryTemporary, $binaryBackup, $binaryDiscard, $markerTemporary, $markerBackup, $markerDiscard)
+    foreach ($path in $migrationPaths) {
+        if ([IO.Directory]::Exists($path)) {
+            throw "Anti-Codex rollback host migration path is unexpectedly a directory: $path"
+        }
+        if ([IO.File]::Exists($path)) {
+            [IO.File]::Delete($path)
+        }
+    }
+
+    $preserveRecoveryBackups = $false
+    try {
+        Copy-Item -LiteralPath $sourceHost -Destination $binaryTemporary
+        if ([string](Get-AntiCodexSha256 -Path $binaryTemporary) -ne [string]$sourceHash) {
+            throw "Anti-Codex rollback host migration staging failed."
+        }
+        $json = $manifest | ConvertTo-Json -Depth 8
+        [IO.File]::WriteAllText($markerTemporary, $json, [Text.UTF8Encoding]::new($false))
+
+        [IO.File]::Replace($binaryTemporary, $antiCodexHost, $binaryBackup, $true)
+        [IO.File]::Replace($markerTemporary, $rollbackMarker, $markerBackup, $true)
+
+        $migratedManifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
+        if ([string](Get-AntiCodexSha256 -Path $antiCodexHost) -ne [string]$sourceHash -or
+            [string]$migratedManifest.files.antiCodexExe -ne [string]$sourceHash) {
+            throw "Anti-Codex rollback host migration verification failed."
+        }
+    } catch {
+        $migrationError = $_.Exception.Message
+        $recoveryErrors = New-Object System.Collections.Generic.List[string]
+        if ([IO.File]::Exists($markerBackup)) {
+            try {
+                [IO.File]::Replace($markerBackup, $rollbackMarker, $markerDiscard, $true)
+            } catch {
+                $recoveryErrors.Add("marker: $($_.Exception.Message)") | Out-Null
+            }
+        }
+        if ([IO.File]::Exists($binaryBackup)) {
+            try {
+                [IO.File]::Replace($binaryBackup, $antiCodexHost, $binaryDiscard, $true)
+            } catch {
+                $recoveryErrors.Add("binary: $($_.Exception.Message)") | Out-Null
+            }
+        }
+        try {
+            if ([string](Get-AntiCodexSha256 -Path $antiCodexHost) -ne [string]$originalBinaryHash) {
+                $recoveryErrors.Add("binary hash did not return to its original value") | Out-Null
+            }
+            if ([string](Get-AntiCodexSha256 -Path $rollbackMarker) -ne [string]$originalMarkerHash) {
+                $recoveryErrors.Add("marker hash did not return to its original value") | Out-Null
+            }
+        } catch {
+            $recoveryErrors.Add("verification: $($_.Exception.Message)") | Out-Null
+        }
+        if ($recoveryErrors.Count -gt 0) {
+            $preserveRecoveryBackups = $true
+            throw "Anti-Codex rollback host migration failed and recovery failed: $migrationError; $($recoveryErrors -join '; ')"
+        }
+        throw "Anti-Codex rollback host migration failed; original binary and marker were restored: $migrationError"
+    } finally {
+        $cleanupPaths = if ($preserveRecoveryBackups) {
+            @($binaryTemporary, $binaryDiscard, $markerTemporary, $markerDiscard)
+        } else {
+            $migrationPaths
+        }
+        foreach ($path in $cleanupPaths) {
+            if ([IO.File]::Exists($path)) {
+                [IO.File]::Delete($path)
+            }
+        }
+    }
+}
+
 function Commit-AntiCodexRollbackCheckpoint {
     $rollbackHostCommitted = $false
     $rollbackMarkerCommitted = $false
@@ -927,13 +1049,22 @@ if ($ValidateOnly) {
     if ($RecoveryAttempt) {
         throw "ValidateOnly and RecoveryAttempt cannot be combined."
     }
-    Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
-    Test-AntiCodexComponent -ComponentRoot $rollbackComponent
-    return
 }
 
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
 if (-not $syncMutex.WaitOne(0)) { $syncMutex.Dispose(); throw "Another Anti-Codex sync or rollback is already running." }
+
+if ($ValidateOnly) {
+    try {
+        Repair-LegacyRollbackHostBinaryManifest
+        Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
+        Test-AntiCodexComponent -ComponentRoot $rollbackComponent
+    } finally {
+        $syncMutex.ReleaseMutex()
+        $syncMutex.Dispose()
+    }
+    return
+}
 
 $rollbackError = $null
 $restartAfterRollback = $false
@@ -942,6 +1073,7 @@ try {
     try {
         Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_validation" -Message "Validating both active and rollback releases." -RollbackAvailable $true -StateRoot $stateRoot
         if ([IO.Directory]::Exists("\\?\$swapHost") -or [IO.File]::Exists($swapMarker) -or [IO.Directory]::Exists("\\?\$swapComponent")) { throw "A stale rollback swap is present. Anti-Codex was not changed." }
+        Repair-LegacyRollbackHostBinaryManifest
         Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
         Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
         Test-AntiCodexComponent -ComponentRoot $activeComponent

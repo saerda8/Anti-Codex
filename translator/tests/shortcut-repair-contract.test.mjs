@@ -29,6 +29,9 @@ test("interactive shortcut broker focuses only the exact installed Anti-Codex wi
   assert.doesNotMatch(shortcutBroker, /Get-CimInstance|Win32_Process/);
   assert.match(shortcutBroker, /MainWindowHandle/);
   assert.match(shortcutBroker, /ShowWindowAsync/);
+  assert.match(shortcutBroker, /ShowWindowAsync\(\$window,\s*4\)/);
+  assert.match(shortcutBroker, /RedrawWindow/);
+  assert.match(shortcutBroker, /DwmFlush/);
   assert.match(shortcutBroker, /SetForegroundWindow/);
   assert.match(shortcutBroker, /GetForegroundWindow/);
   assert.match(shortcutBroker, /GetWindowThreadProcessId/);
@@ -42,9 +45,8 @@ test("interactive shortcut broker focuses only the exact installed Anti-Codex wi
   assert.match(runningBranch, /exit 0/);
   assert.doesNotMatch(runningBranch, /\[void\]\(Focus-ExactAntiCodexWindow/);
   assert.doesNotMatch(runningBranch, /\.Run\(/);
-  assert.match(shortcutBroker, /Schedule\.Service/);
-  assert.match(shortcutBroker, /GetTask\("\\Anti-Codex Launcher"\)/);
-  assert.match(shortcutBroker, /\.Run\(\$null\)/);
+  assert.match(shortcutBroker, /Start-ScheduledTask\s+-TaskName\s+"Anti-Codex Launcher"/);
+  assert.doesNotMatch(shortcutBroker, /Schedule\.Service|GetTask\(|\.Run\(\$null\)/);
 });
 
 test("installed shortcut restore acceptance proves one process, one page, and no blank frame", () => {
@@ -63,15 +65,68 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   assert.match(shortcutRestoreAcceptance, /StretchBlt/);
   assert.match(
     shortcutRestoreAcceptance,
-    /if \(\$isVisible -and -not \$isMinimized\) \{\s*\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric -WindowHandle \$windowHandle/,
+    /\$foregroundWindowHandle\s*=\s*\[AntiCodexShortcutRestoreProbe\]::GetForegroundWindow\(\)[\s\S]*?\$isExactForeground\s*=\s*\[int64\]\$foregroundWindowHandle\s+-eq\s+\[int64\]\$windowHandle/,
   );
-  assert.doesNotMatch(
+  assert.match(
     shortcutRestoreAcceptance,
-    /if \(\$isVisible -and -not \$isMinimized -and \$foregroundProcessId -eq \$ExpectedMainPid\) \{\s*\$metric = Get-FrameMetric/,
+    /if \(\$null -eq \$frameCaptureOriginMs -and \$isVisible -and -not \$isMinimized -and \$isExactForeground\) \{\s*\$frameCaptureOriginMs = \$observationAtMs/,
+  );
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$null -ne \$frameCaptureOriginMs -and \$isVisible -and -not \$isMinimized -and \$isExactForeground\) \{\s*\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric -WindowHandle \$windowHandle/,
+  );
+  assert.match(shortcutRestoreAcceptance, /\$sampleDeadlineMs\s*=\s*\[int\]\$activationSentAtMs\s*\+\s*\$SampleDurationMs/);
+  assert.match(shortcutRestoreAcceptance, /while \(\$stopwatch\.ElapsedMilliseconds -lt \$sampleDeadlineMs\)/);
+  assert.match(shortcutRestoreAcceptance, /\$taskbarActivationWaitMs\s*=\s*\$observationAtMs\s*-\s*\[int\]\$taskbarClickSentAtMs/);
+  assert.match(shortcutRestoreAcceptance, /frameCaptureOrigin = "exact-foreground-window"/);
+  assert.match(shortcutRestoreAcceptance, /frameCaptureOriginMs = \$frameCaptureOriginMs/);
+  assert.match(shortcutRestoreAcceptance, /deadlineState = \$deadlineState/);
+  assert.match(shortcutRestoreAcceptance, /probeRecoveryApplied = \$probeRecoveryApplied/);
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$null -eq \$deadlineState -or -not \$deadlineState\.visible -or \$deadlineState\.minimized -or -not \$deadlineState\.exactForeground\) \{ \$failures\.Add\("Anti-Codex was not visible, restored, and exactly foreground at the sampling deadline"\)/,
+  );
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$probeRecoveryApplied\) \{ \$failures\.Add\("the restore probe applied recovery after the sampling deadline"\)/,
+  );
+  assert.match(shortcutRestoreAcceptance, /if \(\$maxVisibleWindowCount -gt 1\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$maxVisibleTopLevelWindowCount -gt 1\)/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /\$maxVisible(?:TopLevel)?WindowCount -ne 1/);
+  assert.match(
+    shortcutRestoreAcceptance,
+    /\$blankFrames = @\(\$frames \| Where-Object \{ \$_.standardDeviation -lt 5 -or \$_.darkRatio -lt 0\.005 \}\)/,
   );
   assert.match(shortcutRestoreAcceptance, /blankFrameCount/);
+  assert.match(shortcutRestoreAcceptance, /Get-MainAppPages/);
+  assert.match(shortcutRestoreAcceptance, /response\.GetEnumerator\(\)/);
+  assert.match(shortcutRestoreAcceptance, /initialRoute=%2Favatar-overlay/);
   assert.match(shortcutRestoreAcceptance, /originalCodexAlive/);
   assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
+});
+
+test("taskbar restore keeps the cursor off hover-activated apps until the sampling deadline", () => {
+  const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
+  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const deadlineStart = shortcutRestoreAcceptance.indexOf(
+    "$deadlineForegroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()",
+    finallyStart,
+  );
+  const cursorRestore = shortcutRestoreAcceptance.indexOf(
+    "SetCursorPos($savedTaskbarCursorX, $savedTaskbarCursorY)",
+    finallyStart,
+  );
+
+  assert.ok(samplingStart >= 0 && finallyStart > samplingStart);
+  assert.doesNotMatch(
+    shortcutRestoreAcceptance.slice(samplingStart, finallyStart),
+    /SetCursorPos\(\$savedTaskbarCursorX,\s*\$savedTaskbarCursorY\)/,
+  );
+  assert.match(
+    shortcutRestoreAcceptance.slice(samplingStart, finallyStart),
+    /SetCursorPos\(\$safeCursorX,\s*\$safeCursorY\)/,
+  );
+  assert.ok(deadlineStart >= 0 && cursorRestore > deadlineStart);
 });
 
 test("shortcut repair resolves PowerShell without relying on a populated WINDIR", () => {
@@ -118,7 +173,7 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /schtasks\.exe/);
   assert.match(repairScript, /Schedule\.Service/);
   assert.doesNotMatch(repairScript, /\.Run\(`\$null\)/);
-  assert.match(shortcutBroker, /\.Run\(\$null\)/);
+  assert.match(shortcutBroker, /Start-ScheduledTask\s+-TaskName\s+"Anti-Codex Launcher"/);
   assert.doesNotMatch(repairScript, /Start-ScheduledTask -TaskName/);
   assert.match(repairScript, /-WindowStyle Hidden/);
   assert.doesNotMatch(repairScript, /\/Run \/TN/);

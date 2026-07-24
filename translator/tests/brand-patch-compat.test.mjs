@@ -1,9 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import * as brandPatchCompat from "../../scripts/brand-patch-compat.mjs";
 
 const { hasProductNameDrivenSessionTitle } = brandPatchCompat;
+const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asar.mjs", import.meta.url), "utf8");
+
+test("finds settings and model patches in Codex's consolidated app-initial bundle", () => {
+  const profileFinder = brandPatcherSource.match(/function findProfileDropdownSettingsPatch[\s\S]*?(?=function findBrowserWindowIconPatch)/)?.[0] ?? "";
+  const modelFinder = brandPatcherSource.match(/function findLocalModelAvailabilityPatch[\s\S]*?(?=function findLocalPluginCatalogPatch)/)?.[0] ?? "";
+
+  assert.match(profileFinder, /webview\/assets\/app-initial-/);
+  assert.match(modelFinder, /webview\/assets\/app-initial-/);
+});
 
 test("patches startup MCP config reload across minified variable renames", () => {
   const previous = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
@@ -34,7 +44,13 @@ test("recognizes padded idempotent auth and local-model patches", () => {
   );
   assert.equal(
     brandPatchCompat.hasPatchedLocalModelAvailability(
-      "let c=[],l=null,u=!1                    ,d=o.some(e=>e.hidden)",
+      "function r({authMethod:e,availableModels:n,defaultModel:r,enabledReasoningEfforts:i,includeUltraReasoningEffort:a,models:o,useHiddenModels:s}){let c=[],l=null,u=!1                    ,d=o.some(e=>e.supportedReasoningEfforts.some(({reasoningEffort:e})=>e===`max`))}",
+    ),
+    true,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedLocalModelAvailability(
+      "function MJr({additionalAvailableModels:e,authMethod:t,availableModels:n,defaultModel:r,enabledReasoningEfforts:i,includeUltraReasoningEffort:a,models:o,useHiddenModels:s}){let c=[],l=null,u=!1                    ,d=o.some(e=>e.supportedReasoningEfforts.some(({reasoningEffort:e})=>e===`max`))}",
     ),
     true,
   );
@@ -44,6 +60,18 @@ test("recognizes padded idempotent auth and local-model patches", () => {
   );
   assert.equal(
     brandPatchCompat.hasPatchedLocalModelAvailability("let c=[],l=null,u=e&&e!==`amazonBedrock`,d=1"),
+    false,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedLocalModelAvailability(
+      "function DGc({agentItems:e}){let r=[],i=null,a=!1,o=!1}",
+    ),
+    false,
+  );
+  assert.equal(
+    brandPatchCompat.hasPatchedLocalModelAvailability(
+      "function $cl(e){let t=[],n=null,r=!1,i=e=>t.push(e)}",
+    ),
     false,
   );
 });
@@ -80,6 +108,43 @@ test("does not accept a generic app.getName reference as session-title proof", (
   assert.equal(
     hasProductNameDrivenSessionTitle("dialog.showMessageBox({title:r.app.getName()})"),
     false,
+  );
+});
+
+test("keeps the primary BrowserWindow drawing while minimized without changing bundle size", () => {
+  const source = [
+    "let A={preload:this.options.preloadPath,",
+    "backgroundThrottling:o===`avatarOverlay`?!1:void 0,",
+    "contextIsolation:!0};",
+  ].join("");
+  const patched = brandPatchCompat.patchPrimaryWindowBackgroundThrottling(source);
+
+  assert.equal(patched.length, source.length);
+  assert.match(
+    patched,
+    /preload:this\.options\.preloadPath,backgroundThrottling:o===`primary`\?!1:void 0,\s*contextIsolation/,
+  );
+  assert.equal(
+    brandPatchCompat.patchPrimaryWindowBackgroundThrottling(patched),
+    patched,
+  );
+});
+
+test("fails closed for mixed or duplicate primary BrowserWindow throttling targets", () => {
+  const legacy = "preload:this.options.preloadPath,backgroundThrottling:o===`avatarOverlay`?!1:void 0,";
+  const patched = "preload:this.options.preloadPath,backgroundThrottling:o===`primary`?!1:void 0,";
+
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${legacy}${patched}`),
+    /not found or ambiguous/,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${legacy}${legacy}`),
+    /not found or ambiguous/,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(`${patched}${patched}`),
+    /not found or ambiguous/,
   );
 });
 

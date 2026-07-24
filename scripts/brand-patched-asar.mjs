@@ -8,6 +8,7 @@ import {
   hasStartupMcpConfigReload,
   hasWindowsTrayIconSelection,
   patchComputerUseLegacyNotifyOptOut,
+  patchPrimaryWindowBackgroundThrottling,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchWindowsTrayIconSelection,
@@ -18,11 +19,10 @@ const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
 const asarPath = argv[0];
-const exePath = argv[1] && !argv[1].startsWith("--") ? argv[1] : "";
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
 if (!asarPath || patchProfile !== "fixed-shell-v1") {
-  console.error("Usage: node brand-patched-asar.mjs <app.asar> [Codex.exe] [--profile fixed-shell-v1]");
+  console.error("Usage: node brand-patched-asar.mjs <app.asar> [--profile fixed-shell-v1]");
   process.exit(2);
 }
 
@@ -351,13 +351,15 @@ function patchProfileDropdownSettings(text) {
 }
 
 function patchBrowserWindowIcon(text) {
-  const currentSearch = "...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{},";
-  const currentReplacement = "...process.platform===`win32`?{icon:`icon.ico`,autoHideMenuBar:!0}:{},";
-  if (text.includes(currentSearch)) return replacePadded(text, currentSearch, currentReplacement);
+  let next = text;
+  const currentSearch = '...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{},';
+  const currentReplacement = '...process.platform===`win32`?{icon:`icon.ico`,autoHideMenuBar:!0}:{},';
+  if (next.includes(currentSearch)) next = replacePadded(next, currentSearch, currentReplacement);
   const search = '...process.platform===`win32`?{autoHideMenuBar:!0}:{},';
   const replacement = '...process.platform===`win32`?{icon:`icon.ico`}:{},';
-  if (!text.includes(search) && text.includes("icon:`icon.ico`")) return text;
-  return replacePadded(text, search, replacement);
+  if (next.includes(search)) next = replacePadded(next, search, replacement);
+  if (!next.includes("icon:`icon.ico`")) throw new Error("BrowserWindow icon pattern not found");
+  return patchPrimaryWindowBackgroundThrottling(next);
 }
 
 function patchLocalModelAvailability(text) {
@@ -648,7 +650,9 @@ function findGeneralAppearanceSettingsPatch(fd, header, dataOffset) {
 
 function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith("webview/assets/profile-dropdown-") || !rel.endsWith(".js")) continue;
+    if ((!rel.startsWith("webview/assets/profile-dropdown-") &&
+         !rel.startsWith("webview/assets/app-initial-")) ||
+        !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes(",Mt=xt,Nt=p(Se,`settings`)") ||
@@ -677,16 +681,10 @@ function findBrowserWindowIconPatch(fd, header, dataOffset) {
 
 function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith("webview/assets/model-list-filter-") || !rel.endsWith(".js")) continue;
-    const { buf } = readFileFromAsar(fd, entry, dataOffset);
-    const text = buf.toString("utf8");
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
-        hasPatchedLocalModelAvailability(text)) {
-      return [rel, patchLocalModelAvailability];
-    }
-  }
-  for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith("webview/assets/models-and-reasoning-efforts-") || !rel.endsWith(".js")) continue;
+    if ((!rel.startsWith("webview/assets/model-list-filter-") &&
+         !rel.startsWith("webview/assets/models-and-reasoning-efforts-") &&
+         !rel.startsWith("webview/assets/app-initial-")) ||
+        !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
@@ -895,26 +893,6 @@ fs.writeSync(fd, nextHeaderBuf, 0, nextHeaderBuf.length, 16);
 fs.closeSync(fd);
 
 const newHeaderHash = crypto.createHash("sha256").update(nextHeaderBuf).digest("hex");
-let exePatched = false;
-if (exePath && fs.existsSync(exePath) && oldHeaderHash !== newHeaderHash) {
-  const exe = fs.readFileSync(exePath);
-  const oldHashBuf = Buffer.from(oldHeaderHash, "ascii");
-  const newHashBuf = Buffer.from(newHeaderHash, "ascii");
-  const at = exe.indexOf(oldHashBuf);
-  if (at >= 0) {
-    newHashBuf.copy(exe, at);
-    fs.writeFileSync(exePath, exe);
-    exePatched = true;
-  }
-}
-
-if (oldHeaderHash !== newHeaderHash && exePath && fs.existsSync(exePath) && !exePatched) {
-  // Newer Codex/Electron builds (e.g. MS Store 26.x) no longer embed the ASAR header
-  // hash as plain ASCII in the EXE, so it cannot be located/replaced. These builds do
-  // not enforce embedded ASAR integrity (a hand-patched asar launches fine), so the EXE
-  // hash patch is optional here: warn and keep the patched asar instead of aborting.
-  console.warn(`ASAR header hash changed, but the old hash was not found in ${exePath}. Skipping EXE hash patch (asar integrity not enforced on this build).`);
-}
 
 const criticalSkipped = skipped.filter((item) => activeCriticalPatchNames.has(item.name));
 console.log(JSON.stringify({
@@ -926,7 +904,6 @@ console.log(JSON.stringify({
   criticalSkipped,
   oldHeaderHash,
   newHeaderHash,
-  exePatched,
 }, null, 2));
 if (criticalSkipped.length > 0) {
   process.exitCode = 1;

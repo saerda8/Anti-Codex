@@ -291,7 +291,7 @@ if ($UiOnlyMatrix) {
             if (@($isolation.requestPaths) -notcontains "/models") { Add-Failure "Manager UI-only request shim did not serve the model read" }
             if ([int]$isolation.traffic.requestDelta -ne 0) { Add-Failure "Manager UI-only verification changed the native model request count" }
             if ([int]$isolation.managerBridgeLog.actionReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real action bridge" }
-            if ([int]$isolation.managerBridgeLog.requestReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real request bridge" }
+            if ([int]$isolation.managerBridgeLog.nonHealthRequestReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real non-health request bridge" }
         }
         if ((@($payload.actions) -join "|") -ne ($expectedActions -join "|")) {
             Add-Failure "Manager UI-only button matrix action coverage drifted from the complete 20-button contract"

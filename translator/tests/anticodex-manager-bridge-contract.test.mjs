@@ -15,6 +15,7 @@ const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-i
 const managerOpenInject = readFileSync(resolve(root, "scripts", "anticodex-manager-open-inject.js"), "utf8");
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const cdpInject = readFileSync(resolve(root, "scripts", "deepcodex-cdp-inject.mjs"), "utf8");
+const uiStateTest = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
 const managerButtonTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 const managerRealButtonsTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-real-buttons.ps1"), "utf8");
 const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
@@ -46,6 +47,46 @@ function fakeBridgeSession(name) {
     },
   };
 }
+
+test("all Manager CDP selectors skip an avatar overlay listed before the primary page", () => {
+  for (const [name, scriptSource] of Object.entries({
+    managerBridge: source,
+    startupInjector: cdpInject,
+    uiStateVerifier: uiStateTest,
+    mouseVerifier: managerButtonTest,
+  })) {
+    const selectorSource = scriptSource.match(
+      /function isAvatarOverlayTarget\(target\) \{[\s\S]*?\r?\n\}\r?\n\r?\nfunction pickTarget\(targets\) \{[\s\S]*?\r?\n\}/,
+    )?.[0];
+    assert.ok(selectorSource, `${name} does not expose the shared target-selection contract`);
+    const pickTarget = vm.runInNewContext(`(() => { ${selectorSource}; return pickTarget; })()`);
+    const overlay = {
+      id: "overlay",
+      type: "page",
+      title: "Anti-Codex",
+      url: "app://-/index.html?initialRoute=%2Favatar-overlay",
+      webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/overlay",
+    };
+    const primary = {
+      id: "primary",
+      type: "page",
+      title: "Anti-Codex",
+      url: "app://-/index.html",
+      webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/primary",
+    };
+    const fallback = {
+      id: "fallback",
+      type: "page",
+      title: "Other",
+      url: "app://-/other.html",
+      webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/fallback",
+    };
+
+    assert.equal(pickTarget([overlay, primary])?.id, "primary", `${name} selected the avatar overlay`);
+    assert.equal(pickTarget([overlay, fallback])?.id, "fallback", `${name} lost its non-overlay fallback`);
+    assert.equal(pickTarget([overlay]), null, `${name} must fail closed when only the avatar overlay exists`);
+  }
+});
 
 test("Manager bridge coalesces Target crashed recovery and never overlaps polls", async () => {
   const sessions = [fakeBridgeSession("old"), fakeBridgeSession("current")];
@@ -456,13 +497,32 @@ test("Manager zero-side-effect matrix covers every current daily and high-impact
   assert.match(managerButtonTest, /function uiOnlyBatchBridgeSource\(enabled = uiOnlyBatchMode\)/);
   assert.match(managerButtonTest, /__ANTICODEX_RUN_MANAGER_REQUEST__/);
   assert.match(managerButtonTest, /managerActionDelta === 0/);
-  assert.match(managerButtonTest, /managerRequestDelta === 0/);
+  assert.match(managerButtonTest, /managerNonHealthRequestDelta === 0/);
+  assert.match(managerButtonTest, /nonHealthRequestReceivedCount/);
   assert.match(managerButtonTest, /nativeRequestDelta === 0/);
   assert.doesNotMatch(managerButtonTest, /output\.zeroSideEffects = true/);
   assert.doesNotMatch(managerButtonTest, /output\.usedRealTraffic = false/);
   assert.match(managerRealButtonsTest, /managerBridgeLog\.actionReceivedDelta/);
-  assert.match(managerRealButtonsTest, /managerBridgeLog\.requestReceivedDelta/);
+  assert.match(managerRealButtonsTest, /managerBridgeLog\.nonHealthRequestReceivedDelta/);
   assert.match(managerRealButtonsTest, /traffic\.requestDelta/);
+});
+
+test("Manager log counter excludes only the exact /health path", () => {
+  const functionSource = managerButtonTest.match(
+    /function managerBridgeLogCounts\(source\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(functionSource);
+  const managerBridgeLogCounts = vm.runInNewContext(`(${functionSource})`);
+  const counts = managerBridgeLogCounts([
+    '{"event":"manager-action-received","action":"refreshStatus"}',
+    '{"event":"manager-request-received","path":"/health"}',
+    '{"event":"manager-request-received","path":"/healthcheck"}',
+    '{"event":"manager-request-received","path":"/health?probe=1"}',
+  ].join("\n"));
+
+  assert.equal(counts.actionReceivedCount, 1);
+  assert.equal(counts.requestReceivedCount, 3);
+  assert.equal(counts.nonHealthRequestReceivedCount, 2);
 });
 
 test("Manager native mouse verifier recomputes live hit coordinates and proves double confirmation", () => {

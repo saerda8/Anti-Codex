@@ -265,11 +265,27 @@ Add-Check "stateIsolation" $isolationOk ([pscustomobject]@{ stateRoot = $stateRo
 $branding = $null
 $brandingOk = $false
 try {
+    $sourceHostName = @("ChatGPT.exe", "Codex.exe") | Where-Object {
+        Test-Path -LiteralPath (Join-Path $activeHost $_) -PathType Leaf
+    } | Select-Object -First 1
+    $sourceHost = if ($sourceHostName) { Join-Path $activeHost $sourceHostName } else { "" }
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($activeMainExe)
-    $branding = [pscustomobject]@{ productName = $version.ProductName; fileDescription = $version.FileDescription; originalFilename = $version.OriginalFilename; productVersion = $version.ProductVersion }
-    $brandingOk = [bool]($version.ProductName -eq "Anti-Codex" -and $version.FileDescription -eq "Anti-Codex" -and $version.OriginalFilename -eq "Anti-Codex.exe")
+    $activeHash = Get-AntiCodexSha256 -Path $activeMainExe
+    $sourceHash = if ($sourceHost) { Get-AntiCodexSha256 -Path $sourceHost } else { "" }
+    $brandingOk = [bool](
+        (Split-Path -Leaf $activeMainExe) -eq "Anti-Codex.exe" -and
+        $sourceHash -and
+        $activeHash -eq $sourceHash
+    )
+    $branding = [pscustomobject]@{
+        processName = (Split-Path -Leaf $activeMainExe)
+        sourceHostName = $sourceHostName
+        hostBinaryPreserved = ($activeHash -eq $sourceHash)
+        productName = $version.ProductName
+        productVersion = $version.ProductVersion
+    }
 } catch {}
-Add-Check "branding" $brandingOk $branding "Installed copied client branding is invalid"
+Add-Check "branding" $brandingOk $branding "Installed copied client host identity or source bytes are invalid"
 
 $rollbackOk = [bool](
     (Test-Path -LiteralPath (Join-Path $installRoot "rollback-host") -PathType Container) -and

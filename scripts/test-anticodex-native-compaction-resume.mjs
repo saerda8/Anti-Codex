@@ -207,11 +207,21 @@ class CdpClient {
   }
 }
 
+function pickPrimaryAppTarget(targets) {
+  const pages = targets.filter((target) => target?.type === "page"
+    && target.webSocketDebuggerUrl
+    && !String(target.url || "").toLowerCase().includes("avatar-overlay"));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => String(target.url || "").startsWith("app://"))
+    || pages[0]
+    || null;
+}
+
 async function cdpTarget() {
   const response = await fetch("http://127.0.0.1:18318/json", { signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error(`Anti-Codex CDP target list returned HTTP ${response.status}`);
   const targets = await response.json();
-  const target = targets.find((entry) => String(entry?.url || "").startsWith("app://")) || targets[0];
+  const target = pickPrimaryAppTarget(targets);
   if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex app CDP target is missing");
   return target;
 }

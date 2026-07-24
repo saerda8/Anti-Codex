@@ -349,6 +349,15 @@ test("the formal Gate 8 context threshold reaches the native compaction verifier
   assert.match(native, /if \(longContextBytes < minLongContextBytes\)/);
 });
 
+test("native compaction excludes the avatar overlay from its app target", async () => {
+  const native = await readFile(new URL("../../scripts/test-anticodex-native-compaction-resume.mjs", import.meta.url), "utf8");
+  assert.match(native, /function pickPrimaryAppTarget\(targets\)/);
+  assert.match(native, /avatar-overlay/);
+  assert.match(native, /\^app:\\\/\\\/-\\\/index\\\.html/);
+  assert.match(native, /const target = pickPrimaryAppTarget\(targets\)/);
+  assert.doesNotMatch(native, /targets\.find\(\(entry\) => String\(entry\?\.url \|\| ""\)\.startsWith\("app:\/\/"\)\) \|\| targets\[0\]/);
+});
+
 test("native compaction can stop before the scenario-specific follow-up turn", async () => {
   const native = await readFile(new URL("../../scripts/test-anticodex-native-compaction-resume.mjs", import.meta.url), "utf8");
   assert.match(native, /const compactOnly = args\.has\("--compact-only"\)/);

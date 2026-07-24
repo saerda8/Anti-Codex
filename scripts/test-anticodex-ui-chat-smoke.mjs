@@ -4882,6 +4882,16 @@ const visibleMainPaneTextExpression = `
   }
 `;
 
+function pickPrimaryAppTarget(targets) {
+  const pages = targets.filter((target) => target?.type === "page"
+    && target.webSocketDebuggerUrl
+    && !String(target.url || "").toLowerCase().includes("avatar-overlay"));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => String(target.url || "").startsWith("app://"))
+    || pages[0]
+    || null;
+}
+
 async function resolveCdpTargets() {
   const explicitPort = args.get("--cdp-port") || process.env.DEEPCODEX_CDP_PORT;
   const candidates = [...new Set(explicitPort
@@ -5404,7 +5414,7 @@ async function runHistoryProbeOnly() {
   try {
     releaseUiLock = await acquireUiSmokeLock();
     const targets = await resolveCdpTargets();
-    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    const target = pickPrimaryAppTarget(targets);
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
@@ -5814,7 +5824,7 @@ async function runFrontendModelProbeOnly() {
   try {
     releaseUiLock = await acquireUiSmokeLock();
     const targets = await resolveCdpTargets();
-    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    const target = pickPrimaryAppTarget(targets);
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
@@ -5938,7 +5948,7 @@ async function runWorkspaceCommandOnly() {
   try {
     releaseUiLock = await acquireUiSmokeLock();
     const targets = await resolveCdpTargets();
-    const target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    const target = pickPrimaryAppTarget(targets);
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
@@ -5982,7 +5992,7 @@ async function runSingleSubmitHandoff() {
   try {
     releaseUiLock = await acquireUiSmokeLock();
     const targets = await resolveCdpTargets();
-    target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    target = pickPrimaryAppTarget(targets);
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();
@@ -6164,7 +6174,7 @@ async function main() {
     releaseUiLock = await acquireUiSmokeLock();
     process.once("exit", () => releaseUiLock?.());
     const targets = await resolveCdpTargets();
-    target = targets.find((item) => String(item.url || "").startsWith("app://")) || targets[0];
+    target = pickPrimaryAppTarget(targets);
     if (!target?.webSocketDebuggerUrl) throw new Error("Anti-Codex CDP app target was not found");
     ws = new LocalWebSocket(target.webSocketDebuggerUrl);
     await ws.connect();

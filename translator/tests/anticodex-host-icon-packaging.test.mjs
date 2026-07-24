@@ -8,6 +8,7 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+const brandPatcher = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const candidateValidator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
 const updateChecker = readFileSync(resolve(root, "scripts", "check-anticodex-update.ps1"), "utf8");
@@ -31,8 +32,10 @@ function quotePowerShell(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-test("host packaging preserves external Anti-Codex icons without rewriting the executable icon", () => {
-  assert.match(installer, /Update-ExeVersionInfo\s+\$antiCodexHost/);
+test("host packaging preserves official host bytes and uses external Anti-Codex icons", () => {
+  assert.doesNotMatch(installer, /rcedit|Update-ExeVersionInfo/);
+  assert.match(installer, /Get-AntiCodexSha256\s+-Path\s+\$sourceDesktopHostPath[\s\S]*?Get-AntiCodexSha256\s+-Path\s+\$antiCodexHost/);
+  assert.doesNotMatch(brandPatcher, /exePath|fs\.writeFileSync\([^,]*exe/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$resourceIcon\s+-Force/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$trayIcon\s+-Force/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$appRootIcon\s+-Force/);

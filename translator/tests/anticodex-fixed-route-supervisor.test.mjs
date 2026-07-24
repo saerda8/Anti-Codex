@@ -11,12 +11,12 @@ import * as fixedRoute from "../../scripts/start-anticodex-fixed-route.mjs";
 import {
   assertNoExistingClientProcesses,
   assertProductionRoots,
+  buildCopiedClientEnvironment,
   buildFixedRoutePlan,
   buildSupervisorChildEnvironment,
   clientSessionRequiresShutdown,
   liveOwnedClientPids,
   observeCopiedClientSession,
-  parseTasklistAntiCodexProcesses,
   proxyModelCatalogReady,
   readCompatibilityModelAliases,
   refreshAntigravityRelayModelList,
@@ -47,6 +47,7 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.match(source, /getLauncherArgs/);
   assert.match(source, /getCopiedClientArgs/);
   assert.match(source, /spawn\(plan\.paths\.appExecutable, plan\.clientArgs/);
+  assert.match(source, /spawn\(plan\.paths\.appExecutable,[\s\S]+?env:\s*copiedClientEnvironment/);
   assert.match(source, /child\.once\("exit",\s*\(code,\s*signal\)\s*=>/);
   assert.match(source, /lastClientExit:\s*\{/);
   assert.match(source, /processId:\s*child\.pid/);
@@ -145,7 +146,8 @@ test("ready-state supervision follows copied-client process handoffs through CDP
   });
   assert.deepEqual([...ownedClients], []);
   assert.match(source, /observeCopiedClientSession\(ownedClients/);
-  assert.match(source, /tasklist\.exe/);
+  assert.doesNotMatch(source, /tasklist\.exe/);
+  assert.match(source, /function getCopiedClientProcesses\(\)[\s\S]*?getClientProcessTableRows\(\)[\s\S]*?anti-codex\.exe/i);
   assert.match(source, /const startupProcessScan = assertNoExistingClient\(\)/);
   assert.match(source, /const processScan = refreshOwnedClientIdentities\(\)/);
   const readyLoop = source.slice(source.indexOf("let clientMissingSince = null"), source.indexOf("} catch (error)", source.indexOf("let clientMissingSince = null")));
@@ -447,18 +449,6 @@ test("owned-process shutdown waits for every unique process and reports survivor
   assert.match(source, /state: stoppedNormally && fullyStopped \? "stopped" : "error"/);
   assert.doesNotMatch(source, /process\.kill\(pid,\s*signal\)|child\.kill\(signal\)/);
   assert.match(source, /TerminateProcess\(process,\s*1\)/);
-});
-
-test("tasklist duplicate-client scan is locale independent and ignores no-match text", () => {
-  assert.deepEqual(parseTasklistAntiCodexProcesses([
-    '"Anti-Codex.exe","40148","Console","1","120,000 K"',
-    '"Anti-Codex.exe","40149","Console","1","80,000 K"',
-  ].join("\r\n")), [
-    { processId: 40148 },
-    { processId: 40149 },
-  ]);
-  assert.deepEqual(parseTasklistAntiCodexProcesses("INFO: No tasks are running which match the specified criteria."), []);
-  assert.deepEqual(parseTasklistAntiCodexProcesses("信息: 没有运行的任务与指定标准匹配。"), []);
 });
 
 test("a timed-out startup process scan fails closed before a second client can launch", () => {
@@ -949,19 +939,37 @@ test("copied client environment removes original Codex pointers and provider sec
     UPSTREAM_MODEL: "response-model",
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
   });
-  const child = buildSupervisorChildEnvironment(plan, {
+  const supervisorChild = buildSupervisorChildEnvironment(plan, {
     GLOBAL_CODEX_HOME: "C:\\Users\\XD\\.codex",
     DEEPCODEX_SHARED_CODEX_HOME: "C:\\Users\\XD\\.codex",
     RUST_LOG: "info",
+    CODEX_ELECTRON_DEV_PARENT_PID: "1234",
+    CODEX_ELECTRON_DEV_WEBVIEW_PID: "5678",
     OPENAI_API_KEY: "OPENAI_SECRET",
     ANTHROPIC_API_KEY: "ANTHROPIC_SECRET",
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
   });
+  assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
+  const child = buildCopiedClientEnvironment(plan, supervisorChild);
   assert.equal(child.CODEX_HOME, plan.paths.codexHome);
   assert.equal(child.CODEX_PLUS_FIXED_MODEL, undefined);
   assert.equal(child.RUST_LOG, "info");
   assert.equal(child.CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED, "1");
-  for (const name of ["GLOBAL_CODEX_HOME", "DEEPCODEX_SHARED_CODEX_HOME", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "UPSTREAM_API_KEY"]) {
+  assert.equal(child.CODEX_SPARKLE_ENABLED, "false");
+  for (const name of [
+    "GLOBAL_CODEX_HOME",
+    "DEEPCODEX_SHARED_CODEX_HOME",
+    "CODEX_ELECTRON_DEV_PARENT_PID",
+    "CODEX_ELECTRON_DEV_WEBVIEW_PID",
+    "CODEX_PLUS_STATE_DIR",
+    "CODEX_PLUS_APP_EXECUTABLE",
+    "CODEX_PLUS_PROTOCOL_PROXY_PORT",
+    "CODEX_PLUS_LAUNCHER_GUARD_PORT",
+    "CODEX_PLUS_MANAGER_GUARD_PORT",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "UPSTREAM_API_KEY",
+  ]) {
     assert.equal(Object.hasOwn(child, name), false, `${name} leaked into copied client environment`);
   }
 });

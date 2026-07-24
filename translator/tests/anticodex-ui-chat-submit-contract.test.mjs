@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import vm from "node:vm";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const uiSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
@@ -15,6 +16,29 @@ const freshAutonomousVideoPrompt = readFileSync(
   resolve(root, "docs", "prompts", "2026-07-23-autonomous-live-action-lipsync-total-goal.md"),
   "utf8",
 );
+
+test("all UI chat entry paths select the primary app page when the avatar overlay is listed first", () => {
+  const helperSource = uiSmoke.match(/function pickPrimaryAppTarget\(targets\) \{[\s\S]*?\r?\n\}/)?.[0];
+  assert.ok(helperSource, "primary app target helper is missing");
+  const pickPrimaryAppTarget = vm.runInNewContext(`(${helperSource})`);
+  const overlay = {
+    id: "overlay",
+    type: "page",
+    url: "app://-/index.html?initialRoute=%2Favatar-overlay",
+    webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/overlay",
+  };
+  const primary = {
+    id: "primary",
+    type: "page",
+    url: "app://-/index.html",
+    webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/primary",
+  };
+
+  assert.equal(pickPrimaryAppTarget([overlay, primary])?.id, "primary");
+  assert.equal(pickPrimaryAppTarget([overlay]), null);
+  assert.equal((uiSmoke.match(/(?:const )?target = pickPrimaryAppTarget\(targets\);/g) || []).length, 5);
+  assert.doesNotMatch(uiSmoke, /targets\.find\(\(item\) => String\(item\.url \|\| ""\)\.startsWith\("app:\/\/"\)\) \|\| targets\[0\]/);
+});
 
 function loadSingleSubmitRolloutReader({ files, recordsByPath }) {
   const functionName = "readSingleSubmitRolloutEvidence";

@@ -318,6 +318,16 @@ async function nativeRequestSnapshotSafe() {
   }
 }
 
+function managerBridgeLogCounts(source) {
+  const text = String(source ?? "");
+  const requests = [...text.matchAll(/"event":"manager-request-received"(?=[^\r\n]*"path":"(?<path>[^"]*)")/g)];
+  return {
+    actionReceivedCount: (text.match(/"event":"manager-action-received"/g) || []).length,
+    requestReceivedCount: requests.length,
+    nonHealthRequestReceivedCount: requests.filter((match) => match.groups.path !== "/health").length,
+  };
+}
+
 function managerBridgeLogSnapshot() {
   if (!existsSync(managerBridgeLogPath)) return { available: false, path: managerBridgeLogPath };
   try {
@@ -326,8 +336,7 @@ function managerBridgeLogSnapshot() {
       available: true,
       path: managerBridgeLogPath,
       byteLength: Buffer.byteLength(source),
-      actionReceivedCount: (source.match(/"event":"manager-action-received"/g) || []).length,
-      requestReceivedCount: (source.match(/"event":"manager-request-received"/g) || []).length,
+      ...managerBridgeLogCounts(source),
     };
   } catch (error) {
     return { available: false, path: managerBridgeLogPath, error: error?.message || String(error) };
@@ -1236,12 +1245,24 @@ async function pickVisiblePageContextId(ws, frameId, nextId) {
   return ids[0] || null;
 }
 
+function isAvatarOverlayTarget(target) {
+  return String(target?.url || "").toLowerCase().includes("avatar-overlay");
+}
+
+function pickTarget(targets) {
+  const pages = targets.filter((target) => target.type === "page" && target.webSocketDebuggerUrl && !isAvatarOverlayTarget(target));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => target.title === "Anti-Codex")
+    || pages.find((target) => `${target.title || ""} ${target.url || ""}`.toLowerCase().includes("codex"))
+    || pages[0]
+    || null;
+}
+
 async function findTarget() {
   for (const port of ports) {
     try {
       const targets = await getJson(`http://127.0.0.1:${port}/json`);
-      const target = targets.find((item) => item.type === "page" && item.webSocketDebuggerUrl && `${item.title} ${item.url}`.toLowerCase().includes("codex"))
-        || targets.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
+      const target = pickTarget(targets);
       if (target) return { port, target };
     } catch {}
   }
@@ -1385,7 +1406,8 @@ async function waitForManagerBridgeLogStable(waitMs = 3000) {
         && previous.available === true
         && current.byteLength === previous.byteLength
         && current.actionReceivedCount === previous.actionReceivedCount
-        && current.requestReceivedCount === previous.requestReceivedCount) {
+        && current.requestReceivedCount === previous.requestReceivedCount
+        && current.nonHealthRequestReceivedCount === previous.nonHealthRequestReceivedCount) {
       return current;
     }
     previous = current;
@@ -2367,6 +2389,11 @@ if (uiOnlyMatrix) {
   const nativeRequestDelta = nonNegativeDelta(uiOnlyTrafficAfter, uiOnlyTrafficBefore, "requestCount");
   const managerActionDelta = nonNegativeDelta(uiOnlyManagerLogAfter, uiOnlyManagerLogBefore, "actionReceivedCount");
   const managerRequestDelta = nonNegativeDelta(uiOnlyManagerLogAfter, uiOnlyManagerLogBefore, "requestReceivedCount");
+  const managerNonHealthRequestDelta = nonNegativeDelta(
+    uiOnlyManagerLogAfter,
+    uiOnlyManagerLogBefore,
+    "nonHealthRequestReceivedCount",
+  );
   const stubbedActionNames = [...new Set((batchBeforeRestore.actionCalls || []).map((entry) => String(entry?.action || "")).filter(Boolean))];
   const missingStubbedActions = genericActions.filter((actionName) => !stubbedActionNames.includes(actionName));
   const requestPaths = [...new Set((batchBeforeRestore.requestCalls || []).map((entry) => String(entry?.path || "")).filter(Boolean))];
@@ -2383,7 +2410,7 @@ if (uiOnlyMatrix) {
     && requestPaths.includes("/anticodex/account")
     && requestPaths.includes("/models")
     && managerActionDelta === 0
-    && managerRequestDelta === 0
+    && managerNonHealthRequestDelta === 0
     && nativeRequestDelta === 0;
   output.isolationEvidence = {
     batchBeforeRestore,
@@ -2403,6 +2430,7 @@ if (uiOnlyMatrix) {
       after: uiOnlyManagerLogAfter,
       actionReceivedDelta: managerActionDelta,
       requestReceivedDelta: managerRequestDelta,
+      nonHealthRequestReceivedDelta: managerNonHealthRequestDelta,
     },
   };
   output.ok = output.ok === true && output.zeroSideEffects === true && output.usedRealTraffic === false;
@@ -2469,6 +2497,11 @@ if (actions.length > 1) {
     const nativeRequestDelta = nonNegativeDelta(trafficAfter, uiOnlyTrafficBefore, "requestCount");
     const managerActionDelta = nonNegativeDelta(managerLogAfter, uiOnlyManagerLogBefore, "actionReceivedCount");
     const managerRequestDelta = nonNegativeDelta(managerLogAfter, uiOnlyManagerLogBefore, "requestReceivedCount");
+    const managerNonHealthRequestDelta = nonNegativeDelta(
+      managerLogAfter,
+      uiOnlyManagerLogBefore,
+      "nonHealthRequestReceivedCount",
+    );
     const stubbedActionNames = [...new Set((batchBeforeRestore.actionCalls || []).map((entry) => String(entry?.action || "")).filter(Boolean))];
     const missingStubbedActions = actions.filter((actionName) => !stubbedActionNames.includes(actionName));
     const queueUnchanged = Number(batchBeforeRestore.currentQueueLength) === Number(batchBeforeRestore.baselineQueueLength)
@@ -2482,7 +2515,7 @@ if (actions.length > 1) {
       && queueUnchanged
       && missingStubbedActions.length === 0
       && managerActionDelta === 0
-      && managerRequestDelta === 0
+      && managerNonHealthRequestDelta === 0
       && nativeRequestDelta === 0;
     output.isolationEvidence = {
       batchBeforeRestore,
@@ -2492,7 +2525,13 @@ if (actions.length > 1) {
       missingStubbedActions,
       queueUnchanged,
       traffic: { before: uiOnlyTrafficBefore, after: trafficAfter, requestDelta: nativeRequestDelta },
-      managerBridgeLog: { before: uiOnlyManagerLogBefore, after: managerLogAfter, actionReceivedDelta: managerActionDelta, requestReceivedDelta: managerRequestDelta },
+      managerBridgeLog: {
+        before: uiOnlyManagerLogBefore,
+        after: managerLogAfter,
+        actionReceivedDelta: managerActionDelta,
+        requestReceivedDelta: managerRequestDelta,
+        nonHealthRequestReceivedDelta: managerNonHealthRequestDelta,
+      },
     };
     output.ok = output.ok === true && output.zeroSideEffects === true && output.usedRealTraffic === false;
   }

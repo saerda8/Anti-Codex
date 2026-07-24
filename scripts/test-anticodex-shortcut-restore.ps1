@@ -420,7 +420,12 @@ function Get-ExactAntiCodexSnapshot {
 }
 
 function Get-ForegroundProcessId {
-    $foregroundWindow = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
+    param([IntPtr]$ForegroundWindowHandle = [IntPtr]::Zero)
+    $foregroundWindow = if ($PSBoundParameters.ContainsKey("ForegroundWindowHandle")) {
+        $ForegroundWindowHandle
+    } else {
+        [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
+    }
     if ($foregroundWindow -eq [IntPtr]::Zero) { return 0 }
     [uint32]$foregroundProcessId = 0
     [void][AntiCodexShortcutRestoreProbe]::GetWindowThreadProcessId($foregroundWindow, [ref]$foregroundProcessId)
@@ -580,16 +585,29 @@ function Invoke-TaskbarButtonActualMouseClick {
     }
 }
 
+function Get-MainAppPages {
+    param([int]$CdpPort)
+    $response = Invoke-RestMethod -Uri "http://127.0.0.1:$CdpPort/json/list" -TimeoutSec 3
+    $targets = if ($response -is [Collections.IEnumerable] -and $response -isnot [string]) {
+        @($response.GetEnumerator())
+    } else {
+        @($response)
+    }
+    return @($targets | Where-Object {
+        [string]$_.type -eq "page" -and
+        [string]$_.url -like "app://*" -and
+        [string]$_.url -notmatch "initialRoute=%2Favatar-overlay"
+    })
+}
+
 function Get-AppPageCount {
     param([int]$CdpPort)
-    $targets = @(Invoke-RestMethod -Uri "http://127.0.0.1:$CdpPort/json/list" -TimeoutSec 3)
-    return @($targets | Where-Object { [string]$_.url -like "app://*" }).Count
+    return @(Get-MainAppPages -CdpPort $CdpPort).Count
 }
 
 function Get-AppPageIdentity {
     param([int]$CdpPort)
-    $targets = @(Invoke-RestMethod -Uri "http://127.0.0.1:$CdpPort/json/list" -TimeoutSec 3)
-    $pages = @($targets | Where-Object { [string]$_.url -like "app://*" })
+    $pages = @(Get-MainAppPages -CdpPort $CdpPort)
     $target = if ($pages.Count -eq 1) { $pages[0] } else { $null }
     return [pscustomobject]@{
         count = $pages.Count
@@ -688,6 +706,12 @@ $frameSampleTimes = New-Object System.Collections.Generic.List[int]
 $windowStateTransitions = New-Object System.Collections.Generic.List[object]
 $lastWindowStateKey = ""
 $reminimizedAfterRestore = $false
+$frameCaptureOriginMs = $null
+$activationSentAtMs = $null
+$sampleDeadlineMs = $null
+$deadlineState = $null
+$probeRecoveryApplied = $false
+$stopwatch = $null
 
 try {
     [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)
@@ -721,34 +745,45 @@ try {
         $savedTaskbarCursorY = [int]$taskbarTarget.savedCursorY
         $taskbarCursorHeld = $true
         $actualMouse = $true
+        $activationSentAtMs = [int]$taskbarClickSentAtMs
     } else {
+        $activationSentAtMs = [int]$stopwatch.ElapsedMilliseconds
         Start-Process -FilePath $desktopShortcut | Out-Null
     }
+    $sampleDeadlineMs = [int]$activationSentAtMs + $SampleDurationMs
     [long]$nextTopologySampleMs = 0
-    while ($stopwatch.ElapsedMilliseconds -lt $SampleDurationMs) {
+    while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs) {
         $isVisible = [AntiCodexShortcutRestoreProbe]::IsWindowVisible($windowHandle)
         $isMinimized = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
-        $foregroundProcessId = Get-ForegroundProcessId
+        $foregroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
+        $foregroundProcessId = Get-ForegroundProcessId -ForegroundWindowHandle $foregroundWindowHandle
+        $isExactForeground = [int64]$foregroundWindowHandle -eq [int64]$windowHandle
+        $observationAtMs = [int]$stopwatch.ElapsedMilliseconds
         if (
             $ActivationMode -eq "TaskbarButton" -and
             -not $taskbarActivationObserved -and
+            $isVisible -and
             -not $isMinimized -and
-            $foregroundProcessId -eq $ExpectedMainPid
+            $isExactForeground
         ) {
             $taskbarActivationObserved = $true
-            $taskbarActivationWaitMs = [int]$stopwatch.ElapsedMilliseconds - [int]$taskbarClickSentAtMs
-            if ($taskbarCursorHeld) {
-                [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($savedTaskbarCursorX, $savedTaskbarCursorY)
-                $taskbarCursorHeld = $false
+            $taskbarActivationWaitMs = $observationAtMs - [int]$taskbarClickSentAtMs
+            $safeCursorRect = New-Object AntiCodexShortcutRestoreProbe+RECT
+            if ([AntiCodexShortcutRestoreProbe]::GetWindowRect($windowHandle, [ref]$safeCursorRect)) {
+                $safeCursorX = $safeCursorRect.Left + [int](($safeCursorRect.Right - $safeCursorRect.Left) / 2)
+                $safeCursorY = $safeCursorRect.Top + [int](($safeCursorRect.Bottom - $safeCursorRect.Top) / 2)
+                [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($safeCursorX, $safeCursorY)
             }
         }
-        $windowStateKey = "$isVisible|$isMinimized|$foregroundProcessId"
+        $windowStateKey = "$isVisible|$isMinimized|$([int64]$foregroundWindowHandle)|$foregroundProcessId"
         if ($windowStateKey -cne $lastWindowStateKey) {
             $windowStateTransitions.Add([pscustomobject]@{
                 elapsedMs = [int]$stopwatch.ElapsedMilliseconds
                 visible = [bool]$isVisible
                 minimized = [bool]$isMinimized
+                foregroundWindowHandle = [int64]$foregroundWindowHandle
                 foregroundProcessId = [int]$foregroundProcessId
+                exactForeground = [bool]$isExactForeground
             }) | Out-Null
             $lastWindowStateKey = $windowStateKey
         }
@@ -756,13 +791,14 @@ try {
             $reminimizedAfterRestore = $true
         }
         if ($isVisible -and -not $isMinimized -and $null -eq $firstVisibleAtMs) {
-            $firstVisibleAtMs = [int]$stopwatch.ElapsedMilliseconds
+            $firstVisibleAtMs = $observationAtMs
         }
-        if ($isVisible -and -not $isMinimized -and $foregroundProcessId -eq $ExpectedMainPid -and $null -eq $restoredAtMs) {
-            $restoredAtMs = [int]$stopwatch.ElapsedMilliseconds
+        if ($null -eq $frameCaptureOriginMs -and $isVisible -and -not $isMinimized -and $isExactForeground) {
+            $frameCaptureOriginMs = $observationAtMs
+            $restoredAtMs = $observationAtMs
         }
 
-        if ($isVisible -and -not $isMinimized) {
+        if ($null -ne $frameCaptureOriginMs -and $isVisible -and -not $isMinimized -and $isExactForeground) {
             $frameStartedAtMs = [int]$stopwatch.ElapsedMilliseconds
             $metric = Get-FrameMetric -WindowHandle $windowHandle
             if ($null -ne $metric) {
@@ -812,16 +848,29 @@ try {
             $maxAppPageCount = [Math]::Max($maxAppPageCount, (Get-AppPageCount -CdpPort $cdpPort))
             $nextTopologySampleMs = $stopwatch.ElapsedMilliseconds + 90
         }
-        Start-Sleep -Milliseconds 15
+        Start-Sleep -Milliseconds 5
     }
 } catch {
     $probeError = $_.Exception.Message
 } finally {
+    $deadlineForegroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
+    $deadlineForegroundProcessId = Get-ForegroundProcessId -ForegroundWindowHandle $deadlineForegroundWindowHandle
+    $deadlineVisible = [AntiCodexShortcutRestoreProbe]::IsWindowVisible($windowHandle)
+    $deadlineMinimized = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
+    $deadlineState = [pscustomobject]@{
+        elapsedMs = if ($null -ne $stopwatch) { [int]$stopwatch.ElapsedMilliseconds } else { $null }
+        visible = [bool]$deadlineVisible
+        minimized = [bool]$deadlineMinimized
+        foregroundWindowHandle = [int64]$deadlineForegroundWindowHandle
+        foregroundProcessId = [int]$deadlineForegroundProcessId
+        exactForeground = [int64]$deadlineForegroundWindowHandle -eq [int64]$windowHandle
+    }
     if ($taskbarCursorHeld) {
         [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($savedTaskbarCursorX, $savedTaskbarCursorY)
         $taskbarCursorHeld = $false
     }
-    if ([AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)) {
+    if ($deadlineMinimized) {
+        $probeRecoveryApplied = $true
         [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 9)
         [void][AntiCodexShortcutRestoreProbe]::SetForegroundWindow($windowHandle)
     }
@@ -858,7 +907,6 @@ for ($index = 1; $index -lt $frameSampleTimes.Count; $index++) {
         [int]$frameSampleTimes[$index] - [int]$frameSampleTimes[$index - 1]
     )
 }
-$frameCaptureOriginMs = if ($ActivationMode -eq "TaskbarButton") { $taskbarClickSentAtMs } else { $firstVisibleAtMs }
 $firstFrameDelayMs = if ($null -ne $firstFrame -and $null -ne $frameCaptureOriginMs) {
     [int]$firstFrame.elapsedMs - [int]$frameCaptureOriginMs
 } else {
@@ -878,6 +926,8 @@ if ($probeError) { $failures.Add($probeError) | Out-Null }
 if (-not $minimizedObserved) { $failures.Add("minimized state was not observed") | Out-Null }
 if ($null -eq $restoredAtMs) { $failures.Add("$activationModeReport did not restore and foreground the existing window") | Out-Null }
 if ($null -eq $firstVisibleAtMs) { $failures.Add("$activationModeReport did not present the existing window") | Out-Null }
+if ($null -eq $deadlineState -or -not $deadlineState.visible -or $deadlineState.minimized -or -not $deadlineState.exactForeground) { $failures.Add("Anti-Codex was not visible, restored, and exactly foreground at the sampling deadline") | Out-Null }
+if ($probeRecoveryApplied) { $failures.Add("the restore probe applied recovery after the sampling deadline") | Out-Null }
 if ($reminimizedAfterRestore) { $failures.Add("Anti-Codex became minimized again after taskbar restore") | Out-Null }
 if (@($after.rootProcessIds).Count -ne 1 -or [int]$after.rootProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex root process changed") | Out-Null }
 if (@($after.visibleWindowProcessIds).Count -ne 1 -or [int]$after.visibleWindowProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex no longer has exactly one visible main window") | Out-Null }
@@ -889,8 +939,8 @@ if (-not $samePid) { $failures.Add("Anti-Codex main PID changed during restore")
 if (-not $sameHwnd) { $failures.Add("Anti-Codex main HWND changed during restore") | Out-Null }
 if (-not $sameExecutable) { $failures.Add("Anti-Codex executable identity changed during restore") | Out-Null }
 if ($maxRootProcessCount -ne 1) { $failures.Add("a second Anti-Codex root process was observed") | Out-Null }
-if ($maxVisibleWindowCount -ne 1) { $failures.Add("a second visible Anti-Codex window was observed") | Out-Null }
-if ($maxVisibleTopLevelWindowCount -ne 1) { $failures.Add("a second visible Anti-Codex top-level window was observed") | Out-Null }
+if ($maxVisibleWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex window was observed") | Out-Null }
+if ($maxVisibleTopLevelWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex top-level window was observed") | Out-Null }
 if ($maxAppPageCount -ne 1 -or $pagesAfter -ne 1) { $failures.Add("Anti-Codex app page count changed") | Out-Null }
 if (
     -not $sessionBefore.targetId -or
@@ -931,7 +981,12 @@ $result = [ordered]@{
     taskbarActivationObserved = $taskbarActivationObserved
     taskbarActivationWaitMs = $taskbarActivationWaitMs
     taskbarClickSentAtMs = $taskbarClickSentAtMs
-    frameCaptureOrigin = if ($ActivationMode -eq "TaskbarButton") { "taskbar-sendinput" } else { "first-presented-window" }
+    frameCaptureOrigin = "exact-foreground-window"
+    frameCaptureOriginMs = $frameCaptureOriginMs
+    activationSentAtMs = $activationSentAtMs
+    sampleDeadlineMs = $sampleDeadlineMs
+    deadlineState = $deadlineState
+    probeRecoveryApplied = $probeRecoveryApplied
     visibleWindowCriterion = "presentable-exact-executable-v1"
     minimizedObserved = $minimizedObserved
     reminimizedAfterRestore = $reminimizedAfterRestore

@@ -23,6 +23,14 @@ test("process snapshots avoid the resource-heavy WMI provider", () => {
   assert.doesNotMatch(harnessSource, /Get-CimInstance Win32_Process/);
 });
 
+test("visible harness selects the primary app page instead of the avatar overlay", () => {
+  assert.match(harnessSource, /function pickPrimaryAppTarget\(targets\)/);
+  assert.match(harnessSource, /avatar-overlay/);
+  assert.match(harnessSource, /\^app:\\\/\\\/-\\\/index\\\.html/);
+  assert.match(harnessSource, /return pickPrimaryAppTarget\(targets\)/);
+  assert.doesNotMatch(harnessSource, /targets\.find\(\(entry\) => String\(entry\?\.url \?\? ""\)\.startsWith\("app:\/\/"\)\)/);
+});
+
 test("archiveDirectory creates a readable zip from the complete workspace", {
   skip: process.platform !== "win32",
 }, () => {

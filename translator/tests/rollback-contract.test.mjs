@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -166,6 +167,66 @@ function runRollbackRepair(options) {
   const after = snapshotTree(fixture.rollbackHost);
   const manifest = JSON.parse(readFileSync(fixture.rollbackMarker, "utf8"));
   return { ...fixture, before, after, result, manifest };
+}
+
+function createLegacyRollbackBinaryFixture({ readOnlyMarker = false } = {}) {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-binary-"));
+  const rollbackHost = join(fixture, "rollback-host");
+  const rollbackMarker = join(fixture, "rollback-host.ok");
+  const sourceHost = join(rollbackHost, "ChatGPT.exe");
+  const antiCodexHost = join(rollbackHost, "Anti-Codex.exe");
+  const sourceBytes = Buffer.from("official-codex-host-bytes");
+  const legacyBytes = Buffer.from("legacy-rcedit-host-bytes");
+  mkdirSync(rollbackHost, { recursive: true });
+  writeFileSync(sourceHost, sourceBytes);
+  writeFileSync(antiCodexHost, legacyBytes);
+  const markerText = JSON.stringify({
+    schema: "anticodex-host-manifest-v2",
+    source: {
+      desktopHostName: "ChatGPT.exe",
+      codexHost: sha256(sourceBytes),
+      codexCli: sha256("codex-cli"),
+    },
+    files: {
+      antiCodexExe: sha256(legacyBytes),
+    },
+  }, null, 2);
+  writeFileSync(rollbackMarker, markerText);
+  if (readOnlyMarker) chmodSync(rollbackMarker, 0o444);
+
+  const rollback = readRollbackScript();
+  const sha256Function = extractFunction(rollback, "Get-AntiCodexSha256");
+  const repair = extractFunction(rollback, "Repair-LegacyRollbackHostBinaryManifest");
+  const harness = join(fixture, "repair-binary.ps1");
+  writeFileSync(harness, `$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$rollbackHost = ${quotePowerShell(rollbackHost)}
+$rollbackMarker = ${quotePowerShell(rollbackMarker)}
+${sha256Function}
+${repair}
+Repair-LegacyRollbackHostBinaryManifest
+`);
+  return {
+    fixture,
+    rollbackHost,
+    rollbackMarker,
+    sourceHost,
+    antiCodexHost,
+    sourceBytes,
+    legacyBytes,
+    markerText,
+    harness,
+  };
+}
+
+function runLegacyRollbackBinaryMigration(options) {
+  const fixture = createLegacyRollbackBinaryFixture(options);
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fixture.harness],
+    { encoding: "utf8", timeout: 10_000, windowsHide: true },
+  );
+  return { ...fixture, result };
 }
 
 function createRollbackCommitFailureFixture(failStep) {
@@ -357,9 +418,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /manifest\.source\.codexHost/);
   assert.match(validator, /manifest\.source\.codexCli/);
   assert.match(validator, /Test-AntiCodexIconPalette/);
-  assert.match(validator, /ProductName/);
-  assert.match(validator, /FileDescription/);
-  assert.match(validator, /OriginalFilename/);
+  assert.match(validator, /preserve the copied source Codex host bytes/);
+  assert.match(validator, /required\.antiCodexExe/);
+  assert.match(validator, /required\.codexHost/);
   assert.match(validator, /Anti-Codex\.exe/);
   assert.match(validator, /Anti-Codex/);
 });
@@ -411,8 +472,18 @@ test("host sync validates the exact rollback contract and separates activation r
   const sync = readSyncScript();
   const rollback = readRollbackScript();
   assert.match(rollback, /\[switch\]\$ValidateOnly/);
-  assert.match(rollback, /if\s*\(\$ValidateOnly\)\s*\{[\s\S]*?Test-AntiCodexHost\s+-HostRoot\s+\$rollbackHost\s+-MarkerPath\s+\$rollbackMarker[\s\S]*?Test-AntiCodexComponent\s+-ComponentRoot\s+\$rollbackComponent[\s\S]*?return\s*\}/);
-  assert.ok(rollback.indexOf("if ($ValidateOnly)") < rollback.indexOf("$syncMutex ="));
+  assert.match(rollback, /if\s*\(\$ValidateOnly\)\s*\{[\s\S]*?Repair-LegacyRollbackHostBinaryManifest[\s\S]*?Test-AntiCodexHost\s+-HostRoot\s+\$rollbackHost\s+-MarkerPath\s+\$rollbackMarker[\s\S]*?Test-AntiCodexComponent\s+-ComponentRoot\s+\$rollbackComponent[\s\S]*?\$syncMutex\.ReleaseMutex\(\)[\s\S]*?return\s*\}/);
+  assert.ok(
+    rollback.indexOf("$syncMutex =") <
+      rollback.indexOf("if ($ValidateOnly)", rollback.indexOf("$syncMutex =")),
+  );
+  const normalValidation = rollback.indexOf('if ([IO.Directory]::Exists("\\\\?\\$swapHost")');
+  assert.ok(
+    rollback.indexOf("Repair-LegacyRollbackHostBinaryManifest", normalValidation) <
+      rollback.indexOf("Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker", normalValidation),
+    "normal rollback must migrate the legacy host pair before strict rollback-host validation",
+  );
+  assert.doesNotMatch(sync, /Repair-RollbackHostBinaryManifest/);
   assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\([\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable[\s\S]*?\[IO\.File\]::Exists\(\$rollbackMarker\)/);
   assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\s+-and\s+\$rollbackManifestSchemaCompatible\)\s*\{[\s\S]*?Repair-RollbackHostIconManifest[\s\S]*?&\s+\$rollbackScript\s+-ValidateOnly[\s\S]*?\$rollbackAvailable\s*=\s*\$true/);
@@ -448,6 +519,47 @@ test("legacy rollback inventory migrates from its own tree even when host and CL
     );
     assert.equal(fixture.result.stdout.trim(), "False");
   } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
+});
+
+test("legacy v2 rcedit rollback checkpoint migrates source host bytes and marker together", () => {
+  const fixture = runLegacyRollbackBinaryMigration();
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.deepEqual(readFileSync(fixture.antiCodexHost), fixture.sourceBytes);
+    const manifest = JSON.parse(readFileSync(fixture.rollbackMarker, "utf8"));
+    assert.equal(manifest.files.antiCodexExe, sha256(fixture.sourceBytes));
+    assert.deepEqual(
+      readdirSync(fixture.rollbackHost).sort(),
+      ["Anti-Codex.exe", "ChatGPT.exe"],
+    );
+    assert.deepEqual(
+      readdirSync(fixture.fixture).sort(),
+      ["repair-binary.ps1", "rollback-host", "rollback-host.ok"],
+    );
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
+  }
+});
+
+test("legacy rollback binary migration restores byte and marker pair when marker replacement fails", () => {
+  const fixture = runLegacyRollbackBinaryMigration({ readOnlyMarker: true });
+  try {
+    assert.notEqual(fixture.result.status, 0);
+    assert.match(fixture.result.stderr, /migration failed.*restored/i);
+    assert.deepEqual(readFileSync(fixture.antiCodexHost), fixture.legacyBytes);
+    assert.equal(readFileSync(fixture.rollbackMarker, "utf8"), fixture.markerText);
+    assert.deepEqual(
+      readdirSync(fixture.rollbackHost).sort(),
+      ["Anti-Codex.exe", "ChatGPT.exe"],
+    );
+    assert.deepEqual(
+      readdirSync(fixture.fixture).sort(),
+      ["repair-binary.ps1", "rollback-host", "rollback-host.ok"],
+    );
+  } finally {
+    chmodSync(fixture.rollbackMarker, 0o666);
     rmSync(fixture.fixture, { recursive: true, force: true });
   }
 });

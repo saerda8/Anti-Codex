@@ -66,6 +66,36 @@ test("fixed-route readiness ignores non-page and non-debuggable targets", async 
   assert.equal(probeCount, 0);
 });
 
+test("fixed-route readiness ignores a ready avatar overlay and waits for the primary page", async () => {
+  const overlay = {
+    type: "page",
+    url: "app://-/index.html?initialRoute=%2Favatar-overlay",
+    webSocketDebuggerUrl: "ws://127.0.0.1:18318/devtools/page/overlay",
+  };
+  const primary = {
+    type: "page",
+    url: "app://-/index.html",
+    webSocketDebuggerUrl: "ws://127.0.0.1:18318/devtools/page/primary",
+  };
+  const probes = [];
+
+  const notReady = await cdpPageReady(18318, {
+    fetchImpl: async () => targetResponse([overlay, primary]),
+    rendererProbe: async (url) => {
+      probes.push(url);
+      return url === overlay.webSocketDebuggerUrl;
+    },
+  });
+  assert.equal(notReady, false);
+  assert.deepEqual(probes, [primary.webSocketDebuggerUrl]);
+
+  const ready = await cdpPageReady(18318, {
+    fetchImpl: async () => targetResponse([overlay, primary]),
+    rendererProbe: async (url) => url === primary.webSocketDebuggerUrl,
+  });
+  assert.equal(ready, true);
+});
+
 test("a fatal copied-client page is never renderer-ready even when it has a retry button", () => {
   assert.equal(typeof fixedRoute.isCdpRendererSnapshotReady, "function");
   assert.equal(typeof fixedRoute.classifyCdpRendererSnapshot, "function");

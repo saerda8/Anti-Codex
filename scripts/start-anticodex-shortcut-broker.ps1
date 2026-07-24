@@ -38,6 +38,10 @@ public static class AntiCodexShortcutWindow {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
+    public static extern bool RedrawWindow(IntPtr hWnd, IntPtr updateRect, IntPtr updateRegion, uint flags);
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmFlush();
+    [DllImport("user32.dll")]
     public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")]
     public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -63,7 +67,17 @@ public static class AntiCodexShortcutWindow {
             if ($null -eq $process) { continue }
             $window = [IntPtr]$process.MainWindowHandle
             if ($window -eq [IntPtr]::Zero) { continue }
-            [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 9)
+            if ([AntiCodexShortcutWindow]::IsIconic($window)) {
+                [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 4)
+                $paintDeadline = [DateTime]::UtcNow.AddMilliseconds(250)
+                while ([AntiCodexShortcutWindow]::IsIconic($window) -and [DateTime]::UtcNow -lt $paintDeadline) {
+                    Start-Sleep -Milliseconds 10
+                }
+                [void][AntiCodexShortcutWindow]::RedrawWindow($window, [IntPtr]::Zero, [IntPtr]::Zero, 0x0181)
+                [void][AntiCodexShortcutWindow]::DwmFlush()
+            } else {
+                [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 9)
+            }
             [void][AntiCodexShortcutWindow]::SetForegroundWindow($window)
 
             $foregroundStableSince = $null
@@ -101,18 +115,4 @@ if (-not (Test-Path -LiteralPath $expectedExecutable -PathType Leaf)) {
     throw "Anti-Codex executable is missing: $expectedExecutable"
 }
 
-$service = New-Object -ComObject "Schedule.Service"
-$rootFolder = $null
-$task = $null
-try {
-    $service.Connect()
-    $rootFolder = $service.GetFolder("\")
-    $task = $rootFolder.GetTask("\Anti-Codex Launcher")
-    [void]$task.Run($null)
-} finally {
-    foreach ($comObject in @($task, $rootFolder, $service)) {
-        if ($null -ne $comObject -and [Runtime.InteropServices.Marshal]::IsComObject($comObject)) {
-            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($comObject)
-        }
-    }
-}
+Start-ScheduledTask -TaskName "Anti-Codex Launcher"

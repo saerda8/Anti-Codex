@@ -582,9 +582,7 @@ test("RED: cached up-to-date update check still depends on active manifest, bran
   const guardrailBody = checker.slice(guardrailStart, checker.indexOf("$source =", guardrailStart));
   for (const required of [
     "anticodex-host-manifest-v1",
-    "ProductName",
-    "FileDescription",
-    "OriginalFilename",
+    "preserve the copied source Codex host bytes",
     "hostIcon",
     "trayIcon",
     "appRootIcon",

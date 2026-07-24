@@ -381,22 +381,21 @@ if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure
 if (-not (Has-Text $validatorScript "resources\\codex\.exe")) { Add-Failure "candidate validator missing bundled Codex CLI check" }
 if (-not (Has-Text $validatorScript "resources\\icon\.ico")) { Add-Failure "candidate validator missing host icon check" }
 if (-not (Has-Text $validatorScript "--version")) { Add-Failure "candidate validator missing CLI version probe" }
-if (-not (Has-Text $validatorScript "ProductName")) { Add-Failure "candidate validator missing executable branding check" }
-if (-not (Has-Text $validatorScript "FileDescription")) { Add-Failure "candidate validator missing executable file-description check" }
-if (-not (Has-Text $validatorScript "OriginalFilename")) { Add-Failure "candidate validator missing executable original-filename check" }
+if (-not (Has-Text $validatorScript "preserve the copied source Codex host bytes")) { Add-Failure "candidate validator missing source host byte-preservation check" }
 if (-not (Has-Text $validatorScript "anticodex-host-manifest-v2")) { Add-Failure "candidate validator missing fixed-shell signed host manifest check" }
 if (-not (Has-Text $validatorScript "Get-AntiCodexSha256")) { Add-Failure "candidate validator missing local host content hash checks" }
 $utilityHashCommand = "Get-" + "FileHash"
 if (Has-Text $validatorScript $utilityHashCommand) { Add-Failure "candidate validator still depends on Utility module hashing" }
 if (-not (Has-Text $installScript "Anti-Codex is already installed")) { Add-Failure "installer can overwrite an existing active installation without the safe sync flow" }
-if (-not (Has-Text $installScript "Windows branding verification failed")) { Add-Failure "installer does not hard-fail when Windows branding verification fails" }
+if (-not (Has-Text $installScript "copied host bytes changed during activation")) { Add-Failure "installer does not hard-fail when copied source host bytes change" }
 if (-not (Has-Text $installScript "Install-AntiCodexHostIcon")) { Add-Failure "installer does not install the Anti-Codex host icon" }
 if (-not (Has-Text $installScript "assets\\anticodex\.ico")) { Add-Failure "installer does not prefer the Anti-Codex pink icon asset" }
 if (Has-Text $installScript "patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT") { Add-Failure "installer still rewrites executable icon resources instead of using isolated external icons" }
 if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$resourceIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex window icon" }
 if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$trayIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex tray icon" }
 if (-not (Has-Text $installScript 'Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$appRootIcon\s+-Force')) { Add-Failure "installer does not install the Anti-Codex app-root icon" }
-if (-not (Has-Text $installScript '\$cached\s*=\s*Join-Path\s+\$toolRoot\s+"rcedit\.exe"')) { Add-Failure "installer does not cache the Windows branding tool for future offline syncs" }
+if (Has-Text $installScript "rcedit|Update-ExeVersionInfo") { Add-Failure "installer still rewrites the official Codex executable resources" }
+if (-not (Has-Text $installScript '\$brandScript\s+\(Join-Path\s+\$copiedCodex\s+"resources\\app\.asar"\)\s+--profile')) { Add-Failure "installer still passes the official host executable to the ASAR brand patcher" }
 if (-not (Has-Text $installScript "Copy failed after 3 attempts and fallback copy failed")) { Add-Failure "installer does not retry and safely fall back after transient Codex host copy failures" }
 if (-not (Has-Text $installScript "Find-PhantomDirectories")) { Add-Failure "installer does not detect unreadable phantom directories in packaged Codex hosts" }
 if (-not (Has-Text $installScript '\$copyArguments\s*\+=\s*"/XD"')) { Add-Failure "installer does not exclude unreadable phantom directories from packaged Codex host copies" }
@@ -417,6 +416,8 @@ $fileDescription = ""
 $originalFilename = ""
 $activeManifestValid = $false
 $rollbackManifestValid = $false
+$activeHostBinaryPreserved = $false
+$rollbackHostBinaryPreserved = $false
 $rollbackProductName = ""
 $rollbackFileDescription = ""
 $rollbackOriginalFilename = ""
@@ -1003,6 +1004,14 @@ try {
                     Add-Failure "active host marker hash mismatch: $name"
                 }
             }
+            $activeHostBinaryPreserved = [bool](
+                $activeManifest.source -and
+                [string]$activeHashes.antiCodexExe -eq [string]$activeManifest.source.codexHost
+            )
+            if (-not $activeHostBinaryPreserved) {
+                $activeManifestValid = $false
+                Add-Failure "active Anti-Codex.exe does not preserve the copied source Codex host bytes"
+            }
             if (-not (Test-UnpackedNativeModuleInventory -Manifest $activeManifest -HostRoot $activeHost -Label "active")) {
                 $activeManifestValid = $false
             }
@@ -1025,9 +1034,6 @@ try {
         $productName = [string]$versionInfo.ProductName
         $fileDescription = [string]$versionInfo.FileDescription
         $originalFilename = [string]$versionInfo.OriginalFilename
-        if ($productName -ne "Anti-Codex") { Add-Failure "active host ProductName is '$productName'" }
-        if ($fileDescription -ne "Anti-Codex") { Add-Failure "active host FileDescription is '$fileDescription'" }
-        if ($originalFilename -ne "Anti-Codex.exe") { Add-Failure "active host OriginalFilename is '$originalFilename'" }
     }
     if (Test-Path -LiteralPath $activeCodexCli) {
         $versionOutput = @(& $activeCodexCli --version 2>&1)
@@ -1074,6 +1080,14 @@ try {
                     Add-Failure "rollback host marker hash mismatch: $name"
                 }
             }
+            $rollbackHostBinaryPreserved = [bool](
+                $rollbackManifest.source -and
+                [string]$rollbackHashes.antiCodexExe -eq [string]$rollbackManifest.source.codexHost
+            )
+            if (-not $rollbackHostBinaryPreserved) {
+                $rollbackManifestValid = $false
+                Add-Failure "rollback Anti-Codex.exe does not preserve the copied source Codex host bytes"
+            }
             if (-not (Test-UnpackedNativeModuleInventory -Manifest $rollbackManifest -HostRoot $rollbackHost -Label "rollback")) {
                 $rollbackManifestValid = $false
             }
@@ -1095,9 +1109,6 @@ try {
             $rollbackProductName = [string]$rollbackVersionInfo.ProductName
             $rollbackFileDescription = [string]$rollbackVersionInfo.FileDescription
             $rollbackOriginalFilename = [string]$rollbackVersionInfo.OriginalFilename
-            if ($rollbackProductName -ne "Anti-Codex") { Add-Failure "rollback host ProductName is '$rollbackProductName'" }
-            if ($rollbackFileDescription -ne "Anti-Codex") { Add-Failure "rollback host FileDescription is '$rollbackFileDescription'" }
-            if ($rollbackOriginalFilename -ne "Anti-Codex.exe") { Add-Failure "rollback host OriginalFilename is '$rollbackOriginalFilename'" }
         }
         if (Test-Path -LiteralPath $rollbackCodexCli) {
             $rollbackVersionOutput = @(& $rollbackCodexCli --version 2>&1)
@@ -1199,6 +1210,7 @@ $result = [pscustomobject]@{
         exists = (Test-Path -LiteralPath $activeHost)
         markerExists = (Test-Path -LiteralPath $activeMarker)
         manifestValid = $activeManifestValid
+        hostBinaryPreserved = $activeHostBinaryPreserved
         exeExists = (Test-Path -LiteralPath $activeExe)
         productName = $productName
         fileDescription = $fileDescription
@@ -1273,6 +1285,7 @@ $result = [pscustomobject]@{
             exists = (Test-Path -LiteralPath $rollbackHost)
             markerExists = (Test-Path -LiteralPath $rollbackMarker)
             manifestValid = $rollbackManifestValid
+            hostBinaryPreserved = $rollbackHostBinaryPreserved
             exeExists = (Test-Path -LiteralPath $rollbackExe)
             productName = $rollbackProductName
             fileDescription = $rollbackFileDescription

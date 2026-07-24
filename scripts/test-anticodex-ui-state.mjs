@@ -815,12 +815,17 @@ function labelsFromModelPayload(modelPayload, upstreamModel = "") {
   return [...new Set(labels.filter(Boolean))];
 }
 
+function isAvatarOverlayTarget(target) {
+  return String(target?.url || "").toLowerCase().includes("avatar-overlay");
+}
+
 function pickTarget(targets) {
-  const pages = targets.filter((target) => target.type === "page" && target.webSocketDebuggerUrl);
-  return pages.find((target) => target.title === "Anti-Codex") ||
-    pages.find((target) => `${target.title || ""} ${target.url || ""}`.includes("Anti-Codex")) ||
-    pages[0] ||
-    null;
+  const pages = targets.filter((target) => target.type === "page" && target.webSocketDebuggerUrl && !isAvatarOverlayTarget(target));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => target.title === "Anti-Codex")
+    || pages.find((target) => `${target.title || ""} ${target.url || ""}`.toLowerCase().includes("codex"))
+    || pages[0]
+    || null;
 }
 
 function pageStateFromContextProbe(probe, error = null) {

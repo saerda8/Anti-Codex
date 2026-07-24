@@ -773,6 +773,7 @@ async function runSupervisor(plan) {
     };
 
     const childEnvironment = buildSupervisorChildEnvironment(plan, process.env);
+    const copiedClientEnvironment = buildCopiedClientEnvironment(plan, childEnvironment);
     const launcherLogPath = join(plan.paths.logs, "codexplusplus-launcher.log");
     const launcherErrorPath = join(plan.paths.logs, "codexplusplus-launcher.err.log");
     launcherLog = openSync(launcherLogPath, "a");
@@ -838,7 +839,7 @@ async function runSupervisor(plan) {
       const rootStartedAtMs = Date.now();
       const child = spawn(plan.paths.appExecutable, plan.clientArgs, {
         cwd: plan.paths.appDir,
-        env: childEnvironment,
+        env: copiedClientEnvironment,
         windowsHide: false,
         stdio: "ignore",
       });
@@ -1197,6 +1198,7 @@ function publicChildEnvironment(plan) {
     TEMP: plan.paths.temp,
     TMP: plan.paths.temp,
     CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED: "1",
+    CODEX_SPARKLE_ENABLED: "false",
     DEEPCODEX_STATE_ROOT: plan.paths.stateRoot,
     DEEPCODEX_CDP_PORT: String(plan.ports.cdp),
   };
@@ -1217,6 +1219,7 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
     TEMP: plan.paths.temp,
     TMP: plan.paths.temp,
     CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED: "1",
+    CODEX_SPARKLE_ENABLED: "false",
     DEEPCODEX_STATE_ROOT: plan.paths.stateRoot,
     DEEPCODEX_CDP_PORT: String(plan.ports.cdp),
     ANTICODEX_MANAGER_API: plan.managerBaseUrl,
@@ -1224,6 +1227,8 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
   for (const name of [
     "GLOBAL_CODEX_HOME",
     "DEEPCODEX_SHARED_CODEX_HOME",
+    "CODEX_ELECTRON_DEV_PARENT_PID",
+    "CODEX_ELECTRON_DEV_WEBVIEW_PID",
     "OPENAI_API_KEY",
     "OPENAI_API_BASE",
     "OPENAI_BASE_URL",
@@ -1235,6 +1240,18 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
     "UPSTREAM_URL",
     "UPSTREAM_MODEL",
     "UPSTREAM_API_KEY",
+  ]) delete environment[name];
+  return environment;
+}
+
+export function buildCopiedClientEnvironment(plan, baseEnvironment = process.env) {
+  const environment = buildSupervisorChildEnvironment(plan, baseEnvironment);
+  for (const name of [
+    "CODEX_PLUS_STATE_DIR",
+    "CODEX_PLUS_APP_EXECUTABLE",
+    "CODEX_PLUS_PROTOCOL_PROXY_PORT",
+    "CODEX_PLUS_LAUNCHER_GUARD_PORT",
+    "CODEX_PLUS_MANAGER_GUARD_PORT",
   ]) delete environment[name];
   return environment;
 }
@@ -1590,17 +1607,6 @@ function startManagerSupport(plan, childEnvironment) {
   return { watcher, bridge, watcherStartedAtMs, bridgeStartedAtMs };
 }
 
-export function parseTasklistAntiCodexProcesses(output) {
-  const rows = [];
-  for (const line of String(output ?? "").split(/\r?\n/)) {
-    const match = line.match(/^"Anti-Codex\.exe","(\d+)"(?:,|$)/i);
-    if (!match) continue;
-    const processId = Number(match[1]);
-    if (Number.isInteger(processId) && processId > 0) rows.push({ processId });
-  }
-  return rows;
-}
-
 export function scanCopiedClientProcessesSafely(scan = getCopiedClientProcesses) {
   try {
     return { ok: true, processes: scan(), error: null };
@@ -1893,16 +1899,11 @@ export async function recoverCopiedClientOnce(options = {}) {
 
 function getCopiedClientProcesses() {
   if (process.platform !== "win32") return [];
-  const output = execFileSync("tasklist.exe", [
-    "/FI", "IMAGENAME eq Anti-Codex.exe",
-    "/FO", "CSV",
-    "/NH",
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 5_000,
+  return getClientProcessTableRows().filter((row) => {
+    const name = String(row?.name ?? "").trim().toLowerCase();
+    const executablePath = normalizedExecutablePath(row?.executablePath);
+    return name === "anti-codex.exe" || executablePath.endsWith("\\anti-codex.exe");
   });
-  return parseTasklistAntiCodexProcesses(output);
 }
 
 function assertNoExistingClient() {
@@ -2225,7 +2226,9 @@ export async function cdpPageReady(cdpPort, options = {}) {
     const response = await fetchImpl(`http://127.0.0.1:${cdpPort}/json`, { signal: AbortSignal.timeout(1_500) });
     if (!response.ok) return finish({ ready: false, fatal: false });
     const targets = await response.json();
-    const pages = targets.filter((target) => target?.type === "page" && target?.webSocketDebuggerUrl);
+    const pages = targets.filter((target) => target?.type === "page"
+      && target?.webSocketDebuggerUrl
+      && !String(target?.url || "").toLowerCase().includes("avatar-overlay"));
     let fatal = false;
     for (const page of pages) {
       const status = normalizeCdpProbeStatus(await rendererProbe(page.webSocketDebuggerUrl));

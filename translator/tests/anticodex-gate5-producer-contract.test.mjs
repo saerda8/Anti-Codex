@@ -88,7 +88,8 @@ test("shortcut restore writes signed timestamped PID and CDP-session evidence an
   assert.match(shortcutRestore, /sameCdpTarget = \$sameCdpTarget/);
   assert.match(shortcutRestore, /firstFrame = \$firstFrame/);
   assert.match(shortcutRestore, /firstFrameDelayMs = \$firstFrameDelayMs/);
-  assert.match(shortcutRestore, /frameCaptureOrigin = if \(\$ActivationMode -eq "TaskbarButton"\) \{ "taskbar-sendinput" \}/);
+  assert.match(shortcutRestore, /frameCaptureOrigin = "exact-foreground-window"/);
+  assert.match(shortcutRestore, /frameCaptureOriginMs = \$frameCaptureOriginMs/);
   assert.match(shortcutRestore, /visibleWindowCriterion = "presentable-exact-executable-v1"/);
   assert.match(shortcutRestore, /maxSampleIntervalMs = \$maxSampleIntervalMs/);
   assert.match(shortcutRestore, /earlyFrameCount = \$earlyFrameCount/);

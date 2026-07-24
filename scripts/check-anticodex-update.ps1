@@ -355,6 +355,10 @@ function Test-ActiveHostGuardrails {
                 $failures.Add("active source CLI fingerprint differs from installed Codex") | Out-Null
             }
         }
+        $recordedAntiCodexHost = Get-ObjectPropertyValue -InputObject $manifestFiles -Name "antiCodexExe"
+        if (-not $recordedAntiCodexHost -or [string]$recordedAntiCodexHost -ne [string]$recordedSourceHost) {
+            $failures.Add("active Anti-Codex.exe does not preserve the copied source Codex host bytes") | Out-Null
+        }
     }
 
     if (-not $SourceRoot) {
@@ -363,27 +367,6 @@ function Test-ActiveHostGuardrails {
                 $failures.Add("active host icon content is not the Anti-Codex artwork: $iconName") | Out-Null
             }
         }
-    }
-
-    if (-not $SourceRoot -and (Test-Path -LiteralPath $required.antiCodexExe -PathType Leaf)) {
-        $versionInfo = (Get-Item -LiteralPath $required.antiCodexExe).VersionInfo
-        $productName = [string]$versionInfo.ProductName
-        $fileDescription = [string]$versionInfo.FileDescription
-        $originalFilename = [string]$versionInfo.OriginalFilename
-        if ($productName -ne "Anti-Codex" -or $fileDescription -ne "Anti-Codex" -or $originalFilename -ne "Anti-Codex.exe") {
-            $rcedit = Join-Path $env:LOCALAPPDATA "Anti-Codex\tools\rcedit.exe"
-            if (Test-Path -LiteralPath $rcedit -PathType Leaf) {
-                $productName = ([string](& $rcedit $required.antiCodexExe --get-version-string "ProductName" 2>$null)).Trim()
-                $productExitCode = $LASTEXITCODE
-                $fileDescription = ([string](& $rcedit $required.antiCodexExe --get-version-string "FileDescription" 2>$null)).Trim()
-                $descriptionExitCode = $LASTEXITCODE
-                $originalFilename = ([string](& $rcedit $required.antiCodexExe --get-version-string "OriginalFilename" 2>$null)).Trim()
-                $filenameExitCode = $LASTEXITCODE
-            }
-        }
-        if ($productName -ne "Anti-Codex") { $failures.Add("active host ProductName is not Anti-Codex") | Out-Null }
-        if ($fileDescription -ne "Anti-Codex") { $failures.Add("active host FileDescription is not Anti-Codex") | Out-Null }
-        if ($originalFilename -ne "Anti-Codex.exe") { $failures.Add("active host OriginalFilename is not Anti-Codex.exe") | Out-Null }
     }
 
     [pscustomobject]@{

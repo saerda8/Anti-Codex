@@ -821,7 +821,10 @@ function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
       && raw.taskbarActivationWaitMs <= 2100
       && Number.isFinite(raw?.taskbarClickSentAtMs)
       && raw.taskbarClickSentAtMs >= 0
-      && raw?.frameCaptureOrigin === "taskbar-sendinput"
+      && raw?.frameCaptureOrigin === "exact-foreground-window"
+      && Number.isFinite(raw?.frameCaptureOriginMs)
+      && raw.frameCaptureOriginMs >= raw.taskbarClickSentAtMs
+      && raw.taskbarActivationWaitMs === raw.frameCaptureOriginMs - raw.taskbarClickSentAtMs
       && raw?.visibleWindowCriterion === "presentable-exact-executable-v1"
       && raw?.taskbarElement?.name === "Anti-Codex"
       && raw?.taskbarElement?.accessibleName === "Anti-Codex - 1 个运行窗口"
@@ -851,14 +854,14 @@ function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
       && Number(raw?.windowHandleBefore) > 0
       && Number(raw?.windowHandleAfter) === Number(raw?.windowHandleBefore)
       && Number.isFinite(raw?.firstFrame?.elapsedMs)
-      && raw.firstFrame.elapsedMs >= raw.taskbarClickSentAtMs
+      && raw.firstFrame.elapsedMs >= raw.frameCaptureOriginMs
       && Number.isFinite(raw?.firstFrame?.standardDeviation)
       && raw.firstFrame.standardDeviation >= 0
       && Number(raw?.firstFrame?.sampleCount) === 640
       && Number.isFinite(raw?.firstFrameDelayMs)
       && raw.firstFrameDelayMs >= 0
       && raw.firstFrameDelayMs <= 100
-      && raw.firstFrameDelayMs === raw.firstFrame.elapsedMs - raw.taskbarClickSentAtMs
+      && raw.firstFrameDelayMs === raw.firstFrame.elapsedMs - raw.frameCaptureOriginMs
       && Number.isFinite(raw?.maxSampleIntervalMs)
       && raw.maxSampleIntervalMs > 0
       && raw.maxSampleIntervalMs <= 125
@@ -874,6 +877,11 @@ function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
       && raw?.minimizedObserved === true
       && raw?.reminimizedAfterRestore === false
       && Number(raw?.restoredAtMs) > 0
+      && Number(raw?.restoredAtMs) === raw.frameCaptureOriginMs
+      && raw?.deadlineState?.visible === true
+      && raw?.deadlineState?.minimized === false
+      && raw?.deadlineState?.exactForeground === true
+      && raw?.probeRecoveryApplied === false
       && Number(raw?.maxRootProcessCount) === 1
       && Number(raw?.maxVisibleWindowCount) === 1
       && Number(raw?.maxVisibleTopLevelWindowCount) === 1

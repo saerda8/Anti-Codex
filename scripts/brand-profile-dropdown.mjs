@@ -11,7 +11,7 @@ export function patchCompiledProfileDropdownSettings(text) {
   if (text.includes("anticodex-manager") && text.includes("__ANTICODEX_OPEN_MANAGER__")) return text;
   if (!text.includes("id:`codex.profileDropdown.settingsPage`")) return text;
 
-  const compiledSettings = /let ([\w$]+);[\s\S]*?\1=\(0,([\w$]+)\.jsx\)\(([\w$]+),\{id:`codex\.profileDropdown\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\}\)[\s\S]*?;let ([\w$]+);[\s\S]*?\4=\(0,\2\.jsx\)\(([\w$]+),\{LeftIcon:([\w$]+),keyboardShortcut:([\w$]+),onClick:([\w$]+),children:\1\}\)[\s\S]*?(?=;let [\w$]+;)/;
+  const compiledSettings = /let ([\w$]+);[^;]*?\1=\(0,([\w$]+)\.jsx\)\(([\w$]+),\{id:`codex\.profileDropdown\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\}\)[^;]*?;let ([\w$]+);[^;]*?\4=\(0,\2\.jsx\)\(([\w$]+),\{LeftIcon:([\w$]+),keyboardShortcut:([\w$]+),onClick:([\w$]+),children:\1\}\)[^;]*?(?=;let [\w$]+;)/;
   const match = compiledSettings.exec(text);
   if (!match) return text;
 

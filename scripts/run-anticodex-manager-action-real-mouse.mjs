@@ -19,6 +19,16 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Inv
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function pickPrimaryAppTarget(targets) {
+  const pages = targets.filter((target) => target?.type === "page"
+    && target.webSocketDebuggerUrl
+    && !String(target.url || "").toLowerCase().includes("avatar-overlay"));
+  return pages.find((target) => /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || "")))
+    || pages.find((target) => String(target.url || "").startsWith("app://"))
+    || pages[0]
+    || null;
+}
+
 async function getTargets() {
   const response = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(3_000) });
   if (!response.ok) throw new Error(`Anti-Codex CDP target list returned HTTP ${response.status}`);
@@ -41,7 +51,7 @@ function connect(url) {
 }
 
 const targets = await getTargets();
-const target = targets.find((item) => item.type === "page" && item.webSocketDebuggerUrl && /Anti-Codex|app:\/\//i.test(`${item.title || ""} ${item.url || ""}`));
+const target = pickPrimaryAppTarget(targets);
 if (!target) throw new Error(`No Anti-Codex page target found on CDP port ${port}.`);
 
 const socket = await connect(target.webSocketDebuggerUrl);
