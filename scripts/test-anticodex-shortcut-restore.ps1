@@ -960,6 +960,7 @@ try {
     }
     $minimizedObserved = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
     if (-not $minimizedObserved) { throw "Anti-Codex did not enter the minimized state" }
+    if ($ActivationMode -eq "TaskbarButton") { Start-Sleep -Milliseconds 200 }
 
     $taskbarTarget = $null
     if ($ActivationMode -eq "TaskbarButton") {

@@ -186,6 +186,17 @@ test("taskbar restore nudges and reconfirms the exact cursor target before click
   assert.doesNotMatch(click, /hotTrackDeadline|hotTracked/);
 });
 
+test("taskbar restore lets Explorer commit the minimized state before clicking", () => {
+  const minimized = shortcutRestoreAcceptance.indexOf("$minimizedObserved = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)");
+  const settle = shortcutRestoreAcceptance.indexOf("Start-Sleep -Milliseconds 200", minimized);
+  const resolveTarget = shortcutRestoreAcceptance.indexOf(
+    "$taskbarTarget = Get-ExactAntiCodexTaskbarButton",
+    minimized,
+  );
+
+  assert.ok(minimized >= 0 && settle > minimized && resolveTarget > settle);
+});
+
 test("taskbar restore samples transient topology outside the frame loop", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
