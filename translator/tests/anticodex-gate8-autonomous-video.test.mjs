@@ -10,6 +10,7 @@ const taskId = "019f9000-1111-7222-8333-444444444444";
 const turnId = "019f9000-2222-7333-8444-555555555555";
 const cwd = "G:\\Trae-Project\\Anti-Codex\\deliverables\\2026-07-23-anticodex-autonomous-live-action-lipsync";
 const promptSha256 = sha("a");
+const canonicalProductReview = "成品评价：画面=不够鲜艳；口型=没有对上；主题=不符合；故事逻辑=不完整；对白=不自然；音乐=不协调；字幕=不准确；发布包=不完整。结论：验收未通过。请自行检查原因并继续修改，反复复验直到原总目标真实通过。";
 
 function artifact(role, name, digit, extra = {}) {
   return {
@@ -324,6 +325,33 @@ function validReport() {
   return report;
 }
 
+function withProductReview(report, text = canonicalProductReview) {
+  const previousTurnId = "019f9000-3333-7444-8555-666666666666";
+  const finalTurn = report.task.turns[0];
+  const finalReceipt = report.providerReceipts[0];
+  report.task.primaryTurnId = previousTurnId;
+  report.task.turns = [
+    { ...finalTurn, turnId: previousTurnId, status: "completed" },
+    finalTurn,
+  ];
+  report.task.acceptanceFeedbacks = [{
+    text,
+    taskId,
+    previousTurnId,
+    turnId,
+  }];
+  report.providerReceipts = [
+    {
+      ...finalReceipt,
+      receiptId: "provider-receipt-prior",
+      turnId: previousTurnId,
+      terminalAtUtc: "2026-07-23T01:00:00.000Z",
+    },
+    finalReceipt,
+  ];
+  return report;
+}
+
 function validator() {
   assert.equal(
     typeof evidence.validateGate8AutonomousVideoReport,
@@ -385,6 +413,89 @@ test("rejects host follow-up or micro-stage instructions after the one total-goa
   }];
   report.autonomousExecution.hostIntermediatePromptCount = 1;
   assert.match(validator()(report).join(" "), /host|intermediate|continuation|single goal/i);
+});
+
+test("accepts only the fixed eight-field product review vocabulary", () => {
+  assert.equal(
+    typeof evidence.parseGate8ProductReview,
+    "function",
+    "Gate 8 product-review parser is missing",
+  );
+  assert.deepEqual(evidence.parseGate8ProductReview(canonicalProductReview), {
+    picture: "不够鲜艳",
+    lipSync: "没有对上",
+    theme: "不符合",
+    storyLogic: "不完整",
+    dialogue: "不自然",
+    music: "不协调",
+    subtitles: "不准确",
+    releasePackage: "不完整",
+  });
+  for (const invalid of [
+    "成品评价：画面=合格；口型=合格；主题=合格；故事逻辑=合格；对白=合格；音乐=合格；字幕=合格；发布包=合格。结论：验收未通过。请自行检查原因并继续修改，反复复验直到原总目标真实通过。",
+    canonicalProductReview.replace("画面=不够鲜艳", "画面=过暗"),
+    canonicalProductReview.replace("画面=不够鲜艳；口型=没有对上", "口型=没有对上；画面=不够鲜艳"),
+    `${canonicalProductReview} 请先调整饱和度。`,
+    `${canonicalProductReview}\n`,
+  ]) {
+    assert.equal(evidence.parseGate8ProductReview(invalid), null);
+  }
+});
+
+test("accepts a canonical product review only as a bound retry after a completed native turn", () => {
+  const failures = validator()(withProductReview(validReport())).join(" ");
+  assert.doesNotMatch(failures, /product review|acceptance feedback|成品评价/i);
+});
+
+test("rejects free-form guidance or a product review not bound to the immediately previous completed turn", () => {
+  const guided = withProductReview(
+    validReport(),
+    `${canonicalProductReview} 请先调整饱和度。`,
+  );
+  assert.match(
+    validator()(guided).join(" "),
+    /product review|acceptance feedback|成品评价/i,
+  );
+
+  const unbound = withProductReview(validReport());
+  unbound.task.acceptanceFeedbacks[0].previousTurnId = "019f9000-9999-7444-8555-666666666666";
+  assert.match(
+    validator()(unbound).join(" "),
+    /product review|acceptance feedback|成品评价/i,
+  );
+});
+
+test("allows repeated completed review rounds but rejects two product reviews in one turn", () => {
+  const repeated = withProductReview(validReport());
+  const firstTurnId = "019f9000-4444-7555-8666-777777777777";
+  const middleTurnId = repeated.task.turns[0].turnId;
+  repeated.task.primaryTurnId = firstTurnId;
+  repeated.task.turns.unshift({
+    ...repeated.task.turns[0],
+    turnId: firstTurnId,
+  });
+  repeated.task.acceptanceFeedbacks.unshift({
+    text: canonicalProductReview.replace("画面=不够鲜艳", "画面=不够清晰"),
+    taskId,
+    previousTurnId: firstTurnId,
+    turnId: middleTurnId,
+  });
+  repeated.providerReceipts.unshift({
+    ...repeated.providerReceipts[0],
+    receiptId: "provider-receipt-first",
+    turnId: firstTurnId,
+    terminalAtUtc: "2026-07-23T00:59:00.000Z",
+  });
+  assert.doesNotMatch(
+    validator()(repeated).join(" "),
+    /product review|acceptance feedback|成品评价/i,
+  );
+
+  repeated.task.acceptanceFeedbacks.push({ ...repeated.task.acceptanceFeedbacks.at(-1) });
+  assert.match(
+    validator()(repeated).join(" "),
+    /product review|acceptance feedback|成品评价/i,
+  );
 });
 
 test("rejects a continue receipt that is not bound to a real turn after the proven interruption", () => {

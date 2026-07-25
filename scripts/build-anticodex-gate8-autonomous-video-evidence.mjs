@@ -18,6 +18,8 @@ import {
   buildGate8AutonomousVideoReport,
   createEphemeralGate8Witness,
   deriveTrustedProviderReceipts,
+  isNormalNativeTaskComplete,
+  parseGate8ProductReview,
   parseTrustedSrtCues,
   validateHostHumanReviewReceipt,
   validateGate8AutonomousVideoReport,
@@ -336,6 +338,26 @@ function explicitInterruption(records, turnId) {
   return null;
 }
 
+function normalTaskComplete(records, turnId) {
+  let currentTurnId = "";
+  const matches = [];
+  for (const [index, record] of records.entries()) {
+    if (record?.type === "turn_context") {
+      currentTurnId = String(record?.payload?.turn_id || "");
+    }
+    const recordTurnId = String(
+      record?.payload?.turn_id
+      || record?.payload?.internal_chat_message_metadata_passthrough?.turn_id
+      || currentTurnId,
+    );
+    if (recordTurnId === turnId
+      && isNormalNativeTaskComplete(record)) {
+      matches.push({ index });
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function deriveRolloutEvidence({ rollout, receipt, promptText, promptSha256, marker }) {
   const sessionMeta = rollout.records.find((record) => record?.type === "session_meta");
   const taskId = String(sessionMeta?.payload?.id || sessionMeta?.payload?.session_id || "");
@@ -364,9 +386,12 @@ function deriveRolloutEvidence({ rollout, receipt, promptText, promptSha256, mar
 
   const messages = userMessages(rollout.records);
   const totalGoalMessages = messages.filter((message) => message.text === promptText);
-  const continuations = messages.filter((message) => message.text.trim() === "继续");
+  const continuations = messages.filter((message) => message.text === "继续");
+  const productReviews = messages.filter((message) => parseGate8ProductReview(message.text));
   const hostIntermediateMessages = messages.filter(
-    (message) => message.text !== promptText && message.text.trim() !== "继续",
+    (message) => message.text !== promptText
+      && message.text !== "继续"
+      && !parseGate8ProductReview(message.text),
   );
   requireCondition(totalGoalMessages.length === 1, "rollout: total goal was not submitted exactly once");
   requireCondition(messages[0]?.text === promptText, "rollout: first user input is not the signed total goal");
@@ -394,8 +419,8 @@ function deriveRolloutEvidence({ rollout, receipt, promptText, promptSha256, mar
     }
   }
   const markerOutputs = assistantOutputs.filter((output) => output.text.includes(marker));
-  requireCondition(markerOutputs.length === 1, "rollout: exact final marker was not observed once");
-  const finalOutput = markerOutputs[0];
+  requireCondition(markerOutputs.length >= 1, "rollout: exact final marker was not observed");
+  const finalOutput = markerOutputs.at(-1);
   const finalLine = finalOutput.text.trim().split(/\r?\n/).at(-1)?.trim();
   requireCondition(finalLine === marker, "rollout: final marker is not the last line of the final response");
   const postFinalToolCallCount = toolCalls.filter((call) => call.index > finalOutput.index).length;
@@ -426,10 +451,27 @@ function deriveRolloutEvidence({ rollout, receipt, promptText, promptSha256, mar
       interruptionReceiptId: receiptId,
     });
   }
+  const acceptanceFeedbacks = [];
+  for (const review of productReviews) {
+    const turnIndex = turnContexts.findIndex((turn) => turn.turnId === review.turnId);
+    requireCondition(turnIndex > 0, "rollout: product review has no preceding native turn");
+    const previousTurn = turnContexts[turnIndex - 1];
+    const completion = normalTaskComplete(rollout.records, previousTurn.turnId);
+    requireCondition(
+      completion && completion.index < review.index,
+      "rollout: product review was not preceded by a normal native task_complete",
+    );
+    acceptanceFeedbacks.push({
+      text: review.text,
+      taskId,
+      previousTurnId: previousTurn.turnId,
+      turnId: review.turnId,
+    });
+  }
 
   const turns = turnContexts.map((turn, index) => {
     const interruption = explicitInterruption(rollout.records, turn.turnId);
-    const completed = turn.turnId === finalOutput.turnId;
+    const completed = Boolean(normalTaskComplete(rollout.records, turn.turnId));
     return {
       turnId: turn.turnId,
       taskId,
@@ -454,6 +496,7 @@ function deriveRolloutEvidence({ rollout, receipt, promptText, promptSha256, mar
     turns,
     interruptions,
     continuations: continuationEvidence,
+    acceptanceFeedbacks,
     planUpdateCount: planCalls.length,
     toolCallCount: toolCalls.length,
     fileActionCount: fileActions.length,
@@ -1256,6 +1299,7 @@ async function main() {
       turns: derived.turns.map(({ index: _index, ...turn }) => turn),
       interruptions: derived.interruptions,
       continuations: derived.continuations,
+      acceptanceFeedbacks: derived.acceptanceFeedbacks,
     },
     providerPolicy: { priority: providerPriority },
     providerReceipts,

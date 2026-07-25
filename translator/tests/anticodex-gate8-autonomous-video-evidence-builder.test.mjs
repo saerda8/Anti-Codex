@@ -67,6 +67,14 @@ test("production builder exposes only fail-closed host review inputs and no test
   }
 });
 
+test("production builder derives only canonical product reviews after normal native completion", () => {
+  const source = readFileSync(builderPath, "utf8");
+  assert.match(source, /parseGate8ProductReview/);
+  assert.match(source, /acceptanceFeedbacks/);
+  assert.match(source, /task_complete/);
+  assert.match(source, /previousTurnId/);
+});
+
 test("production builder resolves and hashes the real ffmpeg and ffprobe executables", () => {
   const source = readFileSync(builderPath, "utf8");
   assert.match(source, /where\.exe/);

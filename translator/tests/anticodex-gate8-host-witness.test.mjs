@@ -200,6 +200,25 @@ test("provider receipts come only from structured rollout failures and support t
   assert.throws(() => deriveTrustedProviderReceipts(fake), /structured.*provider/i);
 });
 
+test("a task_complete carrying an error is not a normal completed turn", () => {
+  const deriveTrustedProviderReceipts = required("deriveTrustedProviderReceipts");
+  const turnId = "019f9000-5555-7555-8555-555555555555";
+  assert.throws(
+    () => deriveTrustedProviderReceipts([
+      turn(turnId, "gemini-3.1-pro-low"),
+      {
+        ...complete(turnId),
+        payload: {
+          type: "task_complete",
+          turn_id: turnId,
+          error: "exceeded retry limit",
+        },
+      },
+    ]),
+    /task_complete.*error|normal.*complete/i,
+  );
+});
+
 test("a Gemini retry after recovery may fail structurally and then downgrade normally", () => {
   const deriveTrustedProviderReceipts = required("deriveTrustedProviderReceipts");
   const geminiTurn = "019f9001-1111-7111-8111-111111111111";

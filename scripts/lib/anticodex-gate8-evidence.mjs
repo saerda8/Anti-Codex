@@ -16,6 +16,46 @@ const MULTI_STYLE_JOURNEYS = Object.freeze({
   "interrupted-migration-three-turn": 3,
   "greenfield-project-three-turn": 4,
 });
+const GATE8_PRODUCT_REVIEW_FIELDS = Object.freeze([
+  ["画面", "picture", ["合格", "不够鲜艳", "不够清晰", "不连贯", "不像真人", "观感不好"]],
+  ["口型", "lipSync", ["合格", "没有对上", "不自然", "看不清"]],
+  ["主题", "theme", ["合格", "不符合"]],
+  ["故事逻辑", "storyLogic", ["合格", "不成立", "不完整", "节奏不好"]],
+  ["对白", "dialogue", ["合格", "听不清", "不自然"]],
+  ["音乐", "music", ["合格", "缺失", "不协调", "压住对白"]],
+  ["字幕", "subtitles", ["合格", "缺失", "不准确", "看不清"]],
+  ["发布包", "releasePackage", ["合格", "不完整", "无法使用"]],
+]);
+const GATE8_PRODUCT_REVIEW_SUFFIX = "。结论：验收未通过。请自行检查原因并继续修改，反复复验直到原总目标真实通过。";
+
+export function parseGate8ProductReview(value) {
+  const text = String(value ?? "");
+  const prefix = "成品评价：";
+  if (!text.startsWith(prefix) || !text.endsWith(GATE8_PRODUCT_REVIEW_SUFFIX)) return null;
+  const body = text.slice(prefix.length, -GATE8_PRODUCT_REVIEW_SUFFIX.length);
+  const parts = body.split("；");
+  if (parts.length !== GATE8_PRODUCT_REVIEW_FIELDS.length) return null;
+  const review = {};
+  for (let index = 0; index < GATE8_PRODUCT_REVIEW_FIELDS.length; index += 1) {
+    const [label, key, allowed] = GATE8_PRODUCT_REVIEW_FIELDS[index];
+    const expectedPrefix = `${label}=`;
+    if (!parts[index].startsWith(expectedPrefix)) return null;
+    const rating = parts[index].slice(expectedPrefix.length);
+    if (!allowed.includes(rating)) return null;
+    review[key] = rating;
+  }
+  if (Object.values(review).every((rating) => rating === "合格")) return null;
+  const canonical = `${prefix}${GATE8_PRODUCT_REVIEW_FIELDS
+    .map(([label, key]) => `${label}=${review[key]}`)
+    .join("；")}${GATE8_PRODUCT_REVIEW_SUFFIX}`;
+  return canonical === text ? review : null;
+}
+
+export function isNormalNativeTaskComplete(record) {
+  if (record?.type !== "event_msg" || record?.payload?.type !== "task_complete") return false;
+  const error = record.payload.error;
+  return error == null || (typeof error === "string" && error.trim() === "");
+}
 
 export async function fetchJsonWithRetry(fetchImpl, url, options = {}) {
   const attempts = Math.max(1, Number(options.attempts || 3));
@@ -687,6 +727,8 @@ export function deriveTrustedProviderReceipts(recordsValue = []) {
     ));
     gate8Assertion(completions.length <= 1,
       `multiple task_complete events exist for turn ${turn.turnId}`);
+    gate8Assertion(completions.every(isNormalNativeTaskComplete),
+      `task_complete for turn ${turn.turnId} carries an error and is not a normal completion`);
     gate8Assertion(interruptions.length <= 1,
       `multiple client interruptions exist for turn ${turn.turnId}`);
     const terminalCount = completions.length + Number(Boolean(error)) + interruptions.length;
@@ -1274,9 +1316,11 @@ function validateArtifactReference(reference, artifactByPath, failures, label) {
 function validateContinuationContract(task, failures) {
   const interruptions = Array.isArray(task?.interruptions) ? task.interruptions : [];
   const continuations = Array.isArray(task?.continuations) ? task.continuations : [];
-  const turnIds = new Set((Array.isArray(task?.turns) ? task.turns : [])
+  const turns = Array.isArray(task?.turns) ? task.turns : [];
+  const turnIds = new Set(turns
     .map((turn) => String(turn?.turnId || ""))
     .filter(Boolean));
+  const turnIndexById = new Map(turns.map((turn, index) => [String(turn?.turnId || ""), index]));
   const interruptionById = new Map(interruptions.map((entry) => [String(entry?.receiptId || ""), entry]));
   for (const continuation of continuations) {
     const interruption = interruptionById.get(String(continuation?.interruptionReceiptId || ""));
@@ -1289,6 +1333,27 @@ function validateContinuationContract(task, failures) {
       || !turnIds.has(String(continuation?.turnId || ""))) {
       failures.push("continuation is not an exact native resume after a proven interruption");
     }
+  }
+  if (task?.acceptanceFeedbacks !== undefined && !Array.isArray(task.acceptanceFeedbacks)) {
+    failures.push("product review acceptance feedback list is invalid");
+    return;
+  }
+  const feedbackTurnIds = new Set();
+  for (const feedback of task?.acceptanceFeedbacks || []) {
+    const feedbackTurnId = String(feedback?.turnId || "");
+    const currentIndex = turnIndexById.get(String(feedback?.turnId || ""));
+    const previousIndex = turnIndexById.get(String(feedback?.previousTurnId || ""));
+    const previousTurn = Number.isInteger(previousIndex) ? turns[previousIndex] : null;
+    if (!parseGate8ProductReview(feedback?.text)
+      || String(feedback?.taskId || "") !== String(task?.taskId || "")
+      || feedbackTurnIds.has(feedbackTurnId)
+      || !Number.isInteger(currentIndex)
+      || !Number.isInteger(previousIndex)
+      || currentIndex !== previousIndex + 1
+      || previousTurn?.status !== "completed") {
+      failures.push("product review acceptance feedback is not bound to the immediately previous completed turn");
+    }
+    feedbackTurnIds.add(feedbackTurnId);
   }
 }
 
