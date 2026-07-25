@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-23T03:21:04.582Z",
+  "generatedAtUtc": "2026-07-25T18:32:40.825Z",
   "gate": "Gate 3 thin Antigravity Chat adapter contract",
   "ok": true,
   "failedIds": [],
@@ -11,6 +11,22 @@
   "coverageKind": "no-traffic",
   "modelTraffic": "none",
   "checks": [
+    {
+      "id": "current_release_binding_available",
+      "ok": true,
+      "releaseBinding": {
+        "schema": "anticodex-release-binding-v1",
+        "valid": true,
+        "officialShellVersion": "26.721.4979.0",
+        "activeShellVersion": "26.721.4979.0",
+        "codexPlusPlusVersion": "1.2.39",
+        "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
+        "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+        "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
+        "codexPlusPlusPatchCount": 9,
+        "syncReadinessSha256": "6705bb6f595b14560757a97d5fb09045439dcc341f0c458e202fb9c545f4d1c5"
+      }
+    },
     {
       "id": "provider_syntax",
       "ok": true,
@@ -41,8 +57,8 @@
       "id": "deterministic_contract_tests",
       "ok": true,
       "exitCode": 0,
-      "tests": 52,
-      "pass": 52,
+      "tests": 54,
+      "pass": 54,
       "fail": 0,
       "stderr": ""
     },
@@ -66,8 +82,8 @@
         },
         {
           "path": "translator/provider/antigravity-cascade-client.mjs",
-          "bytes": 34826,
-          "sha256": "d6a99121a368f6a861047e3773edadd83fbc5e1be79e6f963ba7fd5fd985e47d",
+          "bytes": 35265,
+          "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
@@ -87,7 +103,7 @@
     {
       "id": "provider_boundary_small",
       "ok": true,
-      "totalBytes": 82976
+      "totalBytes": 83415
     },
     {
       "id": "real_desktop_read_only_discovery",
@@ -154,8 +170,8 @@
     },
     {
       "path": "translator/provider/antigravity-cascade-client.mjs",
-      "bytes": 34826,
-      "sha256": "d6a99121a368f6a861047e3773edadd83fbc5e1be79e6f963ba7fd5fd985e47d",
+      "bytes": 35265,
+      "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
@@ -167,6 +183,18 @@
       "forbiddenSemantics": false
     }
   ],
+  "releaseBinding": {
+    "schema": "anticodex-release-binding-v1",
+    "valid": true,
+    "officialShellVersion": "26.721.4979.0",
+    "activeShellVersion": "26.721.4979.0",
+    "codexPlusPlusVersion": "1.2.39",
+    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
+    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+    "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
+    "codexPlusPlusPatchCount": 9,
+    "syncReadinessSha256": "6705bb6f595b14560757a97d5fb09045439dcc341f0c458e202fb9c545f4d1c5"
+  },
   "workerReview": {
     "jobId": "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
     "accepted": [
