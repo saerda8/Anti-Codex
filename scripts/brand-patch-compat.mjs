@@ -38,6 +38,51 @@ export function patchStartupMcpConfigReload(text) {
   return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
 }
 
+function originalPrimaryWindowTracker(windowAlias) {
+  return `trackPrimaryWindow(${windowAlias}){this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,()=>{this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())})}`;
+}
+
+function patchedPrimaryWindowTracker(windowAlias) {
+  const touchAlias = windowAlias === "t" ? "n" : "t";
+  return `trackPrimaryWindow(${windowAlias}){let ${touchAlias}=()=>this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now());this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},${touchAlias}()):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},${touchAlias}(),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,${touchAlias}),${windowAlias}.on(\`restore\`,()=>${windowAlias}.webContents.invalidate?.())}`;
+}
+
+function primaryWindowTrackerAnchors(source) {
+  return [...source.matchAll(/trackPrimaryWindow\((?<window>[\w$]+)\)\{/g)];
+}
+
+export function hasPrimaryWindowRestoreRepaint(text) {
+  const source = String(text ?? "");
+  const anchors = primaryWindowTrackerAnchors(source);
+  if (anchors.length !== 1) return false;
+  const match = anchors[0];
+  return source.startsWith(patchedPrimaryWindowTracker(match.groups.window), match.index);
+}
+
+export function patchPrimaryWindowRestoreRepaint(text) {
+  const source = String(text ?? "");
+  const anchors = primaryWindowTrackerAnchors(source);
+  if (anchors.length !== 1) {
+    throw new Error("Expected exactly one supported primary-window tracker");
+  }
+
+  const match = anchors[0];
+  const windowAlias = match.groups.window;
+  const original = originalPrimaryWindowTracker(windowAlias);
+  const replacement = patchedPrimaryWindowTracker(windowAlias);
+  if (source.startsWith(replacement, match.index)) return source;
+  if (!source.startsWith(original, match.index)) {
+    throw new Error("Expected exactly one supported primary-window tracker");
+  }
+  if (replacement.length > original.length) {
+    throw new Error("Primary-window restore repaint patch did not fit in place");
+  }
+  return source.slice(0, match.index)
+    + replacement
+    + " ".repeat(original.length - replacement.length)
+    + source.slice(match.index + original.length);
+}
+
 export function hasPatchedAuthRequirement(text) {
   return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===`chatgpt`\?\1\.account\.email:null/.test(
     String(text ?? ""),

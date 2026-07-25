@@ -337,7 +337,8 @@ function Test-AntiCodexIconPalette {
 function Test-AntiCodexAsarPatches {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile
+        [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile,
+        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowRestoreRepaintCount
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -370,6 +371,22 @@ function Test-AntiCodexAsarPatches {
     if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
         throw "Anti-Codex host app.asar still selects a ChatGPT-branded Windows tray icon."
     }
+    $primaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)'
+    if ([regex]::Matches($text, $primaryRestoreRepaintPattern).Count -ne $ExpectedPrimaryWindowRestoreRepaintCount) {
+        throw "Anti-Codex host app.asar primary-window restore repaint count is invalid."
+    }
+}
+
+function Test-AntiCodexCriticalPatchSet {
+    param(
+        [Parameter(Mandatory = $true)][object[]]$Recorded,
+        [Parameter(Mandatory = $true)][string[]]$Expected
+    )
+
+    return (
+        $Recorded.Count -eq $Expected.Count -and
+        @($Expected | Where-Object { $_ -notin $Recorded }).Count -eq 0
+    )
 }
 
 function Test-AntiCodexHost {
@@ -386,6 +403,7 @@ function Test-AntiCodexHost {
         "app-route-gate",
         "profile-dropdown-settings",
         "browser-window-icon",
+        "primary-window-restore-repaint",
         "windows-tray-icon",
         "local-model-availability"
     )
@@ -400,6 +418,7 @@ function Test-AntiCodexHost {
     }
     $patchProfile = "fixed-shell-v1"
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
+    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "primary-window-restore-repaint" })
 
     $detectedDesktopHost = $null
     foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
@@ -425,8 +444,13 @@ function Test-AntiCodexHost {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Anti-Codex host is incomplete: $path" }
     }
     $recordedCriticalPatches = @($manifest.criticalPatches)
-    if (($recordedCriticalPatches.Count -ne $expectedCriticalPatches.Count) -or
-        (@($expectedCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -gt 0)) {
+    $currentManifestCompatible = Test-AntiCodexCriticalPatchSet `
+        -Recorded $recordedCriticalPatches `
+        -Expected $expectedCriticalPatches
+    $previousManifestCompatible = Test-AntiCodexCriticalPatchSet `
+        -Recorded $recordedCriticalPatches `
+        -Expected $previousCriticalPatches
+    if (-not $currentManifestCompatible -and -not $previousManifestCompatible) {
         throw "Anti-Codex host marker is missing critical compatibility patches."
     }
     $recordedFiles = @()
@@ -467,7 +491,11 @@ function Test-AntiCodexHost {
     if ($actualFiles.Count -ne $recordedFiles.Count) {
         throw "Anti-Codex host unpacked file inventory is incomplete."
     }
-    Test-AntiCodexAsarPatches -Path $required.appAsar -PatchProfile $patchProfile
+    $expectedPrimaryWindowRestoreRepaintCount = if ($currentManifestCompatible) { 1 } else { 0 }
+    Test-AntiCodexAsarPatches `
+        -Path $required.appAsar `
+        -PatchProfile $patchProfile `
+        -ExpectedPrimaryWindowRestoreRepaintCount $expectedPrimaryWindowRestoreRepaintCount
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
         $actual = Get-AntiCodexSha256 -Path $required[$name]
         if ([string]$manifest.files.$name -ne [string]$actual) { throw "Anti-Codex host marker hash mismatch: $name" }
