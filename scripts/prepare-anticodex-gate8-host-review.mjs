@@ -220,8 +220,8 @@ function reviewWindows(durationSeconds) {
       id: `W${String(index + 1).padStart(2, "0")}`,
       startSeconds: Number(startSeconds.toFixed(3)),
       endSeconds: Number(Math.min(durationSeconds, startSeconds + lengthSeconds).toFixed(3)),
-      speaker: index % 2 === 0 ? "speaker-a" : "speaker-b",
-      faceTrackId: index % 2 === 0 ? "face-track-a" : "face-track-b",
+      speaker: "speaker-unidentified",
+      faceTrackId: "face-track-unidentified",
     };
   });
 }

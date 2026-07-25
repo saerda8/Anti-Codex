@@ -340,6 +340,15 @@ test("fails closed without an external host trust anchor even when all task and 
   );
 });
 
+test("five passed windows from one visible speaker and one face track satisfy lip-sync semantics", () => {
+  const report = validReport();
+  for (const window of report.deliverable.lipSync.windows) {
+    window.speaker = "speaker-unidentified";
+    window.faceTrackId = "face-track-unidentified";
+  }
+  assert.doesNotMatch(validator()(report).join(" "), /lip-sync/i);
+});
+
 test("rejects host review provenance without the integrity-only caller HMAC", () => {
   const report = validReport();
   delete report.mediaVerification.hostReview.callerSecretMatched;

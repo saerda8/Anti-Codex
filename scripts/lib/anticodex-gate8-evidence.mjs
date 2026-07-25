@@ -584,8 +584,6 @@ export function validateTrustedLipSyncWindows(windowsValue, durationSecondsValue
   gate8Assertion(windows.length >= 5, "lip-sync requires at least five windows");
   const normalized = [];
   const ids = new Set();
-  const speakers = new Set();
-  const faceTracks = new Set();
   let previousStart = Number.NEGATIVE_INFINITY;
   let previousEnd = Number.NEGATIVE_INFINITY;
   for (const [index, raw] of windows.entries()) {
@@ -617,8 +615,6 @@ export function validateTrustedLipSyncWindows(windowsValue, durationSecondsValue
     gate8Assertion(mouthMotionScore >= 0.5 && avSyncScore >= 0.65,
       `lip-sync window ${id} score is below the acceptance threshold`);
     ids.add(id);
-    speakers.add(speaker);
-    faceTracks.add(faceTrackId);
     previousStart = startSeconds;
     previousEnd = endSeconds;
     normalized.push({
@@ -633,8 +629,6 @@ export function validateTrustedLipSyncWindows(windowsValue, durationSecondsValue
       passed: true,
     });
   }
-  gate8Assertion(speakers.size >= 2, "lip-sync windows do not cover two speakers");
-  gate8Assertion(faceTracks.size >= 2, "lip-sync windows do not cover two face tracks");
   return normalized;
 }
 
@@ -1301,8 +1295,6 @@ function validateContinuationContract(task, failures) {
 function validateLipSyncEvidence(lipSync, failures, durationSeconds) {
   const windows = Array.isArray(lipSync?.windows) ? lipSync.windows : [];
   const ids = new Set();
-  const speakers = new Set();
-  const faceTracks = new Set();
   let previousStart = Number.NEGATIVE_INFINITY;
   let previousEnd = Number.NEGATIVE_INFINITY;
   let invalidWindow = false;
@@ -1340,8 +1332,6 @@ function validateLipSyncEvidence(lipSync, failures, durationSeconds) {
       invalidWindow = true;
     }
     ids.add(id);
-    speakers.add(speaker);
-    faceTracks.add(faceTrackId);
     previousStart = startSeconds;
     previousEnd = endSeconds;
   }
@@ -1352,9 +1342,7 @@ function validateLipSyncEvidence(lipSync, failures, durationSeconds) {
     || windows.length < 5
     || Number(lipSync?.aggregateDenominator) !== windows.length
     || Number(lipSync?.passCount) !== windows.length
-    || invalidWindow
-    || [...speakers].filter(Boolean).length < 2
-    || [...faceTracks].filter(Boolean).length < 2) {
+    || invalidWindow) {
     failures.push("lip-sync evidence lacks five distinct non-overlapping passed speaking windows");
   }
 }

@@ -82,6 +82,9 @@ test("host producer runs post-task, extracts hashed frames and clips, and never 
   assert.match(source, /mkdtempSync/);
   assert.match(source, /frame-\$\{String/);
   assert.match(source, /clipSha256: sha256\(readFileSync\(clipPath\)\)/);
+  assert.match(source, /speaker:\s*"speaker-unidentified"/);
+  assert.match(source, /faceTrackId:\s*"face-track-unidentified"/);
+  assert.doesNotMatch(source, /index\s*%\s*2[\s\S]{0,120}(?:speaker|face-track)-(?:a|b)/);
   assert.match(source, /host-review-receipt\.UNAPPROVED\.template\.json/);
   assert.match(source, /receiptApproved: false/);
   assert.doesNotMatch(source, /receiptApproved: true/);

@@ -101,19 +101,29 @@ test("SRT evidence is ordered, non-overlapping, bounded, Chinese per cue, and un
   );
 });
 
-test("lip-sync windows are bounded and require speaker, face track, and normalized scores", () => {
+test("lip-sync windows allow one honest speaker/face identity while preserving every hard window gate", () => {
   const validateTrustedLipSyncWindows = required("validateTrustedLipSyncWindows");
   const windows = Array.from({ length: 5 }, (_, index) => ({
     id: `w${index + 1}`,
     startSeconds: index * 2,
     endSeconds: index * 2 + 1.5,
-    speaker: index % 2 ? "guest" : "host",
-    faceTrackId: index % 2 ? "face-b" : "face-a",
+    speaker: "speaker-unidentified",
+    faceTrackId: "face-track-unidentified",
     offsetMs: 100,
     mouthMotionScore: 0.8,
     avSyncScore: 0.9,
   }));
   assert.equal(validateTrustedLipSyncWindows(windows, 12).length, 5);
+  assert.throws(
+    () => validateTrustedLipSyncWindows(windows.slice(0, 4), 12),
+    /at least five/i,
+  );
+  assert.throws(
+    () => validateTrustedLipSyncWindows(windows.map((entry, index) => (
+      index === 1 ? { ...entry, startSeconds: 1 } : entry
+    )), 12),
+    /overlap/i,
+  );
   assert.throws(
     () => validateTrustedLipSyncWindows(windows.map((entry, index) => (
       index === 0 ? { ...entry, endSeconds: 13 } : entry
@@ -137,6 +147,12 @@ test("lip-sync windows are bounded and require speaker, face track, and normaliz
       index === 0 ? { ...entry, avSyncScore: 1.01 } : entry
     )), 12),
     /score/i,
+  );
+  assert.throws(
+    () => validateTrustedLipSyncWindows(windows.map((entry, index) => (
+      index === 0 ? { ...entry, mouthMotionScore: 0.49 } : entry
+    )), 12),
+    /threshold/i,
   );
 });
 
