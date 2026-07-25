@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-26 Two-Phase Repaint Deployment and Physical Acceptance
+
+- Runtime transaction `20260725T182238591Z-25445c0a29894854b85bdafdf4c1f0a6` activated the 120-file runtime after authenticated HTTP 202 shutdown reached zero Anti-Codex processes and Launcher `Ready`; native Codex PID `34600` remained alive. The built-in isolated updater then ran exactly once as operation `a7114e52bce44ae7abc258915f5f4e00` and completed successfully.
+- Installed sync-readiness passes in `20260726-022843-sync-readiness.json`; installed-overall no-traffic passes in `20260726-022901-installed-overall.json`; source and installed legacy-zero-hit both pass. Official/active Codex are `26.721.4979.0`, CodexPlusPlus source/active are `1.2.39` with nine patches and hash `b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136`. Active is the new guarded focus/deferred-restore 13-patch shape and rollback is the previous synchronous 13-patch shape.
+- Exactly one responsive product window is active at PID `9880`/HWND `129503038`, with supervisor PID `19096` and CodexPlusPlus PID `38944`. The updater is `Ready`, the Launcher is `Running`, fixed-route health is ready on Gemini 3.6 Flash Low, and original Codex is unchanged.
+- Physical taskbar reports `20260725-183008298-shortcut-restore-53c463de29c6499ea526b4838570d119.json`, `20260725-183022457-shortcut-restore-e4ee04e491d14116a97ec79c29547821.json` and `20260725-183037232-shortcut-restore-373a4daa25744db681d9a0e9b26cb2c6.json` all pass. Blank frames are `0/67`, `0/62` and `0/71`; first-frame delays are `5`, `7` and `8 ms`; maximum frame intervals are `101`, `65` and `70 ms`. Every round retained the same PID, HWND, executable, CDP target, one root, one visible product window, one app page and live original Codex.
+- Gate 5's three-round physical restore requirement is now genuinely green. No model traffic or replacement autonomous task has started, so aggregate release status correctly remains `97%` pending the one-prompt task and formal Gate 5/6/8 evidence.
+
 ## 2026-07-26 Gate 5 Three-Round Result and Two-Phase Repaint Repair
 
 - Built-in updater operation `68e0217e39c546a2bf554882eafb7954` completed after runtime transaction `20260725T173526649Z-dd2f007f243d42b29d5c5df73c661e35` copied 120 verified files. Official and active Codex remained `26.721.4979.0`; active used the legacy synchronous 13-patch repaint shape and rollback retained the 12-patch zero-repaint generation.
