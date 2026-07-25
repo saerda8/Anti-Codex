@@ -35,6 +35,7 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const builderScriptPath = fileURLToPath(import.meta.url);
+const invokedAsMain = Boolean(process.argv[1] && samePath(process.argv[1], builderScriptPath));
 const args = parseArgs(process.argv.slice(2));
 const value = (name, fallback = "") => String(args.get(name)?.at(-1) ?? fallback);
 const values = (name) => (args.get(name) || []).map(String);
@@ -86,9 +87,32 @@ const packageRequiredRoles = Object.freeze([
   "lipsync-report",
   "media-qa-report",
 ]);
+const artifactRoleAliases = new Map(Object.entries({
+  mainvideo: "main-video",
+  cover: "cover",
+  subtitle: "subtitle",
+  scriptstoryboard: "script-storyboard",
+  sourceslicenses: "sources-licenses",
+  buildscript: "build-script",
+  verificationscript: "verification-script",
+  readme: "readme",
+  projectlog: "project-log",
+  licensedsourcevideo: "licensed-source-video",
+  dialoguestem: "dialogue-stem",
+  musicstem: "music-stem",
+  audiomaster: "audio-master",
+  mediaqa: "media-qa-report",
+  mediaqareport: "media-qa-report",
+  lipsyncevidence: "lipsync-report",
+  lipsyncreport: "lipsync-report",
+  asrevidence: "asr-evidence",
+  contactsheet: "contact-sheet",
+  releasepackage: "release-package",
+  checksummanifest: "checksum-manifest",
+}));
 const nativeIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
-if (args.has("--help") || args.has("-h")) {
+if (invokedAsMain && (args.has("--help") || args.has("-h"))) {
   console.log(`Usage: node scripts/build-anticodex-gate8-autonomous-video-evidence.mjs [options]
 
 Offline-only trusted evidence normalization. It never opens Anti-Codex, starts a
@@ -122,6 +146,13 @@ function parseArgs(items) {
     parsed.set(key, parsed.has(key) ? [...parsed.get(key), item] : [item]);
   }
   return parsed;
+}
+
+export function normalizeArtifactRole(roleValue) {
+  const role = String(roleValue || "").trim();
+  const compact = role.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (compact.startsWith("releasevideo")) return "release-video";
+  return artifactRoleAliases.get(compact) || role;
 }
 
 function positiveNumber(input, fallback) {
@@ -858,19 +889,55 @@ function normalizeHostReview({
   };
 }
 
-function parseChecksumManifest(path, artifactRoot) {
+export function parseChecksumManifest(path, artifactRoot, artifacts) {
+  const source = readFileSync(path, "utf8").replace(/^\uFEFF/, "");
   const entries = new Map();
-  for (const [index, rawLine] of readFileSync(path, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/).entries()) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const match = line.match(/^([a-f0-9]{64})\s+[* ]?(.+)$/i);
-    requireCondition(match, `checksum manifest: invalid line ${index + 1}`);
-    const candidate = resolve(artifactRoot, match[2].replaceAll("/", "\\"));
-    requireCondition(insideRoot(artifactRoot, candidate), `checksum manifest: path escapes task cwd at line ${index + 1}`);
+  const addEntry = (pathValue, hashValue, sizeBytes, label) => {
+    const manifestPath = String(pathValue || "").trim();
+    const hash = String(hashValue || "").trim().toLowerCase();
+    requireCondition(manifestPath && /^[a-f0-9]{64}$/.test(hash),
+      `checksum manifest: invalid ${label}`);
+    requireCondition(sizeBytes === null || (Number.isInteger(sizeBytes) && sizeBytes > 0),
+      `checksum manifest: invalid size at ${label}`);
+    const candidate = resolve(artifactRoot, manifestPath.replaceAll("/", "\\"));
+    requireCondition(insideRoot(artifactRoot, candidate),
+      `checksum manifest: path escapes task cwd at ${label}`);
     const key = normalizedPath(candidate);
-    requireCondition(!entries.has(key), `checksum manifest: duplicate path at line ${index + 1}`);
-    entries.set(key, match[1].toLowerCase());
+    requireCondition(!entries.has(key), `checksum manifest: duplicate path at ${label}`);
+    entries.set(key, { sha256: hash, sizeBytes });
+  };
+  const trimmed = source.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    let parsed;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch (error) {
+      fail(`checksum manifest: invalid JSON: ${error?.message || error}`);
+    }
+    const files = Array.isArray(parsed) ? parsed : parsed?.files;
+    requireCondition(Array.isArray(files), "checksum manifest: JSON files array is missing");
+    for (const [index, entry] of files.entries()) {
+      addEntry(entry?.path, entry?.sha256, Number(entry?.sizeBytes), `JSON entry ${index + 1}`);
+    }
+  } else {
+    for (const [index, rawLine] of source.split(/\r?\n/).entries()) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const match = line.match(/^([a-f0-9]{64})\s+[* ]?(.+)$/i);
+      requireCondition(match, `checksum manifest: invalid line ${index + 1}`);
+      addEntry(match[2], match[1], null, `line ${index + 1}`);
+    }
   }
+  requireCondition(
+    Array.isArray(artifacts)
+      && entries.size === artifacts.length
+      && artifacts.every((artifact) => {
+        const entry = entries.get(normalizedPath(artifact.path));
+        return entry?.sha256 === artifact.sha256
+          && (entry.sizeBytes === null || entry.sizeBytes === artifact.bytes);
+      }),
+    "checksum manifest: hashes or sizes are incomplete or do not match the product artifacts",
+  );
   return entries;
 }
 
@@ -894,9 +961,16 @@ function normalizeFacts(
   requireCondition(!forbidden, `deliverable-facts: forbidden task/provider/release metadata at ${forbidden}`);
   const rawArtifacts = Array.isArray(facts?.artifacts) ? facts.artifacts : [];
   requireCondition(rawArtifacts.length >= 8, "deliverable-facts: at least eight product artifacts are required");
-  const artifacts = rawArtifacts.map((artifact) => (
-    fileArtifact(artifact?.path, String(artifact?.role || ""), artifactRoot, { taskStartedAtMs })
+  const listedArtifacts = rawArtifacts.map((artifact) => (
+    fileArtifact(artifact?.path, normalizeArtifactRole(artifact?.role), artifactRoot, { taskStartedAtMs })
   ));
+  const manifestPath = facts?.package?.manifestPath;
+  const listedManifest = listedArtifacts.find((artifact) => samePath(artifact.path, manifestPath));
+  requireCondition(!listedManifest || listedManifest.role === "checksum-manifest",
+    "deliverable-facts: checksum manifest path is bound to the wrong role");
+  const manifest = listedManifest
+    || fileArtifact(manifestPath, "checksum-manifest", artifactRoot, { taskStartedAtMs });
+  const artifacts = listedManifest ? listedArtifacts : [...listedArtifacts, manifest];
   requireCondition(
     new Set(artifacts.map((artifact) => normalizedPath(artifact.path))).size === artifacts.length,
     "deliverable-facts: artifact paths are not unique",
@@ -978,18 +1052,8 @@ function normalizeFacts(
     passed: true,
     ...verified.mediaQa,
   };
-  const manifest = reference(
-    { path: facts?.package?.manifestPath },
-    "checksum-manifest",
-    "checksum manifest",
-  );
   const packageArtifacts = artifacts.filter((artifact) => artifact.role !== "checksum-manifest");
-  const checksumEntries = parseChecksumManifest(manifest.path, artifactRoot);
-  requireCondition(
-    checksumEntries.size === packageArtifacts.length
-      && packageArtifacts.every((artifact) => checksumEntries.get(normalizedPath(artifact.path)) === artifact.sha256),
-    "checksum manifest: hashes are incomplete or do not match the product artifacts",
-  );
+  parseChecksumManifest(manifest.path, artifactRoot, packageArtifacts);
 
   return {
     artifacts: [...artifacts, promptArtifact, rolloutArtifact],
@@ -1369,21 +1433,23 @@ async function main() {
   }
 }
 
-try {
-  const result = await main();
-  console.log(compact ? JSON.stringify(result) : JSON.stringify(result, null, 2));
-} catch (error) {
-  rmSync(outputPath, { force: true });
-  rmSync(`${outputPath}.sha256`, { force: true });
-  const result = {
-    ok: false,
-    requestedRealTraffic: false,
-    usedRealTraffic: false,
-    output: outputPath,
-    outputSigned: false,
-    failures: [String(error?.message || error)],
-  };
-  console.log(compact ? JSON.stringify(result) : JSON.stringify(result, null, 2));
-  process.stderr.write(`${result.failures[0]}\n`);
-  process.exitCode = 1;
+if (invokedAsMain) {
+  try {
+    const result = await main();
+    console.log(compact ? JSON.stringify(result) : JSON.stringify(result, null, 2));
+  } catch (error) {
+    rmSync(outputPath, { force: true });
+    rmSync(`${outputPath}.sha256`, { force: true });
+    const result = {
+      ok: false,
+      requestedRealTraffic: false,
+      usedRealTraffic: false,
+      output: outputPath,
+      outputSigned: false,
+      failures: [String(error?.message || error)],
+    };
+    console.log(compact ? JSON.stringify(result) : JSON.stringify(result, null, 2));
+    process.stderr.write(`${result.failures[0]}\n`);
+    process.exitCode = 1;
+  }
 }

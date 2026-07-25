@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
@@ -21,6 +22,7 @@ const builderPath = join(root, "scripts", "build-anticodex-gate8-autonomous-vide
 const reviewProducerPath = join(root, "scripts", "prepare-anticodex-gate8-host-review.mjs");
 const evidenceLibraryPath = join(root, "scripts", "lib", "anticodex-gate8-evidence.mjs");
 const runnerPath = join(root, "scripts", "test-anticodex-gate8-autonomous-video.mjs");
+const builderUrl = pathToFileURL(builderPath).href;
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -45,6 +47,114 @@ function runRunner(evidence, { withSidecar = true } = {}) {
     latest: join(reportRoot, "latest-gate8-final-long-task.json"),
   };
 }
+
+function runBuilderContractScript(body) {
+  return spawnSync(process.execPath, [
+    "--input-type=module",
+    "--eval",
+    `import { normalizeArtifactRole, parseChecksumManifest } from ${JSON.stringify(builderUrl)};\n${body}`,
+  ], { encoding: "utf8", windowsHide: true });
+}
+
+test("builder normalizes the disclosed semantic role aliases without changing unknown roles", () => {
+  const expected = {
+    mainVideo: "main-video",
+    releaseVideoDouyin: "release-video",
+    releaseVideoRedNote: "release-video",
+    releaseVideoWeChat: "release-video",
+    cover: "cover",
+    subtitle: "subtitle",
+    scriptStoryboard: "script-storyboard",
+    sourcesLicenses: "sources-licenses",
+    buildScript: "build-script",
+    verificationScript: "verification-script",
+    readme: "readme",
+    projectLog: "project-log",
+    licensedSourceVideo: "licensed-source-video",
+    dialogueStem: "dialogue-stem",
+    musicStem: "music-stem",
+    audioMaster: "audio-master",
+    mediaQa: "media-qa-report",
+    lipSyncEvidence: "lipsync-report",
+    asrEvidence: "asr-evidence",
+    contactSheet: "contact-sheet",
+    releasePackage: "release-package",
+    checksumManifest: "checksum-manifest",
+  };
+  const child = runBuilderContractScript(`
+    import assert from "node:assert/strict";
+    const expected = ${JSON.stringify(expected)};
+    for (const [role, canonical] of Object.entries(expected)) {
+      assert.equal(normalizeArtifactRole(role), canonical, role);
+    }
+    assert.equal(normalizeArtifactRole("release-video"), "release-video");
+    assert.equal(normalizeArtifactRole("customEvidence"), "customEvidence");
+  `);
+  assert.equal(child.status, 0, child.stderr + child.stdout);
+});
+
+test("builder accepts JSON and line checksum manifests with exact on-disk hashes", () => {
+  const child = runBuilderContractScript(`
+    import assert from "node:assert/strict";
+    import { createHash } from "node:crypto";
+    import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
+    const root = mkdtempSync(join(tmpdir(), "anticodex-manifest-contract-"));
+    try {
+      const path = join(root, "video.bin");
+      const bytes = Buffer.from("real-media-bytes");
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      const artifact = { path, bytes: bytes.length, sha256: hash };
+      writeFileSync(path, bytes);
+      const jsonPath = join(root, "manifest.json");
+      writeFileSync(jsonPath, JSON.stringify({
+        files: [{ path: "video.bin", sizeBytes: bytes.length, sha256: hash }],
+      }));
+      assert.equal(parseChecksumManifest(jsonPath, root, [artifact]).size, 1);
+      const linePath = join(root, "SHA256SUMS.txt");
+      writeFileSync(linePath, hash + "  video.bin\\n");
+      assert.equal(parseChecksumManifest(linePath, root, [artifact]).size, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  `);
+  assert.equal(child.status, 0, child.stderr + child.stdout);
+});
+
+test("builder rejects JSON manifest size, hash, coverage, duplicate, and escaping mismatches", () => {
+  const child = runBuilderContractScript(`
+    import assert from "node:assert/strict";
+    import { createHash } from "node:crypto";
+    import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+    import { tmpdir } from "node:os";
+    import { join } from "node:path";
+    const root = mkdtempSync(join(tmpdir(), "anticodex-manifest-closed-"));
+    try {
+      const path = join(root, "video.bin");
+      const bytes = Buffer.from("real-media-bytes");
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      const artifact = { path, bytes: bytes.length, sha256: hash };
+      const manifestPath = join(root, "manifest.json");
+      writeFileSync(path, bytes);
+      const parse = (files) => {
+        writeFileSync(manifestPath, JSON.stringify({ files }));
+        return () => parseChecksumManifest(manifestPath, root, [artifact]);
+      };
+      assert.throws(parse([{ path: "video.bin", sizeBytes: bytes.length + 1, sha256: hash }]), /hashes|size/i);
+      assert.throws(parse([{ path: "video.bin", sizeBytes: bytes.length, sha256: "0".repeat(64) }]), /hashes/i);
+      assert.throws(parse([]), /hashes|incomplete/i);
+      assert.throws(parse([
+        { path: "video.bin", sizeBytes: bytes.length, sha256: hash },
+        { path: "video.bin", sizeBytes: bytes.length, sha256: hash },
+      ]), /duplicate/i);
+      assert.throws(parse([{ path: "../escape.bin", sizeBytes: 1, sha256: hash }]), /escapes/i);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  `);
+  assert.equal(child.status, 0, child.stderr + child.stdout);
+});
 
 test("production builder exposes only fail-closed host review inputs and no test injection", () => {
   const source = readFileSync(builderPath, "utf8");
