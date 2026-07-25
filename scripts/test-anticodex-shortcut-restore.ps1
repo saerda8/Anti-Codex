@@ -718,6 +718,8 @@ $taskbarClickSentAtMs = $null
 $taskbarCursorHeld = $false
 $savedTaskbarCursorX = $null
 $savedTaskbarCursorY = $null
+$safeCursorX = $null
+$safeCursorY = $null
 $frameSampleTimes = New-Object System.Collections.Generic.List[int]
 $windowStateTransitions = New-Object System.Collections.Generic.List[object]
 $lastWindowStateKey = ""
@@ -784,12 +786,6 @@ try {
         ) {
             $taskbarActivationObserved = $true
             $taskbarActivationWaitMs = $observationAtMs - [int]$taskbarClickSentAtMs
-            $safeCursorRect = New-Object AntiCodexShortcutRestoreProbe+RECT
-            if ([AntiCodexShortcutRestoreProbe]::GetWindowRect($windowHandle, [ref]$safeCursorRect)) {
-                $safeCursorX = $safeCursorRect.Left + [int](($safeCursorRect.Right - $safeCursorRect.Left) / 2)
-                $safeCursorY = $safeCursorRect.Top + [int](($safeCursorRect.Bottom - $safeCursorRect.Top) / 2)
-                [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($safeCursorX, $safeCursorY)
-            }
         }
         $windowStateKey = "$isVisible|$isMinimized|$([int64]$foregroundWindowHandle)|$foregroundProcessId"
         if ($windowStateKey -cne $lastWindowStateKey) {
@@ -826,6 +822,15 @@ try {
                     darkRatio = $metric.darkRatio
                     sampleCount = $metric.sampleCount
                 }) | Out-Null
+            }
+        }
+
+        if ($taskbarActivationObserved -and $frames.Count -gt 0 -and $null -eq $safeCursorX) {
+            $safeCursorRect = New-Object AntiCodexShortcutRestoreProbe+RECT
+            if ([AntiCodexShortcutRestoreProbe]::GetWindowRect($windowHandle, [ref]$safeCursorRect)) {
+                $safeCursorX = $safeCursorRect.Left + [int](($safeCursorRect.Right - $safeCursorRect.Left) / 2)
+                $safeCursorY = $safeCursorRect.Top + [int](($safeCursorRect.Bottom - $safeCursorRect.Top) / 2)
+                [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($safeCursorX, $safeCursorY)
             }
         }
 

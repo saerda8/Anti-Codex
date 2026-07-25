@@ -148,6 +148,25 @@ test("taskbar restore keeps the cursor off hover-activated apps until the sampli
   assert.ok(deadlineStart >= 0 && cursorRestore > deadlineStart);
 });
 
+test("taskbar restore captures the first exact-foreground frame before moving the cursor", () => {
+  const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
+  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const sampling = samplingStart >= 0 && finallyStart > samplingStart
+    ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
+    : "";
+  const origin = sampling.indexOf("$frameCaptureOriginMs = $observationAtMs");
+  const frame = sampling.indexOf("Get-FrameMetric -WindowHandle $windowHandle");
+  const cursorMove = sampling.indexOf("SetCursorPos($safeCursorX, $safeCursorY)");
+
+  assert.match(shortcutRestoreAcceptance, /\$safeCursorX = \$null\s*\$safeCursorY = \$null/);
+  assert.match(
+    sampling,
+    /if \(\$taskbarActivationObserved -and \$frames\.Count -gt 0 -and \$null -eq \$safeCursorX\)/,
+  );
+  assert.ok(origin >= 0 && frame > origin);
+  assert.ok(cursorMove > frame, "the first exact-foreground frame must precede the safe-cursor move");
+});
+
 test("taskbar restore nudges and reconfirms the exact cursor target before clicking", () => {
   const clickStart = shortcutRestoreAcceptance.indexOf("function Invoke-TaskbarButtonActualMouseClick");
   const clickEnd = shortcutRestoreAcceptance.indexOf("\nfunction Get-MainAppPages", clickStart);
