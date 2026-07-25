@@ -602,8 +602,12 @@ function Invoke-TaskbarButtonActualMouseClick {
 }
 
 function Get-MainAppPages {
-    param([int]$CdpPort)
-    $response = Invoke-RestMethod -Uri "http://127.0.0.1:$CdpPort/json/list" -TimeoutSec 3
+    param(
+        [int]$CdpPort,
+        [ValidateRange(1, 3)]
+        [int]$TimeoutSec = 3
+    )
+    $response = Invoke-RestMethod -Uri "http://127.0.0.1:$CdpPort/json/list" -TimeoutSec $TimeoutSec
     $targets = if ($response -is [Collections.IEnumerable] -and $response -isnot [string]) {
         @($response.GetEnumerator())
     } else {
@@ -730,8 +734,96 @@ $sampleDeadlineMs = $null
 $deadlineState = $null
 $probeRecoveryApplied = $false
 $stopwatch = $null
+$maximumAppPageSampleIntervalMs = 100
+$appPageWatcherState = [hashtable]::Synchronized(@{
+    Stop = $false
+    Ready = $false
+    Error = $null
+    SampleCount = 0
+    MinCount = [int]::MaxValue
+    MaxCount = 0
+    MaxIntervalMs = [int64]0
+    FirstSampleUtcTicks = [int64]0
+    LastSampleUtcTicks = [int64]0
+})
+$appPageWatcherSessionState = $null
+$appPageWatcherRunspace = $null
+$appPageWatcherPowerShell = $null
+$appPageWatcherAsync = $null
+$appPageWatcherReadyBeforeActivation = $false
+$appPageWatcherError = $null
+$appPageSampleCount = 0
+$appPageWatcherMinCount = $null
+$appPageWatcherMaxCount = 0
+$appPageWatcherMaxIntervalMs = 0
+$appPageWatcherStopRequestedAtUtcTicks = [int64]0
+$appPageWatcherFirstSampleAtUtc = $null
+$appPageWatcherLastSampleAtUtc = $null
+$appPageWatcherTailGapMs = $null
 
 try {
+    $appPageWatcherSessionState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    $appPageWatcherSessionState.Commands.Add(
+        [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+            "Get-MainAppPages",
+            ${function:Get-MainAppPages}.ToString()
+        )
+    )
+    $appPageWatcherRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($appPageWatcherSessionState)
+    $appPageWatcherRunspace.Open()
+    $appPageWatcherPowerShell = [System.Management.Automation.PowerShell]::Create()
+    $appPageWatcherPowerShell.Runspace = $appPageWatcherRunspace
+    $appPageWatcherScript = {
+        param($State, [int]$CdpPort)
+        $ErrorActionPreference = "Stop"
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        [long]$lastSampleMs = -1
+        while (-not [bool]$State.Stop) {
+            try {
+                $count = @(Get-MainAppPages -CdpPort $CdpPort -TimeoutSec 1).Count
+                [long]$sampleAtMs = $timer.ElapsedMilliseconds
+                if ($lastSampleMs -ge 0) {
+                    [long]$intervalMs = $sampleAtMs - $lastSampleMs
+                    if ($intervalMs -gt [long]$State.MaxIntervalMs) {
+                        $State.MaxIntervalMs = $intervalMs
+                    }
+                }
+                [long]$sampleAtUtcTicks = [DateTime]::UtcNow.Ticks
+                if ([int]$State.SampleCount -eq 0) {
+                    $State.FirstSampleUtcTicks = $sampleAtUtcTicks
+                }
+                $State.LastSampleUtcTicks = $sampleAtUtcTicks
+                $State.SampleCount = [int]$State.SampleCount + 1
+                $State.MinCount = [Math]::Min([int]$State.MinCount, $count)
+                $State.MaxCount = [Math]::Max([int]$State.MaxCount, $count)
+                $State.Ready = $true
+                $lastSampleMs = $sampleAtMs
+            } catch {
+                $State.Error = $_.Exception.Message
+                $State.Ready = $true
+                break
+            }
+            Start-Sleep -Milliseconds 25
+        }
+    }
+    [void]$appPageWatcherPowerShell.AddScript($appPageWatcherScript.ToString())
+    [void]$appPageWatcherPowerShell.AddArgument($appPageWatcherState)
+    [void]$appPageWatcherPowerShell.AddArgument($cdpPort)
+    $appPageWatcherAsync = $appPageWatcherPowerShell.BeginInvoke()
+    $appPageWatcherReadyDeadline = [DateTime]::UtcNow.AddSeconds(3)
+    while (-not [bool]$appPageWatcherState.Ready -and [DateTime]::UtcNow -lt $appPageWatcherReadyDeadline) {
+        Start-Sleep -Milliseconds 5
+    }
+    if (-not [bool]$appPageWatcherState.Ready) {
+        $appPageWatcherError = "app page watcher did not produce a sample before activation"
+        throw $appPageWatcherError
+    }
+    if ($appPageWatcherState.Error) {
+        $appPageWatcherError = [string]$appPageWatcherState.Error
+        throw "App page watcher failed before activation: $appPageWatcherError"
+    }
+    $appPageWatcherReadyBeforeActivation = $true
+
     [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)
     $minimizeDeadline = [DateTime]::UtcNow.AddSeconds(2)
     while (-not [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle) -and [DateTime]::UtcNow -lt $minimizeDeadline) {
@@ -896,10 +988,62 @@ try {
     }
 }
 
-$after = Get-ExactAntiCodexSnapshot
-$pagesAfter = Get-AppPageCount -CdpPort $cdpPort
+try {
+    $after = Get-ExactAntiCodexSnapshot
+    $pagesAfter = Get-AppPageCount -CdpPort $cdpPort
+    $sessionAfter = Get-AppPageIdentity -CdpPort $cdpPort
+} finally {
+    $appPageWatcherStopRequestedAtUtcTicks = [DateTime]::UtcNow.Ticks
+    $appPageWatcherState.Stop = $true
+    if ($null -ne $appPageWatcherPowerShell -and $null -ne $appPageWatcherAsync) {
+        try {
+            [void]$appPageWatcherPowerShell.EndInvoke($appPageWatcherAsync)
+            if (-not $appPageWatcherError -and $appPageWatcherPowerShell.Streams.Error.Count -gt 0) {
+                $appPageWatcherError = [string]$appPageWatcherPowerShell.Streams.Error[0]
+            }
+        } catch {
+            if (-not $appPageWatcherError) {
+                $appPageWatcherError = $_.Exception.Message
+            }
+        }
+    }
+    if ($appPageWatcherState.Error -and -not $appPageWatcherError) {
+        $appPageWatcherError = [string]$appPageWatcherState.Error
+    }
+    $appPageSampleCount = [int]$appPageWatcherState.SampleCount
+    if ($appPageSampleCount -gt 0) {
+        $appPageWatcherMinCount = [int]$appPageWatcherState.MinCount
+    }
+    $appPageWatcherMaxCount = [int]$appPageWatcherState.MaxCount
+    $appPageWatcherMaxIntervalMs = [int]$appPageWatcherState.MaxIntervalMs
+    if ([long]$appPageWatcherState.FirstSampleUtcTicks -gt 0) {
+        $appPageWatcherFirstSampleAtUtc = [DateTime]::new(
+            [long]$appPageWatcherState.FirstSampleUtcTicks,
+            [DateTimeKind]::Utc
+        ).ToString("o")
+    }
+    if ([long]$appPageWatcherState.LastSampleUtcTicks -gt 0) {
+        $appPageWatcherLastSampleAtUtc = [DateTime]::new(
+            [long]$appPageWatcherState.LastSampleUtcTicks,
+            [DateTimeKind]::Utc
+        ).ToString("o")
+        $tailGapMs = [int][Math]::Round(
+            ($appPageWatcherStopRequestedAtUtcTicks - [long]$appPageWatcherState.LastSampleUtcTicks) /
+                [double][TimeSpan]::TicksPerMillisecond
+        )
+        $appPageWatcherTailGapMs = [Math]::Max(0, $tailGapMs)
+    }
+    if ($null -ne $appPageWatcherPowerShell) {
+        $appPageWatcherPowerShell.Dispose()
+    }
+    if ($null -ne $appPageWatcherRunspace) {
+        $appPageWatcherRunspace.Close()
+        $appPageWatcherRunspace.Dispose()
+    }
+}
+
+$maxAppPageCount = [Math]::Max($maxAppPageCount, $appPageWatcherMaxCount)
 $maxAppPageCount = [Math]::Max($maxAppPageCount, $pagesAfter)
-$sessionAfter = Get-AppPageIdentity -CdpPort $cdpPort
 $foregroundAfter = Get-ForegroundProcessId
 $originalCodexAlive = $null -ne (Get-Process -Id $ExpectedOriginalCodexPid -ErrorAction SilentlyContinue)
 $mainProcessAfter = Get-Process -Id $ExpectedMainPid -ErrorAction SilentlyContinue
@@ -999,6 +1143,12 @@ if (-not $sameExecutable) { $failures.Add("Anti-Codex executable identity change
 if ($maxRootProcessCount -ne 1) { $failures.Add("a second Anti-Codex root process was observed") | Out-Null }
 if ($maxVisibleWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex window was observed") | Out-Null }
 if ($maxVisibleTopLevelWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex top-level window was observed") | Out-Null }
+if ($appPageWatcherError) { $failures.Add("Anti-Codex app page watcher failed: $appPageWatcherError") | Out-Null }
+if (-not $appPageWatcherReadyBeforeActivation) { $failures.Add("Anti-Codex app page watcher was not ready before activation") | Out-Null }
+if ($appPageSampleCount -lt 2) { $failures.Add("Anti-Codex app page watcher did not sample continuously") | Out-Null }
+if ($appPageWatcherMinCount -ne 1 -or $appPageWatcherMaxCount -ne 1) { $failures.Add("Anti-Codex app page watcher observed a non-singleton page count") | Out-Null }
+if ($appPageWatcherMaxIntervalMs -gt $maximumAppPageSampleIntervalMs) { $failures.Add("Anti-Codex app page watcher exceeded the $maximumAppPageSampleIntervalMs ms cadence") | Out-Null }
+if ($appPageWatcherTailGapMs -gt $maximumAppPageSampleIntervalMs) { $failures.Add("Anti-Codex app page watcher stopped covering the restore before the sampling deadline") | Out-Null }
 if ($maxAppPageCount -ne 1 -or $pagesAfter -ne 1) { $failures.Add("Anti-Codex app page count changed") | Out-Null }
 if (
     -not $sessionBefore.targetId -or
@@ -1069,6 +1219,15 @@ $result = [ordered]@{
     appPagesBefore = $pagesBefore
     appPagesAfter = $pagesAfter
     maxAppPageCount = $maxAppPageCount
+    appPageSampleCount = $appPageSampleCount
+    appPageWatcherMinCount = $appPageWatcherMinCount
+    appPageWatcherMaxCount = $appPageWatcherMaxCount
+    appPageWatcherMaxIntervalMs = $appPageWatcherMaxIntervalMs
+    appPageWatcherTailGapMs = $appPageWatcherTailGapMs
+    appPageWatcherFirstSampleAtUtc = $appPageWatcherFirstSampleAtUtc
+    appPageWatcherLastSampleAtUtc = $appPageWatcherLastSampleAtUtc
+    appPageWatcherReadyBeforeActivation = $appPageWatcherReadyBeforeActivation
+    appPageWatcherError = $appPageWatcherError
     foregroundAfter = $foregroundAfter
     frameCount = $frames.Count
     blankFrameCount = $blankFrames.Count

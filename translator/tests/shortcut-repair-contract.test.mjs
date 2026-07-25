@@ -201,17 +201,43 @@ test("taskbar restore samples transient topology after each due frame capture", 
   assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
 });
 
-test("taskbar restore keeps blocking CDP reads outside the frame sampling loop", () => {
+test("taskbar restore continuously samples app pages without blocking the frame loop", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
   const sampling = samplingStart >= 0 && finallyStart > samplingStart
     ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
     : "";
+  const watcherReady = shortcutRestoreAcceptance.indexOf("$appPageWatcherReadyBeforeActivation = $true");
+  const minimize = shortcutRestoreAcceptance.indexOf("[AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)");
+  const pagesAfter = shortcutRestoreAcceptance.indexOf("$pagesAfter = Get-AppPageCount -CdpPort $cdpPort");
+  const watcherStop = shortcutRestoreAcceptance.indexOf("$appPageWatcherState.Stop = $true");
 
   assert.doesNotMatch(sampling, /Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.doesNotMatch(sampling, /Get-MainAppPages -CdpPort \$cdpPort/);
+  assert.doesNotMatch(sampling, /Invoke-RestMethod/);
   assert.match(shortcutRestoreAcceptance, /\$pagesBefore = Get-AppPageCount -CdpPort \$cdpPort/);
   assert.match(shortcutRestoreAcceptance, /\$pagesAfter = Get-AppPageCount -CdpPort \$cdpPort/);
+  assert.match(shortcutRestoreAcceptance, /\[hashtable\]::Synchronized/);
+  assert.match(shortcutRestoreAcceptance, /\[System\.Management\.Automation\.PowerShell\]::Create\(\)/);
+  assert.match(shortcutRestoreAcceptance, /\$appPageWatcherPowerShell\.BeginInvoke\(\)/);
+  assert.match(shortcutRestoreAcceptance, /\$appPageWatcherPowerShell\.EndInvoke\(\$appPageWatcherAsync\)/);
+  assert.match(shortcutRestoreAcceptance, /Get-MainAppPages -CdpPort \$CdpPort -TimeoutSec 1/);
+  assert.ok(watcherReady >= 0 && watcherReady < minimize, "the async watcher must complete one sample before activation");
+  assert.ok(pagesAfter >= 0 && watcherStop > pagesAfter, "the async watcher must cover the final page sample");
+  assert.match(shortcutRestoreAcceptance, /\$ErrorActionPreference = "Stop"/);
+  assert.match(shortcutRestoreAcceptance, /\$State\.MinCount = \[Math\]::Min\(\[int\]\$State\.MinCount, \$count\)/);
+  assert.match(shortcutRestoreAcceptance, /\$maxAppPageCount = \[Math\]::Max\(\$maxAppPageCount, \$appPageWatcherMaxCount\)/);
   assert.match(shortcutRestoreAcceptance, /\$maxAppPageCount = \[Math\]::Max\(\$maxAppPageCount, \$pagesAfter\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$appPageWatcherError\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$appPageSampleCount -lt 2\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$appPageWatcherMinCount -ne 1 -or \$appPageWatcherMaxCount -ne 1\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$appPageWatcherMaxIntervalMs -gt \$maximumAppPageSampleIntervalMs\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$appPageWatcherTailGapMs -gt \$maximumAppPageSampleIntervalMs\)/);
+  assert.match(shortcutRestoreAcceptance, /appPageSampleCount = \$appPageSampleCount/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherMinCount = \$appPageWatcherMinCount/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherError = \$appPageWatcherError/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherMaxIntervalMs = \$appPageWatcherMaxIntervalMs/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherTailGapMs = \$appPageWatcherTailGapMs/);
 });
 
 test("taskbar restore reports the early blank-to-painted transition without recovery", () => {
