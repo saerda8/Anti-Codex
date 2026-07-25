@@ -186,23 +186,57 @@ test("taskbar restore nudges and reconfirms the exact cursor target before click
   assert.doesNotMatch(click, /hotTrackDeadline|hotTracked/);
 });
 
-test("taskbar restore samples transient topology after each due frame capture", () => {
+test("taskbar restore samples transient topology outside the frame loop", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
   const sampling = samplingStart >= 0 && finallyStart > samplingStart
     ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
     : "";
-  const frame = sampling.indexOf("Get-FrameMetric -WindowHandle $windowHandle");
-  const topology = sampling.indexOf("$snapshot = Get-ExactAntiCodexSnapshot");
+  const watcherReady = shortcutRestoreAcceptance.indexOf("$topologyWatcherReadyBeforeActivation = $true");
+  const minimize = shortcutRestoreAcceptance.indexOf("[AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)");
+  const after = shortcutRestoreAcceptance.indexOf("$after = Get-ExactAntiCodexSnapshot");
+  const watcherStop = shortcutRestoreAcceptance.indexOf("$topologyWatcherState.Stop = $true");
 
-  assert.match(sampling, /\$nextTopologySampleMs/);
-  assert.ok(frame >= 0 && topology > frame, "frame capture must run before each due topology sample");
+  assert.doesNotMatch(sampling, /Get-ExactAntiCodexSnapshot/);
+  assert.doesNotMatch(sampling, /GetExactProcessSnapshot/);
+  assert.match(shortcutRestoreAcceptance, /\$topologyWatcherState = \[hashtable\]::Synchronized/);
+  assert.match(shortcutRestoreAcceptance, /\$topologyWatcherPowerShell\.BeginInvoke\(\)/);
+  assert.match(shortcutRestoreAcceptance, /\$topologyWatcherPowerShell\.EndInvoke\(\$topologyWatcherAsync\)/);
+  assert.match(shortcutRestoreAcceptance, /GetExactProcessSnapshot\(\$ExpectedExecutable\)/);
+  assert.match(shortcutRestoreAcceptance, /\$State\.Result = \[pscustomobject\]@\{/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /SeenRootProcessIds = \[System\.Collections\.Generic\.HashSet/);
+  assert.match(shortcutRestoreAcceptance, /\.AsyncWaitHandle\.WaitOne\(\$topologyWatcherStopTimeoutMs\)/);
   assert.match(
-    sampling,
-    /if \(\$stopwatch\.ElapsedMilliseconds -ge \$nextTopologySampleMs\)/,
+    shortcutRestoreAcceptance,
+    /\$topologyWatcherStopAsync\s*=\s*\$topologyWatcherPowerShell\.BeginStop\(\$null,\s*\$null\)[\s\S]*?\$topologyWatcherStopAsync\.AsyncWaitHandle\.WaitOne\(\$topologyWatcherStopTimeoutMs\)[\s\S]*?\$topologyWatcherPowerShell\.EndStop\(\$topologyWatcherStopAsync\)/,
   );
-  assert.doesNotMatch(sampling, /if \(\$frames\.Count .+ \$nextTopologySampleMs\)/);
-  assert.match(sampling, /\$nextTopologySampleMs = \$stopwatch\.ElapsedMilliseconds \+ 90/);
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$topologyWatcherStopCompleted\) \{\s*\$topologyWatcherPowerShell\.EndStop\(\$topologyWatcherStopAsync\)\s*\$topologyWatcherTerminated = \$true\s*\} else \{/,
+  );
+  assert.ok(watcherReady >= 0 && watcherReady < minimize, "the topology watcher must sample before activation");
+  assert.ok(watcherStop >= 0 && after > watcherStop, "the final exact snapshot must bridge the bounded watcher stop");
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(\$topologyWatcherTerminated\) \{\s*\$after = Get-ExactAntiCodexSnapshot/,
+  );
+  assert.match(
+    shortcutRestoreAcceptance,
+    /if \(-not \$topologyWatcherFinalSnapshotTaken\) \{\s*\$failures\.Add\("Anti-Codex final topology snapshot was skipped because the watcher did not terminate"\)/,
+  );
+  assert.match(shortcutRestoreAcceptance, /if \(\$topologyWatcherError\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(-not \$topologyWatcherReadyBeforeActivation\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$topologyWatcherSampleCount -lt 2\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$topologyWatcherMaxIntervalMs -gt \$maximumTopologySampleIntervalMs\)/);
+  assert.match(shortcutRestoreAcceptance, /if \(\$null -eq \$topologyWatcherTailGapMs -or \$topologyWatcherTailGapMs -gt \$maximumTopologySampleIntervalMs\)/);
+  assert.match(shortcutRestoreAcceptance, /\$maxRootProcessCount = \[Math\]::Max\(\$maxRootProcessCount, @\(\$after\.rootProcessIds\)\.Count\)/);
+  assert.match(shortcutRestoreAcceptance, /\$maximumTopologySampleIntervalMs = 250/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherSampleCount = \$topologyWatcherSampleCount/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherMaxIntervalMs = \$topologyWatcherMaxIntervalMs/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherTailGapMs = \$topologyWatcherTailGapMs/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherReadyBeforeActivation = \$topologyWatcherReadyBeforeActivation/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherError = \$topologyWatcherError/);
+  assert.match(shortcutRestoreAcceptance, /topologyWatcherFinalSnapshotTaken = \$topologyWatcherFinalSnapshotTaken/);
   assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
 });
 

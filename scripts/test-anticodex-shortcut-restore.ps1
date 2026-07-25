@@ -734,6 +734,28 @@ $sampleDeadlineMs = $null
 $deadlineState = $null
 $probeRecoveryApplied = $false
 $stopwatch = $null
+$topologyWatcherState = [hashtable]::Synchronized(@{
+    Stop = $false
+    Ready = $false
+    Error = $null
+    Result = $null
+})
+$topologyWatcherRunspace = $null
+$topologyWatcherPowerShell = $null
+$topologyWatcherAsync = $null
+$topologyWatcherReadyBeforeActivation = $false
+$topologyWatcherError = $null
+$topologyWatcherSampleCount = 0
+$topologyWatcherMaxIntervalMs = 0
+$topologyWatcherTailGapMs = $null
+$topologyWatcherFirstSampleAtUtc = $null
+$topologyWatcherLastSampleAtUtc = $null
+$topologyWatcherStopRequestedAtUtcTicks = [int64]0
+$topologyWatcherStopTimedOut = $false
+$topologyWatcherTerminated = $false
+$topologyWatcherFinalSnapshotTaken = $false
+$maximumTopologySampleIntervalMs = 250
+$topologyWatcherStopTimeoutMs = 3000
 $maximumAppPageSampleIntervalMs = 100
 $appPageWatcherState = [hashtable]::Synchronized(@{
     Stop = $false
@@ -766,6 +788,105 @@ $appPageWatcherLastSampleAtUtc = $null
 $appPageWatcherTailGapMs = $null
 
 try {
+    $topologyWatcherRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+    $topologyWatcherRunspace.Open()
+    $topologyWatcherPowerShell = [System.Management.Automation.PowerShell]::Create()
+    $topologyWatcherPowerShell.Runspace = $topologyWatcherRunspace
+    $topologyWatcherScript = {
+        param($State, [string]$ExpectedExecutable)
+        $ErrorActionPreference = "Stop"
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        [long]$lastSampleMs = -1
+        [long]$firstSampleUtcTicks = 0
+        [long]$lastSampleUtcTicks = 0
+        [long]$maxIntervalMs = 0
+        [int]$sampleCount = 0
+        [int]$maxRootProcessCount = 0
+        [int]$maxVisibleWindowCount = 0
+        [int]$maxVisibleTopLevelWindowCount = 0
+        [int]$maxRawVisibleTopLevelWindowCount = 0
+        $seenRootProcessIds = [System.Collections.Generic.HashSet[int]]::new()
+        $seenVisibleTopLevelWindowHandles = [System.Collections.Generic.HashSet[long]]::new()
+        $observedTopLevelWindows = @{}
+        try {
+            while (-not [bool]$State.Stop) {
+                $snapshot = [AntiCodexShortcutRestoreProbe]::GetExactProcessSnapshot($ExpectedExecutable)
+                [long]$sampleAtMs = $timer.ElapsedMilliseconds
+                [long]$sampleAtUtcTicks = [DateTime]::UtcNow.Ticks
+                if ($lastSampleMs -ge 0) {
+                    $maxIntervalMs = [Math]::Max($maxIntervalMs, $sampleAtMs - $lastSampleMs)
+                } else {
+                    $firstSampleUtcTicks = $sampleAtUtcTicks
+                }
+                $lastSampleMs = $sampleAtMs
+                $lastSampleUtcTicks = $sampleAtUtcTicks
+                $sampleCount += 1
+                $maxRootProcessCount = [Math]::Max($maxRootProcessCount, @($snapshot.RootProcessIds).Count)
+                $maxVisibleWindowCount = [Math]::Max($maxVisibleWindowCount, @($snapshot.VisibleWindowProcessIds).Count)
+                $maxVisibleTopLevelWindowCount = [Math]::Max($maxVisibleTopLevelWindowCount, @($snapshot.VisibleTopLevelWindowHandles).Count)
+                $maxRawVisibleTopLevelWindowCount = [Math]::Max($maxRawVisibleTopLevelWindowCount, @($snapshot.RawVisibleTopLevelWindowHandles).Count)
+                foreach ($rootProcessId in @($snapshot.RootProcessIds)) {
+                    [void]$seenRootProcessIds.Add([int]$rootProcessId)
+                }
+                foreach ($visibleTopLevelWindowHandle in @($snapshot.VisibleTopLevelWindowHandles)) {
+                    [void]$seenVisibleTopLevelWindowHandles.Add([int64]$visibleTopLevelWindowHandle)
+                }
+                foreach ($observedWindow in @($snapshot.AllVisibleTopLevelWindows)) {
+                    $observedTopLevelWindows[[string][int64]$observedWindow.Handle] = [pscustomobject]@{
+                        handle = [int64]$observedWindow.Handle
+                        processId = [int]$observedWindow.ProcessId
+                        className = [string]$observedWindow.ClassName
+                        title = [string]$observedWindow.Title
+                        left = [int]$observedWindow.Left
+                        top = [int]$observedWindow.Top
+                        right = [int]$observedWindow.Right
+                        bottom = [int]$observedWindow.Bottom
+                        cloaked = [bool]$observedWindow.Cloaked
+                        auxiliaryWindow = [bool]$observedWindow.AuxiliaryWindow
+                        presentable = [bool]$observedWindow.Presentable
+                        productWindow = [bool]$observedWindow.ProductWindow
+                    }
+                }
+                $State.Ready = $true
+                Start-Sleep -Milliseconds 25
+            }
+        } catch {
+            $State.Error = $_.Exception.Message
+        } finally {
+            $State.Result = [pscustomobject]@{
+                sampleCount = $sampleCount
+                maxIntervalMs = $maxIntervalMs
+                firstSampleUtcTicks = $firstSampleUtcTicks
+                lastSampleUtcTicks = $lastSampleUtcTicks
+                maxRootProcessCount = $maxRootProcessCount
+                maxVisibleWindowCount = $maxVisibleWindowCount
+                maxVisibleTopLevelWindowCount = $maxVisibleTopLevelWindowCount
+                maxRawVisibleTopLevelWindowCount = $maxRawVisibleTopLevelWindowCount
+                seenRootProcessIds = @($seenRootProcessIds)
+                seenVisibleTopLevelWindowHandles = @($seenVisibleTopLevelWindowHandles)
+                observedTopLevelWindows = @($observedTopLevelWindows.Values)
+            }
+            $State.Ready = $true
+        }
+    }
+    [void]$topologyWatcherPowerShell.AddScript($topologyWatcherScript.ToString())
+    [void]$topologyWatcherPowerShell.AddArgument($topologyWatcherState)
+    [void]$topologyWatcherPowerShell.AddArgument($expectedExecutable)
+    $topologyWatcherAsync = $topologyWatcherPowerShell.BeginInvoke()
+    $topologyWatcherReadyDeadline = [DateTime]::UtcNow.AddSeconds(3)
+    while (-not [bool]$topologyWatcherState.Ready -and [DateTime]::UtcNow -lt $topologyWatcherReadyDeadline) {
+        Start-Sleep -Milliseconds 5
+    }
+    if (-not [bool]$topologyWatcherState.Ready) {
+        $topologyWatcherError = "topology watcher did not produce a sample before activation"
+        throw $topologyWatcherError
+    }
+    if ($topologyWatcherState.Error) {
+        $topologyWatcherError = [string]$topologyWatcherState.Error
+        throw "Topology watcher failed before activation: $topologyWatcherError"
+    }
+    $topologyWatcherReadyBeforeActivation = $true
+
     $appPageWatcherSessionState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
     $appPageWatcherSessionState.Commands.Add(
         [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
@@ -869,7 +990,6 @@ try {
         Start-Process -FilePath $desktopShortcut | Out-Null
     }
     $sampleDeadlineMs = [int]$activationSentAtMs + $SampleDurationMs
-    [long]$nextTopologySampleMs = 0
     while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs) {
         $isVisible = [AntiCodexShortcutRestoreProbe]::IsWindowVisible($windowHandle)
         $isMinimized = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
@@ -934,40 +1054,6 @@ try {
             }
         }
 
-        if ($stopwatch.ElapsedMilliseconds -ge $nextTopologySampleMs) {
-            $snapshot = Get-ExactAntiCodexSnapshot
-            $rootCount = @($snapshot.rootProcessIds).Count
-            $visibleWindowCount = @($snapshot.visibleWindowProcessIds).Count
-            $visibleTopLevelWindowCount = @($snapshot.visibleTopLevelWindowHandles).Count
-            $rawVisibleTopLevelWindowCount = @($snapshot.rawVisibleTopLevelWindowHandles).Count
-            $maxRootProcessCount = [Math]::Max($maxRootProcessCount, $rootCount)
-            $maxVisibleWindowCount = [Math]::Max($maxVisibleWindowCount, $visibleWindowCount)
-            $maxVisibleTopLevelWindowCount = [Math]::Max($maxVisibleTopLevelWindowCount, $visibleTopLevelWindowCount)
-            $maxRawVisibleTopLevelWindowCount = [Math]::Max($maxRawVisibleTopLevelWindowCount, $rawVisibleTopLevelWindowCount)
-            foreach ($rootProcessId in @($snapshot.rootProcessIds)) {
-                [void]$seenRootProcessIds.Add([int]$rootProcessId)
-            }
-            foreach ($visibleTopLevelWindowHandle in @($snapshot.visibleTopLevelWindowHandles)) {
-                [void]$seenVisibleTopLevelWindowHandles.Add([int64]$visibleTopLevelWindowHandle)
-            }
-            foreach ($observedWindow in @($snapshot.allVisibleTopLevelWindows)) {
-                $observedTopLevelWindows[[string][int64]$observedWindow.Handle] = [pscustomobject]@{
-                    handle = [int64]$observedWindow.Handle
-                    processId = [int]$observedWindow.ProcessId
-                    className = [string]$observedWindow.ClassName
-                    title = [string]$observedWindow.Title
-                    left = [int]$observedWindow.Left
-                    top = [int]$observedWindow.Top
-                    right = [int]$observedWindow.Right
-                    bottom = [int]$observedWindow.Bottom
-                    cloaked = [bool]$observedWindow.Cloaked
-                    auxiliaryWindow = [bool]$observedWindow.AuxiliaryWindow
-                    presentable = [bool]$observedWindow.Presentable
-                    productWindow = [bool]$observedWindow.ProductWindow
-                }
-            }
-            $nextTopologySampleMs = $stopwatch.ElapsedMilliseconds + 90
-        }
         Start-Sleep -Milliseconds 5
     }
 } catch {
@@ -994,10 +1080,118 @@ try {
         [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 9)
         [void][AntiCodexShortcutRestoreProbe]::SetForegroundWindow($windowHandle)
     }
+    $topologyWatcherStopRequestedAtUtcTicks = [DateTime]::UtcNow.Ticks
+    $topologyWatcherState.Stop = $true
+    $topologyWatcherTerminated = $true
+    if ($null -ne $topologyWatcherPowerShell -and $null -ne $topologyWatcherAsync) {
+        $topologyWatcherTerminated = [bool]$topologyWatcherAsync.AsyncWaitHandle.WaitOne($topologyWatcherStopTimeoutMs)
+        if ($topologyWatcherTerminated) {
+            try {
+                [void]$topologyWatcherPowerShell.EndInvoke($topologyWatcherAsync)
+                if (-not $topologyWatcherError -and $topologyWatcherPowerShell.Streams.Error.Count -gt 0) {
+                    $topologyWatcherError = [string]$topologyWatcherPowerShell.Streams.Error[0]
+                }
+            } catch {
+                if (-not $topologyWatcherError) {
+                    $topologyWatcherError = $_.Exception.Message
+                }
+            }
+        } else {
+            $topologyWatcherStopTimedOut = $true
+            $topologyWatcherError = "topology watcher did not stop within $topologyWatcherStopTimeoutMs ms"
+            try {
+                $topologyWatcherStopAsync = $topologyWatcherPowerShell.BeginStop($null, $null)
+                $topologyWatcherStopCompleted = [bool]$topologyWatcherStopAsync.AsyncWaitHandle.WaitOne($topologyWatcherStopTimeoutMs)
+                if ($topologyWatcherStopCompleted) {
+                    $topologyWatcherPowerShell.EndStop($topologyWatcherStopAsync)
+                    $topologyWatcherTerminated = $true
+                } else {
+                    $topologyWatcherError += "; forced stop also timed out"
+                }
+            } catch {
+                $topologyWatcherTerminated = $false
+                $topologyWatcherError += "; forced stop failed: $($_.Exception.Message)"
+            }
+        }
+    }
+    if ($topologyWatcherState.Error -and -not $topologyWatcherError) {
+        $topologyWatcherError = [string]$topologyWatcherState.Error
+    }
+    $topologyResult = $topologyWatcherState.Result
+    if ($null -ne $topologyResult) {
+        $topologyWatcherSampleCount = [int]$topologyResult.sampleCount
+        $topologyWatcherMaxIntervalMs = [int]$topologyResult.maxIntervalMs
+        if ([long]$topologyResult.firstSampleUtcTicks -gt 0) {
+            $topologyWatcherFirstSampleAtUtc = [DateTime]::new(
+                [long]$topologyResult.firstSampleUtcTicks,
+                [DateTimeKind]::Utc
+            ).ToString("o")
+        }
+        if ([long]$topologyResult.lastSampleUtcTicks -gt 0) {
+            $topologyWatcherLastSampleAtUtc = [DateTime]::new(
+                [long]$topologyResult.lastSampleUtcTicks,
+                [DateTimeKind]::Utc
+            ).ToString("o")
+            $topologyWatcherTailGapMs = [Math]::Max(0, [int][Math]::Round(
+                ($topologyWatcherStopRequestedAtUtcTicks - [long]$topologyResult.lastSampleUtcTicks) /
+                    [double][TimeSpan]::TicksPerMillisecond
+            ))
+        }
+        $maxRootProcessCount = [Math]::Max($maxRootProcessCount, [int]$topologyResult.maxRootProcessCount)
+        $maxVisibleWindowCount = [Math]::Max($maxVisibleWindowCount, [int]$topologyResult.maxVisibleWindowCount)
+        $maxVisibleTopLevelWindowCount = [Math]::Max($maxVisibleTopLevelWindowCount, [int]$topologyResult.maxVisibleTopLevelWindowCount)
+        $maxRawVisibleTopLevelWindowCount = [Math]::Max($maxRawVisibleTopLevelWindowCount, [int]$topologyResult.maxRawVisibleTopLevelWindowCount)
+        foreach ($rootProcessId in @($topologyResult.seenRootProcessIds)) {
+            [void]$seenRootProcessIds.Add([int]$rootProcessId)
+        }
+        foreach ($visibleTopLevelWindowHandle in @($topologyResult.seenVisibleTopLevelWindowHandles)) {
+            [void]$seenVisibleTopLevelWindowHandles.Add([int64]$visibleTopLevelWindowHandle)
+        }
+        foreach ($observedWindow in @($topologyResult.observedTopLevelWindows)) {
+            $observedTopLevelWindows[[string][int64]$observedWindow.handle] = $observedWindow
+        }
+    }
+    if ($topologyWatcherTerminated -and $null -ne $topologyWatcherPowerShell) {
+        $topologyWatcherPowerShell.Dispose()
+    }
+    if ($topologyWatcherTerminated -and $null -ne $topologyWatcherRunspace) {
+        $topologyWatcherRunspace.Close()
+        $topologyWatcherRunspace.Dispose()
+    }
 }
 
+$after = $null
 try {
-    $after = Get-ExactAntiCodexSnapshot
+    if ($topologyWatcherTerminated) {
+        $after = Get-ExactAntiCodexSnapshot
+        $topologyWatcherFinalSnapshotTaken = $true
+        $maxRootProcessCount = [Math]::Max($maxRootProcessCount, @($after.rootProcessIds).Count)
+        $maxVisibleWindowCount = [Math]::Max($maxVisibleWindowCount, @($after.visibleWindowProcessIds).Count)
+        $maxVisibleTopLevelWindowCount = [Math]::Max($maxVisibleTopLevelWindowCount, @($after.visibleTopLevelWindowHandles).Count)
+        $maxRawVisibleTopLevelWindowCount = [Math]::Max($maxRawVisibleTopLevelWindowCount, @($after.rawVisibleTopLevelWindowHandles).Count)
+        foreach ($rootProcessId in @($after.rootProcessIds)) {
+            [void]$seenRootProcessIds.Add([int]$rootProcessId)
+        }
+        foreach ($visibleTopLevelWindowHandle in @($after.visibleTopLevelWindowHandles)) {
+            [void]$seenVisibleTopLevelWindowHandles.Add([int64]$visibleTopLevelWindowHandle)
+        }
+        foreach ($observedWindow in @($after.allVisibleTopLevelWindows)) {
+            $observedTopLevelWindows[[string][int64]$observedWindow.Handle] = [pscustomobject]@{
+                handle = [int64]$observedWindow.Handle
+                processId = [int]$observedWindow.ProcessId
+                className = [string]$observedWindow.ClassName
+                title = [string]$observedWindow.Title
+                left = [int]$observedWindow.Left
+                top = [int]$observedWindow.Top
+                right = [int]$observedWindow.Right
+                bottom = [int]$observedWindow.Bottom
+                cloaked = [bool]$observedWindow.Cloaked
+                auxiliaryWindow = [bool]$observedWindow.AuxiliaryWindow
+                presentable = [bool]$observedWindow.Presentable
+                productWindow = [bool]$observedWindow.ProductWindow
+            }
+        }
+    }
     $pagesAfter = Get-AppPageCount -CdpPort $cdpPort
     $sessionAfter = Get-AppPageIdentity -CdpPort $cdpPort
 } finally {
@@ -1151,18 +1345,27 @@ if ($null -eq $firstVisibleAtMs) { $failures.Add("$activationModeReport did not 
 if ($null -eq $deadlineState -or -not $deadlineState.visible -or $deadlineState.minimized -or -not $deadlineState.exactForeground) { $failures.Add("Anti-Codex was not visible, restored, and exactly foreground at the sampling deadline") | Out-Null }
 if ($probeRecoveryApplied) { $failures.Add("the restore probe applied recovery after the sampling deadline") | Out-Null }
 if ($reminimizedAfterRestore) { $failures.Add("Anti-Codex became minimized again after taskbar restore") | Out-Null }
-if (@($after.rootProcessIds).Count -ne 1 -or [int]$after.rootProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex root process changed") | Out-Null }
-if (@($after.visibleWindowProcessIds).Count -ne 1 -or [int]$after.visibleWindowProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex no longer has exactly one visible main window") | Out-Null }
-if (
-    @($after.visibleTopLevelWindowHandles).Count -ne 1 -or
-    [int64]$after.visibleTopLevelWindowHandles[0] -ne [int64]$windowHandle
-) { $failures.Add("Anti-Codex no longer has exactly the original top-level window") | Out-Null }
+if (-not $topologyWatcherFinalSnapshotTaken) {
+    $failures.Add("Anti-Codex final topology snapshot was skipped because the watcher did not terminate") | Out-Null
+} else {
+    if (@($after.rootProcessIds).Count -ne 1 -or [int]$after.rootProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex root process changed") | Out-Null }
+    if (@($after.visibleWindowProcessIds).Count -ne 1 -or [int]$after.visibleWindowProcessIds[0] -ne $ExpectedMainPid) { $failures.Add("Anti-Codex no longer has exactly one visible main window") | Out-Null }
+    if (
+        @($after.visibleTopLevelWindowHandles).Count -ne 1 -or
+        [int64]$after.visibleTopLevelWindowHandles[0] -ne [int64]$windowHandle
+    ) { $failures.Add("Anti-Codex no longer has exactly the original top-level window") | Out-Null }
+}
 if (-not $samePid) { $failures.Add("Anti-Codex main PID changed during restore") | Out-Null }
 if (-not $sameHwnd) { $failures.Add("Anti-Codex main HWND changed during restore") | Out-Null }
 if (-not $sameExecutable) { $failures.Add("Anti-Codex executable identity changed during restore") | Out-Null }
 if ($maxRootProcessCount -ne 1) { $failures.Add("a second Anti-Codex root process was observed") | Out-Null }
 if ($maxVisibleWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex window was observed") | Out-Null }
 if ($maxVisibleTopLevelWindowCount -gt 1) { $failures.Add("a second visible Anti-Codex top-level window was observed") | Out-Null }
+if ($topologyWatcherError) { $failures.Add("Anti-Codex topology watcher failed: $topologyWatcherError") | Out-Null }
+if (-not $topologyWatcherReadyBeforeActivation) { $failures.Add("Anti-Codex topology watcher was not ready before activation") | Out-Null }
+if ($topologyWatcherSampleCount -lt 2) { $failures.Add("Anti-Codex topology watcher did not sample continuously") | Out-Null }
+if ($topologyWatcherMaxIntervalMs -gt $maximumTopologySampleIntervalMs) { $failures.Add("Anti-Codex topology watcher exceeded the $maximumTopologySampleIntervalMs ms cadence") | Out-Null }
+if ($null -eq $topologyWatcherTailGapMs -or $topologyWatcherTailGapMs -gt $maximumTopologySampleIntervalMs) { $failures.Add("Anti-Codex topology watcher stopped covering the restore before the sampling deadline") | Out-Null }
 if ($appPageWatcherError) { $failures.Add("Anti-Codex app page watcher failed: $appPageWatcherError") | Out-Null }
 if (-not $appPageWatcherReadyBeforeActivation) { $failures.Add("Anti-Codex app page watcher was not ready before activation") | Out-Null }
 if ($appPageSampleCount -lt 2) { $failures.Add("Anti-Codex app page watcher did not sample continuously") | Out-Null }
@@ -1236,6 +1439,20 @@ $result = [ordered]@{
     maxVisibleWindowCount = $maxVisibleWindowCount
     maxVisibleTopLevelWindowCount = $maxVisibleTopLevelWindowCount
     maxRawVisibleTopLevelWindowCount = $maxRawVisibleTopLevelWindowCount
+    topologyWatcherSampleCount = $topologyWatcherSampleCount
+    topologyWatcherMaxIntervalMs = $topologyWatcherMaxIntervalMs
+    topologyWatcherTailGapMs = $topologyWatcherTailGapMs
+    topologyWatcherFirstSampleAtUtc = $topologyWatcherFirstSampleAtUtc
+    topologyWatcherLastSampleAtUtc = $topologyWatcherLastSampleAtUtc
+    topologyWatcherStopTimedOut = $topologyWatcherStopTimedOut
+    topologyWatcherTerminated = $topologyWatcherTerminated
+    topologyWatcherFinalSnapshotTaken = $topologyWatcherFinalSnapshotTaken
+    topologyWatcherThresholds = [pscustomobject]@{
+        maximumSampleIntervalMs = $maximumTopologySampleIntervalMs
+        stopTimeoutMs = $topologyWatcherStopTimeoutMs
+    }
+    topologyWatcherReadyBeforeActivation = $topologyWatcherReadyBeforeActivation
+    topologyWatcherError = $topologyWatcherError
     appPagesBefore = $pagesBefore
     appPagesAfter = $pagesAfter
     maxAppPageCount = $maxAppPageCount
