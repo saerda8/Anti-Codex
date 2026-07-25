@@ -1,12 +1,24 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-23T03:21:04.616Z",
+  "generatedAtUtc": "2026-07-25T14:53:43.387Z",
   "gate": "Gate 6 preparatory edge evidence",
   "ok": true,
   "failedIds": [],
   "modelTraffic": "none; consumes existing accepted real reports",
   "formalGateAdvanced": false,
   "blockedBy": "formal mode not requested",
+  "releaseBinding": {
+    "schema": "anticodex-release-binding-v1",
+    "valid": true,
+    "officialShellVersion": "26.721.4979.0",
+    "activeShellVersion": "26.721.4979.0",
+    "codexPlusPlusVersion": "1.2.39",
+    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
+    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
+    "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
+    "codexPlusPlusPatchCount": 9,
+    "syncReadinessSha256": "18e772969dbec154cbf13849b9c0ed374ef673457603a2e35761affd432ba605"
+  },
   "checks": [
     {
       "id": "changed_boundary_syntax",
@@ -44,8 +56,8 @@
       "ok": true,
       "exitCode": 0,
       "missingTestPaths": [],
-      "tests": 68,
-      "pass": 68,
+      "tests": 72,
+      "pass": 72,
       "fail": 0,
       "stderr": ""
     },
