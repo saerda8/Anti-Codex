@@ -25,6 +25,24 @@ function Get-ExactAntiCodexProcesses {
     return $matchedProcesses.ToArray()
 }
 
+function Test-ExactAntiCodexProcessIdentity {
+    param(
+        [object]$Process,
+        [int]$ExpectedId,
+        [DateTime]$ExpectedStartTimeUtc
+    )
+
+    if ($null -eq $Process -or [int]$Process.Id -ne $ExpectedId) { return $false }
+    try {
+        $processPath = [IO.Path]::GetFullPath([string]$Process.Path)
+        $processStartTimeUtc = ([DateTime]$Process.StartTime).ToUniversalTime()
+    } catch {
+        return $false
+    }
+    return $processPath -ieq $expectedExecutable -and
+        $processStartTimeUtc.Ticks -eq $ExpectedStartTimeUtc.Ticks
+}
+
 function Focus-ExactAntiCodexWindow {
     param([object[]]$Processes)
 
@@ -32,7 +50,19 @@ function Focus-ExactAntiCodexWindow {
         Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public static class AntiCodexShortcutWindow {
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int index);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder text, int maxCount);
     [DllImport("user32.dll")]
     public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")]
@@ -49,6 +79,27 @@ public static class AntiCodexShortcutWindow {
     public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    public static long[] FindMainWindows(int processId) {
+        var result = IntPtr.Zero;
+        var candidateCount = 0;
+        EnumWindows(delegate (IntPtr hWnd, IntPtr _) {
+            uint candidateProcessId;
+            GetWindowThreadProcessId(hWnd, out candidateProcessId);
+            if (candidateProcessId != (uint)processId || GetWindow(hWnd, 4) != IntPtr.Zero) return true;
+            if ((GetWindowLong(hWnd, -16) & 0x00C00000) != 0x00C00000) return true;
+            var title = new StringBuilder(64);
+            var className = new StringBuilder(64);
+            GetWindowText(hWnd, title, title.Capacity);
+            GetClassName(hWnd, className, className.Capacity);
+            if (!String.Equals(title.ToString(), "Anti-Codex", StringComparison.Ordinal)
+                || !String.Equals(className.ToString(), "Chrome_WidgetWin_1", StringComparison.Ordinal)) return true;
+            candidateCount++;
+            result = hWnd;
+            return true;
+        }, IntPtr.Zero);
+        return new long[] { candidateCount, result.ToInt64() };
+    }
 }
 "@
     }
@@ -62,43 +113,62 @@ public static class AntiCodexShortcutWindow {
     }
 
     for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        $eligibleWindows = New-Object System.Collections.Generic.List[object]
+        $eligibleWindowCount = 0
         foreach ($candidate in $Processes) {
+            try { $candidateStartTimeUtc = ([DateTime]$candidate.StartTime).ToUniversalTime() } catch { continue }
             $process = Get-Process -Id ([int]$candidate.Id) -ErrorAction SilentlyContinue
-            if ($null -eq $process) { continue }
-            $window = [IntPtr]$process.MainWindowHandle
-            if ($window -eq [IntPtr]::Zero) { continue }
-            if ([AntiCodexShortcutWindow]::IsIconic($window)) {
-                [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 4)
-                $paintDeadline = [DateTime]::UtcNow.AddMilliseconds(250)
-                while ([AntiCodexShortcutWindow]::IsIconic($window) -and [DateTime]::UtcNow -lt $paintDeadline) {
-                    Start-Sleep -Milliseconds 10
-                }
-                [void][AntiCodexShortcutWindow]::RedrawWindow($window, [IntPtr]::Zero, [IntPtr]::Zero, 0x0181)
-                [void][AntiCodexShortcutWindow]::DwmFlush()
-            } else {
-                [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 9)
-            }
-            [void][AntiCodexShortcutWindow]::SetForegroundWindow($window)
-
-            $foregroundStableSince = $null
-            $confirmationDeadline = [DateTime]::UtcNow.AddMilliseconds(325)
-            do {
-                $current = Get-Process -Id ([int]$candidate.Id) -ErrorAction SilentlyContinue
-                $restored = $null -ne $current -and
-                    [AntiCodexShortcutWindow]::IsWindowVisible($window) -and
-                    -not [AntiCodexShortcutWindow]::IsIconic($window)
-                if ($restored -and (Get-ForegroundProcessId) -eq [int]$candidate.Id) {
-                    if ($null -eq $foregroundStableSince) {
-                        $foregroundStableSince = [DateTime]::UtcNow
-                    } elseif (([DateTime]::UtcNow - $foregroundStableSince).TotalMilliseconds -ge 150) {
-                        return $true
-                    }
-                } else {
-                    $foregroundStableSince = $null
-                }
-                Start-Sleep -Milliseconds 25
-            } while ([DateTime]::UtcNow -lt $confirmationDeadline)
+            if (-not (Test-ExactAntiCodexProcessIdentity -Process $process -ExpectedId ([int]$candidate.Id) -ExpectedStartTimeUtc $candidateStartTimeUtc)) { continue }
+            $windowMatch = [AntiCodexShortcutWindow]::FindMainWindows([int]$candidate.Id)
+            $candidateCount = [int]$windowMatch[0]
+            $eligibleWindowCount += $candidateCount
+            if ($candidateCount -ne 1) { continue }
+            $window = [IntPtr][int64]$windowMatch[1]
+            $eligibleWindows.Add([pscustomobject]@{
+                processId = [int]$candidate.Id
+                startTimeUtc = $candidateStartTimeUtc
+                window = [IntPtr]$window
+            }) | Out-Null
         }
+        if ($eligibleWindowCount -ne 1 -or $eligibleWindows.Count -ne 1) {
+            Start-Sleep -Milliseconds 75
+            continue
+        }
+
+        $eligible = $eligibleWindows[0]
+        $processId = [int]$eligible.processId
+        $window = [IntPtr]$eligible.window
+        if ([AntiCodexShortcutWindow]::IsIconic($window)) {
+            [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 4)
+            $paintDeadline = [DateTime]::UtcNow.AddMilliseconds(250)
+            while ([AntiCodexShortcutWindow]::IsIconic($window) -and [DateTime]::UtcNow -lt $paintDeadline) {
+                Start-Sleep -Milliseconds 10
+            }
+            [void][AntiCodexShortcutWindow]::RedrawWindow($window, [IntPtr]::Zero, [IntPtr]::Zero, 0x0181)
+            [void][AntiCodexShortcutWindow]::DwmFlush()
+        } else {
+            [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 9)
+        }
+        [void][AntiCodexShortcutWindow]::SetForegroundWindow($window)
+
+        $foregroundStableSince = $null
+        $confirmationDeadline = [DateTime]::UtcNow.AddMilliseconds(325)
+        do {
+            $current = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            $restored = (Test-ExactAntiCodexProcessIdentity -Process $current -ExpectedId $processId -ExpectedStartTimeUtc ([DateTime]$eligible.startTimeUtc)) -and
+                [AntiCodexShortcutWindow]::IsWindowVisible($window) -and
+                -not [AntiCodexShortcutWindow]::IsIconic($window)
+            if ($restored -and (Get-ForegroundProcessId) -eq $processId) {
+                if ($null -eq $foregroundStableSince) {
+                    $foregroundStableSince = [DateTime]::UtcNow
+                } elseif (([DateTime]::UtcNow - $foregroundStableSince).TotalMilliseconds -ge 150) {
+                    return $true
+                }
+            } else {
+                $foregroundStableSince = $null
+            }
+            Start-Sleep -Milliseconds 25
+        } while ([DateTime]::UtcNow -lt $confirmationDeadline)
         Start-Sleep -Milliseconds 75
     }
     return $false
@@ -109,6 +179,7 @@ if ($matchingProcesses.Count -gt 0) {
     if (Focus-ExactAntiCodexWindow -Processes $matchingProcesses) {
         exit 0
     }
+    throw "An exact Anti-Codex process is running, but its unique main window could not be restored."
 }
 
 if (-not (Test-Path -LiteralPath $expectedExecutable -PathType Leaf)) {

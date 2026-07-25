@@ -20,14 +20,28 @@ const shortcutRestoreAcceptance = existsSync(shortcutRestoreAcceptancePath)
   ? readFileSync(shortcutRestoreAcceptancePath, "utf8")
   : "";
 
-test("interactive shortcut broker focuses only the exact installed Anti-Codex window", () => {
+test("interactive shortcut broker recovers the exact hidden main window without selecting an overlay", () => {
   assert.equal(existsSync(shortcutBrokerPath), true);
   assert.match(shortcutBroker, /codex-patched-app[\\/]Anti-Codex\.exe/);
   assert.match(shortcutBroker, /Get-Process\s+-Name\s+"Anti-Codex"/);
   assert.match(shortcutBroker, /\.Path/);
   assert.match(shortcutBroker, /-ieq\s+\$expectedExecutable/);
+  assert.match(shortcutBroker, /\.StartTime/);
   assert.doesNotMatch(shortcutBroker, /Get-CimInstance|Win32_Process/);
-  assert.match(shortcutBroker, /MainWindowHandle/);
+  assert.doesNotMatch(shortcutBroker, /MainWindowHandle/);
+  assert.match(shortcutBroker, /EnumWindows/);
+  assert.match(shortcutBroker, /GetWindowLong/);
+  assert.match(shortcutBroker, /GetWindowText/);
+  assert.match(shortcutBroker, /GetClassName/);
+  assert.match(shortcutBroker, /Chrome_WidgetWin_1/);
+  assert.match(shortcutBroker, /StringComparison\.Ordinal/);
+  assert.match(shortcutBroker, /0x00C00000/);
+  assert.match(shortcutBroker, /FindMainWindows/);
+  assert.match(
+    shortcutBroker,
+    /candidateCount\+\+;[\s\S]*?return new long\[\] \{ candidateCount, result\.ToInt64\(\) \};/,
+  );
+  assert.match(shortcutBroker, /Test-ExactAntiCodexProcessIdentity/);
   assert.match(shortcutBroker, /ShowWindowAsync/);
   assert.match(shortcutBroker, /ShowWindowAsync\(\$window,\s*4\)/);
   assert.match(shortcutBroker, /RedrawWindow/);
@@ -41,9 +55,14 @@ test("interactive shortcut broker focuses only the exact installed Anti-Codex wi
   assert.match(shortcutBroker, /foregroundStableSince/);
   assert.doesNotMatch(shortcutBroker, /if \(\[AntiCodexShortcutWindow\]::SetForegroundWindow\(\$window\)\) \{ return \$true \}/);
   const runningBranch = shortcutBroker.match(/if \(\$matchingProcesses\.Count -gt 0\) \{[\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(runningBranch, /if \(Focus-ExactAntiCodexWindow -Processes \$matchingProcesses\) \{/);
+  assert.doesNotMatch(runningBranch, /\$matchingProcesses\.Count -eq 1/);
+  assert.match(runningBranch, /Focus-ExactAntiCodexWindow -Processes \$matchingProcesses/);
+  assert.match(shortcutBroker, /\$eligibleWindowCount \+= \$candidateCount/);
+  assert.match(shortcutBroker, /\$eligibleWindowCount -ne 1 -or \$eligibleWindows\.Count -ne 1/);
   assert.match(runningBranch, /exit 0/);
+  assert.match(runningBranch, /throw "An exact Anti-Codex process is running, but its unique main window could not be restored\."/);
   assert.doesNotMatch(runningBranch, /\[void\]\(Focus-ExactAntiCodexWindow/);
+  assert.doesNotMatch(runningBranch, /Start-ScheduledTask/);
   assert.doesNotMatch(runningBranch, /\.Run\(/);
   assert.match(shortcutBroker, /Start-ScheduledTask\s+-TaskName\s+"Anti-Codex Launcher"/);
   assert.doesNotMatch(shortcutBroker, /Schedule\.Service|GetTask\(|\.Run\(\$null\)/);
