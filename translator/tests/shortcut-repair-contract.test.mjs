@@ -148,7 +148,7 @@ test("taskbar restore keeps the cursor off hover-activated apps until the sampli
   assert.ok(deadlineStart >= 0 && cursorRestore > deadlineStart);
 });
 
-test("taskbar restore captures the first exact-foreground frame before moving the cursor", () => {
+test("taskbar restore captures two exact-foreground frames before moving the cursor", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
   const sampling = samplingStart >= 0 && finallyStart > samplingStart
@@ -161,10 +161,10 @@ test("taskbar restore captures the first exact-foreground frame before moving th
   assert.match(shortcutRestoreAcceptance, /\$safeCursorX = \$null\s*\$safeCursorY = \$null/);
   assert.match(
     sampling,
-    /if \(\$taskbarActivationObserved -and \$frames\.Count -gt 0 -and \$null -eq \$safeCursorX\)/,
+    /if \(\$taskbarActivationObserved -and \$frames\.Count -gt 1 -and \$null -eq \$safeCursorX\)/,
   );
   assert.ok(origin >= 0 && frame > origin);
-  assert.ok(cursorMove > frame, "the first exact-foreground frame must precede the safe-cursor move");
+  assert.ok(cursorMove > frame, "two exact-foreground frames must precede the safe-cursor move");
 });
 
 test("taskbar restore nudges and reconfirms the exact cursor target before clicking", () => {
@@ -197,6 +197,11 @@ test("taskbar restore samples transient topology after each due frame capture", 
 
   assert.match(sampling, /\$nextTopologySampleMs/);
   assert.ok(frame >= 0 && topology > frame, "frame capture must run before each due topology sample");
+  assert.match(
+    sampling,
+    /if \(\$stopwatch\.ElapsedMilliseconds -ge \$nextTopologySampleMs\)/,
+  );
+  assert.doesNotMatch(sampling, /if \(\$frames\.Count .+ \$nextTopologySampleMs\)/);
   assert.match(sampling, /\$nextTopologySampleMs = \$stopwatch\.ElapsedMilliseconds \+ 90/);
   assert.match(shortcutRestoreAcceptance, /\$maximumFrameSampleIntervalMs = 125/);
 });
@@ -237,6 +242,12 @@ test("taskbar restore continuously samples app pages without blocking the frame 
   assert.match(shortcutRestoreAcceptance, /appPageWatcherMinCount = \$appPageWatcherMinCount/);
   assert.match(shortcutRestoreAcceptance, /appPageWatcherError = \$appPageWatcherError/);
   assert.match(shortcutRestoreAcceptance, /appPageWatcherMaxIntervalMs = \$appPageWatcherMaxIntervalMs/);
+  assert.match(shortcutRestoreAcceptance, /MaxIntervalStartUtcTicks = \[int64\]0/);
+  assert.match(shortcutRestoreAcceptance, /MaxIntervalEndUtcTicks = \[int64\]0/);
+  assert.match(shortcutRestoreAcceptance, /\$State\.MaxIntervalStartUtcTicks = \$lastSampleUtcTicks/);
+  assert.match(shortcutRestoreAcceptance, /\$State\.MaxIntervalEndUtcTicks = \$sampleAtUtcTicks/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherMaxIntervalStartedAtUtc = \$appPageWatcherMaxIntervalStartedAtUtc/);
+  assert.match(shortcutRestoreAcceptance, /appPageWatcherMaxIntervalEndedAtUtc = \$appPageWatcherMaxIntervalEndedAtUtc/);
   assert.match(shortcutRestoreAcceptance, /appPageWatcherTailGapMs = \$appPageWatcherTailGapMs/);
 });
 

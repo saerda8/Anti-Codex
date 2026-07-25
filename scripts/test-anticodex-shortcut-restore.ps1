@@ -743,6 +743,8 @@ $appPageWatcherState = [hashtable]::Synchronized(@{
     MinCount = [int]::MaxValue
     MaxCount = 0
     MaxIntervalMs = [int64]0
+    MaxIntervalStartUtcTicks = [int64]0
+    MaxIntervalEndUtcTicks = [int64]0
     FirstSampleUtcTicks = [int64]0
     LastSampleUtcTicks = [int64]0
 })
@@ -756,6 +758,8 @@ $appPageSampleCount = 0
 $appPageWatcherMinCount = $null
 $appPageWatcherMaxCount = 0
 $appPageWatcherMaxIntervalMs = 0
+$appPageWatcherMaxIntervalStartedAtUtc = $null
+$appPageWatcherMaxIntervalEndedAtUtc = $null
 $appPageWatcherStopRequestedAtUtcTicks = [int64]0
 $appPageWatcherFirstSampleAtUtc = $null
 $appPageWatcherLastSampleAtUtc = $null
@@ -778,17 +782,20 @@ try {
         $ErrorActionPreference = "Stop"
         $timer = [Diagnostics.Stopwatch]::StartNew()
         [long]$lastSampleMs = -1
+        [long]$lastSampleUtcTicks = 0
         while (-not [bool]$State.Stop) {
             try {
                 $count = @(Get-MainAppPages -CdpPort $CdpPort -TimeoutSec 1).Count
                 [long]$sampleAtMs = $timer.ElapsedMilliseconds
+                [long]$sampleAtUtcTicks = [DateTime]::UtcNow.Ticks
                 if ($lastSampleMs -ge 0) {
                     [long]$intervalMs = $sampleAtMs - $lastSampleMs
                     if ($intervalMs -gt [long]$State.MaxIntervalMs) {
                         $State.MaxIntervalMs = $intervalMs
+                        $State.MaxIntervalStartUtcTicks = $lastSampleUtcTicks
+                        $State.MaxIntervalEndUtcTicks = $sampleAtUtcTicks
                     }
                 }
-                [long]$sampleAtUtcTicks = [DateTime]::UtcNow.Ticks
                 if ([int]$State.SampleCount -eq 0) {
                     $State.FirstSampleUtcTicks = $sampleAtUtcTicks
                 }
@@ -798,6 +805,7 @@ try {
                 $State.MaxCount = [Math]::Max([int]$State.MaxCount, $count)
                 $State.Ready = $true
                 $lastSampleMs = $sampleAtMs
+                $lastSampleUtcTicks = $sampleAtUtcTicks
             } catch {
                 $State.Error = $_.Exception.Message
                 $State.Ready = $true
@@ -917,7 +925,7 @@ try {
             }
         }
 
-        if ($taskbarActivationObserved -and $frames.Count -gt 0 -and $null -eq $safeCursorX) {
+        if ($taskbarActivationObserved -and $frames.Count -gt 1 -and $null -eq $safeCursorX) {
             $safeCursorRect = New-Object AntiCodexShortcutRestoreProbe+RECT
             if ([AntiCodexShortcutRestoreProbe]::GetWindowRect($windowHandle, [ref]$safeCursorRect)) {
                 $safeCursorX = $safeCursorRect.Left + [int](($safeCursorRect.Right - $safeCursorRect.Left) / 2)
@@ -1016,6 +1024,18 @@ try {
     }
     $appPageWatcherMaxCount = [int]$appPageWatcherState.MaxCount
     $appPageWatcherMaxIntervalMs = [int]$appPageWatcherState.MaxIntervalMs
+    if ([long]$appPageWatcherState.MaxIntervalStartUtcTicks -gt 0) {
+        $appPageWatcherMaxIntervalStartedAtUtc = [DateTime]::new(
+            [long]$appPageWatcherState.MaxIntervalStartUtcTicks,
+            [DateTimeKind]::Utc
+        ).ToString("o")
+    }
+    if ([long]$appPageWatcherState.MaxIntervalEndUtcTicks -gt 0) {
+        $appPageWatcherMaxIntervalEndedAtUtc = [DateTime]::new(
+            [long]$appPageWatcherState.MaxIntervalEndUtcTicks,
+            [DateTimeKind]::Utc
+        ).ToString("o")
+    }
     if ([long]$appPageWatcherState.FirstSampleUtcTicks -gt 0) {
         $appPageWatcherFirstSampleAtUtc = [DateTime]::new(
             [long]$appPageWatcherState.FirstSampleUtcTicks,
@@ -1223,6 +1243,8 @@ $result = [ordered]@{
     appPageWatcherMinCount = $appPageWatcherMinCount
     appPageWatcherMaxCount = $appPageWatcherMaxCount
     appPageWatcherMaxIntervalMs = $appPageWatcherMaxIntervalMs
+    appPageWatcherMaxIntervalStartedAtUtc = $appPageWatcherMaxIntervalStartedAtUtc
+    appPageWatcherMaxIntervalEndedAtUtc = $appPageWatcherMaxIntervalEndedAtUtc
     appPageWatcherTailGapMs = $appPageWatcherTailGapMs
     appPageWatcherFirstSampleAtUtc = $appPageWatcherFirstSampleAtUtc
     appPageWatcherLastSampleAtUtc = $appPageWatcherLastSampleAtUtc

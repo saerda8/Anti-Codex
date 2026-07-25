@@ -3024,3 +3024,9 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - The complete source no-traffic preflight passes 721/721 with zero failure, skip or warning. No Docker container, model request, real sync, client restart or new task was used to obtain that result.
 - Source scope is now frozen. Next order: audit/stage only intended files, commit once, activate through the guarded built-in runtime path, rerun installed Gate 1/7/legacy/UI/three replacement taskbar rounds, then submit the one existing Gemini total goal exactly once.
 - Remaining non-code boundaries stay explicit: two non-empty runtime directories cannot be exchanged in one crash-proof Windows operation under the current layout, and Gate 8 cannot treat a same-user self-signed receipt as independent host identity. Neither limitation may be hidden behind a 100% claim.
+
+## 2026-07-26 Gate 5 Resume Plan
+
+- Replacement taskbar Round 1 failed on real evidence and was not counted: QQ stole foreground before the deadline, the first-to-second frame gap was 172 ms and the app-page watcher had one 581 ms gap. Rounds 2 and 3 were intentionally not started.
+- The minimal verifier repair is complete in source: two painted frames now precede cursor relocation, topology monitoring remains live from activation, and watcher interval endpoints are reported. No acceptance threshold or three-layer product behavior changed.
+- Complete no-traffic source preflight now passes 767/767 with zero failure, skip or warning. Fixed next order: commit the reviewed verifier change and evidence notes, synchronize and restart the installed runtime once, verify one client/original Codex preservation, then rerun Round 1. Only after it passes may Rounds 2 and 3 run. Do not start or spend model traffic before Gate 5 is current.
