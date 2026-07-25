@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-26 Outcome-Only Iteration and Provider Fallback
+
+- Independent review of third-party turn `019f9b7c-6dc0-7323-be9b-7b4d858cc02a` confirms a decodable 57.4-second 1080x1920 live-action main video, three release videos, clear dialogue, five measurable speaking windows and a safe readable ZIP. It still fails viewer acceptance because the single close interview shot is flat, subtitles obscure the face/mouth, the treatment is informational rather than a convincing short story, and the packaged ZIP omits its checksum manifest.
+- The public total-goal contract did not require exact hyphenated artifact roles or a line-only checksum file. Commit `f196186` therefore normalizes the disclosed semantic aliases and accepts either JSON or line manifests while retaining exact artifact coverage, cwd containment, unique paths, actual size/SHA-256 matching and external host review. Full Gate 8 regression passes `127/127`.
+- Commit `48cca0b` constrains host feedback to a canonical eight-field subjective product review. Any added explanation, root cause, implementation method, command or micro-stage remains forbidden. The same native task may now repeat complete `task_complete -> outcome review -> autonomous rework` rounds without resetting its artifacts.
+- Gemini turn `019f9bae-7fd7-7170-8c23-8ac2997ce693` received only the canonical review, then produced no model/tool/file action while the Antigravity route returned repeated 503/504/502 responses. Claude turn `019f9bb4-690e-7b72-9689-bb83be19475d` received only exact `继续` after that proven interruption, but its native compaction requests also returned repeated 503. Both were stopped to end automatic retry traffic. Third-party turn `019f9bb7-20f0-7131-86f1-9757a920cb37` is active from exact `继续` in the same task/cwd; preferred Antigravity still must later complete the accepted result before Gate 8 can pass.
+- The user's reported Manager-page no-op update buttons and unexplained Node.js console are recorded as a separate post-Gate-8 real-click audit. They are not being mixed into the active media task.
+
 ## 2026-07-26 Two-Phase Repaint Deployment and Physical Acceptance
 
 - Runtime transaction `20260725T182238591Z-25445c0a29894854b85bdafdf4c1f0a6` activated the 120-file runtime after authenticated HTTP 202 shutdown reached zero Anti-Codex processes and Launcher `Ready`; native Codex PID `34600` remained alive. The built-in isolated updater then ran exactly once as operation `a7114e52bce44ae7abc258915f5f4e00` and completed successfully.
