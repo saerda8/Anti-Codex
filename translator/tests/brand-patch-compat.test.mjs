@@ -115,7 +115,7 @@ test("keeps Codex's official primary BrowserWindow throttling policy", () => {
   assert.doesNotMatch(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
 });
 
-test("adds one primary-window restore repaint without changing bundle size", () => {
+test("repaints the primary window on focus before restore without changing bundle size", () => {
   const method = "trackPrimaryWindow(e){this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
   const source = `before:${method}:after`;
 
@@ -126,8 +126,11 @@ test("adds one primary-window restore repaint without changing bundle size", () 
   assert.equal(patched.length, source.length);
   assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(patched), true);
   assert.equal((patchedMethod.match(/on\(`restore`/g) || []).length, 1);
-  assert.equal((patchedMethod.match(/webContents\.invalidate\?\.\(\)/g) || []).length, 1);
-  assert.doesNotMatch(patchedMethod, /on\(`(?:focus|show|hide)`[^}]*invalidate/);
+  assert.match(patchedMethod, /let t=.*?,n=\(\)=>\{try\{e\.webContents\.invalidate\(\)\}catch\{\}\};/);
+  assert.match(patchedMethod, /on\(`focus`,\(\)=>\{[^}]*n\(\)\}\)/);
+  assert.match(patchedMethod, /on\(`restore`,\(\)=>setImmediate\(n\)\)/);
+  assert.equal((patchedMethod.match(/webContents\.invalidate/g) ?? []).length, 1);
+  assert.doesNotMatch(patchedMethod, /on\(`(?:show|hide)`[^}]*invalidate/);
   assert.equal(brandPatchCompat.patchPrimaryWindowRestoreRepaint(patched), patched);
   assert.match(brandPatcherSource, /\["primary-window-restore-repaint",\s*\(\)\s*=>\s*findPrimaryWindowRestoreRepaintPatch/);
   assert.match(brandPatcherSource, /"primary-window-restore-repaint",[\s\S]*?const selectedPatchNames/);
@@ -139,6 +142,12 @@ test("adds one primary-window restore repaint without changing bundle size", () 
     () => brandPatchCompat.patchPrimaryWindowRestoreRepaint(`${source}${source}`),
     /exactly one supported primary-window tracker/i,
   );
+  for (const windowAlias of ["t", "n"]) {
+    const aliasedMethod = `trackPrimaryWindow(${windowAlias}){this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,()=>{this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())})}`;
+    const aliasedPatched = brandPatchCompat.patchPrimaryWindowRestoreRepaint(aliasedMethod);
+    assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(aliasedPatched), true);
+    assert.doesNotMatch(aliasedPatched, new RegExp(`let ${windowAlias}=`));
+  }
 });
 
 test("routes every Windows tray brand to the Anti-Codex tray resource", () => {

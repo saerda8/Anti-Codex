@@ -413,9 +413,14 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   ]) {
     assert.match(validator, new RegExp(`"${patchName}"`));
   }
-  assert.match(asarValidator, /\[int\]\$ExpectedPrimaryWindowRestoreRepaintCount/);
-  assert.match(asarValidator, /\.Count -ne \$ExpectedPrimaryWindowRestoreRepaintCount/);
-  assert.match(validator, /-ExpectedPrimaryWindowRestoreRepaintCount \$expectedPrimaryWindowRestoreRepaintCount/);
+  assert.match(asarValidator, /\[int\]\$ExpectedPrimaryWindowFocusRestoreRepaintCount/);
+  assert.match(asarValidator, /\[int\]\$ExpectedLegacyPrimaryWindowRestoreRepaintCount/);
+  assert.match(asarValidator, /primaryFocusRestoreRepaintPattern/);
+  assert.match(asarValidator, /\$primaryFocusRestoreRepaintPattern\)\.Count -ne \$ExpectedPrimaryWindowFocusRestoreRepaintCount/);
+  assert.match(asarValidator, /anyPrimaryWindowRepaintPattern/);
+  assert.match(asarValidator, /\$anyPrimaryWindowRepaintPattern\)\.Count -ne \(\$ExpectedPrimaryWindowFocusRestoreRepaintCount \+ \$ExpectedLegacyPrimaryWindowRestoreRepaintCount\)/);
+  assert.match(validator, /-ExpectedPrimaryWindowFocusRestoreRepaintCount 1[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 0/);
+  assert.match(validator, /-ExpectedPrimaryWindowFocusRestoreRepaintCount 0[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 1/);
   assert.match(validator, /resources\\codex-tray\.ico/);
   assert.match(validator, /trayIcon/);
   assert.match(validator, /Get-AntiCodexSha256/);
@@ -445,23 +450,34 @@ test("rollback patch compatibility accepts only the current or immediate predece
       "\\u7ba1\\u7406",
       "codex-tray.ico codex-tray.ico codex-tray.ico codex-tray.ico",
     ].join(";");
-    const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
+    const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
+    const restoreOnlyHook = hook.replace(",n()", "");
+    const focusOnlyHook = hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
+    const legacyRestoreOnlyHook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
     const paths = {
       zero: join(fixture, "zero.asar"),
       one: join(fixture, "one.asar"),
       two: join(fixture, "two.asar"),
+      restoreOnly: join(fixture, "restore-only.asar"),
+      focusOnly: join(fixture, "focus-only.asar"),
+      splitCross: join(fixture, "split-cross.asar"),
+      legacyRestoreOnly: join(fixture, "legacy-restore-only.asar"),
     };
     writeFileSync(paths.zero, base);
     writeFileSync(paths.one, `${base};${hook}`);
     writeFileSync(paths.two, `${base};${hook};${hook}`);
+    writeFileSync(paths.restoreOnly, `${base};${restoreOnlyHook}`);
+    writeFileSync(paths.focusOnly, `${base};${focusOnlyHook}`);
+    writeFileSync(paths.splitCross, `${base};${focusOnlyHook};${restoreOnlyHook}`);
+    writeFileSync(paths.legacyRestoreOnly, `${base};${legacyRestoreOnlyHook}`);
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
 ${asarValidator}
 ${patchSetValidator}
-function Accept-Asar([string]$Path, [int]$Expected) {
+function Accept-Asar([string]$Path, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore) {
     try {
-        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedPrimaryWindowRestoreRepaintCount $Expected
+        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore
         return $true
     } catch {
         return $false
@@ -470,11 +486,18 @@ function Accept-Asar([string]$Path, [int]$Expected) {
 $current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","auth-requirement","app-route-gate","profile-dropdown-settings","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
 $previous = @($current | Where-Object { $_ -ne "primary-window-restore-repaint" })
 [pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1
-    previousNoHook = Accept-Asar ${quote(paths.zero)} 0
-    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0
+    currentHook = Accept-Asar ${quote(paths.one)} 1 0
+    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 0
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 0
+    currentRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 1 0
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 0
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 0
+    immediatePredecessor = Accept-Asar ${quote(paths.legacyRestoreOnly)} 0 1
+    predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1
+    previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0
+    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 0
+    previousUnexpectedRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 0 0
+    previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 0
     currentManifest = Test-AntiCodexCriticalPatchSet -Recorded $current -Expected $current
     previousManifest = Test-AntiCodexCriticalPatchSet -Recorded $previous -Expected $previous
     missingManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "browser-window-icon" }) -Expected $current
@@ -489,8 +512,15 @@ $previous = @($current | Where-Object { $_ -ne "primary-window-restore-repaint" 
       currentHook: true,
       currentMissingHook: false,
       currentDuplicateHook: false,
+      currentRestoreOnlyHook: false,
+      currentFocusOnlyHook: false,
+      currentSplitCrossHook: false,
+      immediatePredecessor: true,
+      predecessorRejectsCurrent: false,
       previousNoHook: true,
       previousUnexpectedHook: false,
+      previousUnexpectedRestoreOnlyHook: false,
+      previousUnexpectedFocusOnlyHook: false,
       currentManifest: true,
       previousManifest: true,
       missingManifest: false,

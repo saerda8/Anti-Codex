@@ -42,9 +42,13 @@ test("host packaging preserves official host bytes and uses external Anti-Codex 
   assert.doesNotMatch(installer, /patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT|&\s+\$PATCH_EXE_ICON_SCRIPT/);
 });
 
-test("candidate validation requires exactly one primary-window restore repaint", () => {
-  assert.match(candidateValidator, /primaryRestoreRepaintPattern/);
-  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryRestoreRepaintPattern\)\.Count -ne 1/);
+test("candidate validation requires one complete primary-window focus/restore repaint", () => {
+  assert.match(candidateValidator, /primaryFocusRestoreRepaintPattern/);
+  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryFocusRestoreRepaintPattern\)\.Count -ne 1/);
+  assert.match(candidateValidator, /anyPrimaryWindowRepaintPattern/);
+  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$anyPrimaryWindowRepaintPattern\)\.Count -ne 1/);
+  assert.match(candidateValidator, /legacyPrimaryRestoreRepaintPattern/);
+  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$legacyPrimaryRestoreRepaintPattern\)\.Count -ne 0/);
 });
 
 test("shortcuts continue to use the external Anti-Codex icon", () => {

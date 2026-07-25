@@ -208,9 +208,17 @@ $alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatg
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
     throw "Anti-Codex candidate still selects a ChatGPT-branded Windows tray icon."
 }
-$primaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)'
-if ([regex]::Matches($asarText, $primaryRestoreRepaintPattern).Count -ne 1) {
-    throw "Anti-Codex candidate is missing the single primary-window restore repaint."
+$primaryFocusRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\),\3\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
+$legacyPrimaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\);this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)\}'
+$anyPrimaryWindowRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.webContents\.invalidate(?:\?\.)?\(\)'
+if ([regex]::Matches($asarText, $primaryFocusRestoreRepaintPattern).Count -ne 1) {
+    throw "Anti-Codex candidate is missing the single complete primary-window focus/restore repaint."
+}
+if ([regex]::Matches($asarText, $anyPrimaryWindowRepaintPattern).Count -ne 1) {
+    throw "Anti-Codex candidate contains an unexpected primary-window repaint shape."
+}
+if ([regex]::Matches($asarText, $legacyPrimaryRestoreRepaintPattern).Count -ne 0) {
+    throw "Anti-Codex candidate still contains the legacy synchronous primary-window restore repaint."
 }
 foreach ($managerMarker in @("__ANTICODEX_OPEN_MANAGER__", "\u7ba1\u7406")) {
     if (-not $asarText.Contains($managerMarker)) {

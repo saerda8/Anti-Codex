@@ -338,7 +338,8 @@ function Test-AntiCodexAsarPatches {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile,
-        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowRestoreRepaintCount
+        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
+        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -371,9 +372,17 @@ function Test-AntiCodexAsarPatches {
     if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
         throw "Anti-Codex host app.asar still selects a ChatGPT-branded Windows tray icon."
     }
-    $primaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)'
-    if ([regex]::Matches($text, $primaryRestoreRepaintPattern).Count -ne $ExpectedPrimaryWindowRestoreRepaintCount) {
-        throw "Anti-Codex host app.asar primary-window restore repaint count is invalid."
+    $primaryFocusRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\),\3\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
+    $legacyPrimaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\);this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)\}'
+    $anyPrimaryWindowRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.webContents\.invalidate(?:\?\.)?\(\)'
+    if ([regex]::Matches($text, $primaryFocusRestoreRepaintPattern).Count -ne $ExpectedPrimaryWindowFocusRestoreRepaintCount) {
+        throw "Anti-Codex host app.asar primary-window focus/restore repaint count is invalid."
+    }
+    if ([regex]::Matches($text, $anyPrimaryWindowRepaintPattern).Count -ne ($ExpectedPrimaryWindowFocusRestoreRepaintCount + $ExpectedLegacyPrimaryWindowRestoreRepaintCount)) {
+        throw "Anti-Codex host app.asar contains an unexpected primary-window repaint shape."
+    }
+    if ([regex]::Matches($text, $legacyPrimaryRestoreRepaintPattern).Count -ne $ExpectedLegacyPrimaryWindowRestoreRepaintCount) {
+        throw "Anti-Codex host app.asar legacy primary-window restore repaint count is invalid."
     }
 }
 
@@ -491,11 +500,27 @@ function Test-AntiCodexHost {
     if ($actualFiles.Count -ne $recordedFiles.Count) {
         throw "Anti-Codex host unpacked file inventory is incomplete."
     }
-    $expectedPrimaryWindowRestoreRepaintCount = if ($currentManifestCompatible) { 1 } else { 0 }
-    Test-AntiCodexAsarPatches `
-        -Path $required.appAsar `
-        -PatchProfile $patchProfile `
-        -ExpectedPrimaryWindowRestoreRepaintCount $expectedPrimaryWindowRestoreRepaintCount
+    if ($currentManifestCompatible) {
+        try {
+            Test-AntiCodexAsarPatches `
+                -Path $required.appAsar `
+                -PatchProfile $patchProfile `
+                -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
+                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
+        } catch {
+            Test-AntiCodexAsarPatches `
+                -Path $required.appAsar `
+                -PatchProfile $patchProfile `
+                -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
+                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 1
+        }
+    } else {
+        Test-AntiCodexAsarPatches `
+            -Path $required.appAsar `
+            -PatchProfile $patchProfile `
+            -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
+            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
+    }
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
         $actual = Get-AntiCodexSha256 -Path $required[$name]
         if ([string]$manifest.files.$name -ne [string]$actual) { throw "Anti-Codex host marker hash mismatch: $name" }

@@ -43,8 +43,8 @@ function originalPrimaryWindowTracker(windowAlias) {
 }
 
 function patchedPrimaryWindowTracker(windowAlias) {
-  const touchAlias = windowAlias === "t" ? "n" : "t";
-  return `trackPrimaryWindow(${windowAlias}){let ${touchAlias}=()=>this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now());this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},${touchAlias}()):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},${touchAlias}(),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,${touchAlias}),${windowAlias}.on(\`restore\`,()=>${windowAlias}.webContents.invalidate?.())}`;
+  const [touchAlias, repaintAlias] = ["t", "n", "r"].filter((alias) => alias !== windowAlias);
+  return `trackPrimaryWindow(${windowAlias}){let ${touchAlias}=()=>this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),${repaintAlias}=()=>{try{${windowAlias}.webContents.invalidate()}catch{}};this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},${touchAlias}()):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},${touchAlias}(),this.emitPrimaryWindowChangeIfNeeded(),${repaintAlias}()}),${windowAlias}.on(\`blur\`,${touchAlias}),${windowAlias}.on(\`restore\`,()=>setImmediate(${repaintAlias}))}`;
 }
 
 function primaryWindowTrackerAnchors(source) {
