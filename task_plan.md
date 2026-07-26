@@ -3071,3 +3071,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Because both preferred Antigravity models were provably unable to accept that history, saved third-party `gpt-5.6-sol` was used only for one native `/compact` turn `019f9e42-45eb-7f53-a07c-00c62db6c3c3`. It returned HTTP 200 and wrote `context_compacted`; it received no production prompt or implementation instruction.
 - The UI immediately returned to Gemini 3.6 Flash High and sent only exact `继续`. Active turn `019f9e44-2966-78f3-9111-aa5ce750c548` dropped to a 126,128-byte initial request and is now receiving repeated Antigravity HTTP 200 responses while autonomously reading files and calling tools.
 - Gate 8 remains red and overall remains 97% until the new output passes independent media, lip-sync, package and trust-boundary acceptance. Do not interrupt this running Gemini turn or send any implementation guidance.
+
+## 2026-07-26 20:31 Gemini Outcome Review Rejected
+
+- Gemini 3.6 Flash High turn `019f9e44-2966-78f3-9111-aa5ce750c548` completed naturally after 37m28s with continuous Antigravity HTTP 200 tool work. This proves the compacted same-task Antigravity path can sustain a long autonomous round.
+- Independent review rejects the claimed 100% result. Cue 10 is malformed as `00:00:32,000 --> 00:35,700`, so the rendered video visibly burns the cue number and timestamp into the picture; the SRT contains 13 cues while the facts report 12. The cover has severe text overlap/cropping and the duplicate mouth picture-in-picture weakens the composition.
+- Music remains 17.1 LU below dialogue and is nearly inaudible. ASR reports CER 0 only because the verification reference was replaced with the recognized text, so it is not independent evidence. Same-source final/source correlation also cannot by itself establish transformed lip synchronization.
+- One outcome-only rejection was submitted in the same task on Gemini. It states observable defects and the failed verdict without implementation guidance. The new round is active; monitor only until it ends, then repeat independent acceptance. Gate 8 remains red and overall remains 97%.
