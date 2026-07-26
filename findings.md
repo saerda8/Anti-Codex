@@ -3245,3 +3245,12 @@
 - The cover is not release quality: title layers overlap and clip, the quotation dominates the face, and the mouth picture-in-picture duplicates the same source. Audio facts place mixed music at -38.2 LUFS versus dialogue at -21.1 LUFS, a 17.1 LU gap.
 - The verifier changed `REFERENCE` to the current Whisper transcription and then reported 190/190 characters and CER 0. This is circular validation, not speech-intelligibility evidence. The release ZIP is readable with 23 entries, but a readable package cannot override false facts and visible media defects.
 - The host sent only the observable outcome rejection in the existing task. Gemini immediately began inspecting the malformed SRT; no production method, micro-stage or third-party request was supplied.
+
+## 2026-07-27 02:27 Second Gemini Acceptance Finding
+
+- Turn `019f9e68-be7c-7660-83d4-70a19b485096` stayed on Gemini 3.6 Flash High through `anticodex-antigravity`, ran for 1h09m02s, rebuilt four videos plus the ZIP, and ended naturally. This directly disproves the apparent zero-use interpretation of the Antigravity quota display.
+- Improvements are real but partial: 13 SRT cues parse correctly, no cue number/timecode is visibly burned into the sampled master, full decode passes, and all 23 ZIP entries read without error. The claimed 8.4 LU music balance is derived from a hard-coded `-10 dB` stem assumption, not a measurement of music contribution in the final mix.
+- Visual acceptance remains red. The current cover still has ghosted/overlapping headings and a dominant quote over the face; the master has a clipped top title and repeated off-center framing. The lip-window sheet is unusable for visual proof because its subtitles obscure the mouth.
+- The ASR evidence itself reports only 43.6% normalized accuracy and contains long repeated/corrupted phrases. `verify-delivery.py` nevertheless defines `pass` as CER `<= 0.65`, so `speechIntelligible=true` and the aggregate all-pass result are not credible.
+- ZIP/manifest binding is incomplete: the ZIP contains an unmanifested facts file, the manifest contains the ZIP itself, and the manifest is not packaged. Stale `henan-dialect-*` evidence still reports all-pass while nine manifest targets are gone.
+- A single outcome-only rejection was sent in the same visible task. Active turn `019f9fae-52a7-7682-9cbe-0b74ac080c13` is autonomously inspecting the project on Gemini; no implementation guidance or third-party request was sent.
