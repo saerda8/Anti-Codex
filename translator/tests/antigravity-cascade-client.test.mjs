@@ -285,6 +285,44 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
 });
 
+test("omits data-image payloads from text-rendered chat history", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_image_history" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: () => jsonResponse({}),
+    GetCascadeTrajectory: () => jsonResponse(completedTrajectory("continued")),
+  });
+  const client = clientFor(service.fetch);
+  await collect(client.start({
+    model: "gemini-pro-agent",
+    userText: "continue",
+    systemSections: [{
+      kind: "chat_history",
+      title: "Prior Chat Completions messages",
+      messages: [{
+        role: "tool",
+        tool_call_id: "call_image",
+        content: [
+          { type: "text", text: "Rendered frame" },
+          {
+            type: "image_url",
+            image_url: { url: `data:image/png;base64,${"A".repeat(10_000)}` },
+          },
+        ],
+      }],
+    }],
+    tools: [],
+  }));
+
+  const start = service.calls.find((call) => call.method === "StartCascade");
+  const history = start.body.customAgentSpec.customAgent.systemPromptSections[0].content;
+  assert.match(history, /Rendered frame/u);
+  assert.match(history, /call_image/u);
+  assert.match(history, /\[historical image omitted: image\/png\]/u);
+  assert.doesNotMatch(history, /A{64}/u);
+});
+
 test("gives Cascade startup a bounded 60 second default while preserving explicit overrides", async () => {
   assert.equal(cascadeClientModule.DEFAULT_START_TIMEOUT_MS, 60_000);
 

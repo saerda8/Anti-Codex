@@ -536,7 +536,12 @@ function renderSystemPromptSections(sections = []) {
   return sections.flatMap((section) => {
     let content = String(section?.content ?? "");
     if (section?.kind === "chat_history") {
-      content = (section.messages ?? []).map((message) => JSON.stringify(message)).join("\n");
+      content = (section.messages ?? []).map((message) => JSON.stringify(message, (_key, value) => {
+        const dataImage = typeof value === "string"
+          ? /^data:(image\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,/iu.exec(value)
+          : null;
+        return dataImage ? `[historical image omitted: ${dataImage[1].toLowerCase()}]` : value;
+      })).join("\n");
     }
     if (!content) return [];
     return [{
