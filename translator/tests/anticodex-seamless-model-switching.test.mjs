@@ -18,7 +18,7 @@ import {
   buildTaskLauncherEnvironment,
 } from "../../scripts/start-anticodex-task.mjs";
 import { buildUnifiedModelCatalog } from "../../scripts/start-anticodex-fixed-route.mjs";
-import { hotSwitchCodexPlusPlusSettings } from "../../scripts/anticodex-manager-service.mjs";
+import { saveThirdPartyCodexPlusPlusSettings } from "../../scripts/anticodex-manager-service.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
 
@@ -91,8 +91,8 @@ test("one stable native catalog exposes Gemini, Claude and third-party choices t
   };
   const catalog = buildUnifiedModelCatalog(bundled, {
     antigravityCatalog,
-    thirdPartyModel: "gpt-5.5",
-    thirdPartyModels: ["gpt-5.5", "gpt-5.6-terra"],
+    thirdPartyModel: "gpt-5.6-terra",
+    thirdPartyModels: ["gpt-5.6-terra", "gpt-5.6-sol"],
     thirdPartyContextWindow: 1_000_000,
   });
   const visible = catalog.models.filter((model) => model.visibility === "list");
@@ -102,16 +102,19 @@ test("one stable native catalog exposes Gemini, Claude and third-party choices t
   assert.ok(slugs.includes("claude-sonnet-4-6"));
   assert.ok(slugs.includes(ANTIGRAVITY_MODEL_SLOT));
   assert.ok(slugs.includes(THIRD_PARTY_MODEL_SLOT));
-  assert.ok(slugs.includes(thirdPartyNativeModel("gpt-5.5")));
-  assert.equal(
-    visible.find((model) => model.slug === thirdPartyNativeModel("gpt-5.5"))?.display_name,
-    "第三方 · gpt-5.5",
-  );
+  for (const modelId of ["gpt-5.6-terra", "gpt-5.6-sol"]) {
+    const model = visible.find((entry) => entry.slug === thirdPartyNativeModel(modelId));
+    assert.equal(model?.display_name, `第三方 · ${modelId}`);
+    assert.equal(model?.context_window, 1_000_000);
+    assert.equal(model?.max_context_window, 1_000_000);
+  }
 });
 
-test("Manager hot switching rewrites settings atomically and preserves both relays", () => {
-  const fixture = mkdtempSync(join(tmpdir(), "anticodex-hot-switch-"));
+test("Manager saves third-party settings without changing the active relay or native config", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-save-only-"));
   const settingsPath = join(fixture, "settings.json");
+  const catalogPath = join(fixture, "anticodex-model-catalog.json");
+  const codexConfigPath = join(fixture, "config.toml");
   try {
     const { antigravity, thirdParty } = routes();
     writeFileSync(settingsPath, JSON.stringify(buildCodexPlusPlusSettings({
@@ -119,47 +122,59 @@ test("Manager hot switching rewrites settings atomically and preserves both rela
       relayRoutes: [antigravity, thirdParty],
       userDataDir: join(fixture, "electron"),
     })));
+    writeFileSync(catalogPath, JSON.stringify(buildUnifiedModelCatalog({
+      models: [{
+        slug: "gpt-5.4",
+        display_name: "GPT-5.4",
+        visibility: "list",
+        shell_type: "shell_command",
+        apply_patch_tool_type: "freeform",
+        context_window: 272_000,
+        max_context_window: 272_000,
+      }],
+    }, {
+      antigravityCatalog: { models: [
+        { slug: "gemini-3.1-pro-low", display_name: "Gemini 3.1 Pro (Low)" },
+        { slug: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6" },
+      ] },
+      thirdPartyModel: "gpt-5.5",
+      thirdPartyModels: ["gpt-5.5"],
+    })));
+    const configBefore = Buffer.from(`model = "gemini-3.1-pro-low"
+model_provider = "anticodex_antigravity"
+model_context_window = 1000000
+`);
+    writeFileSync(codexConfigPath, configBefore);
 
-    const thirdPartyResult = hotSwitchCodexPlusPlusSettings({
+    const result = saveThirdPartyCodexPlusPlusSettings({
       settingsPath,
-      mode: "third-party",
-      adapterPort: 18488,
-      antigravityModel: "gemini-3.1-pro-low",
-      antigravityModels: ["gemini-3.1-pro-low", "claude-sonnet-4-6"],
+      nativeCatalogPath: catalogPath,
+      codexConfigPath,
       thirdParty: {
         protocol: "openai-compatible",
         baseUrl: "http://127.0.0.1:8080",
         model: "gpt-5.6-terra",
         apiKey: "new-third-party-key",
-        providerModels: ["gpt-5.6-terra"],
+        contextWindow: 1_000_000,
+        providerModels: ["gpt-5.6-terra", "gpt-5.6-sol"],
       },
     });
-    const switched = JSON.parse(readFileSync(settingsPath, "utf8"));
-    assert.equal(thirdPartyResult.restartRequired, false);
-    assert.equal(thirdPartyResult.hotSwitch, true);
-    assert.equal(thirdPartyResult.nativeModel.slug, THIRD_PARTY_MODEL_SLOT);
-    assert.equal(switched.activeRelayId, THIRD_PARTY_RELAY_ID);
-    assert.equal(switched.relayProfiles.length, 2);
-    assert.equal(switched.relayProfiles.find((profile) => profile.id === THIRD_PARTY_RELAY_ID).testModel, "gpt-5.6-terra");
-
-    const antigravityResult = hotSwitchCodexPlusPlusSettings({
-      settingsPath,
-      mode: "antigravity",
-      adapterPort: 18488,
-      antigravityModel: "claude-sonnet-4-6",
-      antigravityModels: ["gemini-3.1-pro-low", "claude-sonnet-4-6"],
-      thirdParty: {
-        protocol: "openai-compatible",
-        baseUrl: "http://127.0.0.1:8080",
-        model: "gpt-5.6-terra",
-        apiKey: "new-third-party-key",
-        providerModels: ["gpt-5.6-terra"],
-      },
-    });
-    const restored = JSON.parse(readFileSync(settingsPath, "utf8"));
-    assert.equal(antigravityResult.nativeModel.slug, "claude-sonnet-4-6");
-    assert.equal(restored.activeRelayId, ANTIGRAVITY_RELAY_ID);
-    assert.equal(restored.relayProfiles.find((profile) => profile.id === THIRD_PARTY_RELAY_ID).testModel, "gpt-5.6-terra");
+    const saved = JSON.parse(readFileSync(settingsPath, "utf8"));
+    const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+    assert.equal(result.ok, true);
+    assert.equal(result.saved, true);
+    assert.equal(saved.activeRelayId, ANTIGRAVITY_RELAY_ID);
+    assert.equal(saved.relayTestModel, "gemini-3.1-pro-low");
+    assert.equal(saved.relayProfiles.length, 2);
+    assert.equal(saved.relayProfiles.find((profile) => profile.id === THIRD_PARTY_RELAY_ID).testModel, "gpt-5.6-terra");
+    assert.ok(catalog.models.some((model) => model.slug === "gemini-3.1-pro-low"));
+    assert.ok(catalog.models.some((model) => model.slug === "claude-sonnet-4-6"));
+    assert.ok(catalog.models.some((model) => model.slug === thirdPartyNativeModel("gpt-5.6-terra")));
+    assert.ok(catalog.models.some((model) => model.slug === thirdPartyNativeModel("gpt-5.6-sol")));
+    assert.deepEqual(readFileSync(codexConfigPath), configBefore);
+    for (const field of ["nativeConfigReload", "nativeModel", "hotSwitch", "restartRequired", "switchRollbackId"]) {
+      assert.equal(Object.hasOwn(result, field), false);
+    }
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -206,18 +221,17 @@ test("formal PowerShell launcher keeps a saved third-party relay resident while 
   assert.match(block, /if \(\$runtimeMode -eq "third-party"\)[\s\S]*?\$provider\s*=\s*"third-party"/);
 });
 
-test("Manager switches the native model in place and never calls the route restart endpoint", () => {
+test("Manager saves provider settings and leaves native model selection to the composer", () => {
   const ui = readFileSync(join(root, "scripts", "anticodex-manager-inject.js"), "utf8");
   const start = ui.indexOf("async function showUpstreamConfig()");
   const end = ui.indexOf("\n    function installActions()", start);
   const block = ui.slice(start, end);
 
-  assert.match(block, /selectNativeModelByLabels/);
-  assert.match(block, /reloadNativeCodexConfig/);
-  assert.match(block, /upstream-profile\/rollback/);
-  assert.match(block, /switchRollbackId/);
-  assert.match(block, /rolledBack\?\.nativeConfigReload/);
-  assert.match(block, /restartRequired\s*===\s*false|restartRequired:\s*false/);
+  assert.doesNotMatch(block, /selectNativeModelByLabels/);
+  assert.doesNotMatch(block, /reloadNativeCodexConfig/);
+  assert.doesNotMatch(block, /upstream-profile\/rollback/);
+  assert.doesNotMatch(block, /switchRollbackId/);
+  assert.doesNotMatch(block, /nativeConfigReload|nativeModel|hotSwitch|restartRequired/);
   assert.doesNotMatch(block, /upstream-apply|applyAndWait|正在重启|30 秒内恢复/);
 });
 

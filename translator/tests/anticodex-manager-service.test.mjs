@@ -8,56 +8,76 @@ import { fileURLToPath } from "node:url";
 
 import {
   createAntiCodexManagerService,
-  hotSwitchCodexPlusPlusSettings,
+  saveThirdPartyCodexPlusPlusSettings,
 } from "../../scripts/anticodex-manager-service.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-test("third-party hot switch updates the native catalog and compaction limits atomically", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-terra-catalog-"));
-  try {
-    const settingsPath = path.join(tempDir, "settings.json");
-    const catalogPath = path.join(tempDir, "anticodex-model-catalog.json");
-    const codexConfigPath = path.join(tempDir, "config.toml");
-    fs.writeFileSync(settingsPath, JSON.stringify({
-      relayProfiles: [
-        {
-          id: "anticodex-antigravity",
-          apiKey: "local-adapter-key",
-          testModel: "gemini-3-flash-agent",
-        },
-        {
-          id: "anticodex-third-party",
-          apiKey: "saved-third-party-key",
-          testModel: "gpt-5.6-sol",
-        },
-      ],
-      activeRelayId: "anticodex-third-party",
-      relayTestModel: "gpt-5.6-sol",
-    }), "utf8");
-    fs.writeFileSync(catalogPath, JSON.stringify({
-      models: [
-        {
-          slug: "anticodex/third-party/gpt-5.6-sol",
-          display_name: "第三方 · gpt-5.6-sol",
-          visibility: "list",
-          shell_type: "shell_command",
-          apply_patch_tool_type: "freeform",
-          context_window: 272000,
-          max_context_window: 272000,
-        },
-        {
-          slug: "anticodex/third-party",
-          display_name: "第三方 API（当前模型）",
-          visibility: "list",
-          shell_type: "shell_command",
-          apply_patch_tool_type: "freeform",
-          context_window: 272000,
-          max_context_window: 272000,
-        },
-      ],
-    }), "utf8");
-    fs.writeFileSync(codexConfigPath, `model = "gemini-3-flash-agent"
+function createSaveOnlyFixture() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-save-only-"));
+  const settingsPath = path.join(tempDir, "settings.json");
+  const catalogPath = path.join(tempDir, "anticodex-model-catalog.json");
+  const codexConfigPath = path.join(tempDir, "config.toml");
+  fs.writeFileSync(settingsPath, `${JSON.stringify({
+    relayProfiles: [
+      {
+        id: "anticodex-antigravity",
+        apiKey: "local-adapter-key",
+        testModel: "gemini-3.1-pro-low",
+        modelList: "anticodex/antigravity\ngemini-3.1-pro-low\nclaude-sonnet-4-6",
+      },
+      {
+        id: "anticodex-third-party",
+        apiKey: "saved-third-party-key",
+        testModel: "gpt-5.5",
+        contextWindow: "272000",
+        modelList: "anticodex/third-party\nanticodex/third-party/gpt-5.5",
+      },
+    ],
+    activeRelayId: "anticodex-antigravity",
+    relayTestModel: "gemini-3.1-pro-low",
+  }, null, 2)}\n`, "utf8");
+  fs.writeFileSync(catalogPath, `${JSON.stringify({
+    models: [
+      {
+        slug: "gemini-3.1-pro-low",
+        display_name: "Gemini 3.1 Pro (Low)",
+        visibility: "list",
+        shell_type: "shell_command",
+        apply_patch_tool_type: "freeform",
+        context_window: 1_000_000,
+        max_context_window: 1_000_000,
+      },
+      {
+        slug: "claude-sonnet-4-6",
+        display_name: "Claude Sonnet 4.6",
+        visibility: "list",
+        shell_type: "shell_command",
+        apply_patch_tool_type: "freeform",
+        context_window: 200_000,
+        max_context_window: 200_000,
+      },
+      {
+        slug: "anticodex/third-party/gpt-5.5",
+        display_name: "第三方 · gpt-5.5",
+        visibility: "list",
+        shell_type: "shell_command",
+        apply_patch_tool_type: "freeform",
+        context_window: 272_000,
+        max_context_window: 272_000,
+      },
+      {
+        slug: "anticodex/third-party",
+        display_name: "第三方 API（当前模型）",
+        visibility: "list",
+        shell_type: "shell_command",
+        apply_patch_tool_type: "freeform",
+        context_window: 272_000,
+        max_context_window: 272_000,
+      },
+    ],
+  }, null, 2)}\n`, "utf8");
+  fs.writeFileSync(codexConfigPath, `model = "gemini-3.1-pro-low"
 model_provider = "anticodex_antigravity"
 model_context_window = 777777
 model_auto_compact_token_limit = 666666
@@ -67,123 +87,91 @@ some_root_setting = "preserved"
 [model_providers.anticodex_antigravity]
 wire_api = "responses"
 `, "utf8");
+  return { tempDir, settingsPath, catalogPath, codexConfigPath };
+}
 
-    const switched = hotSwitchCodexPlusPlusSettings({
-      settingsPath,
-      nativeCatalogPath: catalogPath,
-      codexConfigPath,
-      nativeCatalogModels: [
-        "anticodex/third-party/gpt-5.6-sol",
-        "anticodex/third-party",
-      ],
-      mode: "third-party",
-      adapterPort: 18488,
-      antigravityModel: "gemini-3-flash-agent",
-      thirdParty: {
-        protocol: "openai-compatible",
-        baseUrl: "http://localhost:8080",
-        model: "gpt-5.6-terra",
-        apiKey: "saved-third-party-key",
-        contextWindow: 128000,
-        providerModels: ["gpt-5.6-terra"],
-      },
-    });
+function saveThirdPartyOptions(fixture, model = "gpt-5.6-terra") {
+  return {
+    settingsPath: fixture.settingsPath,
+    nativeCatalogPath: fixture.catalogPath,
+    codexConfigPath: fixture.codexConfigPath,
+    thirdParty: {
+      protocol: "openai-compatible",
+      baseUrl: "http://localhost:8080",
+      model,
+      apiKey: "new-third-party-key",
+      contextWindow: 128_000,
+      providerModels: ["gpt-5.6-terra", "gpt-5.6-sol"],
+    },
+  };
+}
 
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+test("saving third-party settings updates the unified catalog without switching the active model", () => {
+  const fixture = createSaveOnlyFixture();
+  try {
+    const configBefore = fs.readFileSync(fixture.codexConfigPath);
+    const result = saveThirdPartyCodexPlusPlusSettings(saveThirdPartyOptions(fixture));
+    const settings = JSON.parse(fs.readFileSync(fixture.settingsPath, "utf8"));
+    const catalog = JSON.parse(fs.readFileSync(fixture.catalogPath, "utf8"));
     const terra = catalog.models.find((entry) => entry.slug === "anticodex/third-party/gpt-5.6-terra");
     const sol = catalog.models.find((entry) => entry.slug === "anticodex/third-party/gpt-5.6-sol");
-    const current = catalog.models.find((entry) => entry.slug === "anticodex/third-party");
+    const thirdPartyProfile = settings.relayProfiles.find((entry) => entry.id === "anticodex-third-party");
+
+    assert.equal(result.ok, true);
+    assert.equal(result.saved, true);
+    assert.equal(settings.activeRelayId, "anticodex-antigravity");
+    assert.equal(settings.relayTestModel, "gemini-3.1-pro-low");
+    assert.equal(thirdPartyProfile.testModel, "gpt-5.6-terra");
+    assert.match(thirdPartyProfile.modelList, /anticodex\/third-party\/gpt-5\.6-terra/);
+    assert.match(thirdPartyProfile.modelList, /anticodex\/third-party\/gpt-5\.6-sol/);
     assert.equal(terra.display_name, "第三方 · gpt-5.6-terra");
     assert.equal(terra.visibility, "list");
-    assert.equal(terra.shell_type, "shell_command");
-    assert.equal(terra.apply_patch_tool_type, "freeform");
-    assert.equal(terra.context_window, 128000);
-    assert.equal(current.context_window, 128000);
-    assert.equal(current.max_context_window, 128000);
-    assert.equal(sol.visibility, "hide");
-    assert.deepEqual(switched.nativeModel, {
-      slug: "anticodex/third-party/gpt-5.6-terra",
-      label: "第三方 · gpt-5.6-terra",
-    });
-    assert.deepEqual(switched.nativeConfigReload, {
-      hostId: "local",
-      edits: [
-        { keyPath: "model_context_window", value: 128000, mergeStrategy: "replace" },
-        { keyPath: "model_auto_compact_token_limit", value: 115200, mergeStrategy: "replace" },
-        { keyPath: "model_auto_compact_token_limit_scope", value: "total", mergeStrategy: "replace" },
-      ],
-      expectedVersion: null,
-      filePath: null,
-      reloadUserConfig: true,
-    });
-    const codexConfig = fs.readFileSync(codexConfigPath, "utf8");
-    assert.match(codexConfig, /^model_context_window = 128000$/m);
-    assert.match(codexConfig, /^model_auto_compact_token_limit = 115200$/m);
-    assert.match(codexConfig, /^model_auto_compact_token_limit_scope = "total"$/m);
-    assert.match(codexConfig, /^some_root_setting = "preserved"$/m);
+    assert.equal(terra.context_window, 128_000);
+    assert.equal(terra.max_context_window, 128_000);
+    assert.equal(sol.visibility, "list");
+    assert.equal(sol.context_window, 128_000);
+    assert.equal(sol.max_context_window, 128_000);
+    assert.ok(catalog.models.some((entry) => entry.slug === "gemini-3.1-pro-low"));
+    assert.ok(catalog.models.some((entry) => entry.slug === "claude-sonnet-4-6"));
+    assert.deepEqual(fs.readFileSync(fixture.codexConfigPath), configBefore);
+    for (const field of ["nativeConfigReload", "nativeModel", "hotSwitch", "restartRequired", "switchRollbackId"]) {
+      assert.equal(Object.hasOwn(result, field), false, `${field} must not be returned by a save-only operation`);
+    }
+  } finally {
+    fs.rmSync(fixture.tempDir, { recursive: true, force: true });
+  }
+});
 
-    const settingsBeforeFailedSwitch = fs.readFileSync(settingsPath, "utf8");
-    const catalogBeforeFailedSwitch = fs.readFileSync(catalogPath, "utf8");
-    const configBeforeFailedSwitch = fs.readFileSync(codexConfigPath, "utf8");
+test("a catalog write failure restores settings and catalog bytes without touching root config", () => {
+  const fixture = createSaveOnlyFixture();
+  try {
+    const settingsBefore = fs.readFileSync(fixture.settingsPath);
+    const catalogBefore = fs.readFileSync(fixture.catalogPath);
+    const configBefore = fs.readFileSync(fixture.codexConfigPath);
     const renameSync = fs.renameSync;
+    let settingsWriteCompleted = false;
     fs.renameSync = (source, destination) => {
-      if (path.resolve(destination) === path.resolve(codexConfigPath)) {
-        throw new Error("config replace failed");
+      if (path.resolve(destination) === path.resolve(fixture.catalogPath)) {
+        assert.equal(settingsWriteCompleted, true);
+        throw new Error("catalog replace failed");
       }
-      return renameSync(source, destination);
+      const result = renameSync(source, destination);
+      if (path.resolve(destination) === path.resolve(fixture.settingsPath)) settingsWriteCompleted = true;
+      return result;
     };
     try {
-      assert.throws(() => hotSwitchCodexPlusPlusSettings({
-        settingsPath,
-        nativeCatalogPath: catalogPath,
-        codexConfigPath,
-        mode: "third-party",
-        adapterPort: 18488,
-        antigravityModel: "gemini-3-flash-agent",
-        thirdParty: {
-          protocol: "openai-compatible",
-          baseUrl: "http://localhost:8080",
-          model: "gpt-5.6-alt",
-          apiKey: "saved-third-party-key",
-          contextWindow: 128000,
-        },
-      }), /config replace failed/);
+      assert.throws(
+        () => saveThirdPartyCodexPlusPlusSettings(saveThirdPartyOptions(fixture, "gpt-5.6-sol")),
+        /catalog replace failed/,
+      );
     } finally {
       fs.renameSync = renameSync;
     }
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(settingsPath, "utf8")),
-      JSON.parse(settingsBeforeFailedSwitch),
-    );
-    assert.equal(fs.readFileSync(catalogPath, "utf8"), catalogBeforeFailedSwitch);
-    assert.equal(fs.readFileSync(codexConfigPath, "utf8"), configBeforeFailedSwitch);
-
-    const restored = hotSwitchCodexPlusPlusSettings({
-      settingsPath,
-      codexConfigPath,
-      mode: "antigravity",
-      adapterPort: 18488,
-      antigravityModel: "gemini-3-flash-agent",
-      thirdParty: {
-        protocol: "openai-compatible",
-        baseUrl: "http://localhost:8080",
-        model: "gpt-5.6-terra",
-        apiKey: "saved-third-party-key",
-        contextWindow: 128000,
-      },
-    });
-    const restoredConfig = fs.readFileSync(codexConfigPath, "utf8");
-    assert.deepEqual(restored.nativeConfigReload.edits.map(({ keyPath, value }) => ({ keyPath, value })), [
-      { keyPath: "model_context_window", value: 777777 },
-      { keyPath: "model_auto_compact_token_limit", value: 666666 },
-      { keyPath: "model_auto_compact_token_limit_scope", value: "body_after_prefix" },
-    ]);
-    assert.match(restoredConfig, /^model_context_window = 777777$/m);
-    assert.match(restoredConfig, /^model_auto_compact_token_limit = 666666$/m);
-    assert.match(restoredConfig, /^model_auto_compact_token_limit_scope = "body_after_prefix"$/m);
-    assert.match(restoredConfig, /^some_root_setting = "preserved"$/m);
+    assert.deepEqual(fs.readFileSync(fixture.settingsPath), settingsBefore);
+    assert.deepEqual(fs.readFileSync(fixture.catalogPath), catalogBefore);
+    assert.deepEqual(fs.readFileSync(fixture.codexConfigPath), configBefore);
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(fixture.tempDir, { recursive: true, force: true });
   }
 });
 
@@ -499,7 +487,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     token = body.token;
   });
 
-  await t.test("Antigravity model catalog and selection are exposed through the profile API", async () => {
+  await t.test("Antigravity models remain exposed through the profile API", async () => {
     const catalogDir = path.join(tempDir, "codex-home-deepseek-app");
     fs.mkdirSync(catalogDir, { recursive: true });
     fs.writeFileSync(path.join(catalogDir, "antigravity-model-catalog.json"), JSON.stringify({
@@ -509,37 +497,6 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
         { slug: "claude-sonnet-4-5", display_name: "Claude Sonnet 4.5", visibility: "hide" },
       ],
     }), "utf8");
-
-    const componentStateDir = path.join(tempDir, "codexplusplus");
-    fs.mkdirSync(componentStateDir, { recursive: true });
-    fs.writeFileSync(path.join(componentStateDir, "settings.json"), JSON.stringify({
-      relayProfiles: [{
-        id: "anticodex-antigravity",
-        name: "Anti-Codex Antigravity",
-        upstreamBaseUrl: "http://127.0.0.1:18488/v1",
-        protocol: "chatCompletions",
-        relayMode: "pureApi",
-        apiKey: "test-local-adapter-token",
-        testModel: "gemini-3-flash-agent",
-        modelList: "gemini-3-flash-agent\nclaude-sonnet-4-6",
-      }],
-      activeRelayId: "anticodex-antigravity",
-      relayTestModel: "gemini-3-flash-agent",
-    }), "utf8");
-    const contextBackup = Buffer.from(JSON.stringify({
-      schema: 1,
-      values: {
-        model_context_window: 777777,
-        model_auto_compact_token_limit: 666666,
-        model_auto_compact_token_limit_scope: "body_after_prefix",
-      },
-    }), "utf8").toString("base64url");
-    const configBeforeSwitch = `# anticodex-manager-context-backup-v1:${contextBackup}
-model_context_window = 128000
-model_auto_compact_token_limit = 115200
-model_auto_compact_token_limit_scope = "total"
-`;
-    fs.writeFileSync(path.join(catalogDir, "config.toml"), configBeforeSwitch, "utf8");
 
     const healthServer = createServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -552,120 +509,24 @@ model_auto_compact_token_limit_scope = "total"
       }));
     });
     await listenOnLoopback(healthServer);
-    const selectionService = createAntiCodexManagerService({
+    const catalogService = createAntiCodexManagerService({
       port: 0,
       host: "127.0.0.1",
       stateRoot: tempDir,
       fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
-      ensureAntigravityReady: async () => ({ signedIn: true, identityAvailable: true }),
     });
-    const selectionServer = await selectionService.listen();
-    const selectionBaseUrl = `http://127.0.0.1:${selectionServer.address().port}`;
+    const catalogServer = await catalogService.listen();
+    const catalogBaseUrl = `http://127.0.0.1:${catalogServer.address().port}`;
     try {
-      const bootstrapResponse = await fetch(`${selectionBaseUrl}/anticodex/manager/bootstrap`, {
-        headers: { origin: selectionBaseUrl },
-      });
-      assert.equal(bootstrapResponse.status, 200);
-      const selectionToken = (await bootstrapResponse.json()).token;
-
-      const beforeResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`);
+      const beforeResponse = await fetch(`${catalogBaseUrl}/anticodex/upstream-profile`);
       assert.equal(beforeResponse.status, 200);
       const before = await beforeResponse.json();
       const antigravityModelIds = before.antigravityModels.map((entry) => entry.id);
       assert.ok(antigravityModelIds.includes("gemini-3-flash-agent"));
       assert.ok(antigravityModelIds.includes("claude-sonnet-4-6"));
       assert.equal(antigravityModelIds.includes("claude-sonnet-4-5"), false);
-
-      const settingsBeforeSwitch = fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8");
-      const saveResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`, {
-        method: "POST",
-        headers: {
-          origin: selectionBaseUrl,
-          "content-type": "application/json",
-          "x-anticodex-manager-token": selectionToken,
-        },
-        body: JSON.stringify({ mode: "antigravity", antigravityModel: "claude-sonnet-4-6" }),
-      });
-      assert.equal(saveResponse.status, 200);
-      const saved = await saveResponse.json();
-      assert.equal(saved.saved.antigravityModel, "claude-sonnet-4-6");
-      assert.equal(saved.accountReady, true);
-      assert.equal(saved.restartRequired, false);
-      assert.equal(saved.hotSwitch, true);
-      assert.match(saved.switchRollbackId, /^[A-Za-z0-9_-]{20,}$/);
-      const switchedSettings = JSON.parse(fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8"));
-      const switchedAntigravity = switchedSettings.relayProfiles.find((entry) => entry.id === "anticodex-antigravity");
-      assert.equal(switchedAntigravity.apiKey, "test-local-adapter-token");
-
-      const rollbackResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile/rollback`, {
-        method: "POST",
-        headers: {
-          origin: selectionBaseUrl,
-          "content-type": "application/json",
-          "x-anticodex-manager-token": selectionToken,
-        },
-        body: JSON.stringify({ switchRollbackId: saved.switchRollbackId }),
-      });
-      assert.equal(rollbackResponse.status, 200);
-      const rolledBack = await rollbackResponse.json();
-      assert.equal(rolledBack.rolledBack, true);
-      assert.deepEqual(rolledBack.nativeConfigReload.edits.map(({ keyPath, value }) => ({ keyPath, value })), [
-        { keyPath: "model_context_window", value: 128000 },
-        { keyPath: "model_auto_compact_token_limit", value: 115200 },
-        { keyPath: "model_auto_compact_token_limit_scope", value: "total" },
-      ]);
-      assert.equal(fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8"), settingsBeforeSwitch);
-      assert.equal(fs.readFileSync(path.join(catalogDir, "config.toml"), "utf8"), configBeforeSwitch);
-      assert.equal(fs.existsSync(path.join(tempDir, "upstream-profile.json")), false);
     } finally {
-      await selectionService.close();
-      await closeServer(healthServer);
-    }
-  });
-
-  await t.test("Antigravity hot switch fails before saving when Desktop is not ready", async () => {
-    const settingsPath = path.join(tempDir, "codexplusplus", "settings.json");
-    const settingsBefore = fs.readFileSync(settingsPath, "utf8");
-    const healthServer = createServer((_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({
-        ok: true,
-        state: "ready",
-        provider: "third-party",
-        model: "gpt-5.6-sol",
-        ports: { adapter: 18488 },
-      }));
-    });
-    await listenOnLoopback(healthServer);
-    const blockedService = createAntiCodexManagerService({
-      port: 0,
-      host: "127.0.0.1",
-      stateRoot: tempDir,
-      fixedHealthUrl: `http://127.0.0.1:${healthServer.address().port}/anticodex/fixed-route/health`,
-      ensureAntigravityReady: async () => { throw new Error("Desktop not ready"); },
-    });
-    const blockedServer = await blockedService.listen();
-    const blockedBaseUrl = `http://127.0.0.1:${blockedServer.address().port}`;
-    try {
-      const boot = await fetch(`${blockedBaseUrl}/anticodex/manager/bootstrap`, {
-        headers: { origin: blockedBaseUrl },
-      });
-      const blockedToken = (await boot.json()).token;
-      const response = await fetch(`${blockedBaseUrl}/anticodex/upstream-profile`, {
-        method: "POST",
-        headers: {
-          origin: blockedBaseUrl,
-          "content-type": "application/json",
-          "x-anticodex-manager-token": blockedToken,
-        },
-        body: JSON.stringify({ mode: "antigravity", antigravityModel: "claude-sonnet-4-6" }),
-      });
-      const payload = await response.json();
-      assert.equal(response.status, 400, payload.message);
-      assert.match(payload.message, /Desktop not ready/);
-      assert.equal(fs.readFileSync(settingsPath, "utf8"), settingsBefore);
-    } finally {
-      await blockedService.close();
+      await catalogService.close();
       await closeServer(healthServer);
     }
   });

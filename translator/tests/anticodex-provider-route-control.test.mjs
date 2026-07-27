@@ -24,7 +24,7 @@ test("Antigravity and third-party choices persist independently", () => {
   assert.match(launcher, /const runtimeProfile = readThirdPartyRuntimeProfile\(plan, env\)/);
   assert.match(launcher, /if \(thirdPartyConfigured && apiKey\)/);
   assert.match(controlApi, /antigravityModelsFromCatalog/);
-  assert.match(controlApi, /savedThirdPartyForHotSwitch/);
+  assert.match(controlApi, /providerModels/);
 });
 
 test("Manager labels third-party routes as Chat Completions or Responses", () => {
@@ -41,14 +41,14 @@ test("third-party profiles carry an explicit context window", () => {
   assert.match(managerUi, /row\("上下文窗口（token）",\s*contextWindow\)/);
 });
 
-test("Manager hot-switches profiles and cannot request a route or client restart", () => {
+test("Manager only saves third-party profiles and cannot switch the native model", () => {
   const start = managerUi.indexOf("async function showUpstreamConfig()");
   const end = managerUi.indexOf("function installActions()", start);
   const block = managerUi.slice(start, end);
-  assert.match(block, /selectNativeModelByLabels/);
-  assert.match(block, /payload\.restartRequired === false/);
-  assert.match(controlApi, /hotSwitchCodexPlusPlusSettings/);
-  assert.match(controlApi, /restartRequired:\s*false/);
+  assert.doesNotMatch(block, /selectNativeModelByLabels|reloadNativeCodexConfig/);
+  assert.doesNotMatch(block, /upstream-profile\/rollback|switchRollbackId/);
+  assert.match(controlApi, /export function saveThirdPartyCodexPlusPlusSettings/);
+  assert.doesNotMatch(controlApi, /\bhotSwitchCodexPlusPlusSettings\b/);
   assert.doesNotMatch(block, /upstream-apply|applyAndWait|正在重启|30 秒内恢复/);
   assert.doesNotMatch(controlApi, /pathname === "\/anticodex\/upstream-apply"/);
   assert.doesNotMatch(managerBridge, /\/anticodex\/upstream-apply/);
