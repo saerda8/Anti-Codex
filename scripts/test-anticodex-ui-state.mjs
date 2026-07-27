@@ -526,6 +526,7 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   failures.push(...upstreamConfigContractFailures(injectSource));
 
   const managerHtml = extractTemplateLiteral(managerServiceSource, "const managerHtml = `", "manager service html");
+  if (!/<\/html>\s*`;$/.test(managerHtml)) failures.push("manager service HTML template does not end with </html>");
   for (const required of [
     '<title>Anti-Codex 管理</title>',
     '<h1>Anti-Codex 管理</h1>',
@@ -569,6 +570,13 @@ if (args.has("--self-test")) {
     ...managerServiceHtmlParserFailures(),
     ...currentStaticManagerUiFailures({ injectSource: managerInjectSource, managerServiceSource }),
   ];
+  const missingClosingHtmlFailures = currentStaticManagerUiFailures({
+    injectSource: managerInjectSource,
+    managerServiceSource: managerServiceSource.replace(/<\/html>(?=\s*`;)/, ""),
+  });
+  if (!missingClosingHtmlFailures.includes("manager service HTML template does not end with </html>")) {
+    failures.push("manager service HTML self-test accepted a fallback template without closing </html>");
+  }
   const output = { ok: failures.length === 0, failures };
   console.log(asciiJson(output));
   if (!output.ok) process.exit(1);
