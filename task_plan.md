@@ -3093,3 +3093,9 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Fixed the existing hot-switch path instead of adding a controller: saving a tested third-party model now updates the native unified catalog, hides prior exact aliases, keeps the stable current-model slot aligned, and makes later Antigravity refreshes preserve those hidden compatibility aliases.
 - Focused product coverage passes `106/106`; seamless-switch coverage passes `8/8`; all three changed runtime scripts pass syntax checks and the diff check is clean. A no-restart synchronization was verified and staged because the sole client is running; the current live state was updated in place to 15 catalog models with visible `gpt-5.6-terra` and hidden `gpt-5.6-sol`.
 - The same task received only exact `继续`. Turn `019fa1eb-de12-7450-900d-5aba15268dc1` used native slot `anticodex/third-party` at medium reasoning, which resolves through the active third-party relay to saved model `gpt-5.6-terra`; repeated upstream HTTP 502 caused a reconnect loop, so the one failed turn was stopped without another prompt. Gate 8 remains red and overall remains 97%.
+
+## 2026-07-27 Gemini Preferred-Provider Resume
+
+- The no-traffic UI verifier's unrelated `文件`-submenu fallback was removed and RED/GREEN covered in commit `7fcd47bf`. It then selected `Gemini 3.1 Pro (Low)` in the existing visible task without a restart or model request.
+- Exact `继续` started turn `019fa1f9-d34c-7261-b148-fc02ebfc5316` in the same cwd with `model=gemini-3.1-pro-low` and `effort=low`. The turn is active with at least eight completed shell tool calls and real Antigravity HTTP 200 responses; intermittent 503 responses are recovering inside the same turn.
+- Do not prompt or switch while this turn continues to produce tools/files. The `anti-codex` heartbeat monitor was recreated against this current task and provider priority; Gate 8 remains red until independent final acceptance passes.
