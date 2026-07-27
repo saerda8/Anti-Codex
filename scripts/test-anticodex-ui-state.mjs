@@ -68,7 +68,7 @@ const EXPECTED_ACTION_GROUPS = Object.freeze({
 });
 const EXPECTED_ACTION_IDS = Object.freeze(Object.values(EXPECTED_ACTION_GROUPS).flat());
 const EXPECTED_HIGH_IMPACT_ACTION_IDS = Object.freeze([
-  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ]);
 if (new Set(EXPECTED_ACTION_IDS).size !== EXPECTED_ACTION_IDS.length) {
   throw new Error("Manager action groups contain duplicate action IDs");
@@ -1599,14 +1599,14 @@ try {
       const highImpactFirstClicksDidNotRun = true;
       const highImpactSecondClickRuns = true;
       const upstreamConfigButton = reopenedOverlay?.querySelector('button[data-action="upstreamConfig"]');
-      const upstreamConfigConfirming = true;
-      const upstreamConfigOpenedBeforeConfirm = false;
+      const upstreamConfigConfirming = false;
+      const upstreamConfigOpenedWithoutConfirmation = !!upstreamConfigButton;
       const upstreamConfigOpened = !!upstreamConfigButton;
       const upstreamConfigEmbeddedInOverlay = !!upstreamConfigButton?.closest?.("#anticodex-manager-overlay");
       const upstreamConfigSaveInitiallyDisabled = true;
-      const upstreamConfigHasSafeWarning = true;
+      const upstreamConfigHasImpactWarning = false;
       const upstreamConfigHasExpectedControls = true;
-      const upstreamConfigText = "fast mode skips high-impact dynamic clicks";
+      const upstreamConfigText = "fast mode skips ordinary form click";
       let busyAttrDuringAction = "skipped";
       let disabledDuringAction = reopenedActionButtons.length;
       let runningMarkerDuringAction = "skipped";
@@ -1686,10 +1686,10 @@ try {
         actionButtonMinHeight: Number.isFinite(actionButtonMinHeight) ? actionButtonMinHeight : 0,
         upstreamConfigOpened,
         upstreamConfigConfirming,
-        upstreamConfigOpenedBeforeConfirm,
+        upstreamConfigOpenedWithoutConfirmation,
         upstreamConfigEmbeddedInOverlay,
         upstreamConfigSaveInitiallyDisabled,
-        upstreamConfigHasSafeWarning,
+        upstreamConfigHasImpactWarning,
         upstreamConfigHasExpectedControls,
         upstreamConfigTextSample: upstreamConfigText.slice(0, 1200),
         busyAttrDuringAction,
@@ -1807,11 +1807,11 @@ try {
   if (!managerOverlay?.hasActionResultMarker) failures.push("in-app manager action result marker is missing");
   if (!managerOverlay?.hasAccountSwitchAction) failures.push("in-app manager account switch action is missing");
   if (!managerOverlay?.upstreamConfigOpened) failures.push("in-app manager third-party API config panel did not open");
-  if (!managerOverlay?.upstreamConfigConfirming) failures.push("in-app manager upstreamConfig did not require a first-click confirmation");
-  if (managerOverlay?.upstreamConfigOpenedBeforeConfirm) failures.push("in-app manager upstreamConfig opened before second-click confirmation");
+  if (managerOverlay?.upstreamConfigConfirming) failures.push("in-app manager upstreamConfig unexpectedly requires high-impact confirmation");
+  if (!managerOverlay?.upstreamConfigOpenedWithoutConfirmation) failures.push("in-app manager upstreamConfig did not open as an ordinary action");
   if (!managerOverlay?.upstreamConfigEmbeddedInOverlay) failures.push("in-app manager third-party API config panel is not embedded in the overlay");
   if (!managerOverlay?.upstreamConfigSaveInitiallyDisabled) failures.push("in-app manager third-party API save button is enabled before a successful connection test");
-  if (!managerOverlay?.upstreamConfigHasSafeWarning) failures.push("in-app manager third-party API config panel is missing no-fallback/no-history-loss warning");
+  if (managerOverlay?.upstreamConfigHasImpactWarning) failures.push("in-app manager third-party API config panel still shows a high-impact warning");
   if (!managerOverlay?.upstreamConfigHasExpectedControls) failures.push("in-app manager third-party API config panel is missing protocol/key/test/save controls");
   failures.push(...actionLayoutFailures({
     groups: managerOverlay?.actionGroups || [],

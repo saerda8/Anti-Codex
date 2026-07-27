@@ -174,7 +174,6 @@ const MANAGER_ACTION_GROUPS = Object.freeze({
 
 const HIGH_IMPACT_MANAGER_ACTION_IDS = Object.freeze([
   "syncHost",
-  "upstreamConfig",
   "refreshFeatures",
   "stabilitySoak",
   "coldRelaunch",

@@ -27,7 +27,6 @@ const MANAGER_ACTION_GROUPS = Object.freeze({
 });
 const MANAGER_HIGH_IMPACT_ACTION_IDS = Object.freeze([
   "syncHost",
-  "upstreamConfig",
   "refreshFeatures",
   "stabilitySoak",
   "coldRelaunch",
@@ -1932,29 +1931,6 @@ async function verifyUpstreamConfigActualMouseClick() {
   const firstClickStartedAt = Date.now();
   await dispatchActualClick(first);
   const firstClickDurationMs = Date.now() - firstClickStartedAt;
-  let confirmation = {};
-  const confirmationDeadline = Date.now() + 3000;
-  do {
-    confirmation = await evaluate(`(() => {
-      const button = document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]');
-      const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
-      const labels = Array.from(result?.querySelectorAll('label > span') || []);
-      return {
-        ok: button?.getAttribute('data-confirming-high-impact') === 'true' && labels.length === 0,
-        label: String(button?.textContent || '').trim(),
-        formOpenedBeforeConfirm: labels.length > 0,
-      };
-    })()`, 2500);
-    if (confirmation.ok) break;
-    await sleep(75);
-  } while (Date.now() < confirmationDeadline);
-  if (!confirmation.ok) return { ok: false, phase: "confirmation", opened, first, confirmation, usedRealTraffic: false };
-
-  const second = await actionPoint();
-  if (!second.ok) return { ok: false, phase: "second-hit", opened, first, confirmation, second, usedRealTraffic: false };
-  const secondClickStartedAt = Date.now();
-  await dispatchActualClick(second);
-  const secondClickDurationMs = Date.now() - secondClickStartedAt;
   let form = {};
   const formDeadline = Date.now() + Math.max(8000, timeoutMs);
   do {
@@ -1973,7 +1949,7 @@ async function verifyUpstreamConfigActualMouseClick() {
           label: String(button.textContent || '').trim(),
           disabled: button.disabled,
         })),
-        warningMentionsBypass: String(result?.querySelector('.anticodex-warn')?.textContent || '').includes('\u5b8c\u5168\u7ed5\u8fc7 Antigravity'),
+        hasImpactWarning: !!result?.querySelector('.anticodex-warn'),
         embedded: !!result?.closest('#anticodex-manager-overlay'),
         actionLabel: String(document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]')?.textContent || '').trim(),
         confirming: document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]')?.getAttribute('data-confirming-high-impact') || '',
@@ -2067,22 +2043,21 @@ async function verifyUpstreamConfigActualMouseClick() {
   const pageTargetsAfter = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
   const buttonState = Object.fromEntries((form.buttons || []).map((button) => [button.label, button.disabled]));
   const actualMouse = {
-    ok: confirmation.ok === true && form.ok === true && form.confirming === "",
+    ok: form.ok === true && form.confirming === "",
     action: "upstreamConfig",
-    requiredConfirmation: true,
-    expectedClickCount: 2,
-    clickCount: 2,
-    inputEventCount: 6,
-    confirmationArmed: confirmation.ok === true,
-    confirmationCleared: form.confirming === "",
+    requiredConfirmation: false,
+    expectedClickCount: 1,
+    clickCount: 1,
+    inputEventCount: 3,
+    confirmationArmed: false,
+    confirmationCleared: true,
     points: [
       { phase: "first", ...first, hitAction: "upstreamConfig" },
-      { phase: "second", ...second, hitAction: "upstreamConfig" },
     ],
   };
   const ok = form.ok === true
     && form.embedded === true
-    && form.warningMentionsBypass === true
+    && form.hasImpactWarning === false
     && form.protocolOptions?.join("|") === "Chat Completions|Responses"
     && ["\u534f\u8bae", "\u63a5\u53e3\u5730\u5740\uff08\u53ef\u586b base URL \u6216\u5b8c\u6574\u63a5\u53e3\uff09", "\u6a21\u578b\u540d", "API key"].every((label) => form.labels?.includes(label))
     && buttonState["\u6d4b\u8bd5\u8fde\u901a"] === false
@@ -2090,7 +2065,6 @@ async function verifyUpstreamConfigActualMouseClick() {
     && !("\u4fdd\u5b58\u5e76\u5207\u6362" in buttonState)
     && !("\u6062\u590d Antigravity" in buttonState)
     && !form.labels?.includes("Antigravity \u6a21\u578b")
-    && confirmation.formOpenedBeforeConfirm === false
     && actualMouse.ok === true
     && protocolInteraction.selectedAlternate === true
     && protocolInteraction.restoredOriginal === true
@@ -2105,9 +2079,6 @@ async function verifyUpstreamConfigActualMouseClick() {
     opened,
     firstClickLabel: first.label,
     firstClickDurationMs,
-    confirmationLabel: confirmation.label,
-    secondClickLabel: second.label,
-    secondClickDurationMs,
     form,
     actualMouse,
     protocolInteraction,

@@ -102,24 +102,13 @@ function parseNamedStringList(sourceText, name) {
 }
 
 function parseInjectedActionGroups(sourceText) {
-  const groups = [];
-  for (const idMatch of sourceText.matchAll(/\bid:\s*(["'])([^"']+)\1/g)) {
-    const objectStart = sourceText.lastIndexOf("{", idMatch.index);
-    const descriptor = extractBalanced(sourceText, objectStart, "{", "}");
-    const ids = descriptor.match(/\b(?:ids|actions)\s*:\s*/);
-    if (!ids) continue;
-    const expression = descriptor.slice(ids.index + ids[0].length);
-    const named = expression.match(/^([A-Z][A-Z0-9_]*)(?:\.(\w+))?/);
-    let actionIds = [];
-    if (named?.[2]) actionIds = parseFrozenActionGroups(sourceText, named[1])[named[2]] || [];
-    else if (named) actionIds = parseNamedStringList(sourceText, named[1]);
-    else {
-      const arrayStart = expression.indexOf("[");
-      if (arrayStart >= 0) actionIds = quotedStrings(extractBalanced(expression, arrayStart, "[", "]"));
-    }
-    groups.push({ id: idMatch[2], actionIds });
+  const memberships = parseFrozenActionGroups(sourceText, "MANAGER_ACTION_GROUPS");
+  const setup = extractNamedFunction(sourceText, "installActions").split("for (const [action, label] of ACTIONS)")[0];
+  const groupIds = [...setup.matchAll(/\bid:\s*(["'])([^"']+)\1/g)].map((entry) => entry[2]);
+  for (const entry of setup.matchAll(/["']data-action-group["']\s*:\s*(["'])([^"']+)\1/g)) {
+    if (!groupIds.includes(entry[2])) groupIds.push(entry[2]);
   }
-  return groups;
+  return groupIds.map((id) => ({ id, actionIds: memberships[id] || [] }));
 }
 
 function parseFallbackActionGroups(sourceText) {
@@ -172,7 +161,9 @@ test("Manager third-party form saves configuration without switching the active 
 test("Manager injected and fallback UIs expose the same five action groups", () => {
   const injectedGroups = parseInjectedActionGroups(managerInject);
   const fallbackGroups = parseFallbackActionGroups(managerService);
+  const installActions = extractNamedFunction(managerInject, "installActions");
 
+  assert.doesNotMatch(installActions.slice(0, installActions.indexOf("for (const [action, label] of ACTIONS)")), /\bids\s*:/);
   assertExactActionGroups(injectedGroups, "injected Manager");
   assertExactActionGroups(fallbackGroups, "fallback Manager");
   assert.deepEqual(
@@ -669,6 +660,10 @@ test("Manager verifier has a no-traffic actual-mouse third-party form mode", () 
   assert.match(block, /Input\.dispatchKeyEvent/);
   assert.match(block, /protocolInteraction\.selectedAlternate === true/);
   assert.match(block, /protocolInteraction\.restoredOriginal === true/);
+  assert.match(block, /requiredConfirmation:\s*false/);
+  assert.match(block, /expectedClickCount:\s*1/);
+  assert.match(block, /form\.hasImpactWarning === false/);
+  assert.doesNotMatch(block, /confirmationDeadline|secondClick/);
 });
 
 test("Manager action verifier uses native CDP mouse events instead of synthetic clicks", () => {
@@ -684,7 +679,9 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
     return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
   };
   const injectedHighImpact = parseStringList(managerInject, "HIGH_IMPACT_ACTION_IDS", "new Set");
+  const fallbackHighImpact = parseStringList(managerService, "HIGH_IMPACT_MANAGER_ACTION_IDS", "Object\\.freeze");
   const verifierHighImpact = parseStringList(managerButtonTest, "MANAGER_HIGH_IMPACT_ACTION_IDS", "Object\\.freeze");
+  const uiStateHighImpact = parseStringList(uiStateTest, "EXPECTED_HIGH_IMPACT_ACTION_IDS", "Object\\.freeze");
   const verifierGroups = parseFrozenActionGroups(managerButtonTest, "MANAGER_ACTION_GROUPS");
   const uiStateGroups = parseFrozenActionGroups(uiStateTest, "EXPECTED_ACTION_GROUPS");
   const verifierActions = Object.values(verifierGroups).flat();
@@ -699,7 +696,10 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.deepEqual(uiStateGroups, EXPECTED_ACTION_GROUPS);
   assert.deepEqual(verifierActions, EXPECTED_ACTION_IDS);
   assert.equal(new Set(verifierActions).size, verifierActions.length, "each Manager action must belong to exactly one UI group");
+  assert.equal(injectedHighImpact.includes("upstreamConfig"), false, "third-party setup must be an ordinary action");
+  assert.deepEqual(fallbackHighImpact, injectedHighImpact);
   assert.deepEqual(verifierHighImpact, injectedHighImpact);
+  assert.deepEqual(uiStateHighImpact, injectedHighImpact);
   assert.deepEqual([...injectedActions].sort(), [...EXPECTED_ACTION_IDS].sort());
   assert.deepEqual(
     [...parsePowerShellList("dailyActions"), ...parsePowerShellList("highImpactActions")].sort(),

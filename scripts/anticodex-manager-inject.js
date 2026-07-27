@@ -76,7 +76,6 @@
   });
   const HIGH_IMPACT_ACTION_IDS = new Set([
     "syncHost",
-    "upstreamConfig",
     "refreshFeatures",
     "stabilitySoak",
     "coldRelaunch",
@@ -1917,10 +1916,10 @@
       actions.replaceChildren();
       const actionLists = new Map();
       for (const group of [
-        { id: "status", title: "\u5f53\u524d\u72b6\u6001", ids: MANAGER_ACTION_GROUPS.status },
-        { id: "modelSources", title: "\u8d26\u53f7\u4e0e\u6a21\u578b\u6765\u6e90", ids: MANAGER_ACTION_GROUPS.modelSources },
-        { id: "updates", title: "Codex \u66f4\u65b0", ids: MANAGER_ACTION_GROUPS.updates },
-        { id: "troubleshooting", title: "\u6545\u969c\u6392\u67e5", ids: MANAGER_ACTION_GROUPS.troubleshooting },
+        { id: "status", title: "\u5f53\u524d\u72b6\u6001" },
+        { id: "modelSources", title: "\u8d26\u53f7\u4e0e\u6a21\u578b\u6765\u6e90" },
+        { id: "updates", title: "Codex \u66f4\u65b0" },
+        { id: "troubleshooting", title: "\u6545\u969c\u6392\u67e5" },
       ]) {
         const list = el("div", { className: "anticodex-action-list" });
         const section = el("section", {
@@ -1935,7 +1934,6 @@
         actionLists.set(group.id, list);
         actions.append(section);
       }
-      const advancedGroup = { id: "advanced", ids: MANAGER_ACTION_GROUPS.advanced };
       const advancedList = el("div", { className: "anticodex-action-list" });
       const advancedSection = el("details", {
         className: "anticodex-action-section",
@@ -1944,7 +1942,7 @@
         el("summary", { text: "高级诊断" }),
         advancedList,
       ]);
-      actionLists.set(advancedGroup.id, advancedList);
+      actionLists.set("advanced", advancedList);
       actions.append(advancedSection);
       for (const [action, label] of ACTIONS) {
         const highImpact = HIGH_IMPACT_ACTION_IDS.has(action);

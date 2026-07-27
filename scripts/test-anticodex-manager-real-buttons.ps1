@@ -255,11 +255,11 @@ if ($UiOnlyMatrix) {
     $reportName = "manager-ui-only-button-matrix"
     $dailyActions = @(
         "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
-        "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+        "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight", "upstreamConfig",
         "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports"
     )
     $highImpactActions = @(
-        "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+        "syncHost", "refreshFeatures", "stabilitySoak",
         "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull"
     )
     $expectedActions = @($dailyActions + $highImpactActions)
