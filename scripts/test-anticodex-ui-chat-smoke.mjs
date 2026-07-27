@@ -5515,10 +5515,12 @@ function physicalModelMenuProbeExpression(requiredValues = []) {
     };
     const menuItems = Array.from(document.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"],[cmdk-item]')).filter(visible);
     const target = menuItems.find((element) => element.getAttribute('aria-haspopup') !== 'menu' && matches(labelFor(element))) || null;
-    const submenu = menuItems.find((element) => {
+    const submenuCandidates = menuItems.filter((element) => {
       const label = labelFor(element);
       return element.getAttribute('aria-haspopup') === 'menu' || /^\\s*(模型|model)\\b/i.test(label);
-    }) || null;
+    });
+    const submenu = submenuCandidates.find((element) => /^\\s*(模型|model)\\b/i.test(labelFor(element)))
+      || null;
     return {
       target: target ? summarize(target) : null,
       submenu: submenu ? summarize(submenu) : null,
@@ -5640,7 +5642,7 @@ async function selectFrontendModelWithPhysicalMouse(ws, timeoutMs = 20_000) {
         const item = submenuItems.find((element) => {
           const label = String(element.getAttribute('aria-label') || element.textContent || '').trim();
           return label.startsWith('模型') || label.toLowerCase().startsWith('model');
-        }) || submenuItems[0] || null;
+        }) || null;
         item?.focus();
         return { found: Boolean(item), focused: document.activeElement === item, label: String(item?.getAttribute('aria-label') || item?.textContent || '').trim(), ariaExpanded: item?.getAttribute('aria-expanded') || '' };
       })()`,
