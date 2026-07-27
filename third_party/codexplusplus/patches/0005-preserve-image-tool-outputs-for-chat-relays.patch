@@ -1,7 +1,7 @@
-From 1ceadf3e6d39622283b58c9a47aa3bbe2ef09a57 Mon Sep 17 00:00:00 2001
+From c9f60e2e12a17e4f4027414cd1484cbe1d7e8c1c Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 5/9] fix: preserve image tool outputs for chat relays
+Subject: [PATCH 05/10] fix: preserve image tool outputs for chat relays
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 152 +++++++++++++++++-

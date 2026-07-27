@@ -1,7 +1,7 @@
-From 748805b3b3587daad6238d3e10242b04018661e8 Mon Sep 17 00:00:00 2001
+From f59f4db37c9bf6d1a4909ea6d03e800857972e0f Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
-Subject: [PATCH 6/9] guide models to structured patch tools
+Subject: [PATCH 06/10] guide models to structured patch tools
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--

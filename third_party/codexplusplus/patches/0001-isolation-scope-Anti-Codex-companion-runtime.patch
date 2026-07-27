@@ -1,7 +1,7 @@
-From 3618eb9de45c16fcad63054e99032c411f1d3829 Mon Sep 17 00:00:00 2001
+From 288009b6f7adc33da9be36fede83f373ca6036c2 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Tue, 14 Jul 2026 20:11:29 +0800
-Subject: [PATCH 1/9] isolation: scope Anti-Codex companion runtime
+Subject: [PATCH 01/10] isolation: scope Anti-Codex companion runtime
 
 ---
  apps/codex-plus-launcher/src/main.rs          |  51 ++++-

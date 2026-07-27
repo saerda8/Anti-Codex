@@ -1,6 +1,6 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly nine narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, and a bounded long-multimodal helper body limit. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries exactly ten narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, and conservative missing-usage estimation for native compaction. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
 
 ## Upstream
 
@@ -39,7 +39,9 @@ The eighth patch records only native/converted tool counts, names and types for 
 
 The ninth patch raises the decoded loopback helper request limit from 32 MiB to 128 MiB and the encoded bound from 64 MiB to 256 MiB. Requests above the new explicit bound still return 413; routing, conversion, retries, history and task control are unchanged.
 
-None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. None may add retries or task-control behavior.
+The tenth patch estimates nonzero Responses usage only when a completed Chat SSE stream omitted real usage. It counts text and tool context conservatively, excludes embedded image Base64, and never overrides upstream usage.
+
+None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. None may add retries or task-control behavior.
 
 ## Replay
 
@@ -57,19 +59,20 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0007-ignore-late-reasoning-after-visible-text.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0008-chore-audit-Codex-tool-conversion.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch
+git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch
 ```
 
 `upstream.json` records the patch hash and verification state.
 
 ## Current Verification Boundary
 
-- All nine patches replay on the pinned commit to accepted source head `36068438997136b8ebe3de1b8fc56a410b72977a`; the verified Windows build replay head is `7690ebea85d44c57b4cf279f2176de2b8009c9b6`, and independent replays share tree `19ea2a0f3ff87a20a473691575601390ff9c1358`.
+- All ten patches replay on the pinned commit to accepted source head `6aafaae9b1739b66218ad8511dfcb260e6d80698`; the verified Windows build replay head is `be810e6f08e749d617bcc352d1fb5736a9612717`, and independent replays share tree `efb58ba11c6f0090f1e5903b68631f5ccb973a14`.
 - Repository isolation audit: 9/9 checks passed.
-- Focused component, isolation, runtime-contract and security-boundary regressions pass 229/229; security-boundary contracts pass 4/4.
+- Patch-series security-boundary contracts pass 5/5. Component-install contracts pass 24/25; the remaining test is blocked before product code because this Windows session cannot create its test directory symlink (`EPERM`).
 - Targeted `rustfmt --check` passed for the changed protocol source and test; the pre-existing watcher import-order difference remains outside the protocol patch.
-- Pinned `messense/cargo-xwin:0.23.0` Windows x64 release build passed. The three new real TCP authorization/slow-body regressions ran in the pinned container and passed 3/3; the protocol proxy suite passes 56/56.
+- Pinned `messense/cargo-xwin:0.23.0` Windows x64 release build passed. The protocol proxy suite passes 59/59, including missing usage, real usage precedence and Base64 exclusion.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- Release launcher build: passed; 16,943,616 bytes; SHA-256 `b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136`.
+- Release launcher build: passed; 16,954,368 bytes; SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`.
 - Runtime isolation proof: 20/20 checks passed against copied Codex `26.715.4045.0`; invalid executable selection failed closed, original Codex and the active Anti-Codex stayed unchanged, and all test processes were removed.
 - The previous installed real-mouse/model-switch and long-multimodal task evidence is historical. The old task artifacts were deliberately deleted on user request, and the new binary still requires installed real-mouse, isolation and provider-switch verification before release readiness can be restored.
 

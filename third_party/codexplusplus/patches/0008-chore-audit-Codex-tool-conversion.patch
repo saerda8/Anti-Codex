@@ -1,7 +1,7 @@
-From a7d2056264353f17c4ea38cbb5caf9fc2d4fdb79 Mon Sep 17 00:00:00 2001
+From 8eceae89d924b43b1fdf0e388de3a25469aa9b22 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 07:13:50 +0800
-Subject: [PATCH 8/9] chore: audit Codex tool conversion
+Subject: [PATCH 08/10] chore: audit Codex tool conversion
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 70 +++++++++++++++++++-

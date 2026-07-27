@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Missing Chat Usage Prevents Native Compaction
+
+- Third-party `gpt-5.6-terra` is correctly cataloged at 128k context. The actual failure is that a Chat SSE provider may omit usage; CodexPlusPlus then emitted completed Responses usage `0/0/0`, so native Codex never saw context growth and did not trigger its own compaction.
+- Patch 10 adds a completed-response-only conservative fallback. Real upstream usage wins, embedded image Base64 is excluded, and routing, retries, history and task control are unchanged. Clean source/replay tree is `efb58ba11c6f0090f1e5903b68631f5ccb973a14`; Rust protocol tests pass `59/59`; security-boundary contracts pass `5/5`; Windows release build is 16,954,368 bytes with SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`; managed build containers returned to zero.
+- The component installer suite passes `24/25`; its only failure occurs before product code because this Windows session cannot create the test directory symlink (`EPERM`). Runtime activation and installed compaction proof are still required.
+- Complete source preflight passes `796/797`. Its sole failure is the formal Gate 6 release-binding precondition: installed sync-readiness still describes the previous nine-patch binary, so the new ten-patch binding is correctly invalid until activation. No test was weakened or changed to hide this dependency.
+- Exact `继续` on Gemini turn `019fa3fa-ff03-70a1-9216-b7fa2bff745c` returned HTTP 429. The UI still reports Gemini 3.1 Pro Low, so no consecutive retry was sent. Claude must be visibly selected before the next exact `继续`.
+
 ## 2026-07-27 Native Startup Selector Source Acceptance
 
 - Commits `0e4f3c5f` and `fcc20643` remove stale mode as the restart authority. Node and formal PowerShell startup now derive the route from native config `model`: ordinary Gemini/Claude restores Antigravity, and the native third-party slot resolves the saved third-party model while credentials and both relays remain resident.

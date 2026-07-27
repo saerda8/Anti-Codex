@@ -1,7 +1,7 @@
-From 1a89d83379bba90a3aef10bc3b4fab0f91d6bab4 Mon Sep 17 00:00:00 2001
+From c21910624267abea1972504787df7bf2c9e50166 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:37:37 +0800
-Subject: [PATCH 2/9] fix: cancel loopback streams without resets
+Subject: [PATCH 02/10] fix: cancel loopback streams without resets
 
 ---
  Cargo.lock                                   |   4 +

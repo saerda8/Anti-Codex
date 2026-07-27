@@ -7,6 +7,7 @@ import test from "node:test";
 const root = join(import.meta.dirname, "..", "..");
 const patch1 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0001-isolation-scope-Anti-Codex-companion-runtime.patch"), "utf8");
 const patch2 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0002-cancel-loopback-streams-without-resets.patch"), "utf8");
+const patch10 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0010-fix-estimate-missing-chat-usage-for-native-compaction.patch"), "utf8");
 const patch2AddedLines = patch2
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -16,7 +17,7 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 9);
+  assert.equal(metadata.patches.length, 10);
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
       .update(readFileSync(join(componentRoot, patch.file)))
@@ -26,6 +27,14 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("missing Chat usage is estimated only as a completed-response fallback", () => {
+  assert.match(patch10, /if self\.latest_usage\.is_none\(\)/);
+  assert.match(patch10, /self\.latest_usage = self\.estimated_usage\(\)/);
+  assert.match(patch10, /chat_sse_real_usage_overrides_the_fallback_estimate/);
+  assert.match(patch10, /data:image\/png;base64/);
+  assert.match(patch10, /base64 image was counted as text/);
 });
 
 test("isolated restart validates the exact configured copied app before any stop", () => {
