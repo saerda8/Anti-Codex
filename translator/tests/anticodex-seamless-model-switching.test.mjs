@@ -208,17 +208,25 @@ test("Antigravity startup keeps the saved third-party route available for a late
   assert.equal(child.UPSTREAM_API_KEY, "saved-third-party-key");
 });
 
-test("formal PowerShell launcher keeps a saved third-party relay resident while Antigravity is active", () => {
+test("formal PowerShell launcher restores the native model selection and keeps third-party credentials resident", () => {
   const launcher = readFileSync(join(root, "scripts", "start-anticodex.ps1"), "utf8");
+  const readStart = launcher.indexOf("function Read-AntiCodexNativeSelection");
   const start = launcher.indexOf("function Set-AntiCodexProviderEnvironment");
   const end = launcher.indexOf("\nfunction Wait-AntiCodexFixedRouteReady", start);
+  const readBlock = launcher.slice(readStart, start);
   const block = launcher.slice(start, end);
 
+  assert.ok(readStart >= 0, "native selection reader must exist");
+  assert.match(readBlock, /config\.toml/);
+  assert.match(readBlock, /model\s*\\s\*=/);
+  assert.match(block, /anticodex\/third-party/);
+  assert.match(block, /StartsWith\(\$thirdPartyPrefix/);
+  assert.match(block, /if \(\$null -eq \$NativeSelection\)[\s\S]*?\$RuntimeProfile\.mode/);
+  assert.doesNotMatch(block, /\$runtimeMode\s*=|if \(\$runtimeMode -eq "third-party"\)/);
   assert.match(block, /\$thirdPartyConfigured\s*=/);
   assert.match(block, /if \(\$thirdPartyConfigured\)[\s\S]*?\$env:UPSTREAM_URL\s*=/);
   assert.match(block, /\$env:UPSTREAM_MODEL\s*=\s*\[string\]\$RuntimeProfile\.model/);
   assert.match(block, /\$env:UPSTREAM_API_KEY\s*=\s*\[string\]\$RuntimeProfile\.apiKey/);
-  assert.match(block, /if \(\$runtimeMode -eq "third-party"\)[\s\S]*?\$provider\s*=\s*"third-party"/);
 });
 
 test("Manager saves provider settings and leaves native model selection to the composer", () => {

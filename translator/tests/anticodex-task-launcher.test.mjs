@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,10 +16,32 @@ import {
 
 const baseEnv = {
   LOCALAPPDATA: "C:\\Users\\XD\\AppData\\Local",
-  APPDATA: "C:\\Users\\XD\\AppData\\Roaming",
+  APPDATA: join(tmpdir(), `anticodex-task-launcher-${process.pid}-${Date.now()}`),
   USERPROFILE: "C:\\Users\\XD",
   PATH: "C:\\Program Files\\nodejs",
 };
+
+function nativeModelFixture(model) {
+  const appData = mkdtempSync(join(tmpdir(), "anticodex-native-model-"));
+  const codexHome = join(appData, "anticodex", "codex-home-deepseek-app");
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, "config.toml"), `model = "${model}"\n[features]\nunified_exec = true\n`);
+  return {
+    env: { ...baseEnv, APPDATA: appData },
+    cleanup: () => rmSync(appData, { recursive: true, force: true }),
+  };
+}
+
+function configuredThirdPartyProfile(mode = "third-party") {
+  return {
+    mode,
+    antigravityModel: "gemini-3-flash-agent",
+    protocol: "openai-compatible",
+    baseUrl: "http://127.0.0.1:8080",
+    model: "gpt-5.6-terra",
+    contextWindow: 1_000_000,
+  };
+}
 
 test("task launcher allows a real Antigravity cold start without accepting a transient process", () => {
   assert.equal(ANTIGRAVITY_START_TIMEOUT_MS, 90_000);
@@ -97,6 +119,56 @@ test("task launcher preserves third-party CodexPlusPlus routing without exposing
   assert.equal(childEnv.UPSTREAM_URL, "http://127.0.0.1:8080");
   assert.equal(childEnv.UPSTREAM_MODEL, "gpt-5.6-terra");
   assert.equal(childEnv.UPSTREAM_API_KEY, "runtime-secret");
+});
+
+test("task launcher honors an ordinary native Gemini selection over legacy third-party mode", () => {
+  const fixture = nativeModelFixture("gemini-3.1-pro-low");
+  try {
+    const plan = buildTaskLaunchPlan({
+      env: fixture.env,
+      profile: configuredThirdPartyProfile("third-party"),
+    });
+
+    assert.equal(plan.provider, "antigravity");
+    assert.equal(plan.model, "gemini-3.1-pro-low");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("task launcher derives a third-party model from the native namespaced selection", () => {
+  const fixture = nativeModelFixture("anticodex/third-party/gpt-5.6-sol");
+  try {
+    const plan = buildTaskLaunchPlan({
+      env: fixture.env,
+      profile: configuredThirdPartyProfile("antigravity"),
+    });
+    const childEnv = buildTaskLauncherEnvironment(plan, fixture.env, {
+      ...plan.profile,
+      apiKey: "runtime-secret",
+    });
+
+    assert.equal(plan.provider, "third-party");
+    assert.equal(plan.model, "gpt-5.6-sol");
+    assert.equal(childEnv.UPSTREAM_MODEL, plan.model);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("task launcher resolves the bare native third-party slot to the saved model", () => {
+  const fixture = nativeModelFixture("anticodex/third-party");
+  try {
+    const plan = buildTaskLaunchPlan({
+      env: fixture.env,
+      profile: configuredThirdPartyProfile("antigravity"),
+    });
+
+    assert.equal(plan.provider, "third-party");
+    assert.equal(plan.model, "gpt-5.6-terra");
+  } finally {
+    fixture.cleanup();
+  }
 });
 
 test("task launcher consumes a fresh matching route restart request exactly once", () => {

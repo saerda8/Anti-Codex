@@ -537,23 +537,60 @@ function Read-AntiCodexRuntimeProfile {
     }
 }
 
+function Read-AntiCodexNativeSelection {
+    param([Parameter(Mandatory = $true)][string]$CodexHome)
+    $configPath = Join-Path $CodexHome "config.toml"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return $null }
+
+    $model = ""
+    foreach ($line in Get-Content -LiteralPath $configPath) {
+        if ($line -match '^\s*\[') { break }
+        if ($line -match '^\s*model\s*=\s*(["''])(?<model>.*?)\1\s*(?:#.*)?$') {
+            $model = [string]$Matches.model
+            break
+        }
+    }
+    return [pscustomobject]@{ model = $model.Trim() }
+}
+
 function Set-AntiCodexProviderEnvironment {
-    param($RuntimeProfile)
+    param($RuntimeProfile, $NativeSelection)
     $provider = "antigravity"
     $savedAntigravityModel = if ($RuntimeProfile -and $RuntimeProfile.PSObject.Properties["antigravityModel"]) {
         [string]$RuntimeProfile.antigravityModel
     } else {
         ""
     }
-    $model = if ($env:ANTICODEX_MODEL) {
-        [string]$env:ANTICODEX_MODEL
-    } elseif (-not [string]::IsNullOrWhiteSpace($savedAntigravityModel)) {
+    $model = if (-not [string]::IsNullOrWhiteSpace($savedAntigravityModel)) {
         $savedAntigravityModel
     } else {
         "gemini-3-flash-agent"
     }
 
-    $runtimeMode = if ($RuntimeProfile) { [string]$RuntimeProfile.mode } else { "antigravity" }
+    if ($null -eq $NativeSelection) {
+        if ($RuntimeProfile -and [string]$RuntimeProfile.mode -eq "third-party") {
+            $provider = "third-party"
+            $model = [string]$RuntimeProfile.model
+        }
+    } else {
+        $selectedNativeModel = [string]$NativeSelection.model
+        $thirdPartySlot = "anticodex/third-party"
+        $thirdPartyPrefix = "$thirdPartySlot/"
+        if ($selectedNativeModel -eq $thirdPartySlot -or $selectedNativeModel.StartsWith($thirdPartyPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            $provider = "third-party"
+            $model = if ($selectedNativeModel.StartsWith($thirdPartyPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                $selectedNativeModel.Substring($thirdPartyPrefix.Length)
+            } else {
+                [string]$RuntimeProfile.model
+            }
+        } elseif ($selectedNativeModel -eq "anticodex/antigravity") {
+            $provider = "antigravity"
+        } elseif (-not [string]::IsNullOrWhiteSpace($selectedNativeModel)) {
+            $provider = "antigravity"
+            $model = $selectedNativeModel
+        }
+    }
+
     $thirdPartyConfigured = $RuntimeProfile `
         -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeProfile.protocol) `
         -and -not [string]::IsNullOrWhiteSpace([string]$RuntimeProfile.baseUrl) `
@@ -577,14 +614,9 @@ function Set-AntiCodexProviderEnvironment {
         Remove-Item Env:UPSTREAM_MODEL -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_CONTEXT_WINDOW -ErrorAction SilentlyContinue
-        if ($runtimeMode -eq "third-party") {
+        if ($provider -eq "third-party") {
             throw "The saved third-party profile is incomplete."
         }
-    }
-
-    if ($runtimeMode -eq "third-party") {
-        $provider = "third-party"
-        $model = [string]$RuntimeProfile.model
     }
 
     $env:ANTICODEX_PROVIDER = $provider
@@ -791,7 +823,8 @@ if ($env:DEEPCODEX_WORKSPACE) { $env:ANTICODEX_WORKSPACE = $env:DEEPCODEX_WORKSP
 
 Write-AntiCodexLauncherState -Stage "loading-provider"
 $runtimeProfile = Read-AntiCodexRuntimeProfile -StateRoot $stateRoot
-$selection = Set-AntiCodexProviderEnvironment -RuntimeProfile $runtimeProfile
+$nativeSelection = Read-AntiCodexNativeSelection -CodexHome $env:CODEX_HOME_DIR
+$selection = Set-AntiCodexProviderEnvironment -RuntimeProfile $runtimeProfile -NativeSelection $nativeSelection
 Write-AntiCodexLauncherState -Stage "checking-running-client" -Message "$($selection.provider):$($selection.model)"
 
 $runningMain = Get-RunningAntiCodexMain -MainExecutable $mainExecutable

@@ -13,6 +13,11 @@ import { dirname, join, resolve } from "node:path";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  ANTIGRAVITY_MODEL_SLOT,
+  THIRD_PARTY_MODEL_PREFIX,
+  THIRD_PARTY_MODEL_SLOT,
+} from "./lib/anticodex-fixed-route.mjs";
 
 const TASK_LAUNCHER_SCHEMA = "anticodex-task-launcher-v1";
 export const ROUTE_RESTART_REQUEST_SCHEMA = "anticodex-route-restart-request-v1";
@@ -231,6 +236,37 @@ export function readSavedProfile(stateRoot) {
   return normalizeProfile(JSON.parse(readFileSync(profilePath, "utf8")));
 }
 
+function readNativeSelection(codexHome) {
+  const configPath = join(codexHome, "config.toml");
+  if (!existsSync(configPath)) return null;
+  for (const line of readFileSync(configPath, "utf8").split(/\r?\n/)) {
+    if (/^\s*\[/.test(line)) break;
+    const match = line.match(/^\s*model\s*=\s*(["'])(.*?)\1\s*(?:#.*)?$/);
+    if (match) return { model: match[2].trim() };
+  }
+  return { model: "" };
+}
+
+function resolveLaunchSelection(profile, nativeSelection) {
+  if (nativeSelection === null) {
+    return profile.mode === "third-party"
+      ? { provider: "third-party", model: profile.model }
+      : { provider: "antigravity", model: profile.antigravityModel };
+  }
+
+  const selectedModel = text(nativeSelection.model) ?? "";
+  if (selectedModel === THIRD_PARTY_MODEL_SLOT || selectedModel.startsWith(THIRD_PARTY_MODEL_PREFIX)) {
+    return {
+      provider: "third-party",
+      model: text(selectedModel.slice(THIRD_PARTY_MODEL_PREFIX.length)) ?? profile.model,
+    };
+  }
+  if (selectedModel === ANTIGRAVITY_MODEL_SLOT || !selectedModel) {
+    return { provider: "antigravity", model: profile.antigravityModel };
+  }
+  return { provider: "antigravity", model: selectedModel };
+}
+
 export function consumeRouteRestartRequest(stateRoot, expectedSupervisorPid, now = Date.now()) {
   const requestPath = join(stateRoot, "route-restart-request.json");
   if (!existsSync(requestPath)) return null;
@@ -299,10 +335,9 @@ export function buildTaskLaunchPlan(options = {}) {
   const stateRoot = resolve(join(requiredEnv(env, "APPDATA"), "anticodex"));
   const userProfile = resolve(requiredEnv(env, "USERPROFILE"));
   const profile = normalizeProfile(options.profile ?? readSavedProfile(stateRoot));
-  const provider = profile.mode === "third-party" ? "third-party" : "antigravity";
-  const model = provider === "third-party" ? profile.model : profile.antigravityModel;
   const supervisorScript = resolve(join(scriptRoot, "start-anticodex-fixed-route.mjs"));
   const codexHome = join(stateRoot, "codex-home-deepseek-app");
+  const { provider, model } = resolveLaunchSelection(profile, readNativeSelection(codexHome));
   const disableGpu = truthy(env.ANTICODEX_DISABLE_GPU ?? env.DEEPCODEX_DISABLE_GPU);
   const supervisorArgs = [
     supervisorScript,
@@ -393,7 +428,7 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     Object.assign(env, {
       UPSTREAM_PROTOCOL: runtimeProfile.protocol,
       UPSTREAM_URL: runtimeProfile.baseUrl,
-      UPSTREAM_MODEL: runtimeProfile.model,
+      UPSTREAM_MODEL: plan.provider === "third-party" ? plan.model : runtimeProfile.model,
       UPSTREAM_API_KEY: apiKey,
       UPSTREAM_CONTEXT_WINDOW: String(runtimeProfile.contextWindow),
     });
