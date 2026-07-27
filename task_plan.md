@@ -3107,3 +3107,10 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - The no-traffic UI verifier's unrelated `文件`-submenu fallback was removed and RED/GREEN covered in commit `7fcd47bf`. It then selected `Gemini 3.1 Pro (Low)` in the existing visible task without a restart or model request.
 - Exact `继续` started turn `019fa1f9-d34c-7261-b148-fc02ebfc5316` in the same cwd with `model=gemini-3.1-pro-low` and `effort=low`. The turn is active with at least eight completed shell tool calls and real Antigravity HTTP 200 responses; intermittent 503 responses are recovering inside the same turn.
 - Do not prompt or switch while this turn continues to produce tools/files. The `anti-codex` heartbeat monitor was recreated against this current task and provider priority; Gate 8 remains red until independent final acceptance passes.
+
+## 2026-07-27 21:25 Runtime Activation And Resume Block
+
+- Source commit `0d8840d9` is active through runtime transaction `20260727T132359870Z-5d2e43d103e1451687475264bc3e9f26`. All 120 required files were verified, the previous runtime is preserved for rollback, the launcher is running, and exactly one visible Anti-Codex window remains.
+- Post-restart health is green on Antigravity / `gemini-3.1-pro-low`; six changed source/runtime files have exact SHA-256 parity. Original Codex retained all 11 recorded package processes and visible PID `40736` without a restart.
+- Fast installed UI state passes with `native-panel-v107`, the five Manager groups in contract order, advanced diagnostics collapsed and no fatal/reconnect page. The target task rollout is still unchanged since the aborted 14:16 turn.
+- A no-traffic physical model-menu probe reopened exact task `019f9a93-0de5-71f3-9329-12e0e914e681` but found its per-task composer still selected `第三方 · gpt-5.6-terra 中`; the menu did not expose the Gemini option to the verifier, so no `继续` was sent. Next action is a manual native-menu selection of Gemini 3.1 Pro Low followed by exactly `继续`; do not fall back to third-party while Gemini is available.
