@@ -9,8 +9,6 @@ import { fileURLToPath } from "node:url";
 import { testCodexPlusPlusUpstreamConnection } from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
 import {
-    ANTIGRAVITY_MODEL_SLOT,
-    ANTIGRAVITY_RELAY_ID,
     THIRD_PARTY_MODEL_SLOT,
     THIRD_PARTY_RELAY_ID,
     thirdPartyNativeModel,
@@ -820,126 +818,6 @@ function writeTextAtomic(filePath, value) {
     }
 }
 
-const CODEX_CONTEXT_BACKUP_PREFIX = "# anticodex-manager-context-backup-v1:";
-const CODEX_CONTEXT_KEYS = [
-    "model_context_window",
-    "model_auto_compact_token_limit",
-    "model_auto_compact_token_limit_scope",
-];
-
-function codexContextValue(line, key) {
-    const match = new RegExp(`^\\s*${key}\\s*=\\s*(.*?)\\s*$`).exec(line);
-    if (!match) throw new Error(`Cannot preserve native Codex setting ${key}.`);
-    if (key !== "model_auto_compact_token_limit_scope") {
-        const numberMatch = /^(\d+)\s*(?:#.*)?$/.exec(match[1]);
-        if (!numberMatch) throw new Error(`Cannot preserve native Codex setting ${key}.`);
-        return Number(numberMatch[1]);
-    }
-    const stringMatch = /^("(?:\\.|[^"\\])*"|'[^']*')\s*(?:#.*)?$/.exec(match[1]);
-    if (!stringMatch) throw new Error(`Cannot preserve native Codex setting ${key}.`);
-    return stringMatch[1].startsWith("\"")
-        ? JSON.parse(stringMatch[1])
-        : stringMatch[1].slice(1, -1);
-}
-
-function decodeCodexContextBackup(line) {
-    try {
-        const parsed = JSON.parse(Buffer.from(String(line).slice(CODEX_CONTEXT_BACKUP_PREFIX.length).trim(), "base64url").toString("utf8"));
-        const values = Object.fromEntries(CODEX_CONTEXT_KEYS.map((key) => [key, parsed?.values?.[key] ?? null]));
-        if (parsed?.schema !== 1
-            || CODEX_CONTEXT_KEYS.slice(0, 2).some((key) => values[key] != null && !Number.isInteger(values[key]))
-            || (values.model_auto_compact_token_limit_scope != null && typeof values.model_auto_compact_token_limit_scope !== "string")) {
-            throw new Error();
-        }
-        return values;
-    } catch {
-        throw new Error("The preserved native Codex context settings are invalid.");
-    }
-}
-
-function codexContextValues(rootLines) {
-    return Object.fromEntries(CODEX_CONTEXT_KEYS.map((key) => {
-        const matches = rootLines.filter((line) => new RegExp(`^\\s*${key}\\s*=`).test(line));
-        if (matches.length > 1) throw new Error(`Multiple native Codex settings were found for ${key}.`);
-        return [key, matches.length === 1 ? codexContextValue(matches[0], key) : null];
-    }));
-}
-
-function readCodexContextValues(configPath) {
-    const resolvedPath = path.resolve(String(configPath || ""));
-    if (!fs.existsSync(resolvedPath)) return null;
-    const lines = fs.readFileSync(resolvedPath, "utf8").replaceAll("\r\n", "\n").split("\n");
-    const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line));
-    return codexContextValues(lines.slice(0, firstSection < 0 ? lines.length : firstSection));
-}
-
-function prepareCodexContextConfig(configPath, contextWindow) {
-    const resolvedPath = path.resolve(String(configPath || ""));
-    if (!fs.existsSync(resolvedPath)) {
-        if (contextWindow == null) return null;
-        throw new Error("The native Codex config is unavailable for an in-place switch.");
-    }
-    const parsedWindow = contextWindow == null ? null : Number(contextWindow);
-    if (parsedWindow != null && (!Number.isInteger(parsedWindow) || parsedWindow < 16000 || parsedWindow > 4000000)) {
-        throw new Error("Third-party context window must be an integer between 16000 and 4000000.");
-    }
-    const originalSource = fs.readFileSync(resolvedPath, "utf8");
-    const newline = originalSource.includes("\r\n") ? "\r\n" : "\n";
-    const lines = originalSource.replaceAll("\r\n", "\n").split("\n");
-    const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line));
-    const rootEnd = firstSection < 0 ? lines.length : firstSection;
-    const managedKeys = new Set(CODEX_CONTEXT_KEYS);
-    const currentRoot = lines.slice(0, rootEnd);
-    const backupLines = currentRoot.filter((line) => line.startsWith(CODEX_CONTEXT_BACKUP_PREFIX));
-    if (backupLines.length > 1) throw new Error("Multiple native Codex context backups were found.");
-    const rootLines = currentRoot.filter((line) => {
-        const match = /^\s*([A-Za-z0-9_]+)\s*=/.exec(line);
-        return !line.startsWith(CODEX_CONTEXT_BACKUP_PREFIX) && (!match || !managedKeys.has(match[1]));
-    });
-    const existingBackup = backupLines.length === 1 ? decodeCodexContextBackup(backupLines[0]) : null;
-    const preserved = existingBackup || codexContextValues(currentRoot);
-    const managedLines = parsedWindow == null
-        ? CODEX_CONTEXT_KEYS.flatMap((key) => preserved[key] == null
-            ? []
-            : [`${key} = ${typeof preserved[key] === "string" ? JSON.stringify(preserved[key]) : preserved[key]}`])
-        : [
-            `${CODEX_CONTEXT_BACKUP_PREFIX}${Buffer.from(JSON.stringify({ schema: 1, values: preserved }), "utf8").toString("base64url")}`,
-            `model_context_window = ${parsedWindow}`,
-            `model_auto_compact_token_limit = ${Math.floor(parsedWindow * 0.9)}`,
-            'model_auto_compact_token_limit_scope = "total"',
-        ];
-    const nextSource = [
-        ...managedLines,
-        ...rootLines,
-        ...lines.slice(rootEnd),
-    ].join("\n").replace(/^\n+|\n+$/g, "") + "\n";
-    return {
-        configPath: resolvedPath,
-        originalSource,
-        nextSource: newline === "\n" ? nextSource : nextSource.replaceAll("\n", newline),
-        reloadValues: parsedWindow == null ? preserved : {
-            model_context_window: parsedWindow,
-            model_auto_compact_token_limit: Math.floor(parsedWindow * 0.9),
-            model_auto_compact_token_limit_scope: "total",
-        },
-    };
-}
-
-function nativeConfigReload(reloadValues) {
-    if (!reloadValues) return null;
-    return {
-        hostId: "local",
-        edits: CODEX_CONTEXT_KEYS.map((keyPath) => ({
-            keyPath,
-            value: reloadValues[keyPath] ?? null,
-            mergeStrategy: "replace",
-        })),
-        expectedVersion: null,
-        filePath: null,
-        reloadUserConfig: true,
-    };
-}
-
 function captureFileSnapshots(filePaths) {
     return [...new Set(filePaths.map((filePath) => path.resolve(filePath)))].map((filePath) => ({
         filePath,
@@ -961,26 +839,26 @@ function restoreFileSnapshots(snapshots) {
     if (errors.length > 0) throw new Error(errors.join("; "));
 }
 
-function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
+function prepareThirdPartyNativeCatalog(catalogPath, providerModels, contextWindow) {
     const resolvedPath = path.resolve(String(catalogPath || ""));
     if (!fs.existsSync(resolvedPath)) {
-        throw new Error("The native model catalog is unavailable for an in-place switch.");
+        throw new Error("The unified native model catalog is unavailable for third-party setup.");
     }
     const catalog = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
-    const models = Array.isArray(catalog.models) ? catalog.models : [];
-    const exactSlug = thirdPartyNativeModel(model);
+    if (!Array.isArray(catalog.models)) {
+        throw new Error("The unified native model catalog must contain a models array.");
+    }
+    const models = catalog.models;
     const directPrefix = `${THIRD_PARTY_MODEL_SLOT}/`;
-    const template = models.find((entry) => String(entry?.slug || "") === exactSlug)
-        || models.find((entry) => String(entry?.slug || "") === THIRD_PARTY_MODEL_SLOT)
+    const template = models.find((entry) => String(entry?.slug || "") === THIRD_PARTY_MODEL_SLOT)
         || models.find((entry) => String(entry?.slug || "").startsWith(directPrefix));
     if (!template) {
-        throw new Error("The native third-party model template is unavailable for an in-place switch.");
+        throw new Error("The native third-party model template is unavailable for third-party setup.");
     }
     const nextModels = models
-        .filter((entry) => String(entry?.slug || "") !== exactSlug)
+        .filter((entry) => !String(entry?.slug || "").startsWith(directPrefix))
         .map((entry) => {
             const slug = String(entry?.slug || "");
-            if (slug.startsWith(directPrefix)) return { ...entry, visibility: "hide" };
             if (slug === THIRD_PARTY_MODEL_SLOT) {
                 return {
                     ...entry,
@@ -991,9 +869,9 @@ function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
             }
             return entry;
         });
-    const nativeModel = {
+    const nativeModels = providerModels.map((model) => ({
         ...template,
-        slug: exactSlug,
+        slug: thirdPartyNativeModel(model),
         display_name: `第三方 · ${model}`,
         description: `第三方 API 模型 ${model}`,
         visibility: "list",
@@ -1003,9 +881,9 @@ function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
         context_window: contextWindow,
         max_context_window: contextWindow,
         effective_context_window_percent: 90,
-    };
+    }));
     const genericIndex = nextModels.findIndex((entry) => String(entry?.slug || "") === THIRD_PARTY_MODEL_SLOT);
-    nextModels.splice(genericIndex < 0 ? nextModels.length : genericIndex, 0, nativeModel);
+    nextModels.splice(genericIndex < 0 ? nextModels.length : genericIndex, 0, ...nativeModels);
     catalog.models = nextModels.map((entry, priority) => ({ ...entry, priority }));
     return {
         catalog,
@@ -1014,173 +892,97 @@ function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
     };
 }
 
-export function hotSwitchCodexPlusPlusSettings(options = {}) {
-    const settingsPath = path.resolve(String(options.settingsPath || ""));
-    if (!fs.existsSync(settingsPath)) {
-        throw new Error("CodexPlusPlus settings are unavailable for an in-place switch.");
+export function saveThirdPartyCodexPlusPlusSettings(options = {}) {
+    const settingsValue = String(options.settingsPath || "").trim();
+    const catalogValue = String(options.nativeCatalogPath || "").trim();
+    if (!settingsValue) throw new Error("CodexPlusPlus settings path is required.");
+    if (!catalogValue) throw new Error("Unified native model catalog path is required.");
+    const settingsPath = path.resolve(settingsValue);
+    const catalogPath = path.resolve(catalogValue);
+    if (!fs.existsSync(settingsPath) || !fs.statSync(settingsPath).isFile()) {
+        throw new Error("CodexPlusPlus settings are unavailable for third-party setup.");
     }
-    const mode = String(options.mode || "").trim().toLowerCase();
-    if (mode !== "antigravity" && mode !== "third-party") {
-        throw new Error("Anti-Codex mode must be antigravity or third-party.");
+    if (!fs.existsSync(catalogPath) || !fs.statSync(catalogPath).isFile()) {
+        throw new Error("The unified native model catalog is unavailable for third-party setup.");
     }
-    const adapterPort = validLoopbackPort(options.adapterPort);
-    if (!adapterPort) throw new Error("The Antigravity adapter port is unavailable.");
-    const originalSettingsSource = fs.readFileSync(settingsPath, "utf8");
-    const settings = JSON.parse(originalSettingsSource);
-    const profiles = Array.isArray(settings.relayProfiles) ? settings.relayProfiles : [];
-    const byId = new Map(profiles.map((profile) => [String(profile?.id || ""), profile]));
-    const antigravityModel = String(options.antigravityModel || "gemini-3-flash-agent").trim();
-    const antigravityModels = uniqueModelIds([
-        ANTIGRAVITY_MODEL_SLOT,
-        antigravityModel,
-        ...(Array.isArray(options.antigravityModels) ? options.antigravityModels : []),
-    ]);
-    const existingAntigravityProfile = byId.get(ANTIGRAVITY_RELAY_ID) || {};
-    const antigravityApiKey = String(existingAntigravityProfile.apiKey || "");
-    if (!antigravityApiKey) {
-        throw new Error("The authenticated Antigravity adapter profile is unavailable for an in-place switch.");
+    const thirdParty = options.thirdParty;
+    if (!thirdParty || typeof thirdParty !== "object" || Array.isArray(thirdParty)) {
+        throw new Error("Third-party settings are required.");
     }
-    const antigravityProfile = {
-        ...existingAntigravityProfile,
-        id: ANTIGRAVITY_RELAY_ID,
-        name: "Anti-Codex Antigravity",
-        upstreamBaseUrl: `http://127.0.0.1:${adapterPort}/v1`,
-        apiKey: antigravityApiKey,
-        protocol: "chatCompletions",
-        relayMode: "pureApi",
-        testModel: antigravityModel,
-        useCommonConfig: false,
-        modelList: antigravityModels.join("\n"),
-    };
-    byId.set(ANTIGRAVITY_RELAY_ID, antigravityProfile);
+    const baseUrl = String(thirdParty.baseUrl || "").trim().replace(/\/+$/, "");
+    const model = String(thirdParty.model || "").trim();
+    const apiKey = String(thirdParty.apiKey || "");
+    if (!baseUrl || !model || !apiKey.trim()) {
+        throw new Error("Third-party base URL, model, and API key are required.");
+    }
+    let parsedBaseUrl;
+    try { parsedBaseUrl = new URL(baseUrl); }
+    catch { throw new Error("Third-party base URL must be a valid HTTP or HTTPS URL."); }
+    if (!["http:", "https:"].includes(parsedBaseUrl.protocol)) {
+        throw new Error("Third-party base URL must be a valid HTTP or HTTPS URL.");
+    }
+    const protocol = thirdPartyRelayProtocol(thirdParty.protocol);
+    const contextWindow = Number(thirdParty.contextWindow);
+    if (!Number.isInteger(contextWindow) || contextWindow < 16000 || contextWindow > 4000000) {
+        throw new Error("Third-party context window must be an integer between 16000 and 4000000.");
+    }
+    if (thirdParty.providerModels != null && !Array.isArray(thirdParty.providerModels)) {
+        throw new Error("Third-party provider models must be an array.");
+    }
+    const providerModelValues = [model, ...(thirdParty.providerModels || [])];
+    if (providerModelValues.some((entry) => typeof entry !== "string"
+        || !entry.trim()
+        || entry.length > 200
+        || /[\r\n]/.test(entry))) {
+        throw new Error("Third-party provider model IDs must be non-empty single-line strings up to 200 characters.");
+    }
+    const providerModels = uniqueModelIds(providerModelValues);
+    const modelList = uniqueModelIds([
+        THIRD_PARTY_MODEL_SLOT,
+        ...providerModels.map((entry) => thirdPartyNativeModel(entry)),
+    ]).join("\n");
 
-    const thirdParty = options.thirdParty && typeof options.thirdParty === "object"
-        ? options.thirdParty
-        : null;
-    if (thirdParty?.baseUrl || thirdParty?.model || thirdParty?.apiKey) {
-        const baseUrl = String(thirdParty.baseUrl || "").trim().replace(/\/$/, "");
-        const model = String(thirdParty.model || "").trim();
-        const apiKey = String(thirdParty.apiKey || "");
-        if (!baseUrl || !model || !apiKey) {
-            throw new Error("Saved third-party route is incomplete for an in-place switch.");
-        }
-        const modelIds = uniqueModelIds([
-            THIRD_PARTY_MODEL_SLOT,
-            thirdPartyNativeModel(model),
-            ...(Array.isArray(thirdParty.providerModels)
-                ? thirdParty.providerModels
-                    .map((entry) => String(entry || "").trim())
-                    .filter(Boolean)
-                    .map((entry) => thirdPartyNativeModel(entry))
-                : []),
-        ]);
-        byId.set(THIRD_PARTY_RELAY_ID, {
-            ...(byId.get(THIRD_PARTY_RELAY_ID) || {}),
-            id: THIRD_PARTY_RELAY_ID,
-            name: "Anti-Codex third-party API",
-            upstreamBaseUrl: baseUrl,
-            apiKey,
-            protocol: thirdPartyRelayProtocol(thirdParty.protocol),
-            relayMode: "pureApi",
-            testModel: model,
-            contextWindow: String(Number(thirdParty.contextWindow || 272000)),
-            autoCompactLimit: String(Math.floor(Number(thirdParty.contextWindow || 272000) * 0.9)),
-            authContents: `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
-            useCommonConfig: false,
-            modelList: modelIds.join("\n"),
-        });
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    if (!Array.isArray(settings.relayProfiles)) {
+        throw new Error("CodexPlusPlus settings must contain relayProfiles.");
     }
-    const thirdPartyProfile = byId.get(THIRD_PARTY_RELAY_ID);
-    if (mode === "third-party" && !thirdPartyProfile) {
-        throw new Error("No saved third-party relay is available for an in-place switch.");
+    const thirdPartyProfiles = settings.relayProfiles.filter(
+        (profile) => String(profile?.id || "") === THIRD_PARTY_RELAY_ID,
+    );
+    if (thirdPartyProfiles.length !== 1) {
+        throw new Error("CodexPlusPlus settings must contain exactly one resident third-party relay profile.");
     }
-
-    const orderedProfiles = [
-        byId.get(ANTIGRAVITY_RELAY_ID),
-        byId.get(THIRD_PARTY_RELAY_ID),
-        ...profiles.filter((profile) => ![ANTIGRAVITY_RELAY_ID, THIRD_PARTY_RELAY_ID].includes(String(profile?.id || ""))),
-    ].filter(Boolean);
-    let nativeCatalogModelIds =
-        Array.isArray(options.nativeCatalogModels)
-            ? options.nativeCatalogModels.map((entry) => String(entry || "").trim()).filter(Boolean)
-            : [];
-    let preparedNativeCatalog = null;
-    if (mode === "third-party" && options.nativeCatalogPath) {
-        preparedNativeCatalog = prepareThirdPartyNativeCatalog(
-            options.nativeCatalogPath,
-            thirdPartyProfile.testModel,
-            Number(thirdPartyProfile.contextWindow || 272000),
-        );
-        nativeCatalogModelIds = preparedNativeCatalog.modelIds;
-    }
-    const preparedCodexConfig = options.codexConfigPath
-        ? prepareCodexContextConfig(
-            options.codexConfigPath,
-            mode === "third-party" ? Number(thirdPartyProfile.contextWindow || 272000) : null,
-        )
-        : null;
-    const nativeCatalogModels = new Set(nativeCatalogModelIds);
-
-    settings.relayProfiles = orderedProfiles;
-    settings.activeRelayId = mode === "antigravity" ? ANTIGRAVITY_RELAY_ID : THIRD_PARTY_RELAY_ID;
-    settings.relayTestModel = mode === "antigravity" ? antigravityModel : thirdPartyProfile.testModel;
-    const originalCatalogSource = preparedNativeCatalog
-        ? fs.readFileSync(preparedNativeCatalog.catalogPath, "utf8")
-        : null;
-    let settingsWritten = false;
-    let catalogWritten = false;
-    let configWritten = false;
+    settings.relayProfiles = settings.relayProfiles.map((profile) => (
+        String(profile?.id || "") === THIRD_PARTY_RELAY_ID
+            ? {
+                ...profile,
+                upstreamBaseUrl: baseUrl,
+                apiKey,
+                protocol,
+                testModel: model,
+                contextWindow: String(contextWindow),
+                autoCompactLimit: String(Math.floor(contextWindow * 0.9)),
+                authContents: `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
+                modelList,
+            }
+            : profile
+    ));
+    const preparedNativeCatalog = prepareThirdPartyNativeCatalog(catalogPath, providerModels, contextWindow);
+    const snapshots = captureFileSnapshots([settingsPath, preparedNativeCatalog.catalogPath]);
     try {
         writeJsonAtomic(settingsPath, settings);
-        settingsWritten = true;
-        if (preparedNativeCatalog) {
-            writeJsonAtomic(preparedNativeCatalog.catalogPath, preparedNativeCatalog.catalog);
-            catalogWritten = true;
-        }
-        if (preparedCodexConfig) {
-            writeTextAtomic(preparedCodexConfig.configPath, preparedCodexConfig.nextSource);
-            configWritten = true;
-        }
+        writeJsonAtomic(preparedNativeCatalog.catalogPath, preparedNativeCatalog.catalog);
     } catch (error) {
-        const rollbackErrors = [];
-        if (configWritten) {
-            try { writeTextAtomic(preparedCodexConfig.configPath, preparedCodexConfig.originalSource); }
-            catch (rollbackError) { rollbackErrors.push(`config: ${rollbackError.message}`); }
-        }
-        if (catalogWritten) {
-            try { writeTextAtomic(preparedNativeCatalog.catalogPath, originalCatalogSource); }
-            catch (rollbackError) { rollbackErrors.push(`catalog: ${rollbackError.message}`); }
-        }
-        if (settingsWritten) {
-            try { writeTextAtomic(settingsPath, originalSettingsSource); }
-            catch (rollbackError) { rollbackErrors.push(`settings: ${rollbackError.message}`); }
-        }
-        if (rollbackErrors.length > 0) {
-            error.message += ` Rollback failed (${rollbackErrors.join("; ")}).`;
-        }
+        try { restoreFileSnapshots(snapshots); }
+        catch (rollbackError) { error.message += ` Rollback failed: ${rollbackError.message}`; }
         throw error;
     }
-    let nativeModel;
-    if (mode === "antigravity") {
-        nativeModel = nativeCatalogModels.size === 0 || nativeCatalogModels.has(antigravityModel)
-            ? { slug: antigravityModel, label: antigravityModel }
-            : { slug: ANTIGRAVITY_MODEL_SLOT, label: "Antigravity（当前模型）" };
-    } else {
-        const exact = thirdPartyNativeModel(thirdPartyProfile.testModel);
-        nativeModel = nativeCatalogModels.has(exact)
-            ? { slug: exact, label: `第三方 · ${thirdPartyProfile.testModel}` }
-            : { slug: THIRD_PARTY_MODEL_SLOT, label: "第三方 API（当前模型）" };
-    }
-    const reloadValues = preparedCodexConfig?.reloadValues || {};
     return {
         ok: true,
-        hotSwitch: true,
-        restartRequired: false,
-        mode,
-        model: settings.relayTestModel,
-        activeRelayId: settings.activeRelayId,
-        nativeModel,
-        nativeConfigReload: nativeConfigReload(preparedCodexConfig?.reloadValues),
+        saved: true,
+        model,
+        providerModels,
+        catalogModelIds: preparedNativeCatalog.modelIds,
     };
 }
 
@@ -1199,55 +1001,6 @@ function antigravityModelsFromCatalog(stateRoot = "") {
     } catch {
         return [];
     }
-}
-
-function nativeModelSlugsFromCatalog(stateRoot = "") {
-    const catalogPath = path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json");
-    try {
-        const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
-        return uniqueModelIds(
-            (Array.isArray(parsed?.models) ? parsed.models : []).map((entry) => entry?.slug),
-        );
-    } catch {
-        return [];
-    }
-}
-
-function savedThirdPartyForHotSwitch(runtimeProfile = {}) {
-    const providerModels = Array.isArray(runtimeProfile?.capabilities?.providerModels)
-        ? runtimeProfile.capabilities.providerModels
-        : [];
-    if (!runtimeProfile.baseUrl && !runtimeProfile.model && !runtimeProfile.apiKey) return null;
-    return {
-        protocol: runtimeProfile.protocol,
-        baseUrl: runtimeProfile.baseUrl,
-        model: runtimeProfile.model,
-        apiKey: runtimeProfile.apiKey,
-        contextWindow: runtimeProfile.contextWindow,
-        providerModels,
-    };
-}
-
-async function applySavedProfileHotSwitch(mode, options = {}) {
-    const { stateRoot, scriptsRoot, fixedHealthUrl } = options;
-    const [runtimeProfile, fixedRoute] = await Promise.all([
-        runUpstreamProfileScript("GetRuntime", {}, stateRoot, scriptsRoot),
-        fixedRouteHealthSnapshot(fixedHealthUrl),
-    ]);
-    if (fixedRoute.ready !== true || !fixedRoute.adapterPort) {
-        throw new Error("Anti-Codex fixed route is not ready for an in-place model switch.");
-    }
-    return hotSwitchCodexPlusPlusSettings({
-        settingsPath: path.join(stateRoot, "codexplusplus", "settings.json"),
-        mode,
-        adapterPort: fixedRoute.adapterPort,
-        antigravityModel: runtimeProfile.antigravityModel,
-        antigravityModels: antigravityModelsFromCatalog(stateRoot).map((entry) => entry.id),
-        thirdParty: savedThirdPartyForHotSwitch(runtimeProfile),
-        nativeCatalogPath: path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json"),
-        nativeCatalogModels: nativeModelSlugsFromCatalog(stateRoot),
-        codexConfigPath: path.join(stateRoot, "codex-home-deepseek-app", "config.toml"),
-    });
 }
 
 async function fixedRouteHealthSnapshot(fixedHealthUrl) {
@@ -1357,49 +1110,6 @@ async function fixedRouteAccountSnapshot(fixedRoute, options = {}) {
     } catch {
         return unavailableAccountSnapshot("adapter_unavailable");
     }
-}
-
-async function ensureAntigravityDesktopReady(options = {}) {
-    const { fixedRoute, scriptsRoot, stateRoot, adapterAuthToken } = options;
-    if (fixedRoute?.ready !== true || !fixedRoute.adapterPort) {
-        throw new Error("Anti-Codex 固定线路未就绪，不能切换到 Antigravity。");
-    }
-    let account = await fixedRouteAccountSnapshot(fixedRoute, {
-        forceAntigravity: true,
-        authToken: adapterAuthToken,
-    });
-    if (account.signedIn === true && account.identityAvailable === true) return account;
-
-    const desktopHelper = managerScriptPath({ script: "antigravity-desktop.ps1" }, scriptsRoot);
-    const command = [
-        `$helper = ${psSingleQuoted(desktopHelper)}`,
-        `. $helper`,
-        "$desktop = Get-AntigravityMainProcess",
-        "if (-not $desktop) {",
-        "  $desktopPath = Resolve-AntigravityDesktopPath",
-        "  if (-not $desktopPath) { throw 'Antigravity Desktop is not installed.' }",
-        `  $desktop = Start-AntigravityDesktop -ExecutablePath $desktopPath -StateRoot ${psSingleQuoted(stateRoot)}`,
-        "  $stable = Wait-AntigravityDesktopStable -ExecutablePath $desktopPath -TimeoutSeconds 30 -StableSeconds 3",
-        "  if (-not $stable.Stable) { throw 'Antigravity Desktop did not become stable.' }",
-        "}",
-    ].join("\n");
-    await execFileAsync(powershellPath(), ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
-        cwd: scriptsRoot,
-        timeout: 45_000,
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-    });
-
-    const deadline = Date.now() + 30_000;
-    do {
-        account = await fixedRouteAccountSnapshot(fixedRoute, {
-            forceAntigravity: true,
-            authToken: adapterAuthToken,
-        });
-        if (account.signedIn === true && account.identityAvailable === true) return account;
-        await new Promise((resolveWait) => setTimeout(resolveWait, 500));
-    } while (Date.now() < deadline);
-    throw new Error("Antigravity Desktop 已启动，但登录状态尚未就绪，模型没有切换。");
 }
 
 function isAntigravityUpstreamMode(mode) {
@@ -1914,21 +1624,12 @@ export function createAntiCodexManagerService(options = {}) {
   const scriptsRoot = __dirname;
   const adapterAuthToken = String(options.adapterAuthToken || "");
   const refreshModels = options.refreshModels;
-  const ensureAntigravityReady = options.ensureAntigravityReady
-    ?? ((context) => ensureAntigravityDesktopReady(context));
-  let pendingProfileSwitchRollback = null;
-  const profileSwitchPaths = [
+  const thirdPartySavePaths = [
     path.join(stateRoot, "upstream-profile.json"),
     path.join(stateRoot, "upstream-profile.key"),
     path.join(stateRoot, "codexplusplus", "settings.json"),
     path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json"),
-    path.join(stateRoot, "codex-home-deepseek-app", "config.toml"),
   ];
-  const stageProfileSwitchRollback = (snapshots, nativeConfigReload) => {
-    const switchRollbackId = crypto.randomBytes(18).toString("base64url");
-    pendingProfileSwitchRollback = { switchRollbackId, snapshots, nativeConfigReload };
-    return switchRollbackId;
-  };
 
   const server = http.createServer(async (req, res) => {
     if (!validateLoopbackAndTrusted(req, res)) {
@@ -2149,64 +1850,16 @@ export function createAntiCodexManagerService(options = {}) {
       }
     }
 
-    if (req.method === "POST" && pathname === "/anticodex/upstream-profile/rollback") {
-      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
-      try {
-        const raw = await readRequestBody(req);
-        const body = JSON.parse(raw.toString("utf8") || "{}");
-        const switchRollbackId = String(body.switchRollbackId || "");
-        const pending = pendingProfileSwitchRollback?.switchRollbackId === switchRollbackId
-          ? pendingProfileSwitchRollback
-          : null;
-        if (!pending) return jsonResponse(res, 409, { ok: false, message: "切换回滚凭据无效或已过期。" }, req);
-        restoreFileSnapshots(pending.snapshots);
-        pendingProfileSwitchRollback = null;
-        return jsonResponse(res, 200, {
-          ok: true,
-          rolledBack: true,
-          nativeConfigReload: pending.nativeConfigReload,
-        }, req);
-      } catch (error) {
-        return jsonResponse(res, error.statusCode || 500, { ok: false, message: error.message }, req);
-      }
-    }
-
     if (req.method === "POST" && pathname === "/anticodex/upstream-profile") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
-      let profileSwitchSnapshots = null;
+      let saveSnapshots = null;
       try {
         const raw = await readRequestBody(req);
         const body = JSON.parse(raw.toString("utf8") || "{}");
         if (body.mode === "antigravity") {
-          const antigravityModel = String(body.antigravityModel || "").trim();
-          const availableModels = antigravityModelsFromCatalog(stateRoot);
-          if (antigravityModel && availableModels.length > 0
-              && !availableModels.some((entry) => entry.id === antigravityModel)) {
-            return jsonResponse(res, 400, { ok: false, message: "所选 Antigravity 模型不在当前模型目录中。" }, req);
-          }
-          const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
-          const account = await ensureAntigravityReady({
-            fixedRoute,
-            scriptsRoot,
-            stateRoot,
-            adapterAuthToken,
-          });
-          profileSwitchSnapshots = captureFileSnapshots(profileSwitchPaths);
-          const rollbackNativeConfigReload = nativeConfigReload(readCodexContextValues(profileSwitchPaths[4]));
-          const saved = await runUpstreamProfileScript("UseAntigravity", { antigravityModel }, stateRoot, scriptsRoot);
-          const switched = await applySavedProfileHotSwitch("antigravity", {
-            stateRoot,
-            scriptsRoot,
-            fixedHealthUrl,
-          });
-          const switchRollbackId = stageProfileSwitchRollback(profileSwitchSnapshots, rollbackNativeConfigReload);
-          profileSwitchSnapshots = null;
-          return jsonResponse(res, 200, {
-            ok: true,
-            saved,
-            accountReady: account?.signedIn === true && account?.identityAvailable === true,
-            switchRollbackId,
-            ...switched,
+          return jsonResponse(res, 400, {
+            ok: false,
+            message: "模型切换请在聊天输入框的模型菜单中完成；Manager 只保存第三方配置。",
           }, req);
         }
         let apiKey = String(body.apiKey || "");
@@ -2230,9 +1883,8 @@ export function createAntiCodexManagerService(options = {}) {
           connectionStages: sanitizedConnectionStages(stages),
           providerModels: providerModelIdsFromConnectionStages(stages, body.model),
         };
-        profileSwitchSnapshots = captureFileSnapshots(profileSwitchPaths);
-        const rollbackNativeConfigReload = nativeConfigReload(readCodexContextValues(profileSwitchPaths[4]));
-        const saved = await runUpstreamProfileScript("SaveThirdParty", {
+        saveSnapshots = captureFileSnapshots(thirdPartySavePaths);
+        const savedProfile = await runUpstreamProfileScript("SaveThirdParty", {
           protocol: body.protocol,
           baseUrl: body.baseUrl,
           model: body.model,
@@ -2241,17 +1893,26 @@ export function createAntiCodexManagerService(options = {}) {
           testStatus,
           capabilitiesJson: JSON.stringify(capabilities),
         }, stateRoot, scriptsRoot);
-        const switched = await applySavedProfileHotSwitch("third-party", {
-          stateRoot,
-          scriptsRoot,
-          fixedHealthUrl,
+        const saved = saveThirdPartyCodexPlusPlusSettings({
+          settingsPath: thirdPartySavePaths[2],
+          nativeCatalogPath: thirdPartySavePaths[3],
+          thirdParty: {
+            protocol: savedProfile.protocol,
+            baseUrl: savedProfile.baseUrl,
+            model: savedProfile.model,
+            apiKey,
+            contextWindow: savedProfile.contextWindow,
+            providerModels: savedProfile.capabilities?.providerModels || capabilities.providerModels,
+          },
         });
-        const switchRollbackId = stageProfileSwitchRollback(profileSwitchSnapshots, rollbackNativeConfigReload);
-        profileSwitchSnapshots = null;
-        return jsonResponse(res, 200, { ok: true, saved, switchRollbackId, ...switched }, req);
+        saveSnapshots = null;
+        return jsonResponse(res, 200, {
+          ...saved,
+          message: "配置已保存，可在聊天输入框的模型菜单选择第三方模型。",
+        }, req);
       } catch (error) {
-        if (profileSwitchSnapshots) {
-          try { restoreFileSnapshots(profileSwitchSnapshots); }
+        if (saveSnapshots) {
+          try { restoreFileSnapshots(saveSnapshots); }
           catch (rollbackError) { error.message += ` Rollback failed: ${rollbackError.message}`; }
         }
         return jsonResponse(res, error.statusCode || 400, { ok: false, message: error.message }, req);
@@ -2314,7 +1975,6 @@ export function createAntiCodexManagerService(options = {}) {
       });
     },
     close() {
-      pendingProfileSwitchRollback = null;
       return new Promise((resolve, reject) => {
         if (!server.listening) {
           resolve();
