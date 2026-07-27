@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Manager Save-Only Routing Source Acceptance
+
+- Design and plan are committed on `main` as `1d6ee7f9` and `3aa1d099`. The isolated `feature/manager-model-routing` worktree is at `01376fcb`, after `37a878c9` RED tests, `1a2deaec` save-only service, `a30bd700` persistence hardening, `459c67cb` UI RED contract, `4e29f404` contract hardening, `67f6217e` UI implementation, `8d05690c` normal setup action, `ab71ebf4` UI-state parsing repair, `d5ef251b` LF-stable patch-byte protection, and `01376fcb` closed fallback-HTML enforcement.
+- Manager no longer owns provider/model switching. It only tests and saves third-party configuration; the native composer model menu is the sole switch. Antigravity and third-party relays remain resident, and CodexPlusPlus patch `0004` is logically unchanged while all nine patch files stay LF-stable.
+- Fresh source-only receipts are focused `80/80`, JavaScript syntax `4/4`, and complete no-traffic preflight `793/793` across 59 test files with zero failures, skips or warnings (`20260727-203626-source-preflight.json`, `129690 ms`). The forbidden-behavior scan has zero product-source hits; all 12 matches are negative/static assertions. `git diff --check` passes. No Docker, development worker or product/model traffic was used.
+- This is not installed or 100% evidence. The installed runtime has not been synchronized to these commits, and no real-mouse Manager/UI/native-model-menu round trip has run. Runtime acceptance and the autonomous long task remain separate; after runtime/UI acceptance, the original task may receive only exact `继续`. Provider order remains Gemini, Claude, then third-party only after explicit failure of both preferred providers.
+
 ## 2026-07-27 Built-In Update Candidate-Validator Miss
 
 - Built-in updater operation `d4ed1a781a064fa5be0370a6294e0c6d` correctly built a 14-patch candidate and then failed closed before activation because the candidate validator still expected the old 13-patch manifest. The active client stayed on its signed 13-patch host and native Codex was unaffected. This was a release-validator omission, not a patcher or provider failure.
