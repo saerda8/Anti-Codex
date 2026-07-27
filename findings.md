@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Native Startup Selector Source Acceptance
+
+- Commits `0e4f3c5f` and `fcc20643` remove stale mode as the restart authority. Node and formal PowerShell startup now derive the route from native config `model`: ordinary Gemini/Claude restores Antigravity, and the native third-party slot resolves the saved third-party model while credentials and both relays remain resident.
+- Fresh offline receipts are targeted `91/91`, Node syntax `5/5`, PowerShell parse `1/1`, and complete no-traffic preflight `796/796` across 59 files with zero failures, skips or warnings (`20260727-211016-source-preflight.json`, `129192 ms`). Product source has zero forbidden-behavior hits; all 12 matches are negative/static assertions. `git diff --check` passes, with no runtime sync, UI/CDP, model traffic or Docker.
+- One parser wrapper invocation failed before reading `start-anticodex.ps1` because the outer shell expanded its variables. The corrected single-quoted read-only invocation parsed the target `1/1`; no file, process or runtime state changed.
+- Installed restart and actual-mouse Manager/native-menu behavior are not yet accepted, and the long task remains separate. Do not claim 100%; after runtime/UI acceptance, resume the original task only with exact `继续`, preferring Gemini, then Claude, and third-party only after explicit failure of both.
+
 ## 2026-07-27 Manager Save-Only Routing Source Acceptance
 
 - Design and plan are committed on `main` as `1d6ee7f9` and `3aa1d099`. The isolated `feature/manager-model-routing` worktree is at `01376fcb`, after `37a878c9` RED tests, `1a2deaec` save-only service, `a30bd700` persistence hardening, `459c67cb` UI RED contract, `4e29f404` contract hardening, `67f6217e` UI implementation, `8d05690c` normal setup action, `ab71ebf4` UI-state parsing repair, `d5ef251b` LF-stable patch-byte protection, and `01376fcb` closed fallback-HTML enforcement.
