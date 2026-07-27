@@ -101,6 +101,79 @@ test("model refresh preserves the live provider and updates only the Antigravity
   );
 });
 
+test("model refresh derives the third-party catalog from live hot-switch settings", () => {
+  assert.equal(typeof fixedRoute.thirdPartyCatalogOptionsFromSettings, "function");
+  const options = fixedRoute.thirdPartyCatalogOptionsFromSettings({
+    relayProfiles: [{
+      id: "anticodex-third-party",
+      testModel: "gpt-5.6-terra",
+      contextWindow: "128000",
+      modelList: "anticodex/third-party\nanticodex/third-party/gpt-5.6-sol\nanticodex/third-party/gpt-5.6-terra",
+    }],
+  }, {
+    model: "gpt-5.6-sol",
+    modelContextWindow: 272000,
+  });
+
+  assert.deepEqual(options, {
+    thirdPartyModel: "gpt-5.6-terra",
+    thirdPartyModels: ["gpt-5.6-terra"],
+    thirdPartyContextWindow: 128000,
+  });
+});
+
+test("refresh callback rebuilds the unified catalog from live third-party settings", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const route = source.indexOf("const thirdPartyRoute = plan.relayRoutes.find");
+  const start = source.indexOf("refreshModelsCallback = async () =>", route);
+  const end = source.indexOf("const childEnvironment", start);
+  assert.ok(route >= 0 && start > route && end > start);
+  const block = source.slice(start, end);
+
+  assert.match(block, /const liveSettings = JSON\.parse\(readFileSync/);
+  assert.match(block, /const thirdPartyCatalogOptions = thirdPartyCatalogOptionsFromSettings\(liveSettings, thirdPartyRoute\)/);
+  assert.match(block, /const previousUnifiedCatalog = readCatalogSafely\(unifiedCatalogPath\) \?\? catalog/);
+  assert.match(block, /const rebuiltCatalog = buildUnifiedModelCatalog\(bundledCatalog, \{\s*antigravityCatalog: refreshedAntigravityCatalog,\s*\.\.\.thirdPartyCatalogOptions,/);
+  assert.match(block, /const refreshedCatalog = preserveHiddenCompatibilityModels\(rebuiltCatalog, previousUnifiedCatalog\)/);
+});
+
+test("runtime route status reports the live unified catalog size after a hot switch", () => {
+  const stateRoot = join(tmpdir(), `anticodex-live-catalog-${randomUUID()}`);
+  const codexHome = join(stateRoot, "codex-home");
+  const codexPlusPlusState = join(stateRoot, "codexplusplus");
+  mkdirSync(codexHome, { recursive: true });
+  mkdirSync(codexPlusPlusState, { recursive: true });
+  try {
+    writeFileSync(join(codexPlusPlusState, "settings.json"), JSON.stringify({
+      activeRelayId: "anticodex-third-party",
+      relayProfiles: [{
+        id: "anticodex-third-party",
+        name: "Anti-Codex third-party API",
+        testModel: "gpt-5.6-terra",
+        contextWindow: "128000",
+        protocol: "chatCompletions",
+        upstreamBaseUrl: "http://localhost:8080",
+      }],
+    }));
+    writeFileSync(join(codexHome, "config.toml"), 'model = "anticodex/third-party/gpt-5.6-terra"\n');
+    writeFileSync(join(codexHome, "anticodex-model-catalog.json"), JSON.stringify({
+      models: [{ slug: "a" }, { slug: "b" }, { slug: "c" }],
+    }));
+
+    const status = fixedRoute.runtimeRouteStatus({
+      state: "ready",
+      catalogModelCount: 2,
+      route: {},
+    }, {
+      paths: { codexHome, codexPlusPlusState },
+    });
+    assert.equal(status.catalogModelCount, 3);
+    assert.equal(status.model, "gpt-5.6-terra");
+  } finally {
+    rmSync(stateRoot, { recursive: true, force: true });
+  }
+});
+
 test("Manager support children exit when their owning supervisor no longer exists", () => {
   const environment = {
     ...process.env,

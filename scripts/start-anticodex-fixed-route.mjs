@@ -730,13 +730,14 @@ async function runSupervisor(plan) {
           currentAntigravityCatalog,
           antigravityCatalog,
         );
-        const refreshedCatalog = buildUnifiedModelCatalog(bundledCatalog, {
-          antigravityCatalog: refreshedAntigravityCatalog,
-          thirdPartyModel: thirdPartyRoute?.model,
-          thirdPartyModels: thirdPartyRoute?.model ? [thirdPartyRoute.model] : [],
-          thirdPartyContextWindow: thirdPartyRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
-        });
         const liveSettings = JSON.parse(readFileSync(join(plan.paths.codexPlusPlusState, "settings.json"), "utf8"));
+        const thirdPartyCatalogOptions = thirdPartyCatalogOptionsFromSettings(liveSettings, thirdPartyRoute);
+        const previousUnifiedCatalog = readCatalogSafely(unifiedCatalogPath) ?? catalog;
+        const rebuiltCatalog = buildUnifiedModelCatalog(bundledCatalog, {
+          antigravityCatalog: refreshedAntigravityCatalog,
+          ...thirdPartyCatalogOptions,
+        });
+        const refreshedCatalog = preserveHiddenCompatibilityModels(rebuiltCatalog, previousUnifiedCatalog);
         const refreshedSettings = refreshAntigravityRelayModelList(liveSettings, refreshedAntigravityCatalog);
 
         writeTextAtomic(antigravityCatalogPath, `${JSON.stringify(refreshedAntigravityCatalog, null, 2)}\n`);
@@ -1131,6 +1132,8 @@ export function runtimeRouteStatus(baseStatus, plan) {
   try {
     const settingsPath = join(plan.paths.codexPlusPlusState, "settings.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    const liveCatalog = readCatalogSafely(join(plan.paths.codexHome, "anticodex-model-catalog.json"));
+    const catalogModelCount = liveCatalog?.models?.length ?? baseStatus.catalogModelCount;
     const profiles = Array.isArray(settings.relayProfiles) ? settings.relayProfiles : [];
     const antigravity = profiles.find((entry) => entry?.id === ANTIGRAVITY_RELAY_ID) ?? null;
     const thirdParty = profiles.find((entry) => entry?.id === THIRD_PARTY_RELAY_ID) ?? null;
@@ -1159,9 +1162,10 @@ export function runtimeRouteStatus(baseStatus, plan) {
       profile = provider === "third-party" ? thirdParty : antigravity;
       model = String(profile?.testModel ?? baseStatus.model ?? "");
     }
-    if (!profile || !model) return baseStatus;
+    if (!profile || !model) return { ...baseStatus, catalogModelCount };
     return {
       ...baseStatus,
+      catalogModelCount,
       provider,
       model,
       modelContextWindow: provider === "third-party"
@@ -1496,6 +1500,20 @@ export function preserveHiddenCompatibilityModels(currentCatalog, previousCatalo
     });
   }
   return { ...currentCatalog, models };
+}
+
+export function thirdPartyCatalogOptionsFromSettings(settings, fallbackRoute = null) {
+  const profiles = Array.isArray(settings?.relayProfiles) ? settings.relayProfiles : [];
+  const profile = profiles.find((entry) => String(entry?.id || "") === THIRD_PARTY_RELAY_ID) ?? null;
+  const thirdPartyModel = String(profile?.testModel || fallbackRoute?.model || "").trim();
+  return {
+    thirdPartyModel,
+    thirdPartyModels: thirdPartyModel ? [thirdPartyModel] : [],
+    thirdPartyContextWindow: contextWindow(
+      profile?.contextWindow ?? fallbackRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+      DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
+    ),
+  };
 }
 
 export function refreshAntigravityRelayModelList(settings, antigravityCatalog) {

@@ -34,6 +34,24 @@ const completeSnapshotPaths = [
   "/backend-api/wham/apps",
 ];
 
+test("Manager model switch prefers the native model submenu over application menus", () => {
+  const start = managerInject.indexOf("const selectNativeModelByLabels");
+  const end = managerInject.indexOf("testButton.onclick", start);
+  const block = managerInject.slice(start, end);
+
+  assert.match(block, /const visibleMenuItems = Array\.from\(document\.querySelectorAll\('\[role="menuitem"\]'\)\)\s*\.filter\(visible\)/);
+  assert.match(block, /\.filter\(\(element\) => element\.getAttribute\("aria-haspopup"\) === "menu"\)/);
+  assert.match(block, /\.sort\(\(left, right\) =>[\s\S]*?模型[\s\S]*?menuDistance/);
+});
+
+test("Manager third-party switch falls back to the stable current-model slot", () => {
+  const start = managerInject.indexOf("saveButton.onclick");
+  const end = managerInject.indexOf("restoreButton.onclick", start);
+  const block = managerInject.slice(start, end);
+
+  assert.match(block, /selectNativeModelByLabels\([\s\S]*?"第三方 API（当前模型）"[\s\S]*?"anticodex\/third-party"/);
+});
+
 function fakeBridgeSession(name) {
   return {
     name,

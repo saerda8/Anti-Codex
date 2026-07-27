@@ -1903,11 +1903,25 @@
           .filter((item) => /gemini|claude|opus|sonnet|flash|gpt|oss|模型|自定义|第三方|antigravity/i.test(item.label))
           .sort((left, right) => left.distance - right.distance)[0];
         if (!selector) return { ok: false, reason: "model_selector_not_found" };
+        const selectorRect = selector.element.getBoundingClientRect();
         selector.element.click();
         await wait(80);
-        const submenuTrigger = Array.from(document.querySelectorAll('[role="menuitem"]'))
-          .filter(visible)
-          .find((element) => element.getAttribute("aria-haspopup") === "menu" || /^\s*模型/i.test(labelFor(element)));
+        const visibleMenuItems = Array.from(document.querySelectorAll('[role="menuitem"]'))
+          .filter(visible);
+        const submenuTrigger = visibleMenuItems
+          .filter((element) => element.getAttribute("aria-haspopup") === "menu")
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const menuDistance = Math.hypot(
+              (rect.left + rect.width / 2) - (selectorRect.left + selectorRect.width / 2),
+              (rect.top + rect.height / 2) - (selectorRect.top + selectorRect.height / 2),
+            );
+            return { element, label: labelFor(element), menuDistance };
+          })
+          .sort((left, right) => (
+            Number(!/^\s*模型/i.test(left.label)) - Number(!/^\s*模型/i.test(right.label))
+            || left.menuDistance - right.menuDistance
+          ))[0]?.element;
         if (!submenuTrigger) return { ok: false, reason: "model_submenu_not_found" };
         const rect = submenuTrigger.getBoundingClientRect();
         const eventInit = {
@@ -1990,7 +2004,12 @@
           if (!switchedWithoutRestart) {
             throw new Error("本地模型通道拒绝了无重启切换。");
           }
-          const selected = await selectNativeModelByLabels(payload.nativeModel?.label, payload.nativeModel?.slug);
+          const selected = await selectNativeModelByLabels(
+            payload.nativeModel?.label,
+            payload.nativeModel?.slug,
+            "第三方 API（当前模型）",
+            "anticodex/third-party",
+          );
           stageBox.textContent = selected.ok
             ? `已无缝切换到第三方 API：${model.value.trim()}。当前任务和客户端均未重启。`
             : `线路已更新，但原生模型菜单未能自动选中。请在输入框旁的模型菜单选择“${payload.nativeModel?.label || "第三方 API（当前模型）"}”。`;

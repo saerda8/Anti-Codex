@@ -6,9 +6,130 @@ import os from "node:os";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 
-import { createAntiCodexManagerService } from "../../scripts/anticodex-manager-service.mjs";
+import {
+  createAntiCodexManagerService,
+  hotSwitchCodexPlusPlusSettings,
+} from "../../scripts/anticodex-manager-service.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+test("third-party hot switch adds the tested model to the native catalog", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-terra-catalog-"));
+  try {
+    const settingsPath = path.join(tempDir, "settings.json");
+    const catalogPath = path.join(tempDir, "anticodex-model-catalog.json");
+    fs.writeFileSync(settingsPath, JSON.stringify({
+      relayProfiles: [
+        {
+          id: "anticodex-antigravity",
+          apiKey: "local-adapter-key",
+          testModel: "gemini-3-flash-agent",
+        },
+        {
+          id: "anticodex-third-party",
+          apiKey: "saved-third-party-key",
+          testModel: "gpt-5.6-sol",
+        },
+      ],
+      activeRelayId: "anticodex-third-party",
+      relayTestModel: "gpt-5.6-sol",
+    }), "utf8");
+    fs.writeFileSync(catalogPath, JSON.stringify({
+      models: [
+        {
+          slug: "anticodex/third-party/gpt-5.6-sol",
+          display_name: "第三方 · gpt-5.6-sol",
+          visibility: "list",
+          shell_type: "shell_command",
+          apply_patch_tool_type: "freeform",
+          context_window: 272000,
+          max_context_window: 272000,
+        },
+        {
+          slug: "anticodex/third-party",
+          display_name: "第三方 API（当前模型）",
+          visibility: "list",
+          shell_type: "shell_command",
+          apply_patch_tool_type: "freeform",
+          context_window: 272000,
+          max_context_window: 272000,
+        },
+      ],
+    }), "utf8");
+
+    const switched = hotSwitchCodexPlusPlusSettings({
+      settingsPath,
+      nativeCatalogPath: catalogPath,
+      nativeCatalogModels: [
+        "anticodex/third-party/gpt-5.6-sol",
+        "anticodex/third-party",
+      ],
+      mode: "third-party",
+      adapterPort: 18488,
+      antigravityModel: "gemini-3-flash-agent",
+      thirdParty: {
+        protocol: "openai-compatible",
+        baseUrl: "http://localhost:8080",
+        model: "gpt-5.6-terra",
+        apiKey: "saved-third-party-key",
+        contextWindow: 128000,
+        providerModels: ["gpt-5.6-terra"],
+      },
+    });
+
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    const terra = catalog.models.find((entry) => entry.slug === "anticodex/third-party/gpt-5.6-terra");
+    const sol = catalog.models.find((entry) => entry.slug === "anticodex/third-party/gpt-5.6-sol");
+    const current = catalog.models.find((entry) => entry.slug === "anticodex/third-party");
+    assert.equal(terra.display_name, "第三方 · gpt-5.6-terra");
+    assert.equal(terra.visibility, "list");
+    assert.equal(terra.shell_type, "shell_command");
+    assert.equal(terra.apply_patch_tool_type, "freeform");
+    assert.equal(terra.context_window, 128000);
+    assert.equal(current.context_window, 128000);
+    assert.equal(current.max_context_window, 128000);
+    assert.equal(sol.visibility, "hide");
+    assert.deepEqual(switched.nativeModel, {
+      slug: "anticodex/third-party/gpt-5.6-terra",
+      label: "第三方 · gpt-5.6-terra",
+    });
+
+    const settingsBeforeFailedSwitch = fs.readFileSync(settingsPath, "utf8");
+    const catalogBeforeFailedSwitch = fs.readFileSync(catalogPath, "utf8");
+    const renameSync = fs.renameSync;
+    fs.renameSync = (source, destination) => {
+      if (path.resolve(destination) === path.resolve(catalogPath)) {
+        throw new Error("catalog replace failed");
+      }
+      return renameSync(source, destination);
+    };
+    try {
+      assert.throws(() => hotSwitchCodexPlusPlusSettings({
+        settingsPath,
+        nativeCatalogPath: catalogPath,
+        mode: "third-party",
+        adapterPort: 18488,
+        antigravityModel: "gemini-3-flash-agent",
+        thirdParty: {
+          protocol: "openai-compatible",
+          baseUrl: "http://localhost:8080",
+          model: "gpt-5.6-alt",
+          apiKey: "saved-third-party-key",
+          contextWindow: 128000,
+        },
+      }), /catalog replace failed/);
+    } finally {
+      fs.renameSync = renameSync;
+    }
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(settingsPath, "utf8")),
+      JSON.parse(settingsBeforeFailedSwitch),
+    );
+    assert.equal(fs.readFileSync(catalogPath, "utf8"), catalogBeforeFailedSwitch);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("Static code assertions: no prohibited basenames or model/task control words in service source", () => {
   const servicePath = path.resolve(__dirname, "../../scripts/anticodex-manager-service.mjs");

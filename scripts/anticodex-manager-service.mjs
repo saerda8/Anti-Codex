@@ -816,6 +816,59 @@ function writeJsonAtomic(filePath, value) {
     }
 }
 
+function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
+    const resolvedPath = path.resolve(String(catalogPath || ""));
+    if (!fs.existsSync(resolvedPath)) {
+        throw new Error("The native model catalog is unavailable for an in-place switch.");
+    }
+    const catalog = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+    const models = Array.isArray(catalog.models) ? catalog.models : [];
+    const exactSlug = thirdPartyNativeModel(model);
+    const directPrefix = `${THIRD_PARTY_MODEL_SLOT}/`;
+    const template = models.find((entry) => String(entry?.slug || "") === exactSlug)
+        || models.find((entry) => String(entry?.slug || "") === THIRD_PARTY_MODEL_SLOT)
+        || models.find((entry) => String(entry?.slug || "").startsWith(directPrefix));
+    if (!template) {
+        throw new Error("The native third-party model template is unavailable for an in-place switch.");
+    }
+    const nextModels = models
+        .filter((entry) => String(entry?.slug || "") !== exactSlug)
+        .map((entry) => {
+            const slug = String(entry?.slug || "");
+            if (slug.startsWith(directPrefix)) return { ...entry, visibility: "hide" };
+            if (slug === THIRD_PARTY_MODEL_SLOT) {
+                return {
+                    ...entry,
+                    context_window: contextWindow,
+                    max_context_window: contextWindow,
+                    effective_context_window_percent: 90,
+                };
+            }
+            return entry;
+        });
+    const nativeModel = {
+        ...template,
+        slug: exactSlug,
+        display_name: `第三方 · ${model}`,
+        description: `第三方 API 模型 ${model}`,
+        visibility: "list",
+        supported_in_api: true,
+        upgrade: null,
+        availability_nux: null,
+        context_window: contextWindow,
+        max_context_window: contextWindow,
+        effective_context_window_percent: 90,
+    };
+    const genericIndex = nextModels.findIndex((entry) => String(entry?.slug || "") === THIRD_PARTY_MODEL_SLOT);
+    nextModels.splice(genericIndex < 0 ? nextModels.length : genericIndex, 0, nativeModel);
+    catalog.models = nextModels.map((entry, priority) => ({ ...entry, priority }));
+    return {
+        catalog,
+        catalogPath: resolvedPath,
+        modelIds: catalog.models.map((entry) => String(entry?.slug || "").trim()).filter(Boolean),
+    };
+}
+
 export function hotSwitchCodexPlusPlusSettings(options = {}) {
     const settingsPath = path.resolve(String(options.settingsPath || ""));
     if (!fs.existsSync(settingsPath)) {
@@ -827,7 +880,8 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
     }
     const adapterPort = validLoopbackPort(options.adapterPort);
     if (!adapterPort) throw new Error("The Antigravity adapter port is unavailable.");
-    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const originalSettingsSource = fs.readFileSync(settingsPath, "utf8");
+    const settings = JSON.parse(originalSettingsSource);
     const profiles = Array.isArray(settings.relayProfiles) ? settings.relayProfiles : [];
     const byId = new Map(profiles.map((profile) => [String(profile?.id || ""), profile]));
     const antigravityModel = String(options.antigravityModel || "gemini-3-flash-agent").trim();
@@ -901,16 +955,37 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
         byId.get(THIRD_PARTY_RELAY_ID),
         ...profiles.filter((profile) => ![ANTIGRAVITY_RELAY_ID, THIRD_PARTY_RELAY_ID].includes(String(profile?.id || ""))),
     ].filter(Boolean);
+    let nativeCatalogModelIds =
+        Array.isArray(options.nativeCatalogModels)
+            ? options.nativeCatalogModels.map((entry) => String(entry || "").trim()).filter(Boolean)
+            : [];
+    let preparedNativeCatalog = null;
+    if (mode === "third-party" && options.nativeCatalogPath) {
+        preparedNativeCatalog = prepareThirdPartyNativeCatalog(
+            options.nativeCatalogPath,
+            thirdPartyProfile.testModel,
+            Number(thirdPartyProfile.contextWindow || 272000),
+        );
+        nativeCatalogModelIds = preparedNativeCatalog.modelIds;
+    }
+    const nativeCatalogModels = new Set(nativeCatalogModelIds);
+
     settings.relayProfiles = orderedProfiles;
     settings.activeRelayId = mode === "antigravity" ? ANTIGRAVITY_RELAY_ID : THIRD_PARTY_RELAY_ID;
     settings.relayTestModel = mode === "antigravity" ? antigravityModel : thirdPartyProfile.testModel;
     writeJsonAtomic(settingsPath, settings);
-
-    const nativeCatalogModels = new Set(
-        Array.isArray(options.nativeCatalogModels)
-            ? options.nativeCatalogModels.map((entry) => String(entry || "").trim()).filter(Boolean)
-            : [],
-    );
+    if (preparedNativeCatalog) {
+        try {
+            writeJsonAtomic(preparedNativeCatalog.catalogPath, preparedNativeCatalog.catalog);
+        } catch (error) {
+            try {
+                writeJsonAtomic(settingsPath, JSON.parse(originalSettingsSource));
+            } catch (rollbackError) {
+                error.message += ` Settings rollback failed: ${rollbackError.message}`;
+            }
+            throw error;
+        }
+    }
     let nativeModel;
     if (mode === "antigravity") {
         nativeModel = nativeCatalogModels.size === 0 || nativeCatalogModels.has(antigravityModel)
@@ -993,6 +1068,7 @@ async function applySavedProfileHotSwitch(mode, options = {}) {
         antigravityModel: runtimeProfile.antigravityModel,
         antigravityModels: antigravityModelsFromCatalog(stateRoot).map((entry) => entry.id),
         thirdParty: savedThirdPartyForHotSwitch(runtimeProfile),
+        nativeCatalogPath: path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json"),
         nativeCatalogModels: nativeModelSlugsFromCatalog(stateRoot),
     });
 }
