@@ -55,13 +55,24 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const startedAtMs = Date.now();
 const managerInjectSource = fs.readFileSync(new URL("./anticodex-manager-inject.js", import.meta.url), "utf8");
 const managerButtonLockPath = path.join(os.tmpdir(), "anticodex-manager-button.lock");
-const expectedDailyActionIds = [
-  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy", "syncReadiness",
-  "repairShortcuts", "updateCheck", "sourcePreflight", "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
-];
-const expectedHighImpactActionIds = [
+const EXPECTED_ACTION_GROUPS = Object.freeze({
+  status: Object.freeze(["refreshStatus"]),
+  modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+  updates: Object.freeze(["updateCheck", "syncHost"]),
+  troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
+  advanced: Object.freeze([
+    "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+    "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+    "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
+  ]),
+});
+const EXPECTED_ACTION_IDS = Object.freeze(Object.values(EXPECTED_ACTION_GROUPS).flat());
+const EXPECTED_HIGH_IMPACT_ACTION_IDS = Object.freeze([
   "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
-];
+]);
+if (new Set(EXPECTED_ACTION_IDS).size !== EXPECTED_ACTION_IDS.length) {
+  throw new Error("Manager action groups contain duplicate action IDs");
+}
 
 function discoverAntiCodexCdpPorts() {
   if (process.platform !== "win32") return [];
@@ -158,6 +169,49 @@ function sameActionIds(actual, expected) {
   return JSON.stringify([...(actual || [])].sort()) === JSON.stringify([...expected].sort());
 }
 
+function sameActionGroups(actual, expected = EXPECTED_ACTION_GROUPS) {
+  return JSON.stringify(actual || {}) === JSON.stringify(expected);
+}
+
+function actionGroupsFromHtml(html, actionAttribute) {
+  const groups = {};
+  for (const start of html.matchAll(/<(section|details)\b[^>]*data-action-group="([^"]+)"[^>]*>/g)) {
+    const contentStart = start.index + start[0].length;
+    const contentEnd = html.indexOf(`</${start[1]}>`, contentStart);
+    const content = html.slice(contentStart, contentEnd < 0 ? contentStart : contentEnd);
+    groups[start[2]] = [...content.matchAll(new RegExp(`${actionAttribute}="([^"]+)"`, "g"))].map((match) => match[1]);
+  }
+  return groups;
+}
+
+function actionGroupSourceIndex(source, group) {
+  return [
+    source.indexOf(`id: "${group}"`),
+    source.indexOf(`"data-action-group": "${group}"`),
+    source.indexOf(`data-action-group="${group}"`),
+  ].filter((index) => index >= 0).sort((left, right) => left - right)[0] ?? -1;
+}
+
+function upstreamConfigContractFailures(injectSource) {
+  const failures = [];
+  const start = injectSource.indexOf("async function showUpstreamConfig()");
+  const end = injectSource.indexOf("function installActions()", start);
+  const block = injectSource.slice(start, end);
+  if (!/text:\s*"保存配置"/.test(block)) failures.push("third-party form is missing 保存配置");
+  if (!block.includes("配置已保存，可在聊天输入框的模型菜单选择第三方模型。")) failures.push("third-party form is missing the saved-configuration guidance");
+  for (const [label, forbidden] of [
+    ["保存并切换", /保存并切换/],
+    ["恢复 Antigravity", /恢复 Antigravity/],
+    ["Antigravity 模型", /Antigravity 模型/],
+    ["reloadNativeCodexConfig", /reloadNativeCodexConfig/],
+    ["selectNativeModelByLabels", /selectNativeModelByLabels/],
+    ['mode: "antigravity"', /mode:\s*"antigravity"/],
+  ]) {
+    if (forbidden.test(block)) failures.push(`third-party form still exposes ${label}`);
+  }
+  return failures;
+}
+
 function mojibakeMatch(text) {
   return String(text || "").match(mojibakePattern)?.[0] || "";
 }
@@ -174,10 +228,11 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   const failures = [];
   const injectMojibake = mojibakeMatch(injectSource);
   if (injectMojibake) failures.push(`in-app manager source contains mojibake text: ${injectMojibake}`);
-  const dailyIndex = injectSource.indexOf('id: "daily"');
-  const highImpactIndex = injectSource.indexOf('id: "high-impact"');
-  if (dailyIndex < 0 || highImpactIndex < 0 || dailyIndex > highImpactIndex) {
-    failures.push("in-app manager does not render daily actions before high-impact actions");
+  failures.push(...upstreamConfigContractFailures(injectSource));
+  const injectedGroupIndexes = Object.keys(EXPECTED_ACTION_GROUPS).map((group) => actionGroupSourceIndex(injectSource, group));
+  if (injectedGroupIndexes.some((index) => index < 0)
+    || JSON.stringify([...injectedGroupIndexes].sort((left, right) => left - right)) !== JSON.stringify(injectedGroupIndexes)) {
+    failures.push("in-app manager does not render the five action groups in contract order");
   }
   if (/id:\s*LEGACY_BUTTON_ID|id=["']anticodex-manager-button["']/.test(injectSource)) {
     failures.push("in-app manager still creates the removed floating Manager button");
@@ -261,10 +316,14 @@ function staticManagerUiFailures({ injectSource, serverSource }) {
   const managerHtml = extractDelimited(serverSource, "function anticodexManagerHtml()", "</html>`;", "manager html");
   const managerHtmlMojibake = mojibakeMatch(managerHtml);
   if (managerHtmlMojibake) failures.push(`manager page source contains mojibake text: ${managerHtmlMojibake}`);
-  const staticDailyIndex = managerHtml.indexOf('data-action-group="daily"');
-  const staticHighImpactIndex = managerHtml.indexOf('data-action-group="high-impact"');
-  if (staticDailyIndex < 0 || staticHighImpactIndex < 0 || staticDailyIndex > staticHighImpactIndex) {
-    failures.push("manager page does not render daily actions before high-impact actions");
+  const fallbackGroupIndexes = Object.keys(EXPECTED_ACTION_GROUPS).map((group) => actionGroupSourceIndex(managerHtml, group));
+  if (fallbackGroupIndexes.some((index) => index < 0)
+    || JSON.stringify([...fallbackGroupIndexes].sort((left, right) => left - right)) !== JSON.stringify(fallbackGroupIndexes)) {
+    failures.push("manager page does not render the five action groups in contract order");
+  }
+  const fallbackAdvancedTag = managerHtml.match(/<details\s+data-action-group="advanced"[^>]*>/)?.[0] || "";
+  if (!fallbackAdvancedTag || /\sopen(?:\s|=|>)/.test(fallbackAdvancedTag) || !/<summary>高级诊断<\/summary>/.test(managerHtml)) {
+    failures.push("manager page advanced diagnostics are not collapsed details with a visible label");
   }
   if (!managerHtml.includes('data-manager-surface="codex"')) {
     failures.push("manager page is missing the Codex-style surface marker");
@@ -373,10 +432,10 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   const serviceMojibake = mojibakeMatch(managerServiceSource);
   if (serviceMojibake) failures.push(`manager service source contains mojibake text: ${serviceMojibake}`);
 
-  const dailyIndex = injectSource.indexOf('id: "daily"');
-  const highImpactIndex = injectSource.indexOf('id: "high-impact"');
-  if (dailyIndex < 0 || highImpactIndex < 0 || dailyIndex > highImpactIndex) {
-    failures.push("in-app manager does not render daily actions before high-impact actions");
+  const injectedGroupIndexes = Object.keys(EXPECTED_ACTION_GROUPS).map((group) => actionGroupSourceIndex(injectSource, group));
+  if (injectedGroupIndexes.some((index) => index < 0)
+    || JSON.stringify([...injectedGroupIndexes].sort((left, right) => left - right)) !== JSON.stringify(injectedGroupIndexes)) {
+    failures.push("in-app manager does not render the five action groups in contract order");
   }
   if (!/data-anticodex-close/.test(injectSource) || !/min-height:44px/.test(injectSource)) {
     failures.push("in-app manager close button lacks a full-size hit target");
@@ -405,16 +464,20 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   if (!/latestReportsSummary/.test(injectSource) || !/viewLatestReports/.test(injectSource)) {
     failures.push("in-app manager is missing latest-report rendering");
   }
+  failures.push(...upstreamConfigContractFailures(injectSource));
 
   const managerHtml = extractDelimited(managerServiceSource, "const managerHtml = `", "</html>\n`;", "manager service html");
   for (const required of [
     '<title>Anti-Codex 管理</title>',
     '<h1>Anti-Codex 管理</h1>',
-    'data-action-group="daily"',
-    'data-action-group="high-impact"',
+    ...Object.keys(EXPECTED_ACTION_GROUPS).map((group) => `data-action-group="${group}"`),
     'confirmHighImpactAction',
   ]) {
     if (!managerHtml.includes(required)) failures.push(`manager service is missing ${required}`);
+  }
+  const fallbackAdvancedTag = managerHtml.match(/<details\s+data-action-group="advanced"[^>]*>/)?.[0] || "";
+  if (!fallbackAdvancedTag || /\sopen(?:\s|=|>)/.test(fallbackAdvancedTag) || !/<summary>高级诊断<\/summary>/.test(managerHtml)) {
+    failures.push("manager service advanced diagnostics are not collapsed by default");
   }
   if (!/anticodex-manager-service-v1/.test(managerServiceSource) || !/launcher-management-only/.test(managerServiceSource)) {
     failures.push("manager service identity contract is missing");
@@ -924,8 +987,14 @@ try {
 
   progress("manager-html");
   const managerHtml = await getText(`${baseUrl}/anticodex/manager`);
-  const dailyGroupHtml = managerHtml.match(/data-action-group="daily"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
-  const highImpactGroupHtml = managerHtml.match(/data-action-group="high-impact"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
+  const managerPageActionGroups = actionGroupsFromHtml(managerHtml, "data-manager-action");
+  const managerPageButtons = [...managerHtml.matchAll(/<button\b[^>]*data-manager-action="([^"]+)"[^>]*>/g)]
+    .map((match) => ({ action: match[1], tag: match[0] }));
+  const managerPageDangerActionIds = managerPageButtons
+    .filter((button) => /class="[^"]*\bdanger\b[^"]*"/.test(button.tag))
+    .map((button) => button.action);
+  const managerPageAdvanced = managerHtml.match(/(<details\s+data-action-group="advanced"[^>]*>)([\s\S]*?)<\/details>/) || [];
+  const managerPageAdvancedTag = managerPageAdvanced[1] || "";
   managerPage = {
     hasZhLang: /<html\s+lang="zh-CN"/i.test(managerHtml),
     hasTitle: managerHtml.includes("<title>Anti-Codex \u7ba1\u7406</title>"),
@@ -991,9 +1060,10 @@ try {
       managerHtml.includes("providerProtocol") &&
       managerHtml.includes("transport") &&
       managerHtml.includes("Provider"),
-    dailyActionIds: [...dailyGroupHtml.matchAll(/data-manager-action="([^"]+)"/g)].map((match) => match[1]),
-    highImpactActionIds: [...highImpactGroupHtml.matchAll(/data-manager-action="([^"]+)"/g)].map((match) => match[1]),
-    highImpactDangerCount: (highImpactGroupHtml.match(/class="[^"]*danger[^"]*"/g) || []).length,
+    actionGroups: managerPageActionGroups,
+    dangerActionIds: managerPageDangerActionIds,
+    advancedCollapsed: Boolean(managerPageAdvancedTag) && !/\sopen(?:\s|=|>)/.test(managerPageAdvancedTag),
+    advancedLabel: managerPageAdvanced[2]?.match(/<summary>([^<]*)<\/summary>/)?.[1]?.trim() || "",
   };
   if (!managerPage.hasZhLang) failures.push("manager page is not marked zh-CN");
   if (!managerPage.hasTitle) failures.push("manager page title is not Chinese Anti-Codex \u7ba1\u7406");
@@ -1003,9 +1073,9 @@ try {
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
   if (!managerPage.hasHighImpactConfirmation) failures.push("manager page missing high-impact confirmation");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
-  if (!sameActionIds(managerPage.dailyActionIds, expectedDailyActionIds)) failures.push(`manager page daily action group is incorrect: ${JSON.stringify(managerPage.dailyActionIds)}`);
-  if (!sameActionIds(managerPage.highImpactActionIds, expectedHighImpactActionIds)) failures.push(`manager page high-impact action group is incorrect: ${JSON.stringify(managerPage.highImpactActionIds)}`);
-  if (managerPage.highImpactDangerCount !== expectedHighImpactActionIds.length) failures.push(`manager page has ${managerPage.highImpactDangerCount}/${expectedHighImpactActionIds.length} dark-red high-impact buttons`);
+  if (!sameActionGroups(managerPage.actionGroups)) failures.push(`manager page action groups are incorrect: ${JSON.stringify(managerPage.actionGroups)}`);
+  if (!sameActionIds(managerPage.dangerActionIds, EXPECTED_HIGH_IMPACT_ACTION_IDS)) failures.push(`manager page danger actions are incorrect: ${JSON.stringify(managerPage.dangerActionIds)}`);
+  if (!managerPage.advancedCollapsed || managerPage.advancedLabel !== "高级诊断") failures.push("manager page advanced diagnostics are not collapsed with the visible label 高级诊断");
 
   progress("cdp-targets");
   const targets = await getJson(`http://127.0.0.1:${port}/json`);
@@ -1365,8 +1435,12 @@ try {
       const reopenedClose = reopenedOverlay?.querySelector("[data-anticodex-close]");
       const reopenedCloseRect = reopenedClose?.getBoundingClientRect?.();
       const reopenedActionButtons = Array.from(reopenedOverlay?.querySelectorAll("button[data-action]") || []);
-      const dailyActionIds = Array.from(reopenedOverlay?.querySelectorAll('[data-action-group="daily"] button[data-action]') || []).map((item) => item.getAttribute("data-action"));
-      const highImpactButtons = Array.from(reopenedOverlay?.querySelectorAll('[data-action-group="high-impact"] button[data-action]') || []);
+      const actionGroups = Object.fromEntries(Array.from(reopenedOverlay?.querySelectorAll("[data-action-group]") || []).map((group) => [
+        group.getAttribute("data-action-group"),
+        Array.from(group.querySelectorAll("button[data-action]")).map((item) => item.getAttribute("data-action")),
+      ]));
+      const highImpactActionSet = new Set(${JSON.stringify(EXPECTED_HIGH_IMPACT_ACTION_IDS)});
+      const highImpactButtons = reopenedActionButtons.filter((item) => highImpactActionSet.has(item.getAttribute("data-action")));
       const highImpactActionIds = highImpactButtons.map((item) => item.getAttribute("data-action"));
       const highImpactDangerCount = highImpactButtons.filter((item) => item.classList.contains("anticodex-action-danger")).length;
       const highImpactBackgroundColors = highImpactButtons.map((item) => getComputedStyle(item).backgroundColor);
@@ -1380,6 +1454,9 @@ try {
         const [red = 0, green = 0, blue = 0] = channels;
         return red >= 48 && red > green * 1.3 && red > blue * 1.15 && red < 150;
       });
+      const advancedGroup = reopenedOverlay?.querySelector('details[data-action-group="advanced"]') || null;
+      const advancedCollapsed = !!advancedGroup && !advancedGroup.hasAttribute("open");
+      const advancedLabel = String(advancedGroup?.querySelector("summary")?.textContent || "").trim();
       const hostBackgroundColor = getComputedStyle(document.body || document.documentElement).backgroundColor;
       const explicitHostTheme = (node) => {
         if (!node || node.closest?.("#anticodex-manager-overlay")) return "";
@@ -1515,11 +1592,13 @@ try {
         closeText: close?.textContent || close?.getAttribute("aria-label") || "",
         headingText: heading?.textContent || "",
         actionCount: actionButtons.length,
-        dailyActionIds,
+        actionGroups,
         highImpactActionIds,
         highImpactDangerCount,
         highImpactBackgroundColors,
         highImpactDarkRed,
+        advancedCollapsed,
+        advancedLabel,
         highImpactFirstClickResults,
         highImpactAllRequireFirstClickConfirmation,
         highImpactFirstClicksDidNotRun,
@@ -1680,14 +1759,16 @@ try {
   if (!managerOverlay?.upstreamConfigEmbeddedInOverlay) failures.push("in-app manager third-party API config panel is not embedded in the overlay");
   if (!managerOverlay?.upstreamConfigSaveInitiallyDisabled) failures.push("in-app manager third-party API save button is enabled before a successful connection test");
   if (!managerOverlay?.upstreamConfigHasSafeWarning) failures.push("in-app manager third-party API config panel is missing no-fallback/no-history-loss warning");
-  if (!managerOverlay?.upstreamConfigHasExpectedControls) failures.push("in-app manager third-party API config panel is missing protocol/key/test/save/restore controls");
-  if (!sameActionIds(managerOverlay?.dailyActionIds, expectedDailyActionIds)) failures.push(`in-app manager daily action group is incorrect: ${JSON.stringify(managerOverlay?.dailyActionIds || [])}`);
-  if (!sameActionIds(managerOverlay?.highImpactActionIds, expectedHighImpactActionIds)) failures.push(`in-app manager high-impact action group is incorrect: ${JSON.stringify(managerOverlay?.highImpactActionIds || [])}`);
-  if (managerOverlay?.highImpactDangerCount !== expectedHighImpactActionIds.length) failures.push(`in-app manager has ${managerOverlay?.highImpactDangerCount || 0}/${expectedHighImpactActionIds.length} danger-styled high-impact buttons`);
+  if (!managerOverlay?.upstreamConfigHasExpectedControls) failures.push("in-app manager third-party API config panel is missing protocol/key/test/save controls");
+  if (!sameActionGroups(managerOverlay?.actionGroups)) failures.push(`in-app manager action groups are incorrect: ${JSON.stringify(managerOverlay?.actionGroups || {})}`);
+  if (!sameActionGroups(managerOverlay?.actionGroups, managerPage?.actionGroups)) failures.push("fallback and injected Manager action groups do not match");
+  if (!sameActionIds(managerOverlay?.highImpactActionIds, EXPECTED_HIGH_IMPACT_ACTION_IDS)) failures.push(`in-app manager high-impact behavior set is incorrect: ${JSON.stringify(managerOverlay?.highImpactActionIds || [])}`);
+  if (managerOverlay?.highImpactDangerCount !== EXPECTED_HIGH_IMPACT_ACTION_IDS.length) failures.push(`in-app manager has ${managerOverlay?.highImpactDangerCount || 0}/${EXPECTED_HIGH_IMPACT_ACTION_IDS.length} danger-styled high-impact buttons`);
   if (!managerOverlay?.highImpactDarkRed) failures.push("in-app manager high-impact buttons are not consistently dark red");
   if (!managerOverlay?.highImpactAllRequireFirstClickConfirmation) failures.push(`in-app manager high-impact actions did not all require first-click confirmation: ${JSON.stringify(managerOverlay?.highImpactFirstClickResults || [])}`);
   if (!managerOverlay?.highImpactFirstClicksDidNotRun) failures.push("in-app manager first-click high-impact confirmations still queued or ran an action");
   if (!managerOverlay?.highImpactSecondClickRuns) failures.push("in-app manager high-impact action did not run on second click");
+  if (!managerOverlay?.advancedCollapsed || managerOverlay?.advancedLabel !== "高级诊断") failures.push("in-app manager advanced diagnostics are not collapsed with the visible label 高级诊断");
   if (!managerOverlay?.managerThemeMatchesHost) failures.push(`in-app manager theme '${managerOverlay?.managerTheme || ""}' does not match host theme '${managerOverlay?.hostTheme || ""}'`);
   if (!managerOverlay?.themeChangedWithHostClass) failures.push("in-app manager did not react to the Codex electron theme class changing");
   if (!managerOverlay?.themeRestoredWithHostClass) failures.push("in-app manager did not restore after the Codex electron theme class was restored");

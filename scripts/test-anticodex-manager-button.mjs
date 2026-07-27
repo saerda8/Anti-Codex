@@ -14,20 +14,17 @@ import { readNativeCodexRequestSnapshot } from "./lib/anticodex-native-request-a
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], process.argv[i + 1]);
 const flagEnabled = (name) => args.has(name) && String(args.get(name) ?? "true").toLowerCase() !== "false";
-const MANAGER_DAILY_ACTION_IDS = Object.freeze([
-  "refreshStatus",
-  "refreshModels",
-  "accountSwitch",
-  "accountProxy",
-  "syncReadiness",
-  "repairShortcuts",
-  "updateCheck",
-  "sourcePreflight",
-  "mcpSkills",
-  "pluginCapabilities",
-  "diagnosticsBundle",
-  "viewLatestReports",
-]);
+const MANAGER_ACTION_GROUPS = Object.freeze({
+  status: Object.freeze(["refreshStatus"]),
+  modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+  updates: Object.freeze(["updateCheck", "syncHost"]),
+  troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
+  advanced: Object.freeze([
+    "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+    "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+    "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
+  ]),
+});
 const MANAGER_HIGH_IMPACT_ACTION_IDS = Object.freeze([
   "syncHost",
   "upstreamConfig",
@@ -39,7 +36,10 @@ const MANAGER_HIGH_IMPACT_ACTION_IDS = Object.freeze([
   "postVerificationFull",
 ]);
 const MANAGER_HIGH_IMPACT_ACTION_SET = new Set(MANAGER_HIGH_IMPACT_ACTION_IDS);
-const MANAGER_ALL_ACTION_IDS = Object.freeze([...MANAGER_DAILY_ACTION_IDS, ...MANAGER_HIGH_IMPACT_ACTION_IDS]);
+const MANAGER_ALL_ACTION_IDS = Object.freeze(Object.values(MANAGER_ACTION_GROUPS).flat());
+if (new Set(MANAGER_ALL_ACTION_IDS).size !== MANAGER_ALL_ACTION_IDS.length) {
+  throw new Error("Manager action groups contain duplicate action IDs");
+}
 const explicitPorts = args.get("--ports") || args.get("--port") || "";
 const ports = explicitPorts
   ? String(explicitPorts).split(",").map((value) => Number(value.trim())).filter(Number.isFinite)
@@ -2041,8 +2041,10 @@ async function verifyUpstreamConfigActualMouseClick() {
     && form.protocolOptions?.join("|") === "Chat Completions|Responses"
     && ["\u534f\u8bae", "\u63a5\u53e3\u5730\u5740\uff08\u53ef\u586b base URL \u6216\u5b8c\u6574\u63a5\u53e3\uff09", "\u6a21\u578b\u540d", "API key"].every((label) => form.labels?.includes(label))
     && buttonState["\u6d4b\u8bd5\u8fde\u901a"] === false
-    && buttonState["\u4fdd\u5b58\u5e76\u5207\u6362"] === true
-    && buttonState["\u6062\u590d Antigravity"] === false
+    && buttonState["\u4fdd\u5b58\u914d\u7f6e"] === true
+    && !("\u4fdd\u5b58\u5e76\u5207\u6362" in buttonState)
+    && !("\u6062\u590d Antigravity" in buttonState)
+    && !form.labels?.includes("Antigravity \u6a21\u578b")
     && confirmation.formOpenedBeforeConfirm === false
     && actualMouse.ok === true
     && protocolInteraction.selectedAlternate === true
@@ -2368,10 +2370,9 @@ if (uiOnlyMatrix) {
   output.ok = output.ok === true && upstreamConfig.ok === true;
   output.mode = "ui-only-matrix";
   output.actions = [...MANAGER_ALL_ACTION_IDS];
-  output.actionGroups = {
-    daily: [...MANAGER_DAILY_ACTION_IDS],
-    highImpact: [...MANAGER_HIGH_IMPACT_ACTION_IDS],
-  };
+  output.actionGroups = Object.fromEntries(
+    Object.entries(MANAGER_ACTION_GROUPS).map(([group, actionIds]) => [group, [...actionIds]]),
+  );
   const batchBeforeRestore = await evaluate(uiOnlyBatchEvidenceSource(), 5000).catch((error) => ({
     installed: false,
     error: error?.message || String(error),

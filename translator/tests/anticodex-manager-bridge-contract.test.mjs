@@ -34,22 +34,69 @@ const completeSnapshotPaths = [
   "/backend-api/wham/apps",
 ];
 
-test("Manager model switch prefers the native model submenu over application menus", () => {
-  const start = managerInject.indexOf("const selectNativeModelByLabels");
-  const end = managerInject.indexOf("testButton.onclick", start);
+const EXPECTED_ACTION_GROUPS = Object.freeze({
+  status: Object.freeze(["refreshStatus"]),
+  modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+  updates: Object.freeze(["updateCheck", "syncHost"]),
+  troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
+  advanced: Object.freeze([
+    "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+    "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+    "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
+  ]),
+});
+const EXPECTED_ACTION_IDS = Object.freeze(Object.values(EXPECTED_ACTION_GROUPS).flat());
+
+function parseFrozenActionGroups(sourceText, name) {
+  const match = sourceText.match(new RegExp(`const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\n\\}\\);`));
+  assert.ok(match, `${name} must be declared once as the shared frozen group shape`);
+  return Object.fromEntries([...match[1].matchAll(/(\w+): Object\.freeze\(\[([\s\S]*?)\]\),/g)].map((entry) => [
+    entry[1],
+    [...entry[2].matchAll(/"([^"]+)"/g)].map((item) => item[1]),
+  ]));
+}
+
+test("Manager third-party form saves configuration without switching the active model", () => {
+  const start = managerInject.indexOf("async function showUpstreamConfig()");
+  const end = managerInject.indexOf("function installActions()", start);
   const block = managerInject.slice(start, end);
 
-  assert.match(block, /const visibleMenuItems = Array\.from\(document\.querySelectorAll\('\[role="menuitem"\]'\)\)\s*\.filter\(visible\)/);
-  assert.match(block, /\.filter\(\(element\) => element\.getAttribute\("aria-haspopup"\) === "menu"\)/);
-  assert.match(block, /\.sort\(\(left, right\) =>[\s\S]*?模型[\s\S]*?menuDistance/);
+  assert.ok(/text:\s*"保存配置"/.test(block), "third-party form is missing 保存配置");
+  assert.ok(block.includes("配置已保存，可在聊天输入框的模型菜单选择第三方模型。"), "third-party form is missing saved guidance");
+  for (const [label, forbidden] of [
+    ["保存并切换", /保存并切换/],
+    ["恢复 Antigravity", /恢复 Antigravity/],
+    ["Antigravity 模型", /Antigravity 模型/],
+    ["reloadNativeCodexConfig", /reloadNativeCodexConfig/],
+    ["selectNativeModelByLabels", /selectNativeModelByLabels/],
+    ['mode: "antigravity"', /mode:\s*"antigravity"/],
+  ]) {
+    assert.equal(forbidden.test(block), false, `third-party form still exposes ${label}`);
+  }
 });
 
-test("Manager third-party switch falls back to the stable current-model slot", () => {
-  const start = managerInject.indexOf("saveButton.onclick");
-  const end = managerInject.indexOf("restoreButton.onclick", start);
-  const block = managerInject.slice(start, end);
+test("Manager injected and fallback UIs expose the same five action groups", () => {
+  const groupNames = Object.keys(EXPECTED_ACTION_GROUPS);
+  const injectedIndexes = groupNames.map((group) => managerInject.indexOf(`id: "${group}"`));
+  const fallbackIndexes = groupNames.map((group) => managerService.indexOf(`data-action-group="${group}"`));
 
-  assert.match(block, /selectNativeModelByLabels\([\s\S]*?"第三方 API（当前模型）"[\s\S]*?"anticodex\/third-party"/);
+  assert.ok(injectedIndexes.every((index) => index >= 0), `injected groups are incomplete: ${JSON.stringify(injectedIndexes)}`);
+  assert.ok(fallbackIndexes.every((index) => index >= 0), `fallback groups are incomplete: ${JSON.stringify(fallbackIndexes)}`);
+  assert.deepEqual([...injectedIndexes].sort((a, b) => a - b), injectedIndexes);
+  assert.deepEqual([...fallbackIndexes].sort((a, b) => a - b), fallbackIndexes);
+  assert.doesNotMatch(managerInject, /id:\s*"(?:daily|high-impact)"/);
+  assert.doesNotMatch(managerService, /data-action-group="(?:daily|high-impact)"/);
+});
+
+test("Manager advanced diagnostics are collapsed details with a visible label", () => {
+  const injectedAdvanced = managerInject.match(/el\("details"[\s\S]{0,600}/)?.[0] ?? "";
+  assert.ok(injectedAdvanced, "injected Manager is missing advanced details");
+  assert.ok(/el\("summary"[\s\S]{0,200}高级诊断/.test(managerInject), "injected Manager is missing the 高级诊断 label");
+  assert.equal(/\bopen:/.test(injectedAdvanced), false, "injected advanced details must be collapsed by default");
+
+  const fallbackAdvanced = managerService.match(/<details\s+data-action-group="advanced"([^>]*)>[\s\S]*?<summary>高级诊断<\/summary>/)?.[0] ?? "";
+  assert.ok(fallbackAdvanced, "fallback Manager is missing advanced diagnostic details");
+  assert.doesNotMatch(fallbackAdvanced.match(/<details[^>]*>/)?.[0] ?? "", /\sopen(?:\s|=|>)/);
 });
 
 function fakeBridgeSession(name) {
@@ -484,16 +531,17 @@ test("Manager action verifier uses native CDP mouse events instead of synthetic 
   assert.doesNotMatch(managerButtonTest, /actionCenterTarget\.dispatchEvent\(new MouseEvent\("click"/);
 });
 
-test("Manager zero-side-effect matrix covers every current daily and high-impact action", () => {
+test("Manager zero-side-effect matrix covers every action in the five-group contract", () => {
   const parseStringList = (sourceText, name, terminator) => {
     const match = sourceText.match(new RegExp(`const ${name} = ${terminator}\\(\\[([\\s\\S]*?)\\]\\);`));
     assert.ok(match, `${name} must be declared as a literal action list`);
     return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
   };
-  const injectedDaily = parseStringList(managerInject, "DAILY_ACTION_IDS", "new Set");
   const injectedHighImpact = parseStringList(managerInject, "HIGH_IMPACT_ACTION_IDS", "new Set");
-  const verifierDaily = parseStringList(managerButtonTest, "MANAGER_DAILY_ACTION_IDS", "Object\\.freeze");
   const verifierHighImpact = parseStringList(managerButtonTest, "MANAGER_HIGH_IMPACT_ACTION_IDS", "Object\\.freeze");
+  const verifierGroups = parseFrozenActionGroups(managerButtonTest, "MANAGER_ACTION_GROUPS");
+  const uiStateGroups = parseFrozenActionGroups(uiStateTest, "EXPECTED_ACTION_GROUPS");
+  const verifierActions = Object.values(verifierGroups).flat();
   const actionsBlock = managerInject.match(/const ACTIONS = \[([\s\S]*?)\n  \];/)?.[1] ?? "";
   const injectedActions = [...actionsBlock.matchAll(/\["([^"]+)",/g)].map((entry) => entry[1]);
   const parsePowerShellList = (name) => {
@@ -501,16 +549,27 @@ test("Manager zero-side-effect matrix covers every current daily and high-impact
     return [...block.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
   };
 
-  assert.deepEqual(verifierDaily, injectedDaily);
+  assert.deepEqual(verifierGroups, EXPECTED_ACTION_GROUPS);
+  assert.deepEqual(uiStateGroups, EXPECTED_ACTION_GROUPS);
+  assert.deepEqual(verifierActions, EXPECTED_ACTION_IDS);
+  assert.equal(new Set(verifierActions).size, verifierActions.length, "each Manager action must belong to exactly one UI group");
   assert.deepEqual(verifierHighImpact, injectedHighImpact);
-  assert.deepEqual([...new Set([...injectedDaily, ...injectedHighImpact])].sort(), [...new Set(injectedActions)].sort());
-  assert.deepEqual(parsePowerShellList("dailyActions"), injectedDaily);
+  assert.deepEqual([...injectedActions].sort(), [...EXPECTED_ACTION_IDS].sort());
+  assert.deepEqual(
+    [...parsePowerShellList("dailyActions"), ...parsePowerShellList("highImpactActions")].sort(),
+    [...EXPECTED_ACTION_IDS].sort(),
+  );
   assert.deepEqual(parsePowerShellList("highImpactActions"), injectedHighImpact);
-  assert.equal(new Set([...verifierDaily, ...verifierHighImpact]).size, 20);
+  const mouseDispatchStart = managerButtonTest.indexOf("async function dispatchManagerActionActualMouse");
+  const mouseDispatchEnd = managerButtonTest.indexOf("async function verifyUpstreamConfigActualMouseClick", mouseDispatchStart);
+  const mouseDispatchBlock = managerButtonTest.slice(mouseDispatchStart, mouseDispatchEnd);
+  assert.match(mouseDispatchBlock, /const requiredConfirmation = MANAGER_HIGH_IMPACT_ACTION_SET\.has\(actionName\)/);
+  assert.doesNotMatch(mouseDispatchBlock, /MANAGER_ACTION_GROUPS/);
   assert.match(managerButtonTest, /const uiOnlyMatrix = flagEnabled\("--ui-only-matrix"\)/);
   assert.match(managerButtonTest, /const uiOnlyBatchMode = uiOnlyMatrix \|\| flagEnabled\("--ui-only-batch"\)/);
   assert.match(managerButtonTest, /const uiOnlyMode = verificationMode === "ui-only" \|\| uiOnlyBatchMode/);
   assert.match(managerButtonTest, /MANAGER_ALL_ACTION_IDS\.filter\(\(actionName\) => actionName !== "upstreamConfig"\)/);
+  assert.match(managerButtonTest, /Object\.entries\(MANAGER_ACTION_GROUPS\)/);
   assert.match(managerButtonTest, /output\.mode = "ui-only-matrix"/);
   assert.match(managerButtonTest, /function uiOnlyBatchBridgeSource\(enabled = uiOnlyBatchMode\)/);
   assert.match(managerButtonTest, /__ANTICODEX_RUN_MANAGER_REQUEST__/);
