@@ -487,6 +487,92 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     token = body.token;
   });
 
+  await t.test("upstream test falls back from an undersized caller timeout without aborting the local probe", async () => {
+    const providerServer = createServer((_req, res) => {
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
+      }, 25);
+    });
+    await listenOnLoopback(providerServer);
+    try {
+      const response = await fetch(`${baseUrl}/anticodex/upstream-test`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: baseUrl,
+          "x-anticodex-manager-token": token,
+        },
+        body: JSON.stringify({
+          protocol: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${providerServer.address().port}/v1`,
+          apiKey: "local-test-key",
+          model: "gpt-local",
+          timeoutMs: 1,
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).ok, true);
+    } finally {
+      await closeServer(providerServer);
+    }
+  });
+
+  await t.test("profile save persists only discovered capabilities and bounds its caller timeout", async () => {
+    const fixture = createSaveOnlyFixture();
+    const settingsPath = path.join(tempDir, "codexplusplus", "settings.json");
+    const catalogPath = path.join(tempDir, "codex-home-deepseek-app", "anticodex-model-catalog.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+    fs.copyFileSync(fixture.settingsPath, settingsPath);
+    fs.copyFileSync(fixture.catalogPath, catalogPath);
+
+    const providerServer = createServer((_req, res) => {
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
+      }, 25);
+    });
+    await listenOnLoopback(providerServer);
+    const profileBody = {
+      mode: "third-party",
+      protocol: "openai-compatible",
+      baseUrl: `http://127.0.0.1:${providerServer.address().port}/v1`,
+      apiKey: "local-test-key",
+      model: "gpt-local",
+      contextWindow: 128_000,
+      capabilities: { secretNote: "must-not-persist" },
+    };
+    const saveProfile = (body) => fetch(`${baseUrl}/anticodex/upstream-profile`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: baseUrl,
+        "x-anticodex-manager-token": token,
+      },
+      body: JSON.stringify(body),
+    });
+    try {
+      const response = await saveProfile(profileBody);
+      assert.equal(response.status, 200);
+      assert.doesNotMatch(await response.text(), /secretNote|must-not-persist/);
+
+      const persisted = JSON.parse(fs.readFileSync(path.join(tempDir, "upstream-profile.json"), "utf8"));
+      assert.deepEqual(Object.keys(persisted.capabilities).sort(), ["connectionStages", "providerModels"]);
+      assert.equal(persisted.capabilities.secretNote, undefined);
+
+      const publicResponse = await fetch(`${baseUrl}/anticodex/upstream-profile`);
+      assert.equal(publicResponse.status, 200);
+      assert.doesNotMatch(await publicResponse.text(), /secretNote|must-not-persist/);
+
+      const boundedResponse = await saveProfile({ ...profileBody, capabilities: {}, timeoutMs: 1 });
+      assert.equal(boundedResponse.status, 200);
+    } finally {
+      await closeServer(providerServer);
+      fs.rmSync(fixture.tempDir, { recursive: true, force: true });
+    }
+  });
+
   await t.test("Antigravity models remain exposed through the profile API", async () => {
     const catalogDir = path.join(tempDir, "codex-home-deepseek-app");
     fs.mkdirSync(catalogDir, { recursive: true });

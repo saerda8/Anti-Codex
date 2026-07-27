@@ -1181,6 +1181,13 @@ function providerModelIdsFromConnectionStages(stages = [], configuredModel = "")
     return ids.slice(0, 200);
 }
 
+function managerUpstreamTimeoutMs(value) {
+    const timeoutMs = Number(value);
+    return Number.isInteger(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 30000
+        ? timeoutMs
+        : 10000;
+}
+
 function upstreamConnectionFailureType(stage = {}) {
     const detail = String(stage?.detail || "").toLowerCase();
     if (/auth/.test(detail)) return "auth";
@@ -1837,7 +1844,7 @@ export function createAntiCodexManagerService(options = {}) {
           apiKey,
           model: body.model,
         };
-        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: Number(body.timeoutMs || 10000) });
+        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs) });
         const ok = stages.length > 0 && stages.every((stage) => stage.status !== "fail");
         const sanitizedStages = sanitizedConnectionStages(stages);
         return jsonResponse(res, 200, { ok, stages: sanitizedStages, summary: upstreamConnectionSummary(sanitizedStages) }, req);
@@ -1873,13 +1880,12 @@ export function createAntiCodexManagerService(options = {}) {
           apiKey,
           model: body.model,
         };
-        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: Number(body.timeoutMs || 10000) });
+        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs) });
         const testStatus = stages.length && stages.every((stage) => stage.status !== "fail") ? "success" : "pending";
         if (testStatus !== "success") {
           return jsonResponse(res, 400, { ok: false, message: "请先完成“测试连通”，确认接口可用后再保存。" }, req);
         }
         const capabilities = {
-          ...(body.capabilities || {}),
           connectionStages: sanitizedConnectionStages(stages),
           providerModels: providerModelIdsFromConnectionStages(stages, body.model),
         };
