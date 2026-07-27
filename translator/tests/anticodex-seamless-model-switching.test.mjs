@@ -225,7 +225,7 @@ test("formal PowerShell launcher restores the native model selection and keeps t
   assert.doesNotMatch(block, /\$runtimeMode\s*=|if \(\$runtimeMode -eq "third-party"\)/);
   assert.match(block, /\$thirdPartyConfigured\s*=/);
   assert.match(block, /if \(\$thirdPartyConfigured\)[\s\S]*?\$env:UPSTREAM_URL\s*=/);
-  assert.match(block, /\$env:UPSTREAM_MODEL\s*=\s*\[string\]\$RuntimeProfile\.model/);
+  assert.match(block, /\$env:UPSTREAM_MODEL\s*=\s*if \(\$provider -eq "third-party"\)\s*\{\s*\$model\s*\}\s*else\s*\{\s*\[string\]\$RuntimeProfile\.model\s*\}/);
   assert.match(block, /\$env:UPSTREAM_API_KEY\s*=\s*\[string\]\$RuntimeProfile\.apiKey/);
 });
 

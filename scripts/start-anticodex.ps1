@@ -605,7 +605,11 @@ function Set-AntiCodexProviderEnvironment {
         }
         $env:UPSTREAM_PROTOCOL = $protocol
         $env:UPSTREAM_URL = [string]$RuntimeProfile.baseUrl
-        $env:UPSTREAM_MODEL = [string]$RuntimeProfile.model
+        $env:UPSTREAM_MODEL = if ($provider -eq "third-party") {
+            $model
+        } else {
+            [string]$RuntimeProfile.model
+        }
         $env:UPSTREAM_API_KEY = [string]$RuntimeProfile.apiKey
         $env:UPSTREAM_CONTEXT_WINDOW = [string]$RuntimeProfile.contextWindow
     } else {
