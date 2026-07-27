@@ -43,6 +43,9 @@ test("host packaging preserves official host bytes and uses external Anti-Codex 
 });
 
 test("candidate validation requires one complete primary-window focus/restore repaint", () => {
+  assert.match(candidateValidator, /"config-write"/);
+  assert.match(candidateValidator, /configWriteBridgePattern/);
+  assert.match(candidateValidator, /\$configWriteBridgePattern\)\.Count -ne 1/);
   assert.match(candidateValidator, /primaryFocusRestoreRepaintPattern/);
   assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryFocusRestoreRepaintPattern\)\.Count -ne 1/);
   assert.match(candidateValidator, /anyPrimaryWindowRepaintPattern/);

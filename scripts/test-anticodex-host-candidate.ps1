@@ -139,6 +139,7 @@ $expectedFixedShellCriticalPatches = @(
     "app-user-model-id",
     "session-title",
     "startup-mcp-config-reload",
+    "config-write",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",
@@ -203,6 +204,10 @@ $hostIconPalette = Test-AntiCodexIconPalette -Path $hostIcon
 $trayIconPalette = Test-AntiCodexIconPalette -Path $trayIcon
 $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
 $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
+$configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
+if ([regex]::Matches($asarText, $configWriteBridgePattern).Count -ne 1) {
+    throw "Anti-Codex candidate native config write bridge count is invalid."
+}
 $codexTraySelectorCount = [regex]::Matches($asarText, 'codex-tray\.ico').Count
 $alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico').Count
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {

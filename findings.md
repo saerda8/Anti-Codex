@@ -1,5 +1,10 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Built-In Update Candidate-Validator Miss
+
+- Built-in updater operation `d4ed1a781a064fa5be0370a6294e0c6d` correctly built a 14-patch candidate and then failed closed before activation because the candidate validator still expected the old 13-patch manifest. The active client stayed on its signed 13-patch host and native Codex was unaffected. This was a release-validator omission, not a patcher or provider failure.
+- `test-anticodex-host-candidate.ps1` must share the installer/patcher/rollback critical list and independently require exactly one `config/batchWrite` bridge in candidate ASAR bytes. The narrow correction passes `32/32`; complete no-traffic preflight passes `789/789` with zero failures, skips or warnings (`20260727-155908-source-preflight.json`). Do not retry the updater until the corrected validator has been resynced to the installed runtime.
+
 ## 2026-07-27 Native Model-Switch Reload Root Cause
 
 - The saved third-party endpoint/key were valid. Terra failed only after the visible task reached the provider because Manager updated relay/catalog/config files but the copied Codex Electron main process had no `batch-write-config-value` handler, so its already-running app-server retained old million-token model metadata and posted about 2.30 MB to a 128k model.
