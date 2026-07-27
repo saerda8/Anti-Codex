@@ -48,12 +48,106 @@ const EXPECTED_ACTION_GROUPS = Object.freeze({
 const EXPECTED_ACTION_IDS = Object.freeze(Object.values(EXPECTED_ACTION_GROUPS).flat());
 
 function parseFrozenActionGroups(sourceText, name) {
-  const match = sourceText.match(new RegExp(`const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\n\\}\\);`));
-  assert.ok(match, `${name} must be declared once as the shared frozen group shape`);
-  return Object.fromEntries([...match[1].matchAll(/(\w+): Object\.freeze\(\[([\s\S]*?)\]\),/g)].map((entry) => [
+  const declaration = sourceText.search(new RegExp(`const\\s+${name}\\s*=`));
+  assert.ok(declaration >= 0, `${name} must be declared once as the shared frozen group shape`);
+  const objectStart = sourceText.indexOf("{", declaration);
+  const object = extractBalanced(sourceText, objectStart, "{", "}");
+  return Object.fromEntries([...object.matchAll(/(\w+)\s*:\s*Object\.freeze\(\s*\[/g)].map((entry) => [
     entry[1],
-    [...entry[2].matchAll(/"([^"]+)"/g)].map((item) => item[1]),
+    quotedStrings(extractBalanced(object, object.indexOf("[", entry.index), "[", "]")),
   ]));
+}
+
+function extractBalanced(sourceText, start, open, close) {
+  assert.equal(sourceText[start], open, `missing ${open} at ${start}`);
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = start; index < sourceText.length; index += 1) {
+    const character = sourceText[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
+      continue;
+    }
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+    } else if (character === open) {
+      depth += 1;
+    } else if (character === close && --depth === 0) {
+      return sourceText.slice(start, index + 1);
+    }
+  }
+  assert.fail(`unterminated ${open}${close} block`);
+}
+
+function extractNamedFunction(sourceText, name) {
+  const start = sourceText.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `missing function ${name}`);
+  const bodyStart = sourceText.indexOf("{", start);
+  const body = extractBalanced(sourceText, bodyStart, "{", "}");
+  return sourceText.slice(start, bodyStart) + body;
+}
+
+function quotedStrings(sourceText) {
+  return [...sourceText.matchAll(/"([^"]+)"|'([^']+)'/g)].map((entry) => entry[1] ?? entry[2]);
+}
+
+function parseNamedStringList(sourceText, name) {
+  const declaration = sourceText.search(new RegExp(`const\\s+${name}\\s*=`));
+  assert.ok(declaration >= 0, `missing action list ${name}`);
+  const arrayStart = sourceText.indexOf("[", declaration);
+  return quotedStrings(extractBalanced(sourceText, arrayStart, "[", "]"));
+}
+
+function parseInjectedActionGroups(sourceText) {
+  const groups = [];
+  for (const idMatch of sourceText.matchAll(/\bid:\s*(["'])([^"']+)\1/g)) {
+    const objectStart = sourceText.lastIndexOf("{", idMatch.index);
+    const descriptor = extractBalanced(sourceText, objectStart, "{", "}");
+    const ids = descriptor.match(/\b(?:ids|actions)\s*:\s*/);
+    if (!ids) continue;
+    const expression = descriptor.slice(ids.index + ids[0].length);
+    const named = expression.match(/^([A-Z][A-Z0-9_]*)(?:\.(\w+))?/);
+    let actionIds = [];
+    if (named?.[2]) actionIds = parseFrozenActionGroups(sourceText, named[1])[named[2]] || [];
+    else if (named) actionIds = parseNamedStringList(sourceText, named[1]);
+    else {
+      const arrayStart = expression.indexOf("[");
+      if (arrayStart >= 0) actionIds = quotedStrings(extractBalanced(expression, arrayStart, "[", "]"));
+    }
+    groups.push({ id: idMatch[2], actionIds });
+  }
+  return groups;
+}
+
+function parseFallbackActionGroups(sourceText) {
+  const groups = [];
+  for (const start of sourceText.matchAll(/<(section|details)\b([^>]*)data-action-group="([^"]+)"([^>]*)>/g)) {
+    const openingTag = start[0];
+    const contentStart = start.index + openingTag.length;
+    const contentEnd = sourceText.indexOf(`</${start[1]}>`, contentStart);
+    const content = sourceText.slice(contentStart, contentEnd < 0 ? contentStart : contentEnd);
+    const actionIds = [...content.matchAll(/data-manager-action="([^"]+)"/g)].map((entry) => entry[1]);
+    for (const list of content.matchAll(/\$\{\s*([A-Z][A-Z0-9_]*)(?:\.(\w+))?\.map\(/g)) {
+      actionIds.push(...(list[2]
+        ? (parseFrozenActionGroups(sourceText, list[1])[list[2]] || [])
+        : parseNamedStringList(sourceText, list[1])));
+    }
+    groups.push({ id: start[3], tag: start[1], openingTag, content, actionIds });
+  }
+  return groups;
+}
+
+function assertExactActionGroups(groups, label) {
+  assert.deepEqual(groups.map((group) => group.id), Object.keys(EXPECTED_ACTION_GROUPS), `${label} group names/order differ`);
+  for (const group of groups) {
+    assert.deepEqual(group.actionIds, EXPECTED_ACTION_GROUPS[group.id], `${label} ${group.id} membership differs`);
+  }
+  const actionIds = groups.flatMap((group) => group.actionIds);
+  assert.equal(new Set(actionIds).size, actionIds.length, `${label} contains duplicate actions`);
+  assert.deepEqual(actionIds, EXPECTED_ACTION_IDS, `${label} all-action order differs`);
 }
 
 test("Manager third-party form saves configuration without switching the active model", () => {
@@ -76,27 +170,79 @@ test("Manager third-party form saves configuration without switching the active 
 });
 
 test("Manager injected and fallback UIs expose the same five action groups", () => {
-  const groupNames = Object.keys(EXPECTED_ACTION_GROUPS);
-  const injectedIndexes = groupNames.map((group) => managerInject.indexOf(`id: "${group}"`));
-  const fallbackIndexes = groupNames.map((group) => managerService.indexOf(`data-action-group="${group}"`));
+  const injectedGroups = parseInjectedActionGroups(managerInject);
+  const fallbackGroups = parseFallbackActionGroups(managerService);
 
-  assert.ok(injectedIndexes.every((index) => index >= 0), `injected groups are incomplete: ${JSON.stringify(injectedIndexes)}`);
-  assert.ok(fallbackIndexes.every((index) => index >= 0), `fallback groups are incomplete: ${JSON.stringify(fallbackIndexes)}`);
-  assert.deepEqual([...injectedIndexes].sort((a, b) => a - b), injectedIndexes);
-  assert.deepEqual([...fallbackIndexes].sort((a, b) => a - b), fallbackIndexes);
-  assert.doesNotMatch(managerInject, /id:\s*"(?:daily|high-impact)"/);
-  assert.doesNotMatch(managerService, /data-action-group="(?:daily|high-impact)"/);
+  assertExactActionGroups(injectedGroups, "injected Manager");
+  assertExactActionGroups(fallbackGroups, "fallback Manager");
+  assert.deepEqual(
+    injectedGroups.map(({ id, actionIds }) => ({ id, actionIds })),
+    fallbackGroups.map(({ id, actionIds }) => ({ id, actionIds })),
+  );
 });
 
 test("Manager advanced diagnostics are collapsed details with a visible label", () => {
-  const injectedAdvanced = managerInject.match(/el\("details"[\s\S]{0,600}/)?.[0] ?? "";
-  assert.ok(injectedAdvanced, "injected Manager is missing advanced details");
-  assert.ok(/el\("summary"[\s\S]{0,200}高级诊断/.test(managerInject), "injected Manager is missing the 高级诊断 label");
-  assert.equal(/\bopen:/.test(injectedAdvanced), false, "injected advanced details must be collapsed by default");
+  const advancedMarker = managerInject.search(/["']data-action-group["']\s*:\s*["']advanced["']/);
+  const detailsCalls = [...managerInject.matchAll(/el\(\s*["']details["']/g)].filter((match) => match.index < advancedMarker);
+  const injectedCallStart = detailsCalls.at(-1)?.index ?? -1;
+  assert.ok(advancedMarker >= 0 && injectedCallStart >= 0, "injected Manager is missing advanced details");
+  const injectedAdvanced = extractBalanced(managerInject, managerInject.indexOf("(", injectedCallStart), "(", ")");
+  const injectedAttrs = extractBalanced(injectedAdvanced, injectedAdvanced.indexOf("{"), "{", "}");
+  assert.match(injectedAttrs, /["']data-action-group["']\s*:\s*["']advanced["']/);
+  assert.match(injectedAdvanced, /el\(\s*["']summary["'][\s\S]*?高级诊断/);
+  assert.doesNotMatch(injectedAttrs, /\bopen\s*:/);
 
-  const fallbackAdvanced = managerService.match(/<details\s+data-action-group="advanced"([^>]*)>[\s\S]*?<summary>高级诊断<\/summary>/)?.[0] ?? "";
-  assert.ok(fallbackAdvanced, "fallback Manager is missing advanced diagnostic details");
-  assert.doesNotMatch(fallbackAdvanced.match(/<details[^>]*>/)?.[0] ?? "", /\sopen(?:\s|=|>)/);
+  const fallbackGroups = parseFallbackActionGroups(managerService);
+  const fallbackAdvanced = fallbackGroups.find((group) => group.id === "advanced");
+  assert.equal(fallbackAdvanced?.tag, "details", "fallback advanced group must be details");
+  assert.doesNotMatch(fallbackAdvanced?.openingTag || "", /\sopen(?:\s|=|>)/);
+  assert.match(fallbackAdvanced?.content || "", /<summary[^>]*>\s*高级诊断\s*<\/summary>/);
+});
+
+test("Manager rendered-layout verifiers reject duplicate, unexpected, group-less, and misplaced controls", () => {
+  const validLayout = {
+    groups: Object.entries(EXPECTED_ACTION_GROUPS).map(([id, actionIds]) => ({ id, actionIds: [...actionIds] })),
+    buttons: Object.entries(EXPECTED_ACTION_GROUPS).flatMap(([groupId, actionIds]) => actionIds.map((action) => ({ action, groupId }))),
+  };
+  const validators = [
+    {
+      name: "ui-state",
+      validate: vm.runInNewContext(`(${extractNamedFunction(uiStateTest, "actionLayoutFailures")})`, {
+        EXPECTED_ACTION_GROUPS,
+        EXPECTED_ACTION_IDS,
+      }),
+      run(layout) { return this.validate(layout, this.name); },
+    },
+    {
+      name: "button-matrix",
+      validate: vm.runInNewContext(`(${extractNamedFunction(managerButtonTest, "managerActionLayoutFailures")})`, {
+        MANAGER_ACTION_GROUPS: EXPECTED_ACTION_GROUPS,
+        MANAGER_ALL_ACTION_IDS: EXPECTED_ACTION_IDS,
+      }),
+      run(layout) { return this.validate(layout); },
+    },
+  ];
+  const invalidLayouts = [
+    (layout) => layout.groups.push({ ...layout.groups[0], actionIds: [...layout.groups[0].actionIds] }),
+    (layout) => layout.groups.push({ id: "unexpected", actionIds: [] }),
+    (layout) => layout.buttons.push({ ...layout.buttons[0] }),
+    (layout) => layout.buttons.push({ action: "unexpected", groupId: "" }),
+    (layout) => { layout.buttons[0].groupId = ""; },
+    (layout) => { layout.buttons[0].groupId = "advanced"; },
+    (layout) => {
+      layout.groups[0].actionIds = [];
+      layout.groups[1].actionIds.unshift("refreshStatus");
+    },
+  ];
+
+  for (const validator of validators) {
+    assert.deepEqual([...validator.run(structuredClone(validLayout))], [], `${validator.name} rejects the valid layout`);
+    for (const mutate of invalidLayouts) {
+      const layout = structuredClone(validLayout);
+      mutate(layout);
+      assert.ok(validator.run(layout).length > 0, `${validator.name} accepted an invalid layout`);
+    }
+  }
 });
 
 function fakeBridgeSession(name) {
@@ -570,6 +716,13 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.match(managerButtonTest, /const uiOnlyMode = verificationMode === "ui-only" \|\| uiOnlyBatchMode/);
   assert.match(managerButtonTest, /MANAGER_ALL_ACTION_IDS\.filter\(\(actionName\) => actionName !== "upstreamConfig"\)/);
   assert.match(managerButtonTest, /Object\.entries\(MANAGER_ACTION_GROUPS\)/);
+  assert.match(managerButtonTest, /function managerActionLayoutFailures\(layout\)/);
+  assert.match(managerButtonTest, /const groups = Array\.from\(overlay\?\.querySelectorAll\("\[data-action-group\]"\)/);
+  assert.match(managerButtonTest, /const actionLayout = await readManagerActionLayout\(\)/);
+  assert.match(managerButtonTest, /actionLayoutFailures\.length === 0/);
+  assert.match(uiStateTest, /function actionLayoutFailures\(layout, label\)/);
+  assert.match(uiStateTest, /const actionGroups = Array\.from\(reopenedOverlay\?\.querySelectorAll\("\[data-action-group\]"\)/);
+  assert.doesNotMatch(uiStateTest, /const actionGroups = Object\.fromEntries/);
   assert.match(managerButtonTest, /output\.mode = "ui-only-matrix"/);
   assert.match(managerButtonTest, /function uiOnlyBatchBridgeSource\(enabled = uiOnlyBatchMode\)/);
   assert.match(managerButtonTest, /__ANTICODEX_RUN_MANAGER_REQUEST__/);

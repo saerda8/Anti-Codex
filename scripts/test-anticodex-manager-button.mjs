@@ -40,6 +40,34 @@ const MANAGER_ALL_ACTION_IDS = Object.freeze(Object.values(MANAGER_ACTION_GROUPS
 if (new Set(MANAGER_ALL_ACTION_IDS).size !== MANAGER_ALL_ACTION_IDS.length) {
   throw new Error("Manager action groups contain duplicate action IDs");
 }
+function managerActionLayoutFailures(layout) {
+  const failures = [];
+  const groups = layout?.groups || [];
+  const buttons = layout?.buttons || [];
+  const expectedGroupNames = Object.keys(MANAGER_ACTION_GROUPS);
+  const unexpectedGroups = groups.filter((group) => !expectedGroupNames.includes(group.id)).map((group) => group.id);
+  if (unexpectedGroups.length > 0) failures.push(`unexpected action groups: ${JSON.stringify(unexpectedGroups)}`);
+  for (const groupName of expectedGroupNames) {
+    const matches = groups.filter((group) => group.id === groupName);
+    if (matches.length !== 1) failures.push(`${groupName} group count is ${matches.length}, expected 1`);
+    else if (JSON.stringify(matches[0].actionIds) !== JSON.stringify(MANAGER_ACTION_GROUPS[groupName])) {
+      failures.push(`${groupName} actions are incorrect: ${JSON.stringify(matches[0].actionIds)}`);
+    }
+  }
+  const expectedGroupByAction = new Map(Object.entries(MANAGER_ACTION_GROUPS)
+    .flatMap(([group, actionIds]) => actionIds.map((actionId) => [actionId, group])));
+  for (const actionId of MANAGER_ALL_ACTION_IDS) {
+    const matches = buttons.filter((button) => button.action === actionId);
+    if (matches.length !== 1) failures.push(`${actionId} button count is ${matches.length}, expected 1`);
+  }
+  for (const button of buttons) {
+    const expectedGroup = expectedGroupByAction.get(button.action);
+    if (!expectedGroup) failures.push(`unexpected action button ${button.action}`);
+    else if (!button.groupId) failures.push(`${button.action} is outside an action group`);
+    else if (button.groupId !== expectedGroup) failures.push(`${button.action} is in ${button.groupId}, expected ${expectedGroup}`);
+  }
+  return failures;
+}
 const explicitPorts = args.get("--ports") || args.get("--port") || "";
 const ports = explicitPorts
   ? String(explicitPorts).split(",").map((value) => Number(value.trim())).filter(Number.isFinite)
@@ -204,6 +232,8 @@ function compactManagerButtonOutput(output) {
       target: output.target ? { id: output.target.id, title: output.target.title, url: output.target.url } : null,
       actions: output.actions,
       actionGroups: output.actionGroups,
+      actionLayout: output.actionLayout,
+      actionLayoutFailures: output.actionLayoutFailures,
       zeroSideEffects: output.zeroSideEffects,
       usedRealTraffic: output.usedRealTraffic,
       isolationEvidence: output.isolationEvidence,
@@ -1733,6 +1763,21 @@ async function readManagerActionClickPoint(actionName) {
   })()`, 3500);
 }
 
+async function readManagerActionLayout() {
+  return evaluate(`(() => {
+    const overlay = document.querySelector("#anticodex-manager-overlay");
+    const groups = Array.from(overlay?.querySelectorAll("[data-action-group]") || []).map((group) => ({
+      id: group.getAttribute("data-action-group"),
+      actionIds: Array.from(group.querySelectorAll("button[data-action]")).map((button) => button.getAttribute("data-action")),
+    }));
+    const buttons = Array.from(overlay?.querySelectorAll("button[data-action]") || []).map((button) => ({
+      action: button.getAttribute("data-action"),
+      groupId: button.closest("[data-action-group]")?.getAttribute("data-action-group") || "",
+    }));
+    return { groups, buttons };
+  })()`, 3500);
+}
+
 async function dispatchManagerActionActualMouse(actionName) {
   const requiredConfirmation = MANAGER_HIGH_IMPACT_ACTION_SET.has(actionName);
   const expectedClickCount = requiredConfirmation ? 2 : 1;
@@ -2341,6 +2386,8 @@ if (uiOnlyMatrix) {
   const startedAt = Date.now();
   const genericActions = MANAGER_ALL_ACTION_IDS.filter((actionName) => actionName !== "upstreamConfig");
   const output = await runManagerActionBatch(genericActions);
+  const actionLayout = await readManagerActionLayout();
+  const actionLayoutFailures = managerActionLayoutFailures(actionLayout);
   const upstreamConfig = await verifyUpstreamConfigActualMouseClick().catch((error) => ({
     ok: false,
     phase: "upstream-config-exception",
@@ -2367,7 +2414,9 @@ if (uiOnlyMatrix) {
     pageTargetCountBeforeManagerOpen: upstreamConfig.pageTargetCountBefore,
     pageTargetCountAfterManagerOpen: upstreamConfig.pageTargetCountAfter,
   };
-  output.ok = output.ok === true && upstreamConfig.ok === true;
+  output.actionLayout = actionLayout;
+  output.actionLayoutFailures = actionLayoutFailures;
+  output.ok = output.ok === true && upstreamConfig.ok === true && actionLayoutFailures.length === 0;
   output.mode = "ui-only-matrix";
   output.actions = [...MANAGER_ALL_ACTION_IDS];
   output.actionGroups = Object.fromEntries(

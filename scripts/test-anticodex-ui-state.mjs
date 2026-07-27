@@ -169,19 +169,64 @@ function sameActionIds(actual, expected) {
   return JSON.stringify([...(actual || [])].sort()) === JSON.stringify([...expected].sort());
 }
 
-function sameActionGroups(actual, expected = EXPECTED_ACTION_GROUPS) {
-  return JSON.stringify(actual || {}) === JSON.stringify(expected);
-}
-
-function actionGroupsFromHtml(html, actionAttribute) {
-  const groups = {};
+function actionLayoutFromHtml(html, actionAttribute) {
+  const groups = [];
   for (const start of html.matchAll(/<(section|details)\b[^>]*data-action-group="([^"]+)"[^>]*>/g)) {
     const contentStart = start.index + start[0].length;
     const contentEnd = html.indexOf(`</${start[1]}>`, contentStart);
+    const end = contentEnd < 0 ? contentStart : contentEnd + `</${start[1]}>`.length;
     const content = html.slice(contentStart, contentEnd < 0 ? contentStart : contentEnd);
-    groups[start[2]] = [...content.matchAll(new RegExp(`${actionAttribute}="([^"]+)"`, "g"))].map((match) => match[1]);
+    groups.push({
+      id: start[2],
+      tag: start[1],
+      open: /\sopen(?:\s|=|>)/.test(start[0]),
+      summary: content.match(/<summary[^>]*>([^<]*)<\/summary>/)?.[1]?.trim() || "",
+      start: start.index,
+      end,
+      actionIds: [],
+    });
   }
-  return groups;
+  const buttons = [...html.matchAll(new RegExp(`${actionAttribute}="([^"]+)"`, "g"))].map((match) => {
+    const group = groups.find((candidate) => match.index >= candidate.start && match.index < candidate.end);
+    const button = { action: match[1], groupId: group?.id || "" };
+    if (group) group.actionIds.push(button.action);
+    return button;
+  });
+  return { groups, buttons };
+}
+
+function actionLayoutFailures(layout, label) {
+  const failures = [];
+  const groups = layout?.groups || [];
+  const buttons = layout?.buttons || [];
+  const expectedGroupNames = Object.keys(EXPECTED_ACTION_GROUPS);
+  const unexpectedGroups = groups.filter((group) => !expectedGroupNames.includes(group.id)).map((group) => group.id);
+  if (unexpectedGroups.length > 0) failures.push(`${label} has unexpected action groups: ${JSON.stringify(unexpectedGroups)}`);
+  for (const groupName of expectedGroupNames) {
+    const matches = groups.filter((group) => group.id === groupName);
+    if (matches.length !== 1) {
+      failures.push(`${label} has ${matches.length} ${groupName} groups, expected 1`);
+    } else if (JSON.stringify(matches[0].actionIds) !== JSON.stringify(EXPECTED_ACTION_GROUPS[groupName])) {
+      failures.push(`${label} ${groupName} actions are incorrect: ${JSON.stringify(matches[0].actionIds)}`);
+    }
+  }
+  const expectedGroupByAction = new Map(Object.entries(EXPECTED_ACTION_GROUPS)
+    .flatMap(([group, actionIds]) => actionIds.map((action) => [action, group])));
+  for (const action of EXPECTED_ACTION_IDS) {
+    const matches = buttons.filter((button) => button.action === action);
+    if (matches.length !== 1) failures.push(`${label} has ${matches.length} ${action} buttons, expected 1`);
+  }
+  for (const button of buttons) {
+    const expectedGroup = expectedGroupByAction.get(button.action);
+    if (!expectedGroup) failures.push(`${label} has unexpected action button ${button.action}`);
+    else if (!button.groupId) failures.push(`${label} action ${button.action} is outside an action group`);
+    else if (button.groupId !== expectedGroup) failures.push(`${label} action ${button.action} is in ${button.groupId}, expected ${expectedGroup}`);
+  }
+  return failures;
+}
+
+function actionGroupMembership(groups) {
+  return (groups || []).map(({ id, actionIds }) => ({ id, actionIds }));
 }
 
 function actionGroupSourceIndex(source, group) {
@@ -987,14 +1032,13 @@ try {
 
   progress("manager-html");
   const managerHtml = await getText(`${baseUrl}/anticodex/manager`);
-  const managerPageActionGroups = actionGroupsFromHtml(managerHtml, "data-manager-action");
+  const managerPageActionLayout = actionLayoutFromHtml(managerHtml, "data-manager-action");
   const managerPageButtons = [...managerHtml.matchAll(/<button\b[^>]*data-manager-action="([^"]+)"[^>]*>/g)]
     .map((match) => ({ action: match[1], tag: match[0] }));
   const managerPageDangerActionIds = managerPageButtons
     .filter((button) => /class="[^"]*\bdanger\b[^"]*"/.test(button.tag))
     .map((button) => button.action);
-  const managerPageAdvanced = managerHtml.match(/(<details\s+data-action-group="advanced"[^>]*>)([\s\S]*?)<\/details>/) || [];
-  const managerPageAdvancedTag = managerPageAdvanced[1] || "";
+  const managerPageAdvanced = managerPageActionLayout.groups.find((group) => group.id === "advanced");
   managerPage = {
     hasZhLang: /<html\s+lang="zh-CN"/i.test(managerHtml),
     hasTitle: managerHtml.includes("<title>Anti-Codex \u7ba1\u7406</title>"),
@@ -1060,10 +1104,11 @@ try {
       managerHtml.includes("providerProtocol") &&
       managerHtml.includes("transport") &&
       managerHtml.includes("Provider"),
-    actionGroups: managerPageActionGroups,
+    actionGroups: managerPageActionLayout.groups,
+    actionButtons: managerPageActionLayout.buttons,
     dangerActionIds: managerPageDangerActionIds,
-    advancedCollapsed: Boolean(managerPageAdvancedTag) && !/\sopen(?:\s|=|>)/.test(managerPageAdvancedTag),
-    advancedLabel: managerPageAdvanced[2]?.match(/<summary>([^<]*)<\/summary>/)?.[1]?.trim() || "",
+    advancedCollapsed: managerPageAdvanced?.tag === "details" && managerPageAdvanced.open === false,
+    advancedLabel: managerPageAdvanced?.summary || "",
   };
   if (!managerPage.hasZhLang) failures.push("manager page is not marked zh-CN");
   if (!managerPage.hasTitle) failures.push("manager page title is not Chinese Anti-Codex \u7ba1\u7406");
@@ -1073,7 +1118,7 @@ try {
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
   if (!managerPage.hasHighImpactConfirmation) failures.push("manager page missing high-impact confirmation");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
-  if (!sameActionGroups(managerPage.actionGroups)) failures.push(`manager page action groups are incorrect: ${JSON.stringify(managerPage.actionGroups)}`);
+  failures.push(...actionLayoutFailures(managerPageActionLayout, "manager page"));
   if (!sameActionIds(managerPage.dangerActionIds, EXPECTED_HIGH_IMPACT_ACTION_IDS)) failures.push(`manager page danger actions are incorrect: ${JSON.stringify(managerPage.dangerActionIds)}`);
   if (!managerPage.advancedCollapsed || managerPage.advancedLabel !== "高级诊断") failures.push("manager page advanced diagnostics are not collapsed with the visible label 高级诊断");
 
@@ -1435,10 +1480,17 @@ try {
       const reopenedClose = reopenedOverlay?.querySelector("[data-anticodex-close]");
       const reopenedCloseRect = reopenedClose?.getBoundingClientRect?.();
       const reopenedActionButtons = Array.from(reopenedOverlay?.querySelectorAll("button[data-action]") || []);
-      const actionGroups = Object.fromEntries(Array.from(reopenedOverlay?.querySelectorAll("[data-action-group]") || []).map((group) => [
-        group.getAttribute("data-action-group"),
-        Array.from(group.querySelectorAll("button[data-action]")).map((item) => item.getAttribute("data-action")),
-      ]));
+      const actionGroups = Array.from(reopenedOverlay?.querySelectorAll("[data-action-group]") || []).map((group) => ({
+        id: group.getAttribute("data-action-group"),
+        tag: group.tagName.toLowerCase(),
+        open: group.hasAttribute("open"),
+        summary: String(group.querySelector(":scope > summary")?.textContent || "").trim(),
+        actionIds: Array.from(group.querySelectorAll("button[data-action]")).map((item) => item.getAttribute("data-action")),
+      }));
+      const actionLayoutButtons = reopenedActionButtons.map((button) => ({
+        action: button.getAttribute("data-action"),
+        groupId: button.closest("[data-action-group]")?.getAttribute("data-action-group") || "",
+      }));
       const highImpactActionSet = new Set(${JSON.stringify(EXPECTED_HIGH_IMPACT_ACTION_IDS)});
       const highImpactButtons = reopenedActionButtons.filter((item) => highImpactActionSet.has(item.getAttribute("data-action")));
       const highImpactActionIds = highImpactButtons.map((item) => item.getAttribute("data-action"));
@@ -1593,6 +1645,7 @@ try {
         headingText: heading?.textContent || "",
         actionCount: actionButtons.length,
         actionGroups,
+        actionButtons: actionLayoutButtons,
         highImpactActionIds,
         highImpactDangerCount,
         highImpactBackgroundColors,
@@ -1760,8 +1813,13 @@ try {
   if (!managerOverlay?.upstreamConfigSaveInitiallyDisabled) failures.push("in-app manager third-party API save button is enabled before a successful connection test");
   if (!managerOverlay?.upstreamConfigHasSafeWarning) failures.push("in-app manager third-party API config panel is missing no-fallback/no-history-loss warning");
   if (!managerOverlay?.upstreamConfigHasExpectedControls) failures.push("in-app manager third-party API config panel is missing protocol/key/test/save controls");
-  if (!sameActionGroups(managerOverlay?.actionGroups)) failures.push(`in-app manager action groups are incorrect: ${JSON.stringify(managerOverlay?.actionGroups || {})}`);
-  if (!sameActionGroups(managerOverlay?.actionGroups, managerPage?.actionGroups)) failures.push("fallback and injected Manager action groups do not match");
+  failures.push(...actionLayoutFailures({
+    groups: managerOverlay?.actionGroups || [],
+    buttons: managerOverlay?.actionButtons || [],
+  }, "in-app manager"));
+  if (JSON.stringify(actionGroupMembership(managerOverlay?.actionGroups)) !== JSON.stringify(actionGroupMembership(managerPage?.actionGroups))) {
+    failures.push("fallback and injected Manager action groups do not match");
+  }
   if (!sameActionIds(managerOverlay?.highImpactActionIds, EXPECTED_HIGH_IMPACT_ACTION_IDS)) failures.push(`in-app manager high-impact behavior set is incorrect: ${JSON.stringify(managerOverlay?.highImpactActionIds || [])}`);
   if (managerOverlay?.highImpactDangerCount !== EXPECTED_HIGH_IMPACT_ACTION_IDS.length) failures.push(`in-app manager has ${managerOverlay?.highImpactDangerCount || 0}/${EXPECTED_HIGH_IMPACT_ACTION_IDS.length} danger-styled high-impact buttons`);
   if (!managerOverlay?.highImpactDarkRed) failures.push("in-app manager high-impact buttons are not consistently dark red");
