@@ -74,6 +74,6 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - Release launcher build: passed; 16,954,368 bytes; SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`.
 - Runtime isolation proof: 20/20 checks passed against copied Codex `26.715.4045.0`; invalid executable selection failed closed, original Codex and the active Anti-Codex stayed unchanged, and all test processes were removed.
-- The previous installed real-mouse/model-switch and long-multimodal task evidence is historical. The old task artifacts were deliberately deleted on user request, and the new binary still requires installed real-mouse, isolation and provider-switch verification before release readiness can be restored.
+- Installed sync-readiness and installed-overall no-traffic checks pass on one copied-client root with the ten-patch binary; source and installed legacy-zero-hit checks pass, and original Codex processes remain alive. Real provider continuation and final long-task result acceptance remain separate open gates.
 
 The isolation component is runtime-ready for Gate 2. The isolated launcher must always receive explicit copied-client paths and child-only state environment variables; provider and long-task readiness remain separate later gates.

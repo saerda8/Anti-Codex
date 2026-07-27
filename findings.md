@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Patch 10 Installed Acceptance
+
+- Commit `e854d9f5` is installed through runtime transaction `20260727T151010973Z-fc0b0958a5b749e9818144726ea67604` and built-in updater operation `d9f527766877469a808c66b52406b9e4`; the operation completed successfully without launching an intermediate client.
+- Installed metadata, manifest and executable all bind CodexPlusPlus `1.2.39`, ten patches, patch head `6aafaae9b1739b66218ad8511dfcb260e6d80698` and SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`.
+- Fresh source preflight passes `797/797`; sync-readiness and installed-overall pass; source and installed legacy-zero-hit pass. One copied-client root PID `20032` is owned by supervisor PID `26100` with component PID `49984`; original Codex PIDs `40736` and `16492` remained alive.
+- The UI is healthy and nonfatal, but model selection is still Gemini 3.1 Pro Low. The prior Gemini turn ended on explicit 429, so the next exact `继续` waits for a visibly confirmed Claude selection rather than repeating traffic.
+
 ## 2026-07-27 Missing Chat Usage Prevents Native Compaction
 
 - Third-party `gpt-5.6-terra` is correctly cataloged at 128k context. The actual failure is that a Chat SSE provider may omit usage; CodexPlusPlus then emitted completed Responses usage `0/0/0`, so native Codex never saw context growth and did not trigger its own compaction.
