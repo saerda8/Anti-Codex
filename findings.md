@@ -6,6 +6,7 @@
 - Installed metadata, manifest and executable all bind CodexPlusPlus `1.2.39`, ten patches, patch head `6aafaae9b1739b66218ad8511dfcb260e6d80698` and SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`.
 - Fresh source preflight passes `797/797`; sync-readiness and installed-overall pass; source and installed legacy-zero-hit pass. One copied-client root PID `20032` is owned by supervisor PID `26100` with component PID `49984`; original Codex PIDs `40736` and `16492` remained alive.
 - The UI is healthy and nonfatal, but model selection is still Gemini 3.1 Pro Low. The prior Gemini turn ended on explicit 429, so the next exact `继续` waits for a visibly confirmed Claude selection rather than repeating traffic.
+- A no-traffic native-menu probe could focus the Gemini selector but could not expose/find the Claude option; it sent no prompt and left the route unchanged. Per the user interaction rule, further automated retries stop here and manual selection is requested instead.
 
 ## 2026-07-27 Missing Chat Usage Prevents Native Compaction
 
