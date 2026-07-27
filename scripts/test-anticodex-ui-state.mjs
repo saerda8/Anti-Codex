@@ -269,6 +269,20 @@ function extractDelimited(source, start, end, label) {
   return source.slice(startIndex, endIndex + end.length);
 }
 
+function extractTemplateLiteral(source, start, label) {
+  const startIndex = source.indexOf(start);
+  if (startIndex < 0) throw new Error(`missing ${label} start`);
+  const contentStart = startIndex + start.length;
+  let endIndex = source.indexOf("`;", contentStart);
+  while (endIndex >= 0) {
+    let backslashCount = 0;
+    for (let index = endIndex - 1; index >= contentStart && source[index] === "\\"; index -= 1) backslashCount += 1;
+    if (backslashCount % 2 === 0) return source.slice(startIndex, endIndex + 2);
+    endIndex = source.indexOf("`;", endIndex + 2);
+  }
+  throw new Error(`missing ${label} end`);
+}
+
 function staticManagerUiFailures({ injectSource, serverSource }) {
   const failures = [];
   const injectMojibake = mojibakeMatch(injectSource);
@@ -511,7 +525,7 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   }
   failures.push(...upstreamConfigContractFailures(injectSource));
 
-  const managerHtml = extractDelimited(managerServiceSource, "const managerHtml = `", "</html>\n`;", "manager service html");
+  const managerHtml = extractTemplateLiteral(managerServiceSource, "const managerHtml = `", "manager service html");
   for (const required of [
     '<title>Anti-Codex 管理</title>',
     '<h1>Anti-Codex 管理</h1>',
@@ -533,9 +547,28 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   return failures;
 }
 
+function managerServiceHtmlParserFailures() {
+  const fixture = [
+    "const managerHtml = `<!doctype html>",
+    "<script>const nested = \\`value\\`;</script>",
+    "</html>",
+    "",
+    "`;",
+  ].join("\n");
+  try {
+    const managerHtml = extractTemplateLiteral(fixture, "const managerHtml = `", "manager service html fixture");
+    return managerHtml.endsWith("</html>\n\n`;") ? [] : ["manager service HTML parser truncated the reorganized fallback template"];
+  } catch (error) {
+    return [`manager service HTML parser rejected the reorganized fallback template: ${error.message}`];
+  }
+}
+
 if (args.has("--self-test")) {
   const managerServiceSource = fs.readFileSync(new URL("./anticodex-manager-service.mjs", import.meta.url), "utf8");
-  const failures = currentStaticManagerUiFailures({ injectSource: managerInjectSource, managerServiceSource });
+  const failures = [
+    ...managerServiceHtmlParserFailures(),
+    ...currentStaticManagerUiFailures({ injectSource: managerInjectSource, managerServiceSource }),
+  ];
   const output = { ok: failures.length === 0, failures };
   console.log(asciiJson(output));
   if (!output.ok) process.exit(1);
