@@ -45,38 +45,35 @@
     ["refreshStatus", "\u5237\u65b0\u72b6\u6001"],
     ["refreshModels", "\u5237\u65b0\u6a21\u578b"],
     ["accountSwitch", "\u5207\u6362 Antigravity \u8d26\u53f7"],
+    ["upstreamConfig", "\u914d\u7f6e\u7b2c\u4e09\u65b9 API"],
+    ["updateCheck", "\u68c0\u67e5\u66f4\u65b0"],
+    ["syncHost", "\u540c\u6b65 Codex \u66f4\u65b0"],
+    ["repairShortcuts", "\u4fee\u590d\u5feb\u6377\u65b9\u5f0f"],
+    ["diagnosticsBundle", "\u751f\u6210\u8bca\u65ad\u5305"],
+    ["viewLatestReports", "\u67e5\u770b\u6700\u65b0\u62a5\u544a"],
     ["accountProxy", "\u68c0\u67e5\u8d26\u53f7/\u4ee3\u7406"],
     ["syncReadiness", "\u68c0\u67e5\u5b89\u88c5/\u540c\u6b65"],
-    ["repairShortcuts", "\u4fee\u590d\u5feb\u6377\u65b9\u5f0f"],
-    ["updateCheck", "\u68c0\u67e5\u66f4\u65b0"],
     ["sourcePreflight", "\u8fd0\u884c\u6e90\u7801\u9884\u68c0"],
-    ["upstreamConfig", "\u914d\u7f6e\u7b2c\u4e09\u65b9 API"],
-    ["syncHost", "\u540c\u6b65 Codex \u66f4\u65b0"],
     ["mcpSkills", "\u68c0\u67e5 MCP/Skill"],
     ["pluginCapabilities", "\u68c0\u67e5\u63d2\u4ef6/\u5e94\u7528"],
     ["refreshFeatures", "\u5237\u65b0\u672c\u5730\u529f\u80fd"],
-    ["stabilitySoak", "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
-    ["coldRelaunch", "\u51b7\u542f\u52a8\u9a8c\u8bc1\uff08\u91cd\u542f Anti-Codex\uff09"],
     ["fastOverallNoTraffic", "\u5feb\u901f\u68c0\u67e5\uff08\u4e0d\u8017\u6d41\u91cf\uff09"],
     ["overallNoTraffic", "\u6574\u4f53\u68c0\u67e5\uff08\u4e0d\u8017\u6d41\u91cf\uff09"],
-    ["diagnosticsBundle", "\u751f\u6210\u8bca\u65ad\u5305"],
-    ["viewLatestReports", "\u67e5\u770b\u6700\u65b0\u62a5\u544a"],
+    ["stabilitySoak", "\u7a33\u5b9a\u6027\u5de1\u68c0\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
+    ["coldRelaunch", "\u51b7\u542f\u52a8\u9a8c\u8bc1\uff08\u91cd\u542f Anti-Codex\uff09"],
     ["postVerificationFull", "\u9a8c\u8bc1\u540e\u5b8c\u6574\u68c0\u67e5\uff08\u8017\u771f\u5b9e\u6d41\u91cf\uff09"],
   ];
-  const DAILY_ACTION_IDS = new Set([
-    "refreshStatus",
-    "refreshModels",
-    "accountSwitch",
-    "accountProxy",
-    "syncReadiness",
-    "repairShortcuts",
-    "updateCheck",
-    "sourcePreflight",
-    "mcpSkills",
-    "pluginCapabilities",
-    "diagnosticsBundle",
-    "viewLatestReports",
-  ]);
+  const MANAGER_ACTION_GROUPS = Object.freeze({
+    status: Object.freeze(["refreshStatus"]),
+    modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+    updates: Object.freeze(["updateCheck", "syncHost"]),
+    troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
+    advanced: Object.freeze([
+      "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+      "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+      "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
+    ]),
+  });
   const HIGH_IMPACT_ACTION_IDS = new Set([
     "syncHost",
     "upstreamConfig",
@@ -1492,7 +1489,7 @@
       .anticodex-close:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}.anticodex-close:active{background:var(--ac-close-active)}.anticodex-close:focus-visible{outline:2px solid var(--ac-focus);outline-offset:2px}
       .anticodex-actions{display:grid;gap:10px;margin:0 0 14px}
       .anticodex-action-section{border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-surface);padding:13px 14px 14px}
-      .anticodex-action-section[data-tone="danger"]{background:var(--ac-danger-section);border-color:var(--ac-danger-section-line)}
+      .anticodex-action-section>summary{color:var(--ac-text);font-size:13px;font-weight:650;cursor:pointer}.anticodex-action-section[open]>summary{margin-bottom:10px}
       .anticodex-action-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:10px}
       .anticodex-action-section h2{margin:0;color:var(--ac-text);font-size:13px;font-weight:650}.anticodex-action-section p{margin:0;color:var(--ac-muted);font-size:11px;text-align:right}
       .anticodex-action-list{display:flex;flex-wrap:wrap;gap:7px}
@@ -1790,26 +1787,11 @@
       updateProviderModelList(saved.capabilities?.providerModels || []);
       const contextWindow = el("input", { style: fieldStyle, type: "number", min: "16000", max: "4000000", step: "1000", value: String(saved.contextWindow || 272000), placeholder: "272000" });
       const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
-      const antigravityCatalog = Array.isArray(profilePayload.antigravityModels)
-        ? profilePayload.antigravityModels.filter((entry) => entry?.id)
-        : [];
-      const selectedAntigravityModel = saved.antigravityModel
-        || (profilePayload.fixedRoute?.provider === "antigravity" ? profilePayload.fixedRoute?.model : "")
-        || "gemini-3-flash-agent";
-      if (!antigravityCatalog.some((entry) => entry.id === selectedAntigravityModel)) {
-        antigravityCatalog.unshift({ id: selectedAntigravityModel, label: selectedAntigravityModel });
-      }
-      const antigravityModel = el("select", { style: fieldStyle }, antigravityCatalog.map((entry) => el("option", {
-        value: entry.id,
-        text: entry.label || entry.id,
-      })));
-      antigravityModel.value = selectedAntigravityModel;
       const stageBox = el("pre", { className: "anticodex-result", text: "先点“测试连通”。测试不会保存配置，也不会切换当前会话。" });
       const testButton = el("button", { type: "button", text: "测试连通" });
-      const saveButton = el("button", { type: "button", className: "anticodex-action-danger", text: "保存并切换" });
+      const saveButton = el("button", { type: "button", text: "保存配置" });
       saveButton.disabled = true;
-      const restoreButton = el("button", { type: "button", className: "anticodex-action-danger", text: "恢复 Antigravity" });
-      const upstreamConfigFields = [protocol, baseUrl, model, contextWindow, apiKey, antigravityModel];
+      const upstreamConfigFields = [protocol, baseUrl, model, contextWindow, apiKey];
       function upstreamConfigFingerprint() {
         return JSON.stringify([
           protocol.value,
@@ -1822,7 +1804,6 @@
       const refreshUpstreamConfigControls = () => {
         for (const field of upstreamConfigFields) field.disabled = upstreamConfigOperationInFlight;
         testButton.disabled = upstreamConfigOperationInFlight;
-        restoreButton.disabled = upstreamConfigOperationInFlight;
         saveButton.disabled = upstreamConfigOperationInFlight
           || !testedFingerprint
           || testedFingerprint !== upstreamConfigFingerprint();
@@ -1865,121 +1846,6 @@
         upstreamConnectionSummaryText(payload),
         (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n"),
       ].filter(Boolean).join("\n\n") || "没有返回测试结果";
-      const reloadNativeCodexConfig = async (payload) => {
-        const reload = payload?.nativeConfigReload;
-        if (!reload) return;
-        try {
-          const send = window.electronBridge?.sendMessageFromView;
-          if (typeof send !== "function") throw new Error("原生配置重载通道不可用。");
-          await send({ ...reload, type: "batch-write-config-value" });
-        } catch (error) {
-          if (payload?.switchRollbackId) {
-            try {
-              const rolledBack = await managerPostJson("/anticodex/upstream-profile/rollback", { switchRollbackId: payload.switchRollbackId }, {
-                timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
-                retryCandidates: false,
-              });
-              if (rolledBack?.nativeConfigReload) {
-                await send({ ...rolledBack.nativeConfigReload, type: "batch-write-config-value" });
-              }
-            } catch (rollbackError) {
-              error.message += `；本地状态回滚失败：${rollbackError.message}`;
-            }
-          }
-          throw error;
-        }
-      };
-      const selectNativeModelByLabels = async (...values) => {
-        const expected = values
-          .flat()
-          .map((value) => String(value || "").toLowerCase().replace(/\s+/g, " ").trim())
-          .filter(Boolean);
-        const matches = (value) => {
-          const text = String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
-          return Boolean(text) && expected.some((needle) => text === needle || text.includes(needle));
-        };
-        const visible = (element) => {
-          if (!(element instanceof HTMLElement)) return false;
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
-        };
-        const labelFor = (element) => String(
-          element?.getAttribute?.("aria-label")
-            || element?.getAttribute?.("title")
-            || element?.textContent
-            || "",
-        ).trim();
-        const composer = document.querySelector("[data-codex-composer].ProseMirror") || document.querySelector(".ProseMirror");
-        const composerRect = composer?.getBoundingClientRect();
-        const selector = Array.from(document.querySelectorAll('button,[role="button"]'))
-          .filter(visible)
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            const distance = composerRect
-              ? Math.hypot(
-                  (rect.left + rect.width / 2) - (composerRect.left + composerRect.width / 2),
-                  (rect.top + rect.height / 2) - (composerRect.top + composerRect.height / 2),
-                )
-              : Number.MAX_SAFE_INTEGER;
-            return { element, label: labelFor(element), distance };
-          })
-          .filter((item) => /gemini|claude|opus|sonnet|flash|gpt|oss|模型|自定义|第三方|antigravity/i.test(item.label))
-          .sort((left, right) => left.distance - right.distance)[0];
-        if (!selector) return { ok: false, reason: "model_selector_not_found" };
-        const selectorRect = selector.element.getBoundingClientRect();
-        selector.element.click();
-        await wait(80);
-        const visibleMenuItems = Array.from(document.querySelectorAll('[role="menuitem"]'))
-          .filter(visible);
-        const submenuTrigger = visibleMenuItems
-          .filter((element) => element.getAttribute("aria-haspopup") === "menu")
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            const menuDistance = Math.hypot(
-              (rect.left + rect.width / 2) - (selectorRect.left + selectorRect.width / 2),
-              (rect.top + rect.height / 2) - (selectorRect.top + selectorRect.height / 2),
-            );
-            return { element, label: labelFor(element), menuDistance };
-          })
-          .sort((left, right) => (
-            Number(!/^\s*模型/i.test(left.label)) - Number(!/^\s*模型/i.test(right.label))
-            || left.menuDistance - right.menuDistance
-          ))[0]?.element;
-        if (!submenuTrigger) return { ok: false, reason: "model_submenu_not_found" };
-        const rect = submenuTrigger.getBoundingClientRect();
-        const eventInit = {
-          bubbles: true,
-          cancelable: true,
-          clientX: rect.left + rect.width / 2,
-          clientY: rect.top + rect.height / 2,
-        };
-        submenuTrigger.dispatchEvent(new PointerEvent("pointerover", { ...eventInit, pointerType: "mouse" }));
-        submenuTrigger.dispatchEvent(new MouseEvent("mouseover", eventInit));
-        submenuTrigger.focus({ preventScroll: true });
-        submenuTrigger.dispatchEvent(new KeyboardEvent("keydown", {
-          key: "ArrowRight",
-          code: "ArrowRight",
-          bubbles: true,
-          cancelable: true,
-        }));
-        await wait(120);
-        let target = Array.from(document.querySelectorAll('[role="menuitem"]'))
-          .filter(visible)
-          .find((element) => matches(labelFor(element)));
-        if (!target) {
-          submenuTrigger.click();
-          await wait(120);
-          target = Array.from(document.querySelectorAll('[role="menuitem"]'))
-            .filter(visible)
-            .find((element) => matches(labelFor(element)));
-        }
-        if (!target) return { ok: false, reason: "model_option_not_found" };
-        const targetLabel = labelFor(target);
-        target.click();
-        await wait(250);
-        return { ok: true, target: targetLabel };
-      };
       testButton.onclick = async () => {
         if (upstreamConfigOperationInFlight) return;
         const requestFingerprint = upstreamConfigFingerprint();
@@ -2019,26 +1885,12 @@
         setUpstreamConfigBusy(true);
         stageBox.textContent = "正在保存配置...";
         try {
-          const payload = await managerPostJson("/anticodex/upstream-profile", { mode: "third-party", protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), contextWindow: Number(contextWindow.value), apiKey: apiKey.value, stages: lastStages }, {
+          const payload = await managerPostJson("/anticodex/upstream-profile", { protocol: protocol.value, baseUrl: baseUrl.value.trim(), model: model.value.trim(), contextWindow: Number(contextWindow.value), apiKey: apiKey.value }, {
             timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
             retryCandidates: false,
           });
           stageBox.classList.remove("anticodex-error");
-          await reloadNativeCodexConfig(payload);
-          const switchedWithoutRestart = payload.restartRequired === false && payload.hotSwitch === true;
-          if (!switchedWithoutRestart) {
-            throw new Error("本地模型通道拒绝了无重启切换。");
-          }
-          const selected = await selectNativeModelByLabels(
-            payload.nativeModel?.label,
-            payload.nativeModel?.slug,
-            "第三方 API（当前模型）",
-            "anticodex/third-party",
-          );
-          stageBox.textContent = selected.ok
-            ? `已无缝切换到第三方 API：${model.value.trim()}。当前任务和客户端均未重启。`
-            : `线路已更新，但原生模型菜单未能自动选中。请在输入框旁的模型菜单选择“${payload.nativeModel?.label || "第三方 API（当前模型）"}”。`;
-          stageBox.classList.toggle("anticodex-error", !selected.ok);
+          stageBox.textContent = payload.message || "配置已保存，可在聊天输入框的模型菜单选择第三方模型。";
           window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
         } catch (error) {
           stageBox.classList.add("anticodex-error");
@@ -2047,45 +1899,16 @@
           setUpstreamConfigBusy(false);
         }
       };
-      restoreButton.onclick = async () => {
-        if (upstreamConfigOperationInFlight) return;
-        setUpstreamConfigBusy(true);
-        try {
-          const payload = await managerPostJson("/anticodex/upstream-profile", { mode: "antigravity", antigravityModel: antigravityModel.value }, {
-            timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
-            retryCandidates: false,
-          });
-          stageBox.classList.remove("anticodex-error");
-          await reloadNativeCodexConfig(payload);
-          const switchedWithoutRestart = payload.restartRequired === false && payload.hotSwitch === true;
-          if (!switchedWithoutRestart) {
-            throw new Error("本地模型通道拒绝了无重启切换。");
-          }
-          const selected = await selectNativeModelByLabels(payload.nativeModel?.label, payload.nativeModel?.slug, antigravityModel.value);
-          stageBox.textContent = selected.ok
-            ? `已无缝切回 Antigravity：${antigravityModel.value}。第三方配置已保留。`
-            : `线路已更新，但原生模型菜单未能自动选中。请在输入框旁的模型菜单选择“${payload.nativeModel?.label || antigravityModel.value}”。`;
-          stageBox.classList.toggle("anticodex-error", !selected.ok);
-          window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
-        } catch (error) {
-          stageBox.classList.add("anticodex-error");
-          stageBox.textContent = "切回失败：" + error.message;
-        } finally {
-          setUpstreamConfigBusy(false);
-        }
-      };
       refreshUpstreamConfigControls();
       result.classList.remove("anticodex-error");
       result.replaceChildren(el("div", { style: "display:grid;gap:10px" }, [
-        el("div", { className: "anticodex-warn", text: "第三方 API 由 CodexPlusPlus 直接连接，完全绕过 Antigravity。接口失败时只会报错，不会自动消耗 Antigravity 流量，也不会清空聊天记录、项目或当前工作区。" }),
-        row("Antigravity 模型", antigravityModel),
         row("协议", protocol),
         row("接口地址（可填 base URL 或完整接口）", baseUrl),
         row("模型名", model),
         providerModelList,
         row("上下文窗口（token）", contextWindow),
         row("API key", apiKey),
-        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [testButton, saveButton, restoreButton]),
+        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [testButton, saveButton]),
         stageBox,
       ]));
     }
@@ -2094,24 +1917,35 @@
       actions.replaceChildren();
       const actionLists = new Map();
       for (const group of [
-        { id: "daily", title: "\u65e5\u5e38\u64cd\u4f5c", description: "\u67e5\u770b\u3001\u5237\u65b0\u548c\u672c\u5730\u8bca\u65ad", ids: DAILY_ACTION_IDS, tone: "neutral" },
-        { id: "high-impact", title: "\u7ef4\u62a4\u4e0e\u9ad8\u5f71\u54cd\u64cd\u4f5c", description: "\u53ef\u80fd\u91cd\u542f\u3001\u5199\u5165\u6216\u957f\u65f6\u95f4\u8fd0\u884c", ids: HIGH_IMPACT_ACTION_IDS, tone: "danger" },
+        { id: "status", title: "\u5f53\u524d\u72b6\u6001", ids: MANAGER_ACTION_GROUPS.status },
+        { id: "modelSources", title: "\u8d26\u53f7\u4e0e\u6a21\u578b\u6765\u6e90", ids: MANAGER_ACTION_GROUPS.modelSources },
+        { id: "updates", title: "Codex \u66f4\u65b0", ids: MANAGER_ACTION_GROUPS.updates },
+        { id: "troubleshooting", title: "\u6545\u969c\u6392\u67e5", ids: MANAGER_ACTION_GROUPS.troubleshooting },
       ]) {
         const list = el("div", { className: "anticodex-action-list" });
         const section = el("section", {
           className: "anticodex-action-section",
           "data-action-group": group.id,
-          "data-tone": group.tone,
         }, [
           el("div", { className: "anticodex-action-section-head" }, [
             el("h2", { text: group.title }),
-            el("p", { text: group.description }),
           ]),
           list,
         ]);
         actionLists.set(group.id, list);
         actions.append(section);
       }
+      const advancedGroup = { id: "advanced", ids: MANAGER_ACTION_GROUPS.advanced };
+      const advancedList = el("div", { className: "anticodex-action-list" });
+      const advancedSection = el("details", {
+        className: "anticodex-action-section",
+        "data-action-group": "advanced",
+      }, [
+        el("summary", { text: "高级诊断" }),
+        advancedList,
+      ]);
+      actionLists.set(advancedGroup.id, advancedList);
+      actions.append(advancedSection);
       for (const [action, label] of ACTIONS) {
         const highImpact = HIGH_IMPACT_ACTION_IDS.has(action);
         const button = el("button", {
@@ -2252,7 +2086,8 @@
             }
           }
         });
-        actionLists.get(highImpact ? "high-impact" : "daily")?.append(button);
+        const groupId = Object.keys(MANAGER_ACTION_GROUPS).find((id) => MANAGER_ACTION_GROUPS[id].includes(action));
+        actionLists.get(groupId)?.append(button);
       }
     }
 

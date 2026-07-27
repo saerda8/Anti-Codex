@@ -190,7 +190,7 @@ test("Manager advanced diagnostics are collapsed details with a visible label", 
   const injectedAttrs = extractBalanced(injectedAdvanced, injectedAdvanced.indexOf("{"), "{", "}");
   assert.match(injectedAttrs, /["']data-action-group["']\s*:\s*["']advanced["']/);
   assert.match(injectedAdvanced, /el\(\s*["']summary["'][\s\S]*?高级诊断/);
-  assert.doesNotMatch(injectedAttrs, /\bopen\s*:/);
+  assert.doesNotMatch(injectedAttrs, /["']?open["']?\s*:/);
 
   const fallbackGroups = parseFallbackActionGroups(managerService);
   const fallbackAdvanced = fallbackGroups.find((group) => group.id === "advanced");

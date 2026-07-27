@@ -700,8 +700,10 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const html = await response.text();
     assert.match(html, /<title>Anti-Codex \u7ba1\u7406<\/title>/);
     assert.match(html, /<h1>Anti-Codex \u7ba1\u7406<\/h1>/);
-    assert.match(html, /data-action-group="daily"/);
-    assert.match(html, /data-action-group="high-impact"/);
+    for (const group of ["status", "modelSources", "updates", "troubleshooting"]) {
+      assert.match(html, new RegExp(`<section data-action-group="${group}">`));
+    }
+    assert.match(html, /<details(?![^>]*\sopen(?:\s|=|>))[^>]*data-action-group="advanced"[^>]*>\s*<summary>高级诊断<\/summary>/);
     assert.match(html, /confirmHighImpactAction/);
     assert.doesNotMatch(html, /Gate 7|Anti-Codex Manager/);
     assert.doesNotMatch(html, /resetAntigravitySessionLock|secondAccountLoginStatus/);

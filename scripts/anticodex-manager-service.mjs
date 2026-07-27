@@ -160,20 +160,17 @@ const MANAGER_ACTIONS = Object.freeze({
     },
 });
 
-const DAILY_MANAGER_ACTION_IDS = Object.freeze([
-  "refreshStatus",
-  "refreshModels",
-  "accountSwitch",
-  "accountProxy",
-  "syncReadiness",
-  "repairShortcuts",
-  "updateCheck",
-  "sourcePreflight",
-  "mcpSkills",
-  "pluginCapabilities",
-  "diagnosticsBundle",
-  "viewLatestReports",
-]);
+const MANAGER_ACTION_GROUPS = Object.freeze({
+  status: Object.freeze(["refreshStatus"]),
+  modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+  updates: Object.freeze(["updateCheck", "syncHost"]),
+  troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
+  advanced: Object.freeze([
+    "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+    "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+    "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
+  ]),
+});
 
 const HIGH_IMPACT_MANAGER_ACTION_IDS = Object.freeze([
   "syncHost",
@@ -1226,7 +1223,7 @@ function upstreamConnectionSummary(stages = []) {
             status: "ok",
             type: "ready",
             title: "连接可用",
-            suggestedAction: "可以保存并切换；这不会走 ChatGPT 登录，也不会清空聊天记录。",
+            suggestedAction: "可以保存配置；之后可在聊天输入框的模型菜单选择。",
             retryable: false,
             failedStage: "",
         };
@@ -1523,9 +1520,10 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     };
 }
 
-function managerActionButtonHtml(actionId, danger = false) {
+function managerActionButtonHtml(actionId) {
   const action = MANAGER_ACTIONS[actionId];
   if (!action) throw new Error(`Unknown Manager page action: ${actionId}`);
+  const danger = HIGH_IMPACT_MANAGER_ACTION_IDS.includes(actionId);
   return `<button${danger ? ' class="danger"' : ""} data-action="${actionId}" data-manager-action="${actionId}">${action.label}</button>`;
 }
 
@@ -1544,8 +1542,9 @@ const managerHtml = `<!doctype html>
   header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding-bottom:16px; border-bottom:1px solid var(--border); }
   h1 { margin:0; font-size:22px; font-weight:650; }
   .notice { margin:0; color:var(--muted); text-align:right; }
-  section { padding:20px 0; border-bottom:1px solid var(--border); }
-  h2 { margin:0 0 12px; font-size:15px; }
+  section, details { padding:20px 0; border-bottom:1px solid var(--border); }
+  h2, summary { margin:0 0 12px; font-size:15px; font-weight:600; }
+  summary { cursor:pointer; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:8px; }
   button { min-height:40px; padding:8px 12px; border:1px solid var(--border); border-radius:6px; background:var(--button); color:var(--text); text-align:left; cursor:pointer; }
   button:hover { border-color:#6b7280; }
@@ -1561,14 +1560,26 @@ const managerHtml = `<!doctype html>
     <h1>Anti-Codex 管理</h1>
     <p class="notice">只管理本机 Anti-Codex。标有真实流量或重启的操作会再次确认。</p>
   </header>
-  <section data-action-group="daily">
-    <h2>日常操作</h2>
-    <div class="grid">${DAILY_MANAGER_ACTION_IDS.map((id) => managerActionButtonHtml(id)).join("")}</div>
+  <section data-action-group="status">
+    <h2>当前状态</h2>
+    <div class="grid">${MANAGER_ACTION_GROUPS.status.map((id) => managerActionButtonHtml(id)).join("")}</div>
   </section>
-  <section data-action-group="high-impact">
-    <h2>高影响操作</h2>
-    <div class="grid">${HIGH_IMPACT_MANAGER_ACTION_IDS.map((id) => managerActionButtonHtml(id, true)).join("")}</div>
+  <section data-action-group="modelSources">
+    <h2>账号与模型来源</h2>
+    <div class="grid">${MANAGER_ACTION_GROUPS.modelSources.map((id) => managerActionButtonHtml(id)).join("")}</div>
   </section>
+  <section data-action-group="updates">
+    <h2>Codex 更新</h2>
+    <div class="grid">${MANAGER_ACTION_GROUPS.updates.map((id) => managerActionButtonHtml(id)).join("")}</div>
+  </section>
+  <section data-action-group="troubleshooting">
+    <h2>故障排查</h2>
+    <div class="grid">${MANAGER_ACTION_GROUPS.troubleshooting.map((id) => managerActionButtonHtml(id)).join("")}</div>
+  </section>
+  <details data-action-group="advanced">
+    <summary>高级诊断</summary>
+    <div class="grid">${MANAGER_ACTION_GROUPS.advanced.map((id) => managerActionButtonHtml(id)).join("")}</div>
+  </details>
   <section>
     <h2>执行结果</h2>
     <pre id="actionResult" aria-live="polite">尚未执行操作。</pre>
