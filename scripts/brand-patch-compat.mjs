@@ -38,6 +38,31 @@ export function patchStartupMcpConfigReload(text) {
   return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
 }
 
+export function patchConfigWriteHandler(text) {
+  const source = String(text ?? "");
+  if (source.includes('"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)')) {
+    return source;
+  }
+  const startMatch = /"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.exec(source);
+  const start = startMatch?.index ?? -1;
+  const end = start < 0 ? -1 : source.indexOf('"apply-patch":', start);
+  if (start < 0 || end < 0) throw new Error("Current desktop config handler table not found");
+  const original = source.slice(start, end);
+  const settingsModule = /definitions:([\w$]+)\.qi/.exec(original)?.[1];
+  const requiredHandlers = ["set-configuration", "get-setting", "get-settings", "set-setting", "settings-read", "settings-write"];
+  if (!settingsModule || !requiredHandlers.every((name) => original.includes(`"${name}"`))) {
+    throw new Error("Current desktop config handler table is incomplete");
+  }
+  const replacement = `"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\`config/batchWrite\`,e),"set-configuration":e=>(this.setConfigurationValue(e.key,e.value),{success:!0}),"get-setting":e=>({value:this.getSettingValue(e.key)}),"get-settings":()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":e=>(this.setSettingValue(e.key,e.value),{success:!0}),"settings-read":()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:${settingsModule}.qi}),"settings-write":async e=>{let t=Object.entries(e.settings).map(([e,t])=>{let r=${settingsModule}.Wi(e);if(!r)throw Error("Unknown setting: "+e);if(r.agentAccess!==\`read-write\`)throw Error("Setting is read-only: "+e);return[r.key,${settingsModule}.Gi(r.key).parse(t)]});t.map(e=>this.setSettingValue(...e));await this.getSettingsStore().flush();return{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},`;
+  if (replacement.length > original.length) {
+    throw new Error(`Current desktop config handler patch did not fit: ${replacement.length} > ${original.length}`);
+  }
+  return source.slice(0, start)
+    + replacement
+    + " ".repeat(original.length - replacement.length)
+    + source.slice(end);
+}
+
 function originalPrimaryWindowTracker(windowAlias) {
   return `trackPrimaryWindow(${windowAlias}){this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,()=>{this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())})}`;
 }

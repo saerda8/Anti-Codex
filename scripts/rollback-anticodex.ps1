@@ -338,6 +338,7 @@ function Test-AntiCodexAsarPatches {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile,
+        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedConfigWriteBridgeCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount
     )
@@ -366,6 +367,10 @@ function Test-AntiCodexAsarPatches {
         if ($text -match $pattern) {
             throw "Anti-Codex fixed shell host contains a retired feature patch: $pattern"
         }
+    }
+    $configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
+    if ([regex]::Matches($text, $configWriteBridgePattern).Count -ne $ExpectedConfigWriteBridgeCount) {
+        throw "Anti-Codex host app.asar native config write bridge count is invalid."
     }
     $codexTraySelectorCount = [regex]::Matches($text, 'codex-tray\.ico').Count
     $alternateTraySelectorCount = [regex]::Matches($text, 'icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico').Count
@@ -408,6 +413,7 @@ function Test-AntiCodexHost {
         "app-user-model-id",
         "session-title",
         "startup-mcp-config-reload",
+        "config-write",
         "auth-requirement",
         "app-route-gate",
         "profile-dropdown-settings",
@@ -427,7 +433,7 @@ function Test-AntiCodexHost {
     }
     $patchProfile = "fixed-shell-v1"
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
-    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "primary-window-restore-repaint" })
+    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "config-write" })
 
     $detectedDesktopHost = $null
     foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
@@ -505,12 +511,14 @@ function Test-AntiCodexHost {
             Test-AntiCodexAsarPatches `
                 -Path $required.appAsar `
                 -PatchProfile $patchProfile `
+                -ExpectedConfigWriteBridgeCount 1 `
                 -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
                 -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
         } catch {
             Test-AntiCodexAsarPatches `
                 -Path $required.appAsar `
                 -PatchProfile $patchProfile `
+                -ExpectedConfigWriteBridgeCount 1 `
                 -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
                 -ExpectedLegacyPrimaryWindowRestoreRepaintCount 1
         }
@@ -518,7 +526,8 @@ function Test-AntiCodexHost {
         Test-AntiCodexAsarPatches `
             -Path $required.appAsar `
             -PatchProfile $patchProfile `
-            -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
+            -ExpectedConfigWriteBridgeCount 0 `
+            -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
             -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
     }
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {

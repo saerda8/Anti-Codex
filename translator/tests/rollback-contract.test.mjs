@@ -372,9 +372,12 @@ function assertOriginalReleasePairRestored(output) {
 }
 
 test("rollback host validation covers Anti-Codex branding, icons, manifest, hashes, and critical patches", () => {
+  const installer = readRuntimeScript("install-anticodex.ps1");
   const rollback = readRollbackScript();
   const validator = extractFunction(rollback, "Test-AntiCodexHost");
+  const installerCriticalPatches = installer.match(/\$fixedShellCriticalPatches\s*=\s*@\([\s\S]*?\n\)/)?.[0] ?? "";
 
+  assert.match(installerCriticalPatches, /"config-write"/);
   assert.match(validator, /anticodex-host-manifest-v2/);
   assert.match(validator, /fixed-shell-v1/);
   assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full/);
@@ -396,6 +399,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   }
   assert.doesNotMatch(asarValidator, /legacyRequiredMarkers|authMethod:`apikey`|requiresAuth:!1|marketplaces:\[\]/);
   assert.match(asarValidator, /fixed shell host contains a retired feature patch/i);
+  assert.match(asarValidator, /configWriteBridgePattern/);
+  assert.match(asarValidator, /\$configWriteBridgePattern\)\.Count -ne \$ExpectedConfigWriteBridgeCount/);
   for (const patchName of [
     "package-json",
     "webview-html-title",
@@ -403,6 +408,7 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "app-user-model-id",
     "session-title",
     "startup-mcp-config-reload",
+    "config-write",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",
@@ -450,6 +456,8 @@ test("rollback patch compatibility accepts only the current or immediate predece
       "\\u7ba1\\u7406",
       "codex-tray.ico codex-tray.ico codex-tray.ico codex-tray.ico",
     ].join(";");
+    const configWriteBridge = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
+    const patchedBase = `${base};${configWriteBridge}`;
     const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
     const restoreOnlyHook = hook.replace(",n()", "");
     const focusOnlyHook = hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
@@ -462,45 +470,52 @@ test("rollback patch compatibility accepts only the current or immediate predece
       focusOnly: join(fixture, "focus-only.asar"),
       splitCross: join(fixture, "split-cross.asar"),
       legacyRestoreOnly: join(fixture, "legacy-restore-only.asar"),
+      missingConfigBridge: join(fixture, "missing-config-bridge.asar"),
+      duplicateConfigBridge: join(fixture, "duplicate-config-bridge.asar"),
     };
-    writeFileSync(paths.zero, base);
-    writeFileSync(paths.one, `${base};${hook}`);
-    writeFileSync(paths.two, `${base};${hook};${hook}`);
-    writeFileSync(paths.restoreOnly, `${base};${restoreOnlyHook}`);
-    writeFileSync(paths.focusOnly, `${base};${focusOnlyHook}`);
-    writeFileSync(paths.splitCross, `${base};${focusOnlyHook};${restoreOnlyHook}`);
-    writeFileSync(paths.legacyRestoreOnly, `${base};${legacyRestoreOnlyHook}`);
+    writeFileSync(paths.zero, patchedBase);
+    writeFileSync(paths.one, `${patchedBase};${hook}`);
+    writeFileSync(paths.two, `${patchedBase};${hook};${hook}`);
+    writeFileSync(paths.restoreOnly, `${patchedBase};${restoreOnlyHook}`);
+    writeFileSync(paths.focusOnly, `${patchedBase};${focusOnlyHook}`);
+    writeFileSync(paths.splitCross, `${patchedBase};${focusOnlyHook};${restoreOnlyHook}`);
+    writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
+    writeFileSync(paths.missingConfigBridge, `${base};${hook}`);
+    writeFileSync(paths.duplicateConfigBridge, `${patchedBase};${configWriteBridge};${hook}`);
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
 ${asarValidator}
 ${patchSetValidator}
-function Accept-Asar([string]$Path, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore) {
+function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore) {
     try {
-        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore
+        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore
         return $true
     } catch {
         return $false
     }
 }
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","auth-requirement","app-route-gate","profile-dropdown-settings","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
-$previous = @($current | Where-Object { $_ -ne "primary-window-restore-repaint" })
+$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
+$previous = @($current | Where-Object { $_ -ne "config-write" })
 [pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1 0
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 0
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 0
-    currentRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 1 0
-    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 0
-    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 0
-    immediatePredecessor = Accept-Asar ${quote(paths.legacyRestoreOnly)} 0 1
-    predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1
-    previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0
-    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 0
-    previousUnexpectedRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 0 0
-    previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 0
+    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0
+    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0
+    currentRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 1 1 0
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0
+    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0
+    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0
+    immediatePredecessor = Accept-Asar ${quote(paths.missingConfigBridge)} 0 1 0
+    predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1 0
+    previousNoHook = Accept-Asar ${quote(paths.zero)} 0 1 0
+    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 1 0
+    previousUnexpectedRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 0 1 0
+    previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 1 0
     currentManifest = Test-AntiCodexCriticalPatchSet -Recorded $current -Expected $current
     previousManifest = Test-AntiCodexCriticalPatchSet -Recorded $previous -Expected $previous
     missingManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "browser-window-icon" }) -Expected $current
+    missingConfigManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "config-write" }) -Expected $current
     extraManifest = Test-AntiCodexCriticalPatchSet -Recorded @($previous + "unexpected") -Expected $previous
 } | ConvertTo-Json -Compress
 `);
@@ -515,15 +530,18 @@ $previous = @($current | Where-Object { $_ -ne "primary-window-restore-repaint" 
       currentRestoreOnlyHook: false,
       currentFocusOnlyHook: false,
       currentSplitCrossHook: false,
+      currentMissingConfigBridge: false,
+      currentDuplicateConfigBridge: false,
       immediatePredecessor: true,
       predecessorRejectsCurrent: false,
-      previousNoHook: true,
+      previousNoHook: false,
       previousUnexpectedHook: false,
       previousUnexpectedRestoreOnlyHook: false,
       previousUnexpectedFocusOnlyHook: false,
       currentManifest: true,
       previousManifest: true,
       missingManifest: false,
+      missingConfigManifest: false,
       extraManifest: false,
     });
   } finally {

@@ -35,6 +35,45 @@ test("patches startup MCP config reload across minified variable renames", () =>
   );
 });
 
+const configHandlerSource = '"get-configuration":async({key:e})=>({value:this.getConfigurationValue(e)}),"set-configuration":async({key:e,value:t})=>(this.setConfigurationValue(e,t),{success:!0}),"get-setting":async({key:e})=>({value:this.getSettingValue(e)}),"get-settings":async()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":async({key:e,value:t})=>(this.setSettingValue(e,t),{success:!0}),"settings-read":async()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:n.qi}),"settings-write":async({settings:e})=>{let t=Object.entries(e).map(([e,t])=>{let r=n.Wi(e);if(r==null)throw Error(`Unknown setting: ${e}`);if(r.agentAccess!==`read-write`)throw Error(`Setting cannot be written by Codex: ${e}`);return{definition:r,value:n.Gi(r.key).parse(t)}});for(let{definition:e,value:n}of t)this.setSettingValue(e.key,n);return await this.getSettingsStore().flush(),{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},"apply-patch":()=>{},';
+
+test("adds the native batch config bridge to the current desktop handler table", () => {
+  const source = configHandlerSource;
+
+  assert.equal(typeof brandPatchCompat.patchConfigWriteHandler, "function");
+  const patched = brandPatchCompat.patchConfigWriteHandler(source);
+
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /"batch-write-config-value":e=>this\.getRequestAppServerClient\(e\.hostId\)\.sendAppServerRequest\(`config\/batchWrite`,e\)/);
+  assert.match(patched, /"settings-write":async/);
+  assert.equal(brandPatchCompat.patchConfigWriteHandler(patched), patched);
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+  assert.match(criticalBlock, /"config-write"/);
+});
+
+test("validates every settings write before applying any of them", async () => {
+  const patched = brandPatchCompat.patchConfigWriteHandler(configHandlerSource);
+  const applied = [];
+  const definitions = {
+    qi: {},
+    Wi: (key) => key === "good" ? { key, agentAccess: "read-write" } : null,
+    Gi: () => ({ parse: (value) => value }),
+  };
+  const context = {
+    setSettingValue: (key, value) => applied.push([key, value]),
+    getSettingsStore: () => ({ flush: async () => {} }),
+    getToolVisibleSettings: () => ({}),
+    getToolVisibleEffectiveSettings: () => ({}),
+  };
+  const handlers = new Function("n", `return function(){return ({${patched}})}`)(definitions).call(context);
+
+  await assert.rejects(
+    handlers["settings-write"]({ settings: { good: 1, unknown: 2 } }),
+    /Unknown setting: unknown/,
+  );
+  assert.deepEqual(applied, []);
+});
+
 test("recognizes padded idempotent auth and local-model patches", () => {
   assert.equal(
     brandPatchCompat.hasPatchedAuthRequirement(

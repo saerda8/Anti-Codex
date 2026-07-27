@@ -1865,6 +1865,30 @@
         upstreamConnectionSummaryText(payload),
         (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n"),
       ].filter(Boolean).join("\n\n") || "没有返回测试结果";
+      const reloadNativeCodexConfig = async (payload) => {
+        const reload = payload?.nativeConfigReload;
+        if (!reload) return;
+        try {
+          const send = window.electronBridge?.sendMessageFromView;
+          if (typeof send !== "function") throw new Error("原生配置重载通道不可用。");
+          await send({ ...reload, type: "batch-write-config-value" });
+        } catch (error) {
+          if (payload?.switchRollbackId) {
+            try {
+              const rolledBack = await managerPostJson("/anticodex/upstream-profile/rollback", { switchRollbackId: payload.switchRollbackId }, {
+                timeoutMs: UPSTREAM_TEST_TIMEOUT_MS,
+                retryCandidates: false,
+              });
+              if (rolledBack?.nativeConfigReload) {
+                await send({ ...rolledBack.nativeConfigReload, type: "batch-write-config-value" });
+              }
+            } catch (rollbackError) {
+              error.message += `；本地状态回滚失败：${rollbackError.message}`;
+            }
+          }
+          throw error;
+        }
+      };
       const selectNativeModelByLabels = async (...values) => {
         const expected = values
           .flat()
@@ -2000,6 +2024,7 @@
             retryCandidates: false,
           });
           stageBox.classList.remove("anticodex-error");
+          await reloadNativeCodexConfig(payload);
           const switchedWithoutRestart = payload.restartRequired === false && payload.hotSwitch === true;
           if (!switchedWithoutRestart) {
             throw new Error("本地模型通道拒绝了无重启切换。");
@@ -2031,6 +2056,7 @@
             retryCandidates: false,
           });
           stageBox.classList.remove("anticodex-error");
+          await reloadNativeCodexConfig(payload);
           const switchedWithoutRestart = payload.restartRequired === false && payload.hotSwitch === true;
           if (!switchedWithoutRestart) {
             throw new Error("本地模型通道拒绝了无重启切换。");

@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-07-27 Native Model-Switch Reload Root Cause
+
+- The saved third-party endpoint/key were valid. Terra failed only after the visible task reached the provider because Manager updated relay/catalog/config files but the copied Codex Electron main process had no `batch-write-config-value` handler, so its already-running app-server retained old million-token model metadata and posted about 2.30 MB to a 128k model.
+- The minimum compatible fix is one length-preserving `config/batchWrite` handler in the official main bundle plus a post-switch native reload. The handler is critical shell patch 14 in install and rollback manifests. Pre-existing root context settings survive a third-party/Antigravity round trip, and a token-bound exact-byte rollback covers all five switch files if native reload rejects.
+- Source evidence is final focused `52/52`, full no-traffic `789/789` (`20260727-154234-source-preflight.json`), and a real copied-ASAR patch with zero critical skips, exactly one bridge, and validate-all-before-apply settings semantics. This is not installed proof; live acceptance must show a fresh rollout context limit near `115200` rather than `996147` before exact `继续` resumes task `019f9a93-0de5-71f3-9329-12e0e914e681`.
+
 ## 2026-07-26 Outcome-Only Iteration and Provider Fallback
 
 - Independent review of third-party turn `019f9b7c-6dc0-7323-be9b-7b4d858cc02a` confirms a decodable 57.4-second 1080x1920 live-action main video, three release videos, clear dialogue, five measurable speaking windows and a safe readable ZIP. It still fails viewer acceptance because the single close interview shot is flat, subtitles obscure the face/mouth, the treatment is informational rather than a convincing short story, and the packaged ZIP omits its checksum manifest.

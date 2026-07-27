@@ -13,11 +13,12 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-test("third-party hot switch adds the tested model to the native catalog", () => {
+test("third-party hot switch updates the native catalog and compaction limits atomically", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-terra-catalog-"));
   try {
     const settingsPath = path.join(tempDir, "settings.json");
     const catalogPath = path.join(tempDir, "anticodex-model-catalog.json");
+    const codexConfigPath = path.join(tempDir, "config.toml");
     fs.writeFileSync(settingsPath, JSON.stringify({
       relayProfiles: [
         {
@@ -56,10 +57,21 @@ test("third-party hot switch adds the tested model to the native catalog", () =>
         },
       ],
     }), "utf8");
+    fs.writeFileSync(codexConfigPath, `model = "gemini-3-flash-agent"
+model_provider = "anticodex_antigravity"
+model_context_window = 777777
+model_auto_compact_token_limit = 666666
+model_auto_compact_token_limit_scope = "body_after_prefix"
+some_root_setting = "preserved"
+
+[model_providers.anticodex_antigravity]
+wire_api = "responses"
+`, "utf8");
 
     const switched = hotSwitchCodexPlusPlusSettings({
       settingsPath,
       nativeCatalogPath: catalogPath,
+      codexConfigPath,
       nativeCatalogModels: [
         "anticodex/third-party/gpt-5.6-sol",
         "anticodex/third-party",
@@ -93,13 +105,30 @@ test("third-party hot switch adds the tested model to the native catalog", () =>
       slug: "anticodex/third-party/gpt-5.6-terra",
       label: "第三方 · gpt-5.6-terra",
     });
+    assert.deepEqual(switched.nativeConfigReload, {
+      hostId: "local",
+      edits: [
+        { keyPath: "model_context_window", value: 128000, mergeStrategy: "replace" },
+        { keyPath: "model_auto_compact_token_limit", value: 115200, mergeStrategy: "replace" },
+        { keyPath: "model_auto_compact_token_limit_scope", value: "total", mergeStrategy: "replace" },
+      ],
+      expectedVersion: null,
+      filePath: null,
+      reloadUserConfig: true,
+    });
+    const codexConfig = fs.readFileSync(codexConfigPath, "utf8");
+    assert.match(codexConfig, /^model_context_window = 128000$/m);
+    assert.match(codexConfig, /^model_auto_compact_token_limit = 115200$/m);
+    assert.match(codexConfig, /^model_auto_compact_token_limit_scope = "total"$/m);
+    assert.match(codexConfig, /^some_root_setting = "preserved"$/m);
 
     const settingsBeforeFailedSwitch = fs.readFileSync(settingsPath, "utf8");
     const catalogBeforeFailedSwitch = fs.readFileSync(catalogPath, "utf8");
+    const configBeforeFailedSwitch = fs.readFileSync(codexConfigPath, "utf8");
     const renameSync = fs.renameSync;
     fs.renameSync = (source, destination) => {
-      if (path.resolve(destination) === path.resolve(catalogPath)) {
-        throw new Error("catalog replace failed");
+      if (path.resolve(destination) === path.resolve(codexConfigPath)) {
+        throw new Error("config replace failed");
       }
       return renameSync(source, destination);
     };
@@ -107,6 +136,7 @@ test("third-party hot switch adds the tested model to the native catalog", () =>
       assert.throws(() => hotSwitchCodexPlusPlusSettings({
         settingsPath,
         nativeCatalogPath: catalogPath,
+        codexConfigPath,
         mode: "third-party",
         adapterPort: 18488,
         antigravityModel: "gemini-3-flash-agent",
@@ -117,7 +147,7 @@ test("third-party hot switch adds the tested model to the native catalog", () =>
           apiKey: "saved-third-party-key",
           contextWindow: 128000,
         },
-      }), /catalog replace failed/);
+      }), /config replace failed/);
     } finally {
       fs.renameSync = renameSync;
     }
@@ -126,6 +156,32 @@ test("third-party hot switch adds the tested model to the native catalog", () =>
       JSON.parse(settingsBeforeFailedSwitch),
     );
     assert.equal(fs.readFileSync(catalogPath, "utf8"), catalogBeforeFailedSwitch);
+    assert.equal(fs.readFileSync(codexConfigPath, "utf8"), configBeforeFailedSwitch);
+
+    const restored = hotSwitchCodexPlusPlusSettings({
+      settingsPath,
+      codexConfigPath,
+      mode: "antigravity",
+      adapterPort: 18488,
+      antigravityModel: "gemini-3-flash-agent",
+      thirdParty: {
+        protocol: "openai-compatible",
+        baseUrl: "http://localhost:8080",
+        model: "gpt-5.6-terra",
+        apiKey: "saved-third-party-key",
+        contextWindow: 128000,
+      },
+    });
+    const restoredConfig = fs.readFileSync(codexConfigPath, "utf8");
+    assert.deepEqual(restored.nativeConfigReload.edits.map(({ keyPath, value }) => ({ keyPath, value })), [
+      { keyPath: "model_context_window", value: 777777 },
+      { keyPath: "model_auto_compact_token_limit", value: 666666 },
+      { keyPath: "model_auto_compact_token_limit_scope", value: "body_after_prefix" },
+    ]);
+    assert.match(restoredConfig, /^model_context_window = 777777$/m);
+    assert.match(restoredConfig, /^model_auto_compact_token_limit = 666666$/m);
+    assert.match(restoredConfig, /^model_auto_compact_token_limit_scope = "body_after_prefix"$/m);
+    assert.match(restoredConfig, /^some_root_setting = "preserved"$/m);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -470,6 +526,20 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       activeRelayId: "anticodex-antigravity",
       relayTestModel: "gemini-3-flash-agent",
     }), "utf8");
+    const contextBackup = Buffer.from(JSON.stringify({
+      schema: 1,
+      values: {
+        model_context_window: 777777,
+        model_auto_compact_token_limit: 666666,
+        model_auto_compact_token_limit_scope: "body_after_prefix",
+      },
+    }), "utf8").toString("base64url");
+    const configBeforeSwitch = `# anticodex-manager-context-backup-v1:${contextBackup}
+model_context_window = 128000
+model_auto_compact_token_limit = 115200
+model_auto_compact_token_limit_scope = "total"
+`;
+    fs.writeFileSync(path.join(catalogDir, "config.toml"), configBeforeSwitch, "utf8");
 
     const healthServer = createServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -506,6 +576,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.ok(antigravityModelIds.includes("claude-sonnet-4-6"));
       assert.equal(antigravityModelIds.includes("claude-sonnet-4-5"), false);
 
+      const settingsBeforeSwitch = fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8");
       const saveResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile`, {
         method: "POST",
         headers: {
@@ -521,9 +592,31 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.equal(saved.accountReady, true);
       assert.equal(saved.restartRequired, false);
       assert.equal(saved.hotSwitch, true);
+      assert.match(saved.switchRollbackId, /^[A-Za-z0-9_-]{20,}$/);
       const switchedSettings = JSON.parse(fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8"));
       const switchedAntigravity = switchedSettings.relayProfiles.find((entry) => entry.id === "anticodex-antigravity");
       assert.equal(switchedAntigravity.apiKey, "test-local-adapter-token");
+
+      const rollbackResponse = await fetch(`${selectionBaseUrl}/anticodex/upstream-profile/rollback`, {
+        method: "POST",
+        headers: {
+          origin: selectionBaseUrl,
+          "content-type": "application/json",
+          "x-anticodex-manager-token": selectionToken,
+        },
+        body: JSON.stringify({ switchRollbackId: saved.switchRollbackId }),
+      });
+      assert.equal(rollbackResponse.status, 200);
+      const rolledBack = await rollbackResponse.json();
+      assert.equal(rolledBack.rolledBack, true);
+      assert.deepEqual(rolledBack.nativeConfigReload.edits.map(({ keyPath, value }) => ({ keyPath, value })), [
+        { keyPath: "model_context_window", value: 128000 },
+        { keyPath: "model_auto_compact_token_limit", value: 115200 },
+        { keyPath: "model_auto_compact_token_limit_scope", value: "total" },
+      ]);
+      assert.equal(fs.readFileSync(path.join(componentStateDir, "settings.json"), "utf8"), settingsBeforeSwitch);
+      assert.equal(fs.readFileSync(path.join(catalogDir, "config.toml"), "utf8"), configBeforeSwitch);
+      assert.equal(fs.existsSync(path.join(tempDir, "upstream-profile.json")), false);
     } finally {
       await selectionService.close();
       await closeServer(healthServer);

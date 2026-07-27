@@ -40,6 +40,7 @@ $fixedShellCriticalPatches = @(
     "app-user-model-id",
     "session-title",
     "startup-mcp-config-reload",
+    "config-write",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",

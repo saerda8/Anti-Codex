@@ -213,6 +213,10 @@ test("Manager switches the native model in place and never calls the route resta
   const block = ui.slice(start, end);
 
   assert.match(block, /selectNativeModelByLabels/);
+  assert.match(block, /reloadNativeCodexConfig/);
+  assert.match(block, /upstream-profile\/rollback/);
+  assert.match(block, /switchRollbackId/);
+  assert.match(block, /rolledBack\?\.nativeConfigReload/);
   assert.match(block, /restartRequired\s*===\s*false|restartRequired:\s*false/);
   assert.doesNotMatch(block, /upstream-apply|applyAndWait|正在重启|30 秒内恢复/);
 });

@@ -805,15 +805,160 @@ function thirdPartyRelayProtocol(protocol) {
 }
 
 function writeJsonAtomic(filePath, value) {
+    writeTextAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeTextAtomic(filePath, value) {
     const parent = path.dirname(filePath);
     fs.mkdirSync(parent, { recursive: true });
     const temporary = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
     try {
-        fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+        fs.writeFileSync(temporary, Buffer.isBuffer(value) ? value : String(value), Buffer.isBuffer(value) ? undefined : "utf8");
         fs.renameSync(temporary, filePath);
     } finally {
         try { fs.rmSync(temporary, { force: true }); } catch {}
     }
+}
+
+const CODEX_CONTEXT_BACKUP_PREFIX = "# anticodex-manager-context-backup-v1:";
+const CODEX_CONTEXT_KEYS = [
+    "model_context_window",
+    "model_auto_compact_token_limit",
+    "model_auto_compact_token_limit_scope",
+];
+
+function codexContextValue(line, key) {
+    const match = new RegExp(`^\\s*${key}\\s*=\\s*(.*?)\\s*$`).exec(line);
+    if (!match) throw new Error(`Cannot preserve native Codex setting ${key}.`);
+    if (key !== "model_auto_compact_token_limit_scope") {
+        const numberMatch = /^(\d+)\s*(?:#.*)?$/.exec(match[1]);
+        if (!numberMatch) throw new Error(`Cannot preserve native Codex setting ${key}.`);
+        return Number(numberMatch[1]);
+    }
+    const stringMatch = /^("(?:\\.|[^"\\])*"|'[^']*')\s*(?:#.*)?$/.exec(match[1]);
+    if (!stringMatch) throw new Error(`Cannot preserve native Codex setting ${key}.`);
+    return stringMatch[1].startsWith("\"")
+        ? JSON.parse(stringMatch[1])
+        : stringMatch[1].slice(1, -1);
+}
+
+function decodeCodexContextBackup(line) {
+    try {
+        const parsed = JSON.parse(Buffer.from(String(line).slice(CODEX_CONTEXT_BACKUP_PREFIX.length).trim(), "base64url").toString("utf8"));
+        const values = Object.fromEntries(CODEX_CONTEXT_KEYS.map((key) => [key, parsed?.values?.[key] ?? null]));
+        if (parsed?.schema !== 1
+            || CODEX_CONTEXT_KEYS.slice(0, 2).some((key) => values[key] != null && !Number.isInteger(values[key]))
+            || (values.model_auto_compact_token_limit_scope != null && typeof values.model_auto_compact_token_limit_scope !== "string")) {
+            throw new Error();
+        }
+        return values;
+    } catch {
+        throw new Error("The preserved native Codex context settings are invalid.");
+    }
+}
+
+function codexContextValues(rootLines) {
+    return Object.fromEntries(CODEX_CONTEXT_KEYS.map((key) => {
+        const matches = rootLines.filter((line) => new RegExp(`^\\s*${key}\\s*=`).test(line));
+        if (matches.length > 1) throw new Error(`Multiple native Codex settings were found for ${key}.`);
+        return [key, matches.length === 1 ? codexContextValue(matches[0], key) : null];
+    }));
+}
+
+function readCodexContextValues(configPath) {
+    const resolvedPath = path.resolve(String(configPath || ""));
+    if (!fs.existsSync(resolvedPath)) return null;
+    const lines = fs.readFileSync(resolvedPath, "utf8").replaceAll("\r\n", "\n").split("\n");
+    const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line));
+    return codexContextValues(lines.slice(0, firstSection < 0 ? lines.length : firstSection));
+}
+
+function prepareCodexContextConfig(configPath, contextWindow) {
+    const resolvedPath = path.resolve(String(configPath || ""));
+    if (!fs.existsSync(resolvedPath)) {
+        if (contextWindow == null) return null;
+        throw new Error("The native Codex config is unavailable for an in-place switch.");
+    }
+    const parsedWindow = contextWindow == null ? null : Number(contextWindow);
+    if (parsedWindow != null && (!Number.isInteger(parsedWindow) || parsedWindow < 16000 || parsedWindow > 4000000)) {
+        throw new Error("Third-party context window must be an integer between 16000 and 4000000.");
+    }
+    const originalSource = fs.readFileSync(resolvedPath, "utf8");
+    const newline = originalSource.includes("\r\n") ? "\r\n" : "\n";
+    const lines = originalSource.replaceAll("\r\n", "\n").split("\n");
+    const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line));
+    const rootEnd = firstSection < 0 ? lines.length : firstSection;
+    const managedKeys = new Set(CODEX_CONTEXT_KEYS);
+    const currentRoot = lines.slice(0, rootEnd);
+    const backupLines = currentRoot.filter((line) => line.startsWith(CODEX_CONTEXT_BACKUP_PREFIX));
+    if (backupLines.length > 1) throw new Error("Multiple native Codex context backups were found.");
+    const rootLines = currentRoot.filter((line) => {
+        const match = /^\s*([A-Za-z0-9_]+)\s*=/.exec(line);
+        return !line.startsWith(CODEX_CONTEXT_BACKUP_PREFIX) && (!match || !managedKeys.has(match[1]));
+    });
+    const existingBackup = backupLines.length === 1 ? decodeCodexContextBackup(backupLines[0]) : null;
+    const preserved = existingBackup || codexContextValues(currentRoot);
+    const managedLines = parsedWindow == null
+        ? CODEX_CONTEXT_KEYS.flatMap((key) => preserved[key] == null
+            ? []
+            : [`${key} = ${typeof preserved[key] === "string" ? JSON.stringify(preserved[key]) : preserved[key]}`])
+        : [
+            `${CODEX_CONTEXT_BACKUP_PREFIX}${Buffer.from(JSON.stringify({ schema: 1, values: preserved }), "utf8").toString("base64url")}`,
+            `model_context_window = ${parsedWindow}`,
+            `model_auto_compact_token_limit = ${Math.floor(parsedWindow * 0.9)}`,
+            'model_auto_compact_token_limit_scope = "total"',
+        ];
+    const nextSource = [
+        ...managedLines,
+        ...rootLines,
+        ...lines.slice(rootEnd),
+    ].join("\n").replace(/^\n+|\n+$/g, "") + "\n";
+    return {
+        configPath: resolvedPath,
+        originalSource,
+        nextSource: newline === "\n" ? nextSource : nextSource.replaceAll("\n", newline),
+        reloadValues: parsedWindow == null ? preserved : {
+            model_context_window: parsedWindow,
+            model_auto_compact_token_limit: Math.floor(parsedWindow * 0.9),
+            model_auto_compact_token_limit_scope: "total",
+        },
+    };
+}
+
+function nativeConfigReload(reloadValues) {
+    if (!reloadValues) return null;
+    return {
+        hostId: "local",
+        edits: CODEX_CONTEXT_KEYS.map((keyPath) => ({
+            keyPath,
+            value: reloadValues[keyPath] ?? null,
+            mergeStrategy: "replace",
+        })),
+        expectedVersion: null,
+        filePath: null,
+        reloadUserConfig: true,
+    };
+}
+
+function captureFileSnapshots(filePaths) {
+    return [...new Set(filePaths.map((filePath) => path.resolve(filePath)))].map((filePath) => ({
+        filePath,
+        existed: fs.existsSync(filePath),
+        contents: fs.existsSync(filePath) ? fs.readFileSync(filePath) : null,
+    }));
+}
+
+function restoreFileSnapshots(snapshots) {
+    const errors = [];
+    for (const snapshot of [...snapshots].reverse()) {
+        try {
+            if (snapshot.existed) writeTextAtomic(snapshot.filePath, snapshot.contents);
+            else fs.rmSync(snapshot.filePath, { force: true });
+        } catch (error) {
+            errors.push(`${snapshot.filePath}: ${error.message}`);
+        }
+    }
+    if (errors.length > 0) throw new Error(errors.join("; "));
 }
 
 function prepareThirdPartyNativeCatalog(catalogPath, model, contextWindow) {
@@ -968,23 +1113,52 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
         );
         nativeCatalogModelIds = preparedNativeCatalog.modelIds;
     }
+    const preparedCodexConfig = options.codexConfigPath
+        ? prepareCodexContextConfig(
+            options.codexConfigPath,
+            mode === "third-party" ? Number(thirdPartyProfile.contextWindow || 272000) : null,
+        )
+        : null;
     const nativeCatalogModels = new Set(nativeCatalogModelIds);
 
     settings.relayProfiles = orderedProfiles;
     settings.activeRelayId = mode === "antigravity" ? ANTIGRAVITY_RELAY_ID : THIRD_PARTY_RELAY_ID;
     settings.relayTestModel = mode === "antigravity" ? antigravityModel : thirdPartyProfile.testModel;
-    writeJsonAtomic(settingsPath, settings);
-    if (preparedNativeCatalog) {
-        try {
+    const originalCatalogSource = preparedNativeCatalog
+        ? fs.readFileSync(preparedNativeCatalog.catalogPath, "utf8")
+        : null;
+    let settingsWritten = false;
+    let catalogWritten = false;
+    let configWritten = false;
+    try {
+        writeJsonAtomic(settingsPath, settings);
+        settingsWritten = true;
+        if (preparedNativeCatalog) {
             writeJsonAtomic(preparedNativeCatalog.catalogPath, preparedNativeCatalog.catalog);
-        } catch (error) {
-            try {
-                writeJsonAtomic(settingsPath, JSON.parse(originalSettingsSource));
-            } catch (rollbackError) {
-                error.message += ` Settings rollback failed: ${rollbackError.message}`;
-            }
-            throw error;
+            catalogWritten = true;
         }
+        if (preparedCodexConfig) {
+            writeTextAtomic(preparedCodexConfig.configPath, preparedCodexConfig.nextSource);
+            configWritten = true;
+        }
+    } catch (error) {
+        const rollbackErrors = [];
+        if (configWritten) {
+            try { writeTextAtomic(preparedCodexConfig.configPath, preparedCodexConfig.originalSource); }
+            catch (rollbackError) { rollbackErrors.push(`config: ${rollbackError.message}`); }
+        }
+        if (catalogWritten) {
+            try { writeTextAtomic(preparedNativeCatalog.catalogPath, originalCatalogSource); }
+            catch (rollbackError) { rollbackErrors.push(`catalog: ${rollbackError.message}`); }
+        }
+        if (settingsWritten) {
+            try { writeTextAtomic(settingsPath, originalSettingsSource); }
+            catch (rollbackError) { rollbackErrors.push(`settings: ${rollbackError.message}`); }
+        }
+        if (rollbackErrors.length > 0) {
+            error.message += ` Rollback failed (${rollbackErrors.join("; ")}).`;
+        }
+        throw error;
     }
     let nativeModel;
     if (mode === "antigravity") {
@@ -997,6 +1171,7 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
             ? { slug: exact, label: `第三方 · ${thirdPartyProfile.testModel}` }
             : { slug: THIRD_PARTY_MODEL_SLOT, label: "第三方 API（当前模型）" };
     }
+    const reloadValues = preparedCodexConfig?.reloadValues || {};
     return {
         ok: true,
         hotSwitch: true,
@@ -1005,6 +1180,7 @@ export function hotSwitchCodexPlusPlusSettings(options = {}) {
         model: settings.relayTestModel,
         activeRelayId: settings.activeRelayId,
         nativeModel,
+        nativeConfigReload: nativeConfigReload(preparedCodexConfig?.reloadValues),
     };
 }
 
@@ -1070,6 +1246,7 @@ async function applySavedProfileHotSwitch(mode, options = {}) {
         thirdParty: savedThirdPartyForHotSwitch(runtimeProfile),
         nativeCatalogPath: path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json"),
         nativeCatalogModels: nativeModelSlugsFromCatalog(stateRoot),
+        codexConfigPath: path.join(stateRoot, "codex-home-deepseek-app", "config.toml"),
     });
 }
 
@@ -1739,6 +1916,19 @@ export function createAntiCodexManagerService(options = {}) {
   const refreshModels = options.refreshModels;
   const ensureAntigravityReady = options.ensureAntigravityReady
     ?? ((context) => ensureAntigravityDesktopReady(context));
+  let pendingProfileSwitchRollback = null;
+  const profileSwitchPaths = [
+    path.join(stateRoot, "upstream-profile.json"),
+    path.join(stateRoot, "upstream-profile.key"),
+    path.join(stateRoot, "codexplusplus", "settings.json"),
+    path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json"),
+    path.join(stateRoot, "codex-home-deepseek-app", "config.toml"),
+  ];
+  const stageProfileSwitchRollback = (snapshots, nativeConfigReload) => {
+    const switchRollbackId = crypto.randomBytes(18).toString("base64url");
+    pendingProfileSwitchRollback = { switchRollbackId, snapshots, nativeConfigReload };
+    return switchRollbackId;
+  };
 
   const server = http.createServer(async (req, res) => {
     if (!validateLoopbackAndTrusted(req, res)) {
@@ -1959,8 +2149,31 @@ export function createAntiCodexManagerService(options = {}) {
       }
     }
 
+    if (req.method === "POST" && pathname === "/anticodex/upstream-profile/rollback") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      try {
+        const raw = await readRequestBody(req);
+        const body = JSON.parse(raw.toString("utf8") || "{}");
+        const switchRollbackId = String(body.switchRollbackId || "");
+        const pending = pendingProfileSwitchRollback?.switchRollbackId === switchRollbackId
+          ? pendingProfileSwitchRollback
+          : null;
+        if (!pending) return jsonResponse(res, 409, { ok: false, message: "切换回滚凭据无效或已过期。" }, req);
+        restoreFileSnapshots(pending.snapshots);
+        pendingProfileSwitchRollback = null;
+        return jsonResponse(res, 200, {
+          ok: true,
+          rolledBack: true,
+          nativeConfigReload: pending.nativeConfigReload,
+        }, req);
+      } catch (error) {
+        return jsonResponse(res, error.statusCode || 500, { ok: false, message: error.message }, req);
+      }
+    }
+
     if (req.method === "POST" && pathname === "/anticodex/upstream-profile") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      let profileSwitchSnapshots = null;
       try {
         const raw = await readRequestBody(req);
         const body = JSON.parse(raw.toString("utf8") || "{}");
@@ -1978,16 +2191,21 @@ export function createAntiCodexManagerService(options = {}) {
             stateRoot,
             adapterAuthToken,
           });
+          profileSwitchSnapshots = captureFileSnapshots(profileSwitchPaths);
+          const rollbackNativeConfigReload = nativeConfigReload(readCodexContextValues(profileSwitchPaths[4]));
           const saved = await runUpstreamProfileScript("UseAntigravity", { antigravityModel }, stateRoot, scriptsRoot);
           const switched = await applySavedProfileHotSwitch("antigravity", {
             stateRoot,
             scriptsRoot,
             fixedHealthUrl,
           });
+          const switchRollbackId = stageProfileSwitchRollback(profileSwitchSnapshots, rollbackNativeConfigReload);
+          profileSwitchSnapshots = null;
           return jsonResponse(res, 200, {
             ok: true,
             saved,
             accountReady: account?.signedIn === true && account?.identityAvailable === true,
+            switchRollbackId,
             ...switched,
           }, req);
         }
@@ -2012,6 +2230,8 @@ export function createAntiCodexManagerService(options = {}) {
           connectionStages: sanitizedConnectionStages(stages),
           providerModels: providerModelIdsFromConnectionStages(stages, body.model),
         };
+        profileSwitchSnapshots = captureFileSnapshots(profileSwitchPaths);
+        const rollbackNativeConfigReload = nativeConfigReload(readCodexContextValues(profileSwitchPaths[4]));
         const saved = await runUpstreamProfileScript("SaveThirdParty", {
           protocol: body.protocol,
           baseUrl: body.baseUrl,
@@ -2026,8 +2246,14 @@ export function createAntiCodexManagerService(options = {}) {
           scriptsRoot,
           fixedHealthUrl,
         });
-        return jsonResponse(res, 200, { ok: true, saved, ...switched }, req);
+        const switchRollbackId = stageProfileSwitchRollback(profileSwitchSnapshots, rollbackNativeConfigReload);
+        profileSwitchSnapshots = null;
+        return jsonResponse(res, 200, { ok: true, saved, switchRollbackId, ...switched }, req);
       } catch (error) {
+        if (profileSwitchSnapshots) {
+          try { restoreFileSnapshots(profileSwitchSnapshots); }
+          catch (rollbackError) { error.message += ` Rollback failed: ${rollbackError.message}`; }
+        }
         return jsonResponse(res, error.statusCode || 400, { ok: false, message: error.message }, req);
       }
     }
@@ -2088,6 +2314,7 @@ export function createAntiCodexManagerService(options = {}) {
       });
     },
     close() {
+      pendingProfileSwitchRollback = null;
       return new Promise((resolve, reject) => {
         if (!server.listening) {
           resolve();

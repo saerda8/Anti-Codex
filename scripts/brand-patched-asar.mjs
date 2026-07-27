@@ -9,6 +9,7 @@ import {
   hasStartupMcpConfigReload,
   hasWindowsTrayIconSelection,
   patchComputerUseLegacyNotifyOptOut,
+  patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
@@ -174,9 +175,8 @@ function patchLocaleInfo(text) {
 }
 
 function patchConfigWriteHandler(text) {
-  if (text.includes("\"get-configuration\":async({key:e})=>({value:this.getConfigurationValue(e)})") &&
-      text.includes("\"set-configuration\":async({key:e,value:t})=>(this.setConfigurationValue(e,t),{success:!0})")) {
-    return text;
+  if (/"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.test(text)) {
+    return patchCurrentConfigWriteHandler(text);
   }
   const replacement = "\"get-configuration\":async({key:e})=>({value:this.globalState.get(e)}),\"write-config-value\":async e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\"config/value/write\",e),\"batch-write-config-value\":async e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\"config/batchWrite\",e),\"set-configuration\":async({key:t,value:n})=>(this.globalState.set(t,n),t===e.Or.APPEARANCE_THEME&&VT(n),(t===e.Or.APPEARANCE_THEME||t===e.Or.APPEARANCE_LIGHT_CHROME_THEME||t===e.Or.APPEARANCE_DARK_CHROME_THEME)&&this.windowManager.refreshWindowBackdropForHost(this.hostConfig.id),{success:!0}),\"apply-patch\":async n=>{let r=n.hostConfig,i=this.getAppServerClientForHostIdOrThrow(r.id);return t.zt(n,this.gitManager,i,re(t.Hr(r)))},\"mcp-codex-config\":async({cwd:e})=>({config:await this.buildMcpCodexConfig(e)}),\"worktree-shell-environment-config\":async({cwd:n,hostId:r})=>{let i=this.getRequestAppServerClient(r),a=i.hostConfig;return{shellEnvironment:await t.Lt(e.zt(a)?n:this.mapAgentPathToLocalPath(n,a)??n,i)}},\"ide-context\":async({workspaceRoot:e,origin:t})=>{let n=this.getIpcClientForOrigin(t),r=await n.sendRequest(\"ide-context\",{workspaceRoot:e});return{ideContext:r.result.ideContext}},";
   if (text.includes("\"batch-write-config-value\":async e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\"config/batchWrite\",e)")) return text;
@@ -495,13 +495,10 @@ function findConfigWriteHandlerPatch(fd, header, dataOffset) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if ((text.includes("\"get-configuration\":async({key:e})=>({value:this.globalState.get(e)})") &&
-         text.includes("\"set-configuration\":async({key:t,value:n})")) ||
-        (text.includes("\"get-configuration\":async({key:e})=>({value:this.getConfigurationValue(e)})") &&
-         text.includes("\"set-configuration\":async({key:e,value:t})=>(this.setConfigurationValue(e,t),{success:!0})")) ||
-        text.includes("\"write-config-value\":async e=>this.getRequestAppServerClient(e.hostId).writeConfigValue(e)")) {
+    try {
+      patchConfigWriteHandler(text);
       return [rel, patchConfigWriteHandler];
-    }
+    } catch {}
   }
   throw new Error("Could not find Electron config write handler table");
 }
@@ -861,6 +858,7 @@ const fixedShellCriticalPatchNames = new Set([
   "app-user-model-id",
   "session-title",
   "startup-mcp-config-reload",
+  "config-write",
   "auth-requirement",
   "app-route-gate",
   "profile-dropdown-settings",
