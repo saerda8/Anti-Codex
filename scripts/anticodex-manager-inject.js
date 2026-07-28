@@ -109,6 +109,7 @@
 
   function invalidateManagerActionToken(reason) {
     window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = `invalidated:${reason}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__;
   }
 
   function cancelAccountSwitchObservation() {
@@ -586,6 +587,10 @@
 
   async function refreshManagerSnapshot() {
     if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function") return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
+    if (window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__) return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
+    if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
+      return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
+    }
     if (window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__) {
       const deadline = Date.now() + LOAD_SNAPSHOT_TIMEOUT_MS;
       while (window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ && Date.now() < deadline) {
@@ -594,14 +599,22 @@
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     }
     window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ = true;
+    const actionToken = String(window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ || "");
     const previousSuppressRefreshStatus = window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
     window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ = true;
     try {
       const payload = await Promise.race([
-        window.__ANTICODEX_RUN_MANAGER_ACTION__("refreshStatus"),
+        window.__ANTICODEX_RUN_MANAGER_ACTION__("refreshStatus", actionToken),
         new Promise((resolve) => setTimeout(() => resolve(null), LOAD_SNAPSHOT_TIMEOUT_MS)),
       ]);
-      if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+      if (!payload && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
+        invalidateManagerActionToken("snapshot-timeout");
+      }
+      if (
+        payload?.snapshot
+        && !window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__
+        && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken
+      ) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     } catch {
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
@@ -628,7 +641,7 @@
         ]);
         if (winner === "bridge") {
           if (payload?.action && payload.action !== action) throw new Error(`Manager bridge returned ${payload.action} for ${action}.`);
-          if (!actionToken || window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
+          if (actionToken && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
             activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || activeApi, activeApi);
             if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
           }
@@ -888,13 +901,28 @@
       }
       if (action === "retry") {
         const previous = actionButton.textContent;
+        let actionToken = "";
         actionButton.disabled = true;
         actionButton.textContent = "\u68c0\u67e5\u4e2d...";
         try {
           await openManager();
-          await runActionViaBridge("accountProxy");
+          const managerBusy = Boolean(window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__)
+            || Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending);
+          if (managerBusy) {
+            const message = "\u5df2\u6709\u7ba1\u7406\u4efb\u52a1\u5728\u8fd0\u884c\uff0c\u8bf7\u5b8c\u6210\u540e\u518d\u91cd\u65b0\u68c0\u67e5\u3002";
+            notice.querySelector("span").textContent = message;
+            const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
+            if (liveResult) liveResult.textContent = message;
+            return;
+          }
+          actionToken = `notice:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+          window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = actionToken;
+          window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ = actionToken;
+          await runActionViaBridge("accountProxy", actionToken);
+          if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
           await window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
         } catch (error) {
+          if (actionToken && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
           const message = "\u91cd\u65b0\u68c0\u67e5\u5931\u8d25\uff1a" + (error?.message || "\u672c\u5730\u68c0\u67e5\u4e0d\u53ef\u7528");
           notice.querySelector("span").textContent = message;
           const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
@@ -903,6 +931,9 @@
             liveResult.textContent = message;
           }
         } finally {
+          if (window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ === actionToken) {
+            delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__;
+          }
           actionButton.disabled = false;
           actionButton.textContent = previous || "\u91cd\u65b0\u68c0\u67e5";
         }
@@ -2015,6 +2046,7 @@
           const currentActionGeneration = actionGeneration;
           const actionToken = `${currentActionGeneration}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
           window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = actionToken;
+          window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ = actionToken;
           actionInFlight = true;
           const actionStartedAt = Date.now();
           setActionButtonsDisabled(true);
@@ -2040,14 +2072,17 @@
             ]);
             if (outcome.type === "payload") {
               progressActive = false;
+              if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
               if (action === "accountSwitch") {
                 result.textContent = "Antigravity \u5df2\u6253\u5f00\uff0c\u6b63\u5728\u81ea\u52a8\u68c0\u6d4b\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316\u2026";
                 const change = await waitForAccountSwitch(accountSwitchBaseline);
+                if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
                 if (change.reason === "cancelled") {
                   return;
                 } else if (change.changed) {
                   result.textContent = "\u5df2\u68c0\u6d4b\u5230\u5207\u6362\uff0c\u6b63\u5728\u81ea\u52a8\u5237\u65b0 Anti-Codex \u6a21\u578b\u2026";
-                  const refreshPayload = await runActionViaBridge("refreshModels");
+                  const refreshPayload = await runActionViaBridge("refreshModels", actionToken);
+                  if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
                   result.textContent = "\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316\u5df2\u786e\u8ba4\u3002\n" + summaryText("refreshModels", refreshPayload);
                 } else {
                   result.textContent = "\u672a\u68c0\u6d4b\u5230\u53ef\u8bc1\u660e\u7684\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316\u3002\n\u5982\u679c\u4f60\u5df2\u5b8c\u6210\u5207\u6362\uff0c\u8bf7\u624b\u52a8\u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002";
@@ -2062,6 +2097,7 @@
                 };
                 result.textContent = managerSummary;
               }
+              if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
               await load({ updateResult: false });
             } else if (outcome.type === "timeout") {
               progressActive = false;
@@ -2123,6 +2159,9 @@
             const remainingBusyMs = 300 - (Date.now() - actionStartedAt);
             if (remainingBusyMs > 0) await wait(remainingBusyMs);
             actionInFlight = false;
+            if (window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ === actionToken) {
+              delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__;
+            }
             result.removeAttribute("data-anticodex-running");
             setActionButtonsDisabled(false);
             if ((window.__ANTICODEX_MANAGER_ACTION_QUEUE__?.length || 0) === 0) {

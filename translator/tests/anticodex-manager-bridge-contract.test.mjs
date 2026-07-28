@@ -940,6 +940,7 @@ test("Manager long actions enter pending UI without losing their late bridge res
 test("Manager late action delivery is gated by the exact action generation token", () => {
   const bridgeSourceBlock = source.match(/export function createManagerBridgeSource\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  const snapshotRefreshBlock = extractNamedFunction(managerInject, "refreshManagerSnapshot");
   const removeManagerBlock = extractNamedFunction(managerInject, "removeManager");
   const installActionsStart = managerInject.indexOf("function installActions()");
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
@@ -956,9 +957,22 @@ test("Manager late action delivery is gated by the exact action generation token
   assert.match(deliveryBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
   assert.match(deliveryBlock, /if \(!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult\) globalThis\.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload/);
   assert.doesNotMatch(deliveryBlock, /const isCurrentAction = !runningAction \|\| runningAction === deliveredAction/);
-  assert.match(bridgeActionBlock, /if \(!actionToken \|\| window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken\) \{[\s\S]*?__ANTICODEX_MANAGER_SNAPSHOT__/);
+  assert.match(bridgeActionBlock, /if \(actionToken && window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken\) \{[\s\S]*?__ANTICODEX_MANAGER_SNAPSHOT__/);
+  assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__/);
+  assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
+  assert.match(snapshotRefreshBlock, /__ANTICODEX_RUN_MANAGER_ACTION__\("refreshStatus", actionToken\)/);
+  assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
   assert.match(removeManagerBlock, /invalidateManagerActionToken\("closed"\)/);
   assert.match(managerInject.slice(0, managerInject.indexOf("const DEFAULT_API")), /invalidateManagerActionToken\("reinject"\)/);
+  const immediateOutcomeBlock = installActionsBlock.slice(
+    installActionsBlock.indexOf('if (outcome.type === "payload")'),
+    installActionsBlock.indexOf('} else if (outcome.type === "timeout")'),
+  );
+  assert.ok(
+    immediateOutcomeBlock.indexOf("if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;")
+      < immediateOutcomeBlock.indexOf("window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ ="),
+    "a closed or reinjected panel must reject a normal action result before preserving it",
+  );
   const lateOutcomeBlock = installActionsBlock.slice(installActionsBlock.indexOf("actionPromise.then(async (lateOutcome) =>"));
   assert.ok(
     lateOutcomeBlock.indexOf("if (!isCurrentActionToken) return;")
@@ -980,6 +994,14 @@ test("Manager repeated full verification and quota retry failures have truthful 
   }
   assert.match(noticeBlock, /catch \(error\)/);
   assert.match(noticeBlock, /\\u91cd\\u65b0\\u68c0\\u67e5\\u5931\\u8d25/);
+  assert.match(noticeBlock, /runActionViaBridge\("accountProxy", actionToken\)/);
+  assert.match(noticeBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken/);
+  assert.match(noticeBlock, /catch \(error\) \{\s*if \(actionToken && window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken\) return;/);
+  assert.ok(
+    noticeBlock.indexOf("const managerBusy =")
+      < noticeBlock.indexOf("window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = actionToken"),
+    "quota retry must reject an existing Manager action before replacing its token",
+  );
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
