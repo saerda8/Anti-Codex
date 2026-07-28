@@ -62,7 +62,7 @@ const MANAGER_ACTIONS = Object.freeze({
     updateCheck: {
         label: "检查全部更新",
         script: "check-anticodex-update.ps1",
-        args: [],
+        args: ["-CheckRemoteComponents"],
         timeoutMs: 30000,
     },
     sourcePreflight: {

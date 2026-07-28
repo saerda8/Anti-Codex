@@ -94,27 +94,34 @@ function quotedStrings(sourceText) {
   return [...sourceText.matchAll(/"([^"]+)"|'([^']+)'/g)].map((entry) => entry[1] ?? entry[2]);
 }
 
-test("Manager update summaries unwrap results and show CodexPlusPlus independently", () => {
-  const payload = {
-    ok: true,
-    result: {
-      result: {
-        ok: true,
-        updateNeeded: true,
-        source: { packageVersion: "26.source" },
-        active: { packageVersion: "26.active" },
-        components: { sourceVersion: "1.2.43", activeVersion: "1.2.39" },
-      },
-    },
-  };
-
+test("Manager update summaries unwrap results and show advisory CodexPlusPlus releases", () => {
   for (const [sourceText, functionName] of [[source, "managerSummary"], [managerInject, "summaryText"]]) {
     const summarize = vm.runInNewContext(`(${extractNamedFunction(sourceText, functionName)})`);
-    const summary = summarize("updateCheck", payload);
-    assert.match(summary, /\u9700\u8981\u540c\u6b65/);
-    assert.match(summary, /Codex\uff1a\u672c\u673a\u5b98\u65b9 26\.source \/ Anti-Codex 26\.active/);
-    assert.match(summary, /CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1\.2\.43 \/ \u5df2\u5b89\u88c5 1\.2\.39/);
-    assert.match(summary, /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/);
+    for (const scenario of [
+      { updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
+      { updateNeeded: false, components: { remoteState: "current", remoteTag: "v1.2.43" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.43\uff08\u9879\u76ee\u5df2\u8ddf\u8fdb\uff09/ },
+      { updateNeeded: false, components: { remoteState: "newer_available", remoteTag: "v1.2.44", remoteNewerThanProject: true }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.44\uff08\u5f85\u9002\u914d\u9a8c\u8bc1\uff09/ },
+      { updateNeeded: false, components: { remoteState: "failed" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u68c0\u67e5\u5931\u8d25/ },
+    ]) {
+      const payload = {
+        ok: true,
+        result: {
+          result: {
+            ok: true,
+            updateNeeded: scenario.updateNeeded,
+            source: { packageVersion: "26.source" },
+            active: { packageVersion: "26.active" },
+            components: { sourceVersion: "1.2.43", activeVersion: "1.2.43", ...scenario.components },
+          },
+        },
+      };
+      const summary = summarize("updateCheck", payload);
+      assert.match(summary, scenario.status);
+      assert.match(summary, /Codex\uff1a\u672c\u673a\u5b98\u65b9 26\.source \/ Anti-Codex 26\.active/);
+      assert.match(summary, /CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1\.2\.43 \/ \u5df2\u5b89\u88c5 1\.2\.43/);
+      assert.match(summary, scenario.remote);
+      if (scenario.components.remoteState === "newer_available") assert.doesNotMatch(summary, /\u9700\u8981\u540c\u6b65/);
+    }
   }
 });
 

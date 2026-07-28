@@ -33,6 +33,25 @@ test("update checker delegates Appx discovery when hosted by PowerShell Core", (
   assert.match(checker, /-NoPersist/);
 });
 
+test("CodexPlusPlus remote release checks are explicit and advisory only", () => {
+  const checker = fs.readFileSync(updateChecker, "utf8");
+  const managerService = fs.readFileSync(resolve(projectRoot, "scripts", "anticodex-manager-service.mjs"), "utf8");
+
+  assert.match(checker, /\[switch\]\$CheckRemoteComponents/);
+  assert.match(checker, /if\s*\(\$CheckRemoteComponents\)\s*\{\s*\$delegateArgs\s*\+=\s*["']-CheckRemoteComponents["']\s*\}/);
+  assert.match(managerService, /updateCheck:\s*\{[\s\S]{0,180}?args:\s*\[\s*["']-CheckRemoteComponents["']\s*\]/);
+  for (const field of ["remoteState", "remoteTag", "remoteVersion", "remoteNewerThanProject"]) {
+    assert.match(checker, new RegExp(`\\b${field}\\s*=`));
+  }
+
+  const updateNeeded = checker.match(/\$updateNeeded\s*=\s*\[bool\]\([^\r\n]+/i)?.[0] || "";
+  assert.match(updateNeeded, /\$componentDrift/);
+  assert.doesNotMatch(updateNeeded, /remote/i);
+  const promptGate = checker.match(/if\s*\(\$Prompt\s+-and\s+[^\r\n]+/i)?.[0] || "";
+  assert.match(promptGate, /\$updateNeeded/);
+  assert.doesNotMatch(promptGate, /remote/i);
+});
+
 test("update checker hashes files without PowerShell module autoloading", () => {
   const checker = fs.readFileSync(updateChecker, "utf8");
   assert.match(checker, /\[Security\.Cryptography\.SHA256\]::Create\(\)/);

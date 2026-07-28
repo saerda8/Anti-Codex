@@ -5,7 +5,8 @@ param(
     [string]$SourceRoot = "",
     [string]$StateRoot = "",
     [switch]$Prompt,
-    [switch]$NoPersist
+    [switch]$NoPersist,
+    [switch]$CheckRemoteComponents
 )
 
 Set-StrictMode -Version Latest
@@ -29,6 +30,7 @@ if ($PSVersionTable.PSEdition -eq "Core" -and -not $SourceRoot) {
     )
     if ($Prompt) { $delegateArgs += "-Prompt" }
     if ($NoPersist) { $delegateArgs += "-NoPersist" }
+    if ($CheckRemoteComponents) { $delegateArgs += "-CheckRemoteComponents" }
     $delegateOutput = & $windowsPowerShell @delegateArgs
     $delegateExitCode = $LASTEXITCODE
     if ($delegateExitCode -ne 0) {
@@ -120,6 +122,67 @@ function Get-ObjectPropertyValue {
     $property = $InputObject.PSObject.Properties[$Name]
     if ($null -eq $property) { return $null }
     return $property.Value
+}
+
+function Get-CodexPlusPlusRemoteRelease {
+    param([object]$Metadata)
+
+    $result = [ordered]@{
+        remoteState = "failed"
+        remoteTag = $null
+        remoteVersion = $null
+        remoteNewerThanProject = $null
+        remoteCheckedAt = [DateTime]::UtcNow.ToString("o")
+        remoteError = $null
+    }
+    $repository = [string](Get-ObjectPropertyValue -InputObject $Metadata -Name "repository")
+    $projectVersion = ([string](Get-ObjectPropertyValue -InputObject $Metadata -Name "version")).Trim()
+    if ([string]::IsNullOrWhiteSpace($repository) -or [string]::IsNullOrWhiteSpace($projectVersion)) {
+        $result.remoteError = "component_metadata_unavailable"
+        return [pscustomobject]$result
+    }
+
+    $repository = $repository.TrimEnd("/")
+    if ($repository.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
+        $repository = $repository.Substring(0, $repository.Length - 4)
+    }
+    if ($repository -notmatch '^https://github\.com/[^/]+/[^/]+$') {
+        $result.remoteError = "unsupported_component_repository"
+        return [pscustomobject]$result
+    }
+
+    $curl = Join-Path ([Environment]::SystemDirectory) "curl.exe"
+    if (-not (Test-Path -LiteralPath $curl -PathType Leaf)) {
+        $result.remoteError = "curl_unavailable"
+        return [pscustomobject]$result
+    }
+
+    try {
+        $wire = (@(& $curl --silent --show-error --head --location --connect-timeout 3 --max-time 8 --output NUL --write-out '%{url_effective}|%{http_code}' "$repository/releases/latest" 2>$null) -join "").Trim()
+        if ($LASTEXITCODE -ne 0) { throw "curl_exit_$LASTEXITCODE" }
+        $separator = $wire.LastIndexOf("|", [StringComparison]::Ordinal)
+        if ($separator -lt 1) { throw "invalid_remote_response" }
+        $effectiveUrl = $wire.Substring(0, $separator)
+        $statusCode = $wire.Substring($separator + 1)
+        $tagPrefix = "$repository/releases/tag/"
+        if ($statusCode -ne "200" -or -not $effectiveUrl.StartsWith($tagPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "latest_release_unavailable"
+        }
+        $tag = [Uri]::UnescapeDataString($effectiveUrl.Substring($tagPrefix.Length))
+        if ($tag -notmatch '^v?(\d+)\.(\d+)\.(\d+)$' -or $projectVersion -notmatch '^v?(\d+)\.(\d+)\.(\d+)$') {
+            throw "invalid_release_tag"
+        }
+        $remoteVersion = ([regex]::Match($tag, '^v?(\d+\.\d+\.\d+)$')).Groups[1].Value
+        $pinnedVersion = ([regex]::Match($projectVersion, '^v?(\d+\.\d+\.\d+)$')).Groups[1].Value
+        $comparison = ([version]$remoteVersion).CompareTo([version]$pinnedVersion)
+        $result.remoteState = if ($comparison -gt 0) { "newer_available" } elseif ($comparison -eq 0) { "current" } else { "project_ahead" }
+        $result.remoteTag = $tag
+        $result.remoteVersion = $remoteVersion
+        $result.remoteNewerThanProject = ($comparison -gt 0)
+    } catch {
+        $result.remoteError = $_.Exception.Message
+    }
+    return [pscustomobject]$result
 }
 
 function Read-ActiveHostManifest {
@@ -418,6 +481,18 @@ $guardrailDrift = [bool]($source -and $comparable -and $activeGuardrails.ok -ne 
 $sourceComponentVersion = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "version"
 $sourceComponentVerification = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "verification"
 $sourceComponentPatches = Get-ObjectPropertyValue -InputObject $sourceComponentMetadata -Name "patches"
+$remoteComponentRelease = if ($CheckRemoteComponents) {
+    Get-CodexPlusPlusRemoteRelease -Metadata $sourceComponentMetadata
+} else {
+    [pscustomobject]@{
+        remoteState = "not_checked"
+        remoteTag = $null
+        remoteVersion = $null
+        remoteNewerThanProject = $null
+        remoteCheckedAt = $null
+        remoteError = $null
+    }
+}
 $sourceComponentHash = ([string](Get-ObjectPropertyValue -InputObject $sourceComponentVerification -Name "launcherReleaseBuild")).Replace("sha256:", "").ToLowerInvariant()
 $activeComponentVersion = Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "version"
 $activeComponentExpectedHash = ([string](Get-ObjectPropertyValue -InputObject (Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "binary") -Name "sha256")).ToLowerInvariant()
@@ -553,6 +628,12 @@ $result = [pscustomobject]@{
         manifestHash = $activeComponentExpectedHash
         expectedPatchCount = if ($sourceComponentMetadata) { @($sourceComponentPatches).Count } else { 0 }
         patchCount = if ($activeComponentManifest) { @($activeComponentPatches).Count } else { 0 }
+        remoteState = $remoteComponentRelease.remoteState
+        remoteTag = $remoteComponentRelease.remoteTag
+        remoteVersion = $remoteComponentRelease.remoteVersion
+        remoteNewerThanProject = $remoteComponentRelease.remoteNewerThanProject
+        remoteCheckedAt = $remoteComponentRelease.remoteCheckedAt
+        remoteError = $remoteComponentRelease.remoteError
     }
     drift = [pscustomobject]@{
         state = $driftState
