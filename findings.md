@@ -1,5 +1,14 @@
 # Anti-Codex Findings
 
+## 2026-07-29 Final Manager Race Closure and Active Gemini Rework
+
+- Commits `c191a856` and `653e1cd2` are narrow source-only closure changes. Manager refreshes, quota rechecks, normal results, late results, close and reinjection now share exact action-token ownership; stale work cannot overwrite a newer snapshot/result or reopen a closed panel. The rollback product code is unchanged; only its Windows test child timeout increases from 10 to 30 seconds and now surfaces `ETIMEDOUT` explicitly.
+- Fresh JavaScript syntax plus Manager bridge, service, process-safety, native-mouse action and rollback suites pass `81/81` in 33.1 seconds. Independent diff review found no remaining P0/P1/P2.
+- The default full source preflight previously timed out only at its 240-second aggregate translator regression while the same rollback tests passed alone. `-SkipFullRegression` is green with zero failure/warning. A fresh full run with a 480-second subcheck timeout is still required after the media task becomes idle; this distinction prevents a partial gate from being reported as full acceptance.
+- Official/active Codex are still `26.721.4979.0`. CodexPlusPlus source/runtime/active are still `v1.2.43`, ten patches, matching patch commit and binary hash. No update, install, restart, Docker build or model request was used for these checks.
+- Gemini 3.1 Pro Low turn `019faa1b-7cd7-7371-bf8d-a9fbffcb7db6` completed but host review rejected main SHA-256 `6f2a33fdaa510d66c4028b6e4280c0a1eeedac915efcaa9e9c4af52a291d70bf`: independent frames still show subtitles over the face/mouth, the result remains a single interview with decoration rather than an actual short drama/sales film, lip images do not independently bind visible motion to the current audio, and the formal host extractor still rejects the facts path.
+- Only that observable evaluation was sent. The resulting preferred-provider turn `019faa41-c28b-7ea0-937c-a6209ffa163c` is active in the original task and correct cwd on Gemini 3.1 Pro Low and has made its first real shell read. No implementation method, micro-stage or host-produced media was supplied.
+
 ## 2026-07-29 Hidden Scheduled Node Host and Cross-Version Recovery
 
 - The visible Node window was not a Codex/CodexPlusPlus protocol issue. Both scheduled product entry points directly executed `node.exe`, so Windows could create a console before the JavaScript `--hide-console` path took effect.
