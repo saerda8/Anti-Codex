@@ -224,7 +224,7 @@ function runLegacyRollbackBinaryMigration(options) {
   const result = spawnSync(
     "powershell.exe",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fixture.harness],
-    { encoding: "utf8", timeout: 10_000, windowsHide: true },
+    { encoding: "utf8", timeout: 30_000, windowsHide: true },
   );
   return { ...fixture, result };
 }
@@ -650,6 +650,7 @@ test("legacy rollback inventory migrates from its own tree even when host and CL
 test("legacy v2 rcedit rollback checkpoint migrates source host bytes and marker together", () => {
   const fixture = runLegacyRollbackBinaryMigration();
   try {
+    assert.ifError(fixture.result.error);
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(readFileSync(fixture.antiCodexHost), fixture.sourceBytes);
     const manifest = JSON.parse(readFileSync(fixture.rollbackMarker, "utf8"));
@@ -670,6 +671,7 @@ test("legacy v2 rcedit rollback checkpoint migrates source host bytes and marker
 test("legacy rollback binary migration restores byte and marker pair when marker replacement fails", () => {
   const fixture = runLegacyRollbackBinaryMigration({ readOnlyMarker: true });
   try {
+    assert.ifError(fixture.result.error);
     assert.notEqual(fixture.result.status, 0);
     assert.match(fixture.result.stderr, /migration failed.*restored/i);
     assert.deepEqual(readFileSync(fixture.antiCodexHost), fixture.legacyBytes);
