@@ -1,11 +1,13 @@
 # Anti-Codex Final Migration Plan
 
 - Status: authoritative execution plan; release acceptance reopened after an installed-client fatal-page failure and P1 audit findings
-- Updated: 2026-07-27
+- Updated: 2026-07-28
 - Architecture: [`THREE_LAYER_ARCHITECTURE.md`](THREE_LAYER_ARCHITECTURE.md)
 - Removal ledger: [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_REMOVAL_MANIFEST.md)
 - Implementation inventory: [`CURRENT_IMPLEMENTATION_AUDIT.md`](CURRENT_IMPLEMENTATION_AUDIT.md)
 - Dual-environment reference: [`audits/2026-07-14-dual-environment-reference.md`](audits/2026-07-14-dual-environment-reference.md)
+
+> **Current independent-update override - 2026-07-28 14:30:** The three layers remain independently replaceable. Official/active Codex are `26.721.4979.0`; CodexPlusPlus source/runtime/active are upstream `v1.2.43`, ten narrow patches, SHA-256 `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`. The only post-update repairs are bounded startup/verification waits and truthful Manager rendering; no official Codex code, CodexPlusPlus task controller, provider routing or fourth control layer was added. Fresh no-traffic source preflight passes `808/808`, installed-overall and sync-readiness pass, and both legacy-zero-hit scans pass. The Manager update check now has a source-only result-unwrapping/version-display fix; remote upstream discovery remains a separate future read-only capability and is explicitly shown as unverified rather than guessed. Gate 8 remains red because the current autonomous media result still fails independent content and evidence acceptance.
 
 > **Current CodexPlusPlus source update - 2026-07-28 13:36:** Layer 2 is independently pinned to upstream `v1.2.43` / `5036ff056b5c629f19356396b17d6eeb70da664c`. The unchanged ten-patch compatibility scope replays independently to tree `42e6155185508512b9eb799832d3de994e047056`; candidate architecture review passes, protocol tests are `59/59`, watcher tests `11/11`, and the Windows release binary SHA-256 is `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`. Active runtime remains `1.2.39`; full source regression correctly stops at `799/800` because current installed Gate 5 evidence is release-bound to the old component, while the updater's source-only preactivation gate passes. Next is guarded candidate activation and then fresh full/installed acceptance. No fourth controller or architecture rewrite was added.
 

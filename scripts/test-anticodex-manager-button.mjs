@@ -431,7 +431,9 @@ function discoverAntiCodexCdpPorts() {
 function hasActionSpecificResult(actionName, text) {
   if (actionName === "fastOverallNoTraffic") return text.includes("\u5feb\u901f\u68c0\u67e5") && text.includes("\u8017\u65f6");
   if (actionName === "syncReadiness") return text.includes("\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5") && text.includes("\u901a\u8fc7");
-  if (actionName === "updateCheck") return text.includes("Codex \u66f4\u65b0\u68c0\u67e5") && (text.includes("\u5df2\u662f\u6700\u65b0") || text.includes("\u53d1\u73b0\u65b0\u7248"));
+  if (actionName === "updateCheck") return text.includes("\u66f4\u65b0\u68c0\u67e5")
+    && text.includes("CodexPlusPlus")
+    && (text.includes("\u65e0\u9700\u540c\u6b65") || text.includes("\u9700\u8981\u540c\u6b65") || text.includes("\u68c0\u67e5\u4e0d\u53ef\u7528"));
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
@@ -492,7 +494,13 @@ function uiOnlyPayloadForAction(actionName) {
       ok: true,
       action: actionName,
       uiOnly: true,
-      result: { ok: true, updateNeeded: false },
+      result: {
+        ok: true,
+        updateNeeded: false,
+        source: { packageVersion: "26.ui-only" },
+        active: { packageVersion: "26.ui-only" },
+        components: { sourceVersion: "1.2.ui-only", activeVersion: "1.2.ui-only" },
+      },
     },
   };
   return payloadByAction[actionName] || { ok: true, action: actionName, uiOnly: true, result: { ok: true } };
@@ -785,7 +793,14 @@ function cleanupUiOnlyBridgeSource(enabled = uiOnlyMode, actionName = action) {
 
 function managerSummaryFromActionPayload(actionName, payload) {
   const result = payload?.result || payload || {};
+  const unwrapped = result?.result && typeof result.result === "object" ? result.result : result;
   if (actionName === "refreshStatus") return `\u5237\u65b0\u72b6\u6001\uff1a${result.ok === false ? "\u9700\u8981\u5904\u7406" : "\u5b8c\u6210"}`;
+  if (actionName === "updateCheck") return [
+    `\u66f4\u65b0\u68c0\u67e5\uff1a${unwrapped.ok !== true ? "\u68c0\u67e5\u4e0d\u53ef\u7528" : (unwrapped.updateNeeded ? "\u9700\u8981\u540c\u6b65" : "\u65e0\u9700\u540c\u6b65")}`,
+    `Codex\uff1a\u672c\u673a\u5b98\u65b9 ${unwrapped.source?.packageVersion || "\u672a\u68c0\u67e5"} / Anti-Codex ${unwrapped.active?.packageVersion || "\u672a\u5b89\u88c5"}`,
+    `CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a ${unwrapped.components?.sourceVersion || "\u672a\u68c0\u67e5"} / \u5df2\u5b89\u88c5 ${unwrapped.components?.activeVersion || "\u672a\u5b89\u88c5"}`,
+    "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5",
+  ].join("\n");
   if (actionName === "mcpSkills") {
     const realCallPassed = result.mcp?.smoke?.realCall?.passed === true
       || result.mcp?.realCallPassed === true
@@ -878,8 +893,8 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("syncReadiness", "\u68c0\u67e5\u5b89\u88c5/\u540c\u6b65\uff1a\u4ecd\u5728\u8fd0\u884c\u6216\u672c\u673a\u811a\u672c\u6b63\u5728\u6536\u5c3e\u3002"), false);
   assert.equal(hasActionSpecificResult("syncReadiness", "\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5\uff1a\u901a\u8fc7"), true);
   assert.equal(hasActionSpecificResult("updateCheck", "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002"), false);
-  assert.equal(hasActionSpecificResult("updateCheck", "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u5df2\u662f\u6700\u65b0"), true);
-  assert.equal(hasActionSpecificResult("updateCheck", "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u53d1\u73b0\u65b0\u7248"), true);
+  assert.equal(hasActionSpecificResult("updateCheck", "\u66f4\u65b0\u68c0\u67e5\uff1a\u65e0\u9700\u540c\u6b65\nCodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1.2.43 / \u5df2\u5b89\u88c5 1.2.43"), true);
+  assert.equal(hasActionSpecificResult("updateCheck", "\u66f4\u65b0\u68c0\u67e5\uff1a\u9700\u8981\u540c\u6b65\nCodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1.2.43 / \u5df2\u5b89\u88c5 1.2.39"), true);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a21000 ms"), true);
   assert.equal(isFinishedText("\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);

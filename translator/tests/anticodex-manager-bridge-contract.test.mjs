@@ -94,6 +94,30 @@ function quotedStrings(sourceText) {
   return [...sourceText.matchAll(/"([^"]+)"|'([^']+)'/g)].map((entry) => entry[1] ?? entry[2]);
 }
 
+test("Manager update summaries unwrap results and show CodexPlusPlus independently", () => {
+  const payload = {
+    ok: true,
+    result: {
+      result: {
+        ok: true,
+        updateNeeded: true,
+        source: { packageVersion: "26.source" },
+        active: { packageVersion: "26.active" },
+        components: { sourceVersion: "1.2.43", activeVersion: "1.2.39" },
+      },
+    },
+  };
+
+  for (const [sourceText, functionName] of [[source, "managerSummary"], [managerInject, "summaryText"]]) {
+    const summarize = vm.runInNewContext(`(${extractNamedFunction(sourceText, functionName)})`);
+    const summary = summarize("updateCheck", payload);
+    assert.match(summary, /\u9700\u8981\u540c\u6b65/);
+    assert.match(summary, /Codex\uff1a\u672c\u673a\u5b98\u65b9 26\.source \/ Anti-Codex 26\.active/);
+    assert.match(summary, /CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1\.2\.43 \/ \u5df2\u5b89\u88c5 1\.2\.39/);
+    assert.match(summary, /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/);
+  }
+});
+
 function parseNamedStringList(sourceText, name) {
   const declaration = sourceText.search(new RegExp(`const\\s+${name}\\s*=`));
   assert.ok(declaration >= 0, `missing action list ${name}`);

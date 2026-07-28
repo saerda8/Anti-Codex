@@ -722,7 +722,12 @@ function managerSummary(action, payload) {
     "\u8bf7\u5728 Antigravity \u4e2d\u5207\u6362\u8d26\u53f7\uff0c\u5b8c\u6210\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002",
     result.nextAction === "refreshModels" ? "\u4e0b\u4e00\u6b65\uff1a\u5237\u65b0\u6a21\u578b" : "",
   ].filter(Boolean).join("\n");
-  if (action === "updateCheck") return `Codex \u66f4\u65b0\u68c0\u67e5\uff1a${result.updateNeeded ? "\u53d1\u73b0\u65b0\u7248" : "\u5df2\u662f\u6700\u65b0"}`;
+  if (action === "updateCheck") return [
+    `\u66f4\u65b0\u68c0\u67e5\uff1a${unwrappedResult.ok !== true ? "\u68c0\u67e5\u4e0d\u53ef\u7528" : (unwrappedResult.updateNeeded ? "\u9700\u8981\u540c\u6b65" : "\u65e0\u9700\u540c\u6b65")}`,
+    `Codex\uff1a\u672c\u673a\u5b98\u65b9 ${unwrappedResult.source?.packageVersion || "\u672a\u68c0\u67e5"} / Anti-Codex ${unwrappedResult.active?.packageVersion || "\u672a\u5b89\u88c5"}`,
+    `CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a ${unwrappedResult.components?.sourceVersion || "\u672a\u68c0\u67e5"} / \u5df2\u5b89\u88c5 ${unwrappedResult.components?.activeVersion || "\u672a\u5b89\u88c5"}`,
+    "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5",
+  ].join("\n");
   if (action === "syncReadiness") return [
     `\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
     failureSummaryLine(result),

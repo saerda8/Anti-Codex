@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-28 Independent Upstream Activation and Manager Truth
+
+- Official/active Codex are `26.721.4979.0`; CodexPlusPlus source/runtime/active are `1.2.43`, ten patches, SHA-256 `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`. Transaction `20260728T062534394Z-159c9255129d4f4fb123737f7b605311` activated 121 runtime files; an independent 282-file inventory found zero hash mismatch and no staged runtime.
+- The first safe installed cold start exposed two bounded races, not an architecture failure: Antigravity status can need longer than the old 10-second cold timeout, and the Manager overlay can appear a few seconds after route health becomes ready. Commits `147d0c85` and `3896db6` fix only those initial waits; repeated installed-overall now passes with one Anti-Codex and native Codex unchanged.
+- Fresh offline evidence is source preflight `808/808`, installed-overall green, full sync-readiness green, and source/installed legacy-zero-hit green. No model request, Docker container, R: mapping or development worker was used.
+- Both Manager summary paths calculated an unwrapped update result but read `updateNeeded` from the outer action wrapper, so a real nested result could be shown as current and CodexPlusPlus versions were omitted. The source-only repair uses the unwrapped result and shows local official/active Codex plus project-fixed/installed CodexPlusPlus. It states `远端上游：未检查`; automatic remote fetch, patch replay and candidate build remain deliberately outside this read-only check.
+
 ## 2026-07-27 Patch 10 Installed Acceptance
 
 - Commit `e854d9f5` is installed through runtime transaction `20260727T151010973Z-fc0b0958a5b749e9818144726ea67604` and built-in updater operation `d9f527766877469a808c66b52406b9e4`; the operation completed successfully without launching an intermediate client.
