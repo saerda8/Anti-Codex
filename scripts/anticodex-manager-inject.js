@@ -14,6 +14,7 @@
     window.__ANTICODEX_MANAGER_SUMMARY_VERSION__ === SUMMARY_VERSION &&
     typeof window.__ANTICODEX_OPEN_MANAGER__ === "function"
   ) return;
+  invalidateManagerActionToken("reinject");
   window.__ANTICODEX_MANAGER_THEME_OBSERVER__?.disconnect?.();
   const previousThemeMedia = window.__ANTICODEX_MANAGER_THEME_MEDIA__;
   const previousThemeMediaListener = window.__ANTICODEX_MANAGER_THEME_MEDIA_LISTENER__;
@@ -106,6 +107,10 @@
   let pendingHighImpactUntil = 0;
   let pendingHighImpactButton = null;
 
+  function invalidateManagerActionToken(reason) {
+    window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = `invalidated:${reason}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  }
+
   function cancelAccountSwitchObservation() {
     accountSwitchObservationGeneration += 1;
     const cancel = accountSwitchObservationCancel;
@@ -114,6 +119,7 @@
   }
 
   function removeManager() {
+    invalidateManagerActionToken("closed");
     cancelAccountSwitchObservation();
     managerThemeObserver?.disconnect();
     managerThemeObserver = null;
@@ -621,9 +627,11 @@
           new Promise(resolve => setTimeout(() => resolve("timeout"), bridgeTimeoutMs)),
         ]);
         if (winner === "bridge") {
-          activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || activeApi, activeApi);
-          if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
           if (payload?.action && payload.action !== action) throw new Error(`Manager bridge returned ${payload.action} for ${action}.`);
+          if (!actionToken || window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
+            activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || activeApi, activeApi);
+            if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+          }
           if (payload?.ok !== false) return payload;
           throw new Error(payload.message || "Anti-Codex manager action failed.");
         }

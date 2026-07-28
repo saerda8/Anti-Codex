@@ -939,6 +939,8 @@ test("Manager long actions enter pending UI without losing their late bridge res
 
 test("Manager late action delivery is gated by the exact action generation token", () => {
   const bridgeSourceBlock = source.match(/export function createManagerBridgeSource\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  const removeManagerBlock = extractNamedFunction(managerInject, "removeManager");
   const installActionsStart = managerInject.indexOf("function installActions()");
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
   const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
@@ -954,6 +956,9 @@ test("Manager late action delivery is gated by the exact action generation token
   assert.match(deliveryBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
   assert.match(deliveryBlock, /if \(!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult\) globalThis\.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload/);
   assert.doesNotMatch(deliveryBlock, /const isCurrentAction = !runningAction \|\| runningAction === deliveredAction/);
+  assert.match(bridgeActionBlock, /if \(!actionToken \|\| window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken\) \{[\s\S]*?__ANTICODEX_MANAGER_SNAPSHOT__/);
+  assert.match(removeManagerBlock, /invalidateManagerActionToken\("closed"\)/);
+  assert.match(managerInject.slice(0, managerInject.indexOf("const DEFAULT_API")), /invalidateManagerActionToken\("reinject"\)/);
   const lateOutcomeBlock = installActionsBlock.slice(installActionsBlock.indexOf("actionPromise.then(async (lateOutcome) =>"));
   assert.ok(
     lateOutcomeBlock.indexOf("if (!isCurrentActionToken) return;")
