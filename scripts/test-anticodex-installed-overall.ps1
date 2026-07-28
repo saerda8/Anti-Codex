@@ -347,16 +347,22 @@ if (-not $SkipUiStateProbe) {
     if (Test-Path -LiteralPath $uiScript -PathType Leaf) {
         $node = (Get-Command node.exe -ErrorAction SilentlyContinue)
         if (-not $node) { $node = Get-Command node -ErrorAction Stop }
-        $previousErrorActionPreference = $ErrorActionPreference
-        try {
-            # The UI verifier emits timestamped progress on stderr before its JSON result.
-            $ErrorActionPreference = "Continue"
-            $uiOutput = @(& $node.Source $uiScript "--fast" "true" "--skip-manager-action-probe" "true" "--timeout-ms" "$([Math]::Max(10000, $TimeoutSec * 1000))" 2>$null)
-        } finally {
-            $ErrorActionPreference = $previousErrorActionPreference
-        }
-        $uiLine = @($uiOutput | Where-Object { ([string]$_).TrimStart().StartsWith("{") } | Select-Object -Last 1)
-        if ($uiLine.Count -gt 0) { try { $uiState = ([string]$uiLine[0] | ConvertFrom-Json) } catch {} }
+        $uiDeadline = [DateTime]::UtcNow.AddSeconds($(if ($EnsureRunning) { [Math]::Max(15, $TimeoutSec) } else { 0 }))
+        do {
+            $previousErrorActionPreference = $ErrorActionPreference
+            try {
+                # The UI verifier emits timestamped progress on stderr before its JSON result.
+                $ErrorActionPreference = "Continue"
+                $uiOutput = @(& $node.Source $uiScript "--fast" "true" "--skip-manager-action-probe" "true" "--timeout-ms" "$([Math]::Max(10000, $TimeoutSec * 1000))" 2>$null)
+            } finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+            $uiLine = @($uiOutput | Where-Object { ([string]$_).TrimStart().StartsWith("{") } | Select-Object -Last 1)
+            if ($uiLine.Count -gt 0) { try { $uiState = ([string]$uiLine[0] | ConvertFrom-Json) } catch {} }
+            if ($EnsureRunning -and $uiState.ok -ne $true -and [DateTime]::UtcNow -lt $uiDeadline) {
+                Start-Sleep -Milliseconds 500
+            }
+        } while ($EnsureRunning -and $uiState.ok -ne $true -and [DateTime]::UtcNow -lt $uiDeadline)
     } else {
         $uiState = [pscustomobject]@{ ok = $false; failures = @("UI state verifier is missing") }
     }

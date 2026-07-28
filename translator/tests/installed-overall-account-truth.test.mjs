@@ -36,6 +36,13 @@ test("installed overall cold start uses the safe desktop shortcut broker", async
   assert.doesNotMatch(source, /"`"\$launcherScript`"", "-SkipUpdateCheck"/);
 });
 
+test("installed overall cold start waits for the Manager overlay after route readiness", async () => {
+  const source = await readFile(scriptUrl, "utf8");
+
+  assert.match(source, /\$uiDeadline\s*=\s*\[DateTime\]::UtcNow\.AddSeconds\(/);
+  assert.match(source, /while\s*\(\$EnsureRunning\s+-and\s+\$uiState\.ok\s+-ne\s+\$true\s+-and\s+\[DateTime\]::UtcNow\s+-lt\s+\$uiDeadline\)/);
+});
+
 test("installed overall accepts the supervisor's CDP handoff without trusting a stale client PID", async () => {
   const source = await readFile(scriptUrl, "utf8");
 
