@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v108";
+  const VERSION = "native-panel-v109";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -84,8 +84,17 @@
     "overallNoTraffic",
     "postVerificationFull",
   ]);
+  const MANAGER_BACKGROUND_START_ACTION_IDS = new Set([
+    "syncHost",
+    "refreshFeatures",
+    "stabilitySoak",
+    "coldRelaunch",
+    "postVerificationFull",
+  ]);
   const BRIDGE_TIMEOUT_MS = 5000;
   const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 310000;
+  const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
+  const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
   const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
@@ -109,7 +118,6 @@
 
   function invalidateManagerActionToken(reason) {
     window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = `invalidated:${reason}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-    delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__;
   }
 
   function cancelAccountSwitchObservation() {
@@ -588,9 +596,6 @@
   async function refreshManagerSnapshot() {
     if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function") return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     if (window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__) return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
-    if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
-      return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
-    }
     if (window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__) {
       const deadline = Date.now() + LOAD_SNAPSHOT_TIMEOUT_MS;
       while (window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ && Date.now() < deadline) {
@@ -614,7 +619,10 @@
         payload?.snapshot
         && !window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__
         && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken
-      ) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+      ) {
+        window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+        reconcileManagerPendingActions(payload.snapshot);
+      }
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
     } catch {
       return window.__ANTICODEX_MANAGER_SNAPSHOT__ || null;
@@ -643,7 +651,10 @@
           if (payload?.action && payload.action !== action) throw new Error(`Manager bridge returned ${payload.action} for ${action}.`);
           if (actionToken && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
             activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || activeApi, activeApi);
-            if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+            if (payload?.snapshot) {
+              window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+              reconcileManagerPendingActions(payload.snapshot);
+            }
           }
           if (payload?.ok !== false) return payload;
           throw new Error(payload.message || "Anti-Codex manager action failed.");
@@ -653,10 +664,10 @@
         if (location.protocol === "app:") throw error;
       }
     }
-    return runActionViaScript(action);
+    return runActionViaScript(action, actionToken);
   }
 
-  async function runActionViaScript(action) {
+  async function runActionViaScript(action, actionToken = "") {
     await refreshManagerToken();
     let lastError = null;
     for (const baseUrl of actionApiCandidates()) {
@@ -685,8 +696,13 @@
           script.src = `${baseUrl}/anticodex/manager/action-script?${params.toString()}`;
           document.documentElement.append(script);
         });
-        activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || baseUrl, baseUrl);
-        if (payload?.snapshot) window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+        if (!actionToken || window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
+          activeApi = browserReachableApiBase(payload?.snapshot?.baseUrl || baseUrl, baseUrl);
+          if (payload?.snapshot) {
+            window.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+            reconcileManagerPendingActions(payload.snapshot);
+          }
+        }
         return payload;
       } catch (error) {
         lastError = error;
@@ -981,7 +997,12 @@
       if (healthResult.ok) updateTrafficNotice(health);
       const manager = document.getElementById(MANAGER_ID);
       const busy = manager?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
-      if (manager && !busy) await window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
+      if (manager && !busy) {
+        if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
+          await refreshManagerSnapshot();
+        }
+        await window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
+      }
     } catch {}
   }
 
@@ -1323,13 +1344,14 @@
   }
 
   function pendingActionMaxMs(action) {
-    if (action === "syncHost") return 30 * 60 * 1000;
-    if (action === "stabilitySoak") return 20 * 60 * 1000;
-    if (action === "coldRelaunch") return 10 * 60 * 1000;
-    if (action === "postVerificationFull") return 20 * 60 * 1000;
-    if (action === "overallNoTraffic") return 5 * 60 * 1000;
-    if (action === "fastOverallNoTraffic") return 2 * 60 * 1000;
-    return Math.max(60 * 1000, actionUiTimeoutMs(action) * 3);
+    let declaredMaxMs = Math.max(60 * 1000, actionUiTimeoutMs(action) * 3);
+    if (action === "syncHost") declaredMaxMs = 30 * 60 * 1000;
+    else if (action === "stabilitySoak") declaredMaxMs = 20 * 60 * 1000;
+    else if (action === "coldRelaunch" || action === "refreshFeatures") declaredMaxMs = 10 * 60 * 1000;
+    else if (action === "postVerificationFull") declaredMaxMs = 20 * 60 * 1000;
+    else if (action === "overallNoTraffic") declaredMaxMs = 5 * 60 * 1000;
+    else if (action === "fastOverallNoTraffic") declaredMaxMs = 2 * 60 * 1000;
+    return Math.max(declaredMaxMs, actionTransportTimeoutMs(action) + MANAGER_PENDING_TRANSPORT_GRACE_MS);
   }
 
   function actionStillPending(action) {
@@ -1341,6 +1363,41 @@
       return false;
     }
     return true;
+  }
+
+  function managerSnapshotRunningActionIds(snapshot) {
+    const diagnostics = snapshot?.responses?.["/anticodex/diagnostics"] || {};
+    const running = new Set();
+    for (const item of diagnostics?.longTasks?.items || []) {
+      if (item?.state === "running" || item?.rawState === "running" || item?.stage === "manager_background" || item?.stage === "manager_foreground") {
+        if (item?.id) running.add(String(item.id));
+      }
+    }
+    const operation = diagnostics?.updateStatus?.operation || {};
+    const operationAt = Date.parse(String(operation.updatedAt || operation.startedAt || ""));
+    if (
+      String(operation.state || "").toLowerCase() === "running"
+      && Number.isFinite(operationAt)
+      && Date.now() - operationAt <= pendingActionMaxMs("syncHost")
+    ) running.add("syncHost");
+    return running;
+  }
+
+  function reconcileManagerPendingActions(snapshot) {
+    const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+    const running = managerSnapshotRunningActionIds(snapshot);
+    const now = Date.now();
+    for (const [action, startedAtValue] of Object.entries(pendingActions)) {
+      const startedAt = Number(startedAtValue || 0);
+      if (running.has(action) || (startedAt && now - startedAt <= MANAGER_PENDING_REPORT_GRACE_MS)) continue;
+      delete pendingActions[action];
+    }
+    return running;
+  }
+
+  function managerActionContinuesInBackground(action, payload) {
+    return MANAGER_BACKGROUND_START_ACTION_IDS.has(action)
+      && (action === "syncHost" || payload?.background === true);
   }
 
   function wait(ms) {
@@ -1650,6 +1707,7 @@
       const loadGeneration = actionGeneration;
       try {
         await ensureSnapshotForLoad();
+        reconcileManagerPendingActions(window.__ANTICODEX_MANAGER_SNAPSHOT__);
         const snapshotReadOptions = { preferSnapshot: true };
         const [bootstrapResult, healthResult, modelsResult, diagnosticsResult, pluginsResult, connectorsResult, appToolsResult, allowlistResult, upstreamResult, routesResult] = await Promise.all([
           safeJson("/anticodex/manager/bootstrap", snapshotReadOptions),
@@ -2023,17 +2081,26 @@
           text: label,
         });
         button.addEventListener("click", async () => {
-          if (action !== "upstreamConfig") {
-            if (actionInFlight) {
-              resetHighImpactConfirmation();
-              result.textContent = "\u5df2\u6709\u4efb\u52a1\u5728\u8fd0\u884c\uff1a\u8bf7\u7b49\u5b83\u5b8c\u6210\uff0c\u6216\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u67e5\u770b\u8fdb\u5ea6\u3002";
+          const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
+          const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
+          if (actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
+            resetHighImpactConfirmation();
+            if (action === "refreshStatus" && !actionInFlight && !window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__) {
+              result.classList.remove("anticodex-error");
+              result.textContent = "\u6b63\u5728\u5237\u65b0\u540e\u53f0\u4efb\u52a1\u72b6\u6001\u2026";
+              await refreshManagerSnapshot();
+              await load({ updateResult: false });
+              const remainingPending = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
+              const remainingReported = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
+              const remainingAction = remainingPending || remainingReported;
+              const remainingLabel = ACTIONS.find(([id]) => id === remainingAction)?.[1] || remainingAction;
+              result.textContent = remainingAction
+                ? `\u72b6\u6001\u5df2\u5237\u65b0\uff1a${remainingLabel}\u4ecd\u5728\u540e\u53f0\u8fd0\u884c\u3002`
+                : "\u72b6\u6001\u5df2\u5237\u65b0\uff1a\u540e\u53f0\u4efb\u52a1\u5df2\u7ed3\u675f\uff0c\u53ef\u4ee5\u7ee7\u7eed\u64cd\u4f5c\u3002";
               return;
             }
-            if (action !== "refreshStatus" && actionStillPending(action)) {
-              resetHighImpactConfirmation();
-              result.textContent = `${label}\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\uff0c\u8bf7\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u67e5\u770b\u6700\u65b0\u8fdb\u5ea6\uff0c\u4e0d\u8981\u91cd\u590d\u542f\u52a8\u540c\u4e00\u4e2a\u4efb\u52a1\u3002`;
-              return;
-            }
+            result.textContent = "\u5df2\u6709\u7ba1\u7406\u4efb\u52a1\u5728\u8fd0\u884c\u3002\u5b8c\u6210\u540e\u672c\u9875\u4f1a\u81ea\u52a8\u663e\u793a\u7ed3\u679c\uff1b\u671f\u95f4\u4e0d\u4f1a\u91cd\u590d\u542f\u52a8\u5176\u4ed6\u68c0\u67e5\u3001\u540c\u6b65\u6216\u91cd\u542f\u4efb\u52a1\u3002";
+            return;
           }
           if (requireHighImpactConfirmation(action, label, button)) {
             return;
@@ -2072,6 +2139,12 @@
             ]);
             if (outcome.type === "payload") {
               progressActive = false;
+              const continuesInBackground = managerActionContinuesInBackground(action, outcome.payload);
+              if (continuesInBackground) {
+                const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+                pendingActions[action] = actionStartedAt;
+                reconcileManagerPendingActions(outcome.payload?.snapshot);
+              }
               if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
               if (action === "accountSwitch") {
                 result.textContent = "Antigravity \u5df2\u6253\u5f00\uff0c\u6b63\u5728\u81ea\u52a8\u68c0\u6d4b\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316\u2026";
@@ -2089,11 +2162,12 @@
                 }
               } else {
                 const managerSummary = summaryText(action, outcome.payload);
+                const stillPending = continuesInBackground && actionStillPending(action);
                 window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
                   ...(outcome.payload || {}),
                   action,
                   managerSummary,
-                  pending: false,
+                  pending: stillPending,
                 };
                 result.textContent = managerSummary;
               }
@@ -2113,16 +2187,24 @@
               };
               result.textContent = managerSummary;
               actionPromise.then(async (lateOutcome) => {
-                if (pendingActions[action] === pendingStartedAt) delete pendingActions[action];
+                const continuesInBackground = lateOutcome.type === "payload"
+                  && managerActionContinuesInBackground(action, lateOutcome.payload);
+                if (continuesInBackground) {
+                  pendingActions[action] = pendingActions[action] || pendingStartedAt;
+                  reconcileManagerPendingActions(lateOutcome.payload?.snapshot);
+                } else if (pendingActions[action] === pendingStartedAt) {
+                  delete pendingActions[action];
+                }
                 const isCurrentActionToken = window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
                 if (!isCurrentActionToken) return;
                 if (lateOutcome.type === "payload") {
                   const lateSummary = summaryText(action, lateOutcome.payload);
+                  const stillPending = continuesInBackground && actionStillPending(action);
                   window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
                     ...(lateOutcome.payload || {}),
                     action,
                     managerSummary: lateSummary,
-                    pending: false,
+                    pending: stillPending,
                   };
                   const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
                   const liveRunning = liveResult?.getAttribute("data-anticodex-running") || "";

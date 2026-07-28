@@ -683,7 +683,7 @@ test("plan-json proves third-party bypass without starting processes or exposing
     headlessProtocolProxy: true,
     codexPlusPlusOwnsClient: false,
     clientOwner: "fixed-route-supervisor",
-    automaticallyRelaunchesClient: false,
+    automaticallyRelaunchesClient: true,
     ordinaryMissingClientAction: "shutdown",
     fatalRendererRecoveryLimit: 1,
     ownsTaskControl: false,

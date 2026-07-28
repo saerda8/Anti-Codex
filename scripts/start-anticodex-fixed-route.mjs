@@ -428,7 +428,7 @@ export function sanitizeFixedRoutePlan(plan) {
       headlessProtocolProxy: true,
       codexPlusPlusOwnsClient: false,
       clientOwner: plan.headless ? null : "fixed-route-supervisor",
-      automaticallyRelaunchesClient: false,
+      automaticallyRelaunchesClient: !plan.headless,
       ordinaryMissingClientAction: plan.headless ? null : "shutdown",
       fatalRendererRecoveryLimit: plan.headless ? 0 : 1,
       ownsTaskControl: false,

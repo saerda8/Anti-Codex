@@ -912,8 +912,8 @@ test("Manager bridge invokes the real model refresh action", () => {
 });
 
 test("Manager long actions enter pending UI without losing their late bridge result", () => {
-  const bridgeActionBlock = managerInject.match(/async function runActionViaBridge\(action, actionToken = ""\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
-  const scriptActionBlock = managerInject.match(/async function runActionViaScript\(action\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  const scriptActionBlock = extractNamedFunction(managerInject, "runActionViaScript");
   const installActionsStart = managerInject.indexOf("function installActions()");
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
   const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
@@ -959,14 +959,22 @@ test("Manager late action delivery is gated by the exact action generation token
   assert.doesNotMatch(deliveryBlock, /const isCurrentAction = !runningAction \|\| runningAction === deliveredAction/);
   assert.match(bridgeActionBlock, /if \(actionToken && window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken\) \{[\s\S]*?__ANTICODEX_MANAGER_SNAPSHOT__/);
   assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__/);
-  assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
+  assert.doesNotMatch(snapshotRefreshBlock, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
+  assert.match(snapshotRefreshBlock, /reconcileManagerPendingActions\(payload\.snapshot\)/);
   assert.match(snapshotRefreshBlock, /__ANTICODEX_RUN_MANAGER_ACTION__\("refreshStatus", actionToken\)/);
   assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
   assert.match(removeManagerBlock, /invalidateManagerActionToken\("closed"\)/);
   assert.match(managerInject.slice(0, managerInject.indexOf("const DEFAULT_API")), /invalidateManagerActionToken\("reinject"\)/);
+  const invalidateBlock = extractNamedFunction(managerInject, "invalidateManagerActionToken");
+  assert.doesNotMatch(invalidateBlock, /delete window\.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__/);
   const immediateOutcomeBlock = installActionsBlock.slice(
     installActionsBlock.indexOf('if (outcome.type === "payload")'),
     installActionsBlock.indexOf('} else if (outcome.type === "timeout")'),
+  );
+  assert.ok(
+    immediateOutcomeBlock.indexOf("const continuesInBackground = managerActionContinuesInBackground")
+      < immediateOutcomeBlock.indexOf("if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;"),
+    "a background-start receipt must preserve its pending lock before a closed or reinjected panel rejects stale UI delivery",
   );
   assert.ok(
     immediateOutcomeBlock.indexOf("if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;")
@@ -1004,9 +1012,59 @@ test("Manager repeated full verification and quota retry failures have truthful 
   );
 });
 
+test("Manager blocks every new action while any prior action is still running or pending", () => {
+  const pendingMaxBlock = extractNamedFunction(managerInject, "pendingActionMaxMs");
+  const pendingMax = vm.runInNewContext(`(${pendingMaxBlock})`, {
+    actionUiTimeoutMs: () => 5000,
+    actionTransportTimeoutMs: () => 310000,
+    MANAGER_PENDING_TRANSPORT_GRACE_MS: 120000,
+  });
+  const refreshSnapshotBlock = extractNamedFunction(managerInject, "refreshManagerSnapshot");
+  const reconcileBlock = extractNamedFunction(managerInject, "reconcileManagerPendingActions");
+  const backgroundBlock = extractNamedFunction(managerInject, "managerActionContinuesInBackground");
+  const installActionsStart = managerInject.indexOf("function installActions()");
+  const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
+  const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
+  const clickBlock = installActionsBlock.slice(
+    installActionsBlock.indexOf('button.addEventListener("click"'),
+    installActionsBlock.indexOf("if (requireHighImpactConfirmation"),
+  );
+  const immediateOutcomeBlock = installActionsBlock.slice(
+    installActionsBlock.indexOf('if (outcome.type === "payload")'),
+    installActionsBlock.indexOf('} else if (outcome.type === "timeout")'),
+  );
+  const lateOutcomeBlock = installActionsBlock.slice(
+    installActionsBlock.indexOf("actionPromise.then(async (lateOutcome) =>"),
+    installActionsBlock.indexOf("} else {", installActionsBlock.indexOf("actionPromise.then(async (lateOutcome) =>")),
+  );
+
+  assert.match(pendingMaxBlock, /actionTransportTimeoutMs\(action\) \+ MANAGER_PENDING_TRANSPORT_GRACE_MS/);
+  assert.ok(pendingMax("fastOverallNoTraffic") >= 430000);
+  assert.ok(pendingMax("overallNoTraffic") >= 430000);
+  assert.doesNotMatch(refreshSnapshotBlock, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
+  assert.match(refreshSnapshotBlock, /reconcileManagerPendingActions\(payload\.snapshot\)/);
+  assert.match(reconcileBlock, /managerSnapshotRunningActionIds\(snapshot\)/);
+  assert.match(backgroundBlock, /MANAGER_BACKGROUND_START_ACTION_IDS\.has\(action\)/);
+  assert.match(backgroundBlock, /action === "syncHost"/);
+  assert.match(backgroundBlock, /payload\?\.background === true/);
+  const scriptFallbackBlock = extractNamedFunction(managerInject, "runActionViaScript");
+  assert.match(scriptFallbackBlock, /actionToken/);
+  assert.match(scriptFallbackBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
+  assert.match(clickBlock, /Object\.keys\(window\.__ANTICODEX_MANAGER_PENDING_ACTIONS__ \|\| \{\}\)\.find\(actionStillPending\)/);
+  assert.match(clickBlock, /managerSnapshotRunningActionIds\(window\.__ANTICODEX_MANAGER_SNAPSHOT__\)/);
+  assert.match(clickBlock, /action === "refreshStatus"[\s\S]*?refreshManagerSnapshot\(\)/);
+  assert.match(clickBlock, /actionInFlight \|\| window\.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ \|\| pendingAction \|\| reportedAction/);
+  assert.doesNotMatch(clickBlock, /action !== "upstreamConfig"/);
+  assert.match(immediateOutcomeBlock, /managerActionContinuesInBackground\(action, outcome\.payload\)/);
+  assert.match(immediateOutcomeBlock, /pendingActions\[action\] = actionStartedAt/);
+  assert.match(immediateOutcomeBlock, /pending: stillPending/);
+  assert.match(lateOutcomeBlock, /managerActionContinuesInBackground\(action, lateOutcome\.payload\)/);
+  assert.match(lateOutcomeBlock, /pending: stillPending/);
+});
+
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v108"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v108"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v109"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v109"/);
   for (const [name, text] of Object.entries({ source, managerInject, managerService })) {
     assert.doesNotMatch(text, /resetAntigravitySessionLock/, `${name} still exposes the removed session reset`);
   }
