@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-07-28 Manager Long-Action Feedback and Claude Continuation
+
+- The Manager UI used a short “still running” display threshold as its transport deadline plus one second, while the service could legitimately work for up to 240 seconds. This made a healthy background action appear failed before its real result returned.
+- Commit `46d7ae24` separates the display threshold from the transport deadline in the two existing shared paths. Offline acceptance passes Manager contract `39/39`, service `23/23`, process safety `4/4`, the real-mouse action contract `1/1`, syntax checks and bridge self-test. No live Manager action, restart or model request was used.
+- Gemini turn `019fa77a-1ab5-7e50-938c-82226924778a` stopped after sustained 503/timeouts. Exact `继续` was sent once after selecting Claude in the native model menu; turn `019fa7b1-6f71-7360-ac79-6a5772f4e044` is using the correct cwd and producing its own plan and file/tool actions. The host supplied no implementation guidance.
+
 ## 2026-07-28 Advisory CodexPlusPlus Release Discovery
 
 - Commit `7f695aa` makes Manager `检查更新` explicitly query the upstream CodexPlusPlus stable-release redirect. The live result is remote `v1.2.43`, project-fixed `1.2.43`, installed `1.2.43`.
