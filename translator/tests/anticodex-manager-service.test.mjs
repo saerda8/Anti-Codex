@@ -480,7 +480,6 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       "syncHost",
       "syncReadiness",
       "updateCheck",
-      "upstreamConfig",
       "viewLatestReports"
     ].sort());
 
@@ -705,6 +704,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     }
     assert.match(html, /<details(?![^>]*\sopen(?:\s|=|>))[^>]*data-action-group="advanced"[^>]*>\s*<summary>高级诊断<\/summary>/);
     assert.match(html, /confirmHighImpactAction/);
+    assert.doesNotMatch(html, /data-manager-action="upstreamConfig"/);
     assert.doesNotMatch(html, /Gate 7|Anti-Codex Manager/);
     assert.doesNotMatch(html, /resetAntigravitySessionLock|secondAccountLoginStatus/);
   });

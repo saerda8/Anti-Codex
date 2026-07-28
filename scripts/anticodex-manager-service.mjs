@@ -72,10 +72,6 @@ const MANAGER_ACTIONS = Object.freeze({
         timeoutMs: 90000,
         foregroundSingleton: true,
     },
-    upstreamConfig: {
-        label: "配置第三方 API",
-        virtual: true,
-    },
     syncHost: {
         label: "一键更新",
         script: "sync-anticodex-launcher.ps1",
@@ -162,7 +158,7 @@ const MANAGER_ACTIONS = Object.freeze({
 
 const MANAGER_ACTION_GROUPS = Object.freeze({
   status: Object.freeze(["refreshStatus"]),
-  modelSources: Object.freeze(["refreshModels", "accountSwitch", "upstreamConfig"]),
+  modelSources: Object.freeze(["refreshModels", "accountSwitch"]),
   updates: Object.freeze(["updateCheck", "syncHost"]),
   troubleshooting: Object.freeze(["repairShortcuts", "diagnosticsBundle", "viewLatestReports"]),
   advanced: Object.freeze([
@@ -567,9 +563,6 @@ async function runManagerAction(actionName, stateRoot, scriptsRoot) {
 async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot, callbacks = {}) {
     if (actionName === "refreshStatus") {
         return { ok: true, action: actionName, result: { ok: true } };
-    }
-    if (actionName === "upstreamConfig") {
-        return { ok: true, action: actionName, result: { ok: true, virtual: true } };
     }
     if (actionName === "viewLatestReports") {
         return { ok: true, action: actionName, result: latestManagerReportsPayload(stateRoot) };

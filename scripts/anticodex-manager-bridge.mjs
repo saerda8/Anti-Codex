@@ -411,10 +411,10 @@ export function createManagerBridgeSource() {
     entry.resolve(payload);
   };
   globalThis.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = globalThis.__ANTICODEX_ACK_MANAGER_ACTION__;
-  globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action) => new Promise((resolve) => {
+  globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action, actionToken = "") => new Promise((resolve) => {
     const id = Date.now() + ":" + Math.random().toString(36).slice(2);
     globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
-    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action, leaseCount: 0 });
+    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action, actionToken, leaseCount: 0 });
   });
   globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ = (path, options = {}) => new Promise((resolve) => {
     const id = Date.now() + ":" + Math.random().toString(36).slice(2);
@@ -825,7 +825,9 @@ function managerSummary(action, payload) {
     ...reportSummaryLines(result),
     failureSummaryLine(result),
   ].filter(Boolean).join("\n");
-  if (action === "postVerificationFull") return "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
+  if (action === "postVerificationFull") return payload?.alreadyRunning
+    ? "\u5b8c\u6574\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c"
+    : "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
   return JSON.stringify(result, null, 2);
 }
 
@@ -949,6 +951,7 @@ async function main() {
   async function deliver(request, session) {
     const requestId = String(request.id || "");
     const action = String(request.action || "");
+    const actionToken = String(request.actionToken || "");
     const isManagerRequest = request.kind === "manager-request";
     console.log(JSON.stringify({
       event: isManagerRequest ? "manager-request-received" : "manager-action-received",
@@ -981,20 +984,21 @@ async function main() {
     const deliveryExpression = `(() => {
       const payload = ${JSON.stringify(payload)};
       const action = ${JSON.stringify(action)};
+      const actionToken = ${JSON.stringify(actionToken)};
       const isManagerRequest = payload.kind === "manager-request";
       const deliveredAction = payload.action || action;
+      const isCurrentAction = Boolean(actionToken)
+        && globalThis.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
       if (!isManagerRequest) payload.action = deliveredAction;
-      if (payload.snapshot) globalThis.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
+      if (payload.snapshot && (isManagerRequest || isCurrentAction)) globalThis.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
       const suppressRefreshStatusResult = deliveredAction === "refreshStatus" && globalThis.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
-      if (!isManagerRequest && !suppressRefreshStatusResult) globalThis.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload;
+      if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) globalThis.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload;
       let result = document.querySelector('[data-anticodex-result="action"]');
-      if (!isManagerRequest && !suppressRefreshStatusResult && !result && typeof globalThis.__ANTICODEX_OPEN_MANAGER__ === "function") {
+      if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult && !result && typeof globalThis.__ANTICODEX_OPEN_MANAGER__ === "function") {
         document.querySelector("#anticodex-manager-overlay")?.remove();
         globalThis.__ANTICODEX_OPEN_MANAGER__();
         result = document.querySelector('[data-anticodex-result="action"]');
       }
-      const runningAction = result?.getAttribute('data-anticodex-running') || "";
-      const isCurrentAction = !runningAction || runningAction === deliveredAction;
       if (!isManagerRequest && isCurrentAction && result && payload.managerSummary && !suppressRefreshStatusResult) result.textContent = payload.managerSummary;
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) globalThis.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) for (const button of document.querySelectorAll('button[data-action]')) button.disabled = false;

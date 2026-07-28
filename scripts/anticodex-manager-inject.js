@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v107";
+  const VERSION = "native-panel-v108";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -611,13 +611,13 @@
     await refreshManagerSnapshot();
   }
 
-  async function runActionViaBridge(action) {
+  async function runActionViaBridge(action, actionToken = "") {
     if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ === "function") {
       try {
         let payload;
         const bridgeTimeoutMs = actionTransportTimeoutMs(action);
         const winner = await Promise.race([
-          window.__ANTICODEX_RUN_MANAGER_ACTION__(action).then(p => { payload = p; return "bridge"; }),
+          window.__ANTICODEX_RUN_MANAGER_ACTION__(action, actionToken).then(p => { payload = p; return "bridge"; }),
           new Promise(resolve => setTimeout(() => resolve("timeout"), bridgeTimeoutMs)),
         ]);
         if (winner === "bridge") {
@@ -885,7 +885,15 @@
         try {
           await openManager();
           await runActionViaBridge("accountProxy");
-          await load({ updateResult: false });
+          await window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
+        } catch (error) {
+          const message = "\u91cd\u65b0\u68c0\u67e5\u5931\u8d25\uff1a" + (error?.message || "\u672c\u5730\u68c0\u67e5\u4e0d\u53ef\u7528");
+          notice.querySelector("span").textContent = message;
+          const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
+          if (liveResult) {
+            liveResult.classList.add("anticodex-error");
+            liveResult.textContent = message;
+          }
         } finally {
           actionButton.disabled = false;
           actionButton.textContent = previous || "\u91cd\u65b0\u68c0\u67e5";
@@ -1246,7 +1254,9 @@
       ...reportSummaryLines(r),
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
-    if (action === "postVerificationFull") return "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
+    if (action === "postVerificationFull") return payload?.alreadyRunning
+      ? "\u5b8c\u6574\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c"
+      : "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
     return JSON.stringify(r, null, 2);
   }
 
@@ -1995,6 +2005,8 @@
           }
           actionGeneration += 1;
           const currentActionGeneration = actionGeneration;
+          const actionToken = `${currentActionGeneration}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+          window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = actionToken;
           actionInFlight = true;
           const actionStartedAt = Date.now();
           setActionButtonsDisabled(true);
@@ -2011,7 +2023,7 @@
             const accountSwitchBaseline = action === "accountSwitch"
               ? await captureAccountSwitchState()
               : null;
-            const actionPromise = runActionViaBridge(action)
+            const actionPromise = runActionViaBridge(action, actionToken)
               .then((payload) => ({ type: "payload", payload }))
               .catch((error) => ({ type: "error", error }));
             const outcome = await Promise.race([
@@ -2058,6 +2070,8 @@
               result.textContent = managerSummary;
               actionPromise.then(async (lateOutcome) => {
                 if (pendingActions[action] === pendingStartedAt) delete pendingActions[action];
+                const isCurrentActionToken = window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
+                if (!isCurrentActionToken) return;
                 if (lateOutcome.type === "payload") {
                   const lateSummary = summaryText(action, lateOutcome.payload);
                   window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
@@ -2082,7 +2096,9 @@
                       window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ = false;
                     }
                   }
-                } else if (lateOutcome.type === "error" && currentActionGeneration === actionGeneration && !actionInFlight) {
+                } else if (lateOutcome.type === "error"
+                  && currentActionGeneration === actionGeneration
+                  && !actionInFlight) {
                   result.classList.add("anticodex-error");
                   result.textContent = "\u8fd0\u884c\u5931\u8d25\uff1a" + (lateOutcome.error?.message || lateOutcome.error || "\u672a\u77e5\u9519\u8bef");
                 }

@@ -160,14 +160,15 @@ function parseFallbackActionGroups(sourceText) {
   return groups;
 }
 
-function assertExactActionGroups(groups, label) {
-  assert.deepEqual(groups.map((group) => group.id), Object.keys(EXPECTED_ACTION_GROUPS), `${label} group names/order differ`);
+function assertExactActionGroups(groups, label, expectedGroups = EXPECTED_ACTION_GROUPS) {
+  const expectedActionIds = Object.values(expectedGroups).flat();
+  assert.deepEqual(groups.map((group) => group.id), Object.keys(expectedGroups), `${label} group names/order differ`);
   for (const group of groups) {
-    assert.deepEqual(group.actionIds, EXPECTED_ACTION_GROUPS[group.id], `${label} ${group.id} membership differs`);
+    assert.deepEqual(group.actionIds, expectedGroups[group.id], `${label} ${group.id} membership differs`);
   }
   const actionIds = groups.flatMap((group) => group.actionIds);
   assert.equal(new Set(actionIds).size, actionIds.length, `${label} contains duplicate actions`);
-  assert.deepEqual(actionIds, EXPECTED_ACTION_IDS, `${label} all-action order differs`);
+  assert.deepEqual(actionIds, expectedActionIds, `${label} all-action order differs`);
 }
 
 test("Manager third-party form saves configuration without switching the active model", () => {
@@ -189,18 +190,19 @@ test("Manager third-party form saves configuration without switching the active 
   }
 });
 
-test("Manager injected and fallback UIs expose the same five action groups", () => {
+test("Manager injected UI owns third-party setup while the fallback page omits the unsupported fake action", () => {
   const injectedGroups = parseInjectedActionGroups(managerInject);
   const fallbackGroups = parseFallbackActionGroups(managerService);
   const installActions = extractNamedFunction(managerInject, "installActions");
+  const fallbackExpectedGroups = {
+    ...EXPECTED_ACTION_GROUPS,
+    modelSources: EXPECTED_ACTION_GROUPS.modelSources.filter((action) => action !== "upstreamConfig"),
+  };
 
   assert.doesNotMatch(installActions.slice(0, installActions.indexOf("for (const [action, label] of ACTIONS)")), /\bids\s*:/);
   assertExactActionGroups(injectedGroups, "injected Manager");
-  assertExactActionGroups(fallbackGroups, "fallback Manager");
-  assert.deepEqual(
-    injectedGroups.map(({ id, actionIds }) => ({ id, actionIds })),
-    fallbackGroups.map(({ id, actionIds }) => ({ id, actionIds })),
-  );
+  assertExactActionGroups(fallbackGroups, "fallback Manager", fallbackExpectedGroups);
+  assert.doesNotMatch(managerService, /if \(actionName === "upstreamConfig"\)/);
 });
 
 test("Manager advanced diagnostics are collapsed details with a visible label", () => {
@@ -512,7 +514,7 @@ test("silent Manager snapshot refresh never reopens a panel the user closed", ()
 
   assert.match(
     deliverBlock,
-    /if \(!isManagerRequest && !suppressRefreshStatusResult && !result && typeof globalThis\.__ANTICODEX_OPEN_MANAGER__ === "function"\)/,
+    /if \(!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult && !result && typeof globalThis\.__ANTICODEX_OPEN_MANAGER__ === "function"\)/,
   );
 });
 
@@ -910,7 +912,7 @@ test("Manager bridge invokes the real model refresh action", () => {
 });
 
 test("Manager long actions enter pending UI without losing their late bridge result", () => {
-  const bridgeActionBlock = managerInject.match(/async function runActionViaBridge\(action\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const bridgeActionBlock = managerInject.match(/async function runActionViaBridge\(action, actionToken = ""\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
   const scriptActionBlock = managerInject.match(/async function runActionViaScript\(action\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
   const installActionsStart = managerInject.indexOf("function installActions()");
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
@@ -935,9 +937,49 @@ test("Manager long actions enter pending UI without losing their late bridge res
   assert.ok(uiTransportMs > bridgeTransportMs);
 });
 
+test("Manager late action delivery is gated by the exact action generation token", () => {
+  const bridgeSourceBlock = source.match(/export function createManagerBridgeSource\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const installActionsStart = managerInject.indexOf("function installActions()");
+  const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
+  const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
+  const deliveryStart = source.indexOf("async function deliver(request, session)");
+  const deliveryEnd = source.indexOf("async function pollOnce()", deliveryStart);
+  const deliveryBlock = source.slice(deliveryStart, deliveryEnd);
+
+  assert.match(bridgeSourceBlock, /__ANTICODEX_RUN_MANAGER_ACTION__ = \(action, actionToken = ""\)/);
+  assert.match(bridgeSourceBlock, /actionToken/);
+  assert.match(installActionsBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__/);
+  assert.match(installActionsBlock, /runActionViaBridge\(action, actionToken\)/);
+  assert.match(deliveryBlock, /request\.actionToken/);
+  assert.match(deliveryBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
+  assert.match(deliveryBlock, /if \(!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult\) globalThis\.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload/);
+  assert.doesNotMatch(deliveryBlock, /const isCurrentAction = !runningAction \|\| runningAction === deliveredAction/);
+  const lateOutcomeBlock = installActionsBlock.slice(installActionsBlock.indexOf("actionPromise.then(async (lateOutcome) =>"));
+  assert.ok(
+    lateOutcomeBlock.indexOf("if (!isCurrentActionToken) return;")
+      < lateOutcomeBlock.indexOf("window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ ="),
+    "a stale late action must be rejected before it becomes the preserved Manager result",
+  );
+});
+
+test("Manager repeated full verification and quota retry failures have truthful visible feedback", () => {
+  const injectSummary = managerInject.match(/function summaryText\(action, payload\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const bridgeSummary = source.match(/function managerSummary\(action, payload\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const noticeStart = managerInject.indexOf("async function runNoticeAction");
+  const noticeEnd = managerInject.indexOf("notice.addEventListener", noticeStart);
+  const noticeBlock = managerInject.slice(noticeStart, noticeEnd);
+
+  for (const summary of [injectSummary, bridgeSummary]) {
+    assert.match(summary, /action === "postVerificationFull"[\s\S]*?payload\?\.alreadyRunning/);
+    assert.match(summary, /\\u5b8c\\u6574\\u9a8c\\u8bc1\\u5df2\\u5728\\u540e\\u53f0\\u8fd0\\u884c/);
+  }
+  assert.match(noticeBlock, /catch \(error\)/);
+  assert.match(noticeBlock, /\\u91cd\\u65b0\\u68c0\\u67e5\\u5931\\u8d25/);
+});
+
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v107"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v107"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v108"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v108"/);
   for (const [name, text] of Object.entries({ source, managerInject, managerService })) {
     assert.doesNotMatch(text, /resetAntigravitySessionLock/, `${name} still exposes the removed session reset`);
   }
