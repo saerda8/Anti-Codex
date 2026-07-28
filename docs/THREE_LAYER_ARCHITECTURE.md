@@ -3,7 +3,9 @@
 - Status: project cornerstone; supersedes conflicting runtime architecture decisions
 - Decision date: 2026-07-14
 - Decision owner: user-approved product direction
-- Upstream reference: `BigPizzaV3/CodexPlusPlus` commit `37c628e58b21cd3698b68a72c15133c91ccc5f92` (`v1.2.39`)
+- Upstream reference: `BigPizzaV3/CodexPlusPlus` commit `5036ff056b5c629f19356396b17d6eeb70da664c` (`v1.2.43`)
+
+> **Source update - 2026-07-28:** Layer 2 is pinned independently to CodexPlusPlus `v1.2.43`. The same ten narrow compatibility patches replay to head `7505a6d48ca05923139b8406811f72ab3e5247c4` and tree `42e6155185508512b9eb799832d3de994e047056`; no task controller or fourth layer was added. Installed-runtime acceptance remains pending the guarded candidate/rollback gate.
 
 > **Installed acceptance update - 2026-07-27 23:19:** The tenth Layer 2 patch is now active through the built-in updater. Source preflight passes `797/797`; installed sync-readiness, installed-overall and source/installed legacy-zero-hit pass with one copied-client root and original Codex processes unchanged. This verifies the same three layers and does not advance the separate autonomous result gate; the current task still requires a successful preferred-provider continuation and accepted final media.
 
@@ -196,7 +198,7 @@ The exact file-by-file deletion ledger is [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_
 The steps are sequential. A failed gate blocks the next step.
 
 1. **Inventory gate**: this document and the implementation audit identify every kept, reused and retired active-path module.
-2. **No-traffic compatibility gate**: CodexPlusPlus with only the ten documented patches launches/configures the Anti-Codex client copy with disposable isolated state against a deterministic local fake third-party Chat Completions provider. Model selection, history, one tool call/result, streaming, cancellation, terminal errors and text-only native helpers must pass without the Antigravity adapter, and original Codex files/processes/state must have zero changes. **Current v1.2.39 no-traffic proof must be rerun after patch 10 installation; copied-client release proof must be rerun after each upstream update.**
+2. **No-traffic compatibility gate**: CodexPlusPlus with only the ten documented patches launches/configures the Anti-Codex client copy with disposable isolated state against a deterministic local fake third-party Chat Completions provider. Model selection, history, one tool call/result, streaming, cancellation, terminal errors and text-only native helpers must pass without the Antigravity adapter, and original Codex files/processes/state must have zero changes. **The pinned v1.2.43 candidate must pass this proof before activation; copied-client release proof must be rerun after every upstream update.**
 3. **Provider contract gate**: a small standalone Antigravity Chat Adapter passes deterministic Chat Completions contract tests without the mixed server. **Complete: 19/19 deterministic tests plus one real exact native-tool continuation.**
 4. **Route switch gate**: the disposable CodexPlusPlus provider points to the adapter; diagnostics prove the mixed translator is not serving the request. **Complete: 23/23 with one real native file-tool continuation and zero old-route hits.**
 5. **Component integration gate**: the visible copied client is wired to the fixed route; current official Codex UI/features, Anti-Codex branding and bounded text/tool work pass. **Historical proof exists; current-version real-traffic proof is reopened.**

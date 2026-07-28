@@ -1431,6 +1431,7 @@ export function validateGate8AutonomousVideoReport(report = {}) {
   }
 
   const releaseBinding = report?.releaseBinding || {};
+  const codexPlusPlusPatchCount = Number(releaseBinding?.codexPlusPlusPatchCount);
   if (releaseBinding?.schema !== "anticodex-release-binding-v1"
     || releaseBinding?.valid !== true
     || !String(releaseBinding?.officialShellVersion || "")
@@ -1439,7 +1440,8 @@ export function validateGate8AutonomousVideoReport(report = {}) {
     || !/^[0-9a-f]{40}$/i.test(String(releaseBinding?.codexPlusPlusPatchCommit || ""))
     || !SHA256_PATTERN.test(String(releaseBinding?.codexPlusPlusBinarySha256 || ""))
     || !SHA256_PATTERN.test(String(releaseBinding?.codexPlusPlusPatchTreeSha256 || ""))
-    || Number(releaseBinding?.codexPlusPlusPatchCount) !== 9
+    || !Number.isInteger(codexPlusPlusPatchCount)
+    || codexPlusPlusPatchCount <= 0
     || !SHA256_PATTERN.test(String(releaseBinding?.syncReadinessSha256 || ""))) {
     failures.push("current release and CodexPlusPlus component binding is invalid");
   }

@@ -1,12 +1,8 @@
-From c6bdf99aedbe15e4bb69aa3c3df99a17e0b80b8a Mon Sep 17 00:00:00 2001
+From 1b509ed119680b50626732b9a5cffa591b5dd94c Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:35:15 +0800
 Subject: [PATCH 03/10] fix: keep native helper requests text-only
 
----
- crates/codex-plus-core/src/protocol_proxy.rs  | 105 ++++++++++++++---
- .../codex-plus-core/tests/protocol_proxy.rs   | 109 ++++++++++++++++++
- 2 files changed, 197 insertions(+), 17 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
 index 1c01aa7..3a89da5 100644

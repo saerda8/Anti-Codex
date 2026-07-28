@@ -5,8 +5,8 @@ This directory pins the separately licensed CodexPlusPlus component and carries 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Version: `v1.2.39`
-- Commit: `37c628e58b21cd3698b68a72c15133c91ccc5f92`
+- Version: `v1.2.43`
+- Commit: `5036ff056b5c629f19356396b17d6eeb70da664c`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -49,7 +49,7 @@ Apply the patch to the pinned upstream commit:
 
 ```powershell
 git clone https://github.com/BigPizzaV3/CodexPlusPlus.git
-git -C CodexPlusPlus checkout 37c628e58b21cd3698b68a72c15133c91ccc5f92
+git -C CodexPlusPlus checkout 5036ff056b5c629f19356396b17d6eeb70da664c
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch
@@ -66,14 +66,12 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 
 ## Current Verification Boundary
 
-- All ten patches replay on the pinned commit to accepted source head `6aafaae9b1739b66218ad8511dfcb260e6d80698`; the verified Windows build replay head is `be810e6f08e749d617bcc352d1fb5736a9612717`, and independent replays share tree `efb58ba11c6f0090f1e5903b68631f5ccb973a14`.
-- Repository isolation audit: 9/9 checks passed.
-- Patch-series security-boundary contracts pass 5/5. Component-install contracts pass 24/25; the remaining test is blocked before product code because this Windows session cannot create its test directory symlink (`EPERM`).
-- Targeted `rustfmt --check` passed for the changed protocol source and test; the pre-existing watcher import-order difference remains outside the protocol patch.
-- Pinned `messense/cargo-xwin:0.23.0` Windows x64 release build passed. The protocol proxy suite passes 59/59, including missing usage, real usage precedence and Base64 exclusion.
+- All ten patches replay on pinned upstream `v1.2.43` to head `7505a6d48ca05923139b8406811f72ab3e5247c4` and tree `42e6155185508512b9eb799832d3de994e047056`; an independent replay from the project patch files produced the same tree. Patch 0001 was manually rebased across upstream Manager/watcher changes; patches 0002-0010 retained stable patch identities.
+- `cargo fmt --all -- --check` passed in the clean candidate. The protocol proxy suite passes 59/59 and the watcher suite passes 11/11.
+- Project security-boundary tests pass 6/6, isolation audit passes 7/7 and the ten-patch Gate 8 binding passes 34/34. The component installer passes 24/25; its remaining junction setup is blocked before product code by this Windows session's `EPERM` symlink policy.
+- Pinned `messense/cargo-xwin:0.23.0` Windows x64 Manager check and release launcher build passed. The temporary ignored build-only frontend stub used by the Manager check was removed afterward.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- Release launcher build: passed; 16,954,368 bytes; SHA-256 `d45dabda03dff191eb7e22a281ec3c34bf2e71ce33879d114b6dff6b7632a311`.
-- Runtime isolation proof: 20/20 checks passed against copied Codex `26.715.4045.0`; invalid executable selection failed closed, original Codex and the active Anti-Codex stayed unchanged, and all test processes were removed.
-- Installed sync-readiness and installed-overall no-traffic checks pass on one copied-client root with the ten-patch binary; source and installed legacy-zero-hit checks pass, and original Codex processes remain alive. Real provider continuation and final long-task result acceptance remain separate open gates.
+- Release launcher build: passed; 17,252,864 bytes; SHA-256 `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`.
+- Installed-runtime proof for `v1.2.43` is pending guarded candidate activation. The currently active component stays untouched until source replay, project contracts and rollback readiness pass.
 
-The isolation component is runtime-ready for Gate 2. The isolated launcher must always receive explicit copied-client paths and child-only state environment variables; provider and long-task readiness remain separate later gates.
+The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

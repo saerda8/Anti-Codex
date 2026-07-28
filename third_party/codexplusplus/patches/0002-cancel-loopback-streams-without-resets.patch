@@ -1,22 +1,11 @@
-From c21910624267abea1972504787df7bf2c9e50166 Mon Sep 17 00:00:00 2001
+From c8a74054a7aca6c13291c650c08b9c18e1b120bf Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:37:37 +0800
 Subject: [PATCH 02/10] fix: cancel loopback streams without resets
 
----
- Cargo.lock                                   |   4 +
- Cargo.toml                                   |   4 +
- crates/codex-plus-core/Cargo.toml            |   4 +
- crates/codex-plus-core/src/launcher.rs       | 778 +++++++++++++++++--
- crates/codex-plus-core/src/lib.rs            |   1 +
- crates/codex-plus-core/src/loopback_http.rs  |  89 +++
- crates/codex-plus-core/src/protocol_proxy.rs | 248 +++++-
- crates/codex-plus-core/src/relay_config.rs   |   2 +-
- 8 files changed, 1050 insertions(+), 80 deletions(-)
- create mode 100644 crates/codex-plus-core/src/loopback_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
-index 4ac2ff6..49156a1 100644
+index fd21100..2a454cd 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -422,9 +422,13 @@ dependencies = [
@@ -34,7 +23,7 @@ index 4ac2ff6..49156a1 100644
   "rusqlite",
   "serde",
 diff --git a/Cargo.toml b/Cargo.toml
-index f1cdfbb..b3b0d7e 100644
+index a0bc333..250c8ae 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -17,9 +17,13 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
@@ -70,7 +59,7 @@ index 63dfa5d..25356de 100644
  rusqlite.workspace = true
  serde.workspace = true
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 393f733..807e3c8 100644
+index c786b1a..3ffdd75 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -8,10 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
@@ -795,7 +784,7 @@ index 393f733..807e3c8 100644
              ChunkedBody::Complete(body) => body,
              ChunkedBody::Incomplete => {
                  return Err(HttpRequestReadError::bad_request(
-@@ -2973,6 +3425,43 @@ fn activate_packaged_app_blocking(app_user_model_id: &str, arguments: &str) -> a
+@@ -2979,6 +3431,43 @@ fn activate_packaged_app_blocking(app_user_model_id: &str, arguments: &str) -> a
  mod tests {
      use super::*;
  
@@ -839,7 +828,7 @@ index 393f733..807e3c8 100644
      #[test]
      fn http_body_framing_rejects_ambiguous_or_unsupported_headers() {
          let conflict = http_body_framing(
-@@ -3084,18 +3573,163 @@ mod tests {
+@@ -3090,18 +3579,163 @@ mod tests {
          assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 400 Bad Request"));
      }
  
@@ -1005,7 +994,7 @@ index 393f733..807e3c8 100644
          client.write_all(request).await.unwrap();
          let mut response = Vec::new();
          client.read_to_end(&mut response).await.unwrap();
-@@ -3177,13 +3811,17 @@ mod tests {
+@@ -3183,13 +3817,17 @@ mod tests {
          let helper_addr = helper_listener.local_addr().unwrap();
          let helper = tokio::spawn(async move {
              let (stream, remote_addr) = helper_listener.accept().await.unwrap();

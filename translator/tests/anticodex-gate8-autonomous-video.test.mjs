@@ -94,11 +94,11 @@ function validReport() {
       valid: true,
       officialShellVersion: "26.715.10079.0",
       activeShellVersion: "26.715.10079.0",
-      codexPlusPlusVersion: "v1.2.39",
+      codexPlusPlusVersion: "v1.2.43",
       codexPlusPlusPatchCommit: "a".repeat(40),
       codexPlusPlusBinarySha256: sha("b"),
       codexPlusPlusPatchTreeSha256: sha("c"),
-      codexPlusPlusPatchCount: 9,
+      codexPlusPlusPatchCount: 10,
       syncReadinessSha256: sha("d"),
     },
     task: {
@@ -151,7 +151,7 @@ function validReport() {
       reasonKind: null,
       terminalAtUtc: "2026-07-23T01:01:00.000Z",
       component: {
-        version: "v1.2.39",
+        version: "v1.2.43",
         patchCommit: "a".repeat(40),
         binarySha256: sha("b"),
       },
@@ -366,6 +366,26 @@ test("fails closed without an external host trust anchor even when all task and 
     validator()(validReport()).join(" "),
     /external host trust anchor.*integrity-only/i,
   );
+});
+
+test("accepts the current ten-patch CodexPlusPlus release binding", () => {
+  assert.doesNotMatch(
+    validator()(validReport()).join(" "),
+    /current release and CodexPlusPlus component binding is invalid/i,
+  );
+});
+
+test("rejects missing, nonnumeric, fractional, or zero CodexPlusPlus patch counts", async (t) => {
+  for (const patchCount of [undefined, "ten", 1.5, 0]) {
+    await t.test(String(patchCount), () => {
+      const report = validReport();
+      report.releaseBinding.codexPlusPlusPatchCount = patchCount;
+      assert.match(
+        validator()(report).join(" "),
+        /current release and CodexPlusPlus component binding is invalid/i,
+      );
+    });
+  }
 });
 
 test("five passed windows from one visible speaker and one face track satisfy lip-sync semantics", () => {

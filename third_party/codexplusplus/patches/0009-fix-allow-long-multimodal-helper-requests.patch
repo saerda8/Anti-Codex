@@ -1,14 +1,11 @@
-From 86a6bac6317f2037973a480229eac5d9a7ed7332 Mon Sep 17 00:00:00 2001
+From 5d011c4aebb86ce9ba149f2ffc6ce67a7211d5e6 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 09:04:01 +0800
 Subject: [PATCH 09/10] fix: allow long multimodal helper requests
 
----
- crates/codex-plus-core/src/launcher.rs | 10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 807e3c8..773a1b7 100644
+index 3ffdd75..c2a7752 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -2093,8 +2093,8 @@ mod computer_use_tests {
@@ -22,7 +19,7 @@ index 807e3c8..773a1b7 100644
  
  fn is_local_proxy_path(path: &str) -> bool {
      crate::protocol_proxy::is_audio_transcriptions_proxy_path(path)
-@@ -3542,6 +3542,12 @@ mod tests {
+@@ -3548,6 +3548,12 @@ mod tests {
          assert_eq!(error.status(), "413 Payload Too Large");
      }
  

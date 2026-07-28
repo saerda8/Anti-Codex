@@ -1,23 +1,11 @@
-From 288009b6f7adc33da9be36fede83f373ca6036c2 Mon Sep 17 00:00:00 2001
+From 888aa241b9e4b2a2412c8fe976ff2ab5c2176aad Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Tue, 14 Jul 2026 20:11:29 +0800
 Subject: [PATCH 01/10] isolation: scope Anti-Codex companion runtime
 
----
- apps/codex-plus-launcher/src/main.rs          |  51 ++++-
- .../src-tauri/src/commands.rs                 |  96 +++++++-
- apps/codex-plus-manager/src-tauri/src/lib.rs  |  33 +++
- crates/codex-plus-core/src/app_paths.rs       | 211 +++++++++++++++++-
- crates/codex-plus-core/src/launcher.rs        |  12 +-
- crates/codex-plus-core/src/paths.rs           |  29 +++
- crates/codex-plus-core/src/protocol_proxy.rs  |  34 +++
- crates/codex-plus-core/src/relay_config.rs    |  10 +-
- crates/codex-plus-core/src/watcher.rs         | 167 ++++++++++++--
- crates/codex-plus-core/tests/watcher.rs       | 127 +++++++++++
- 10 files changed, 725 insertions(+), 45 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 81b9bb1..bb3fa59 100644
+index ea7f2f7..9d73870 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -43,7 +43,11 @@ async fn main() -> Result<()> {
@@ -105,7 +93,7 @@ index 81b9bb1..bb3fa59 100644
      let mut activated = false;
      #[cfg(windows)]
      {
-@@ -790,11 +816,18 @@ mod tests {
+@@ -800,11 +826,18 @@ mod tests {
          assert_eq!(options.helper_port, LaunchOptions::default().helper_port);
      }
  
@@ -126,29 +114,35 @@ index 81b9bb1..bb3fa59 100644
          assert!(source.contains("launcher.already_running"));
      }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index ea115d4..d5e232f 100644
+index a0aaa27..e7e38d8 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
-@@ -508,11 +508,57 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+@@ -508,11 +508,63 @@ pub fn launch_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
  
  #[tauri::command]
  pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
 -    codex_plus_core::watcher::stop_launcher_processes_and_wait();
--    codex_plus_core::watcher::stop_codex_processes_and_wait();
-+    if let Err(error) = stop_validated_restart_targets(
-+        codex_plus_core::paths::isolated_instance_mode(),
-+        request.app_path.trim(),
-+        validate_isolated_launch_app_path,
-+        codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path,
-+        codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path,
-+    ) {
-+        return failed(
-+            &format!("拒绝重启隔离实例：{error}"),
-+            json!({
-+                "debugPort": request.debug_port,
-+                "helperPort": request.helper_port
-+            }),
-+        );
+-    codex_plus_core::watcher::stop_codex_processes_for_debug_port_and_wait(request.debug_port);
++    if codex_plus_core::paths::isolated_instance_mode() {
++        if let Err(error) = stop_validated_restart_targets(
++            true,
++            request.app_path.trim(),
++            validate_isolated_launch_app_path,
++            codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path,
++            codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path,
++        ) {
++            return failed(
++                &format!("拒绝重启隔离实例：{error}"),
++                json!({
++                    "debugPort": request.debug_port,
++                    "helperPort": request.helper_port
++                }),
++            );
++        }
++    } else {
++        let launcher_path = codex_plus_core::install::companion_binary_path(SILENT_BINARY);
++        codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(&launcher_path);
++        codex_plus_core::watcher::stop_codex_processes_for_debug_port_and_wait(request.debug_port);
 +    }
      spawn_codex_plus_launch(request, "Codex 已请求重启，启动任务正在后台运行。")
  }
@@ -189,7 +183,7 @@ index ea115d4..d5e232f 100644
  fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> CommandResult<Value> {
      let debug_port = request.debug_port;
      let helper_port = request.helper_port;
-@@ -544,6 +590,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+@@ -544,6 +596,10 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
  }
  
  fn spawn_silent_launcher(request: &LaunchRequest) -> anyhow::Result<()> {
@@ -200,7 +194,7 @@ index ea115d4..d5e232f 100644
      let mut args = Vec::new();
      if !request.app_path.trim().is_empty() {
          args.push("--app-path".to_string());
-@@ -3425,7 +3475,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
+@@ -3423,7 +3479,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -209,7 +203,7 @@ index ea115d4..d5e232f 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -3466,11 +3516,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
+@@ -3464,11 +3520,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
      match codex_plus_core::relay_config::apply_relay_config_to_home_with_protocol(
          home,
          &codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
@@ -223,7 +217,7 @@ index ea115d4..d5e232f 100644
      ) {
          Ok(result) => {
              let status = codex_plus_core::relay_config::relay_status_from_home(home);
-@@ -3559,7 +3609,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
+@@ -3557,7 +3613,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -232,7 +226,7 @@ index ea115d4..d5e232f 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -3672,6 +3722,10 @@ fn log_relay_apply_request(
+@@ -3670,6 +3726,10 @@ fn log_relay_apply_request(
      settings: &BackendSettings,
      relay: &codex_plus_core::settings::RelayProfile,
  ) {
@@ -243,7 +237,7 @@ index ea115d4..d5e232f 100644
      let _ = codex_plus_core::diagnostic_log::append_diagnostic_log(
          event,
          json!({
-@@ -3683,7 +3737,7 @@ fn log_relay_apply_request(
+@@ -3681,7 +3741,7 @@ fn log_relay_apply_request(
              "baseUrl": relay.base_url,
              "hasConfigContents": !relay.config_contents.trim().is_empty(),
              "hasAuthContents": !relay.auth_contents.trim().is_empty(),
@@ -252,7 +246,7 @@ index ea115d4..d5e232f 100644
          }),
      );
  }
-@@ -4250,6 +4304,34 @@ mod tests {
+@@ -4248,6 +4308,34 @@ mod tests {
          );
      }
  
@@ -350,7 +344,7 @@ index 60a385b..ef02f55 100644
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
-index 3d571a1..20ece6b 100644
+index 08f027b..f6b4c33 100644
 --- a/crates/codex-plus-core/src/app_paths.rs
 +++ b/crates/codex-plus-core/src/app_paths.rs
 @@ -1,4 +1,4 @@
@@ -367,7 +361,7 @@ index 3d571a1..20ece6b 100644
  
  #[cfg(windows)]
  const OPENAI_PACKAGE_FAMILY_NAMES: &[&str] = &[
-@@ -420,6 +421,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+@@ -426,6 +427,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
          }
          return macos_dir.join("Codex");
      }
@@ -377,7 +371,7 @@ index 3d571a1..20ece6b 100644
      if let Some(executable) = executable_in_dir(app_dir) {
          return executable;
      }
-@@ -429,6 +433,119 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+@@ -435,6 +439,119 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
      app_dir.join("Codex.exe")
  }
  
@@ -497,7 +491,7 @@ index 3d571a1..20ece6b 100644
  pub fn codex_app_version(app_dir: &Path) -> Option<String> {
      if app_dir.extension() == Some(OsStr::new("app")) {
          return macos_app_version(app_dir);
-@@ -646,6 +763,98 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
+@@ -652,6 +769,98 @@ fn executable_in_dir(dir: &Path) -> Option<PathBuf> {
      None
  }
  
@@ -597,7 +591,7 @@ index 3d571a1..20ece6b 100644
      for spec in APP_PACKAGE_SPECS {
          let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index c125653..393f733 100644
+index 99f5c18..c786b1a 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -306,7 +306,7 @@ where
@@ -782,7 +776,7 @@ index 2463a6d..a999c01 100644
      if !provider_base_url.trim().is_empty() {
          provider["base_url"] = toml_edit::value(provider_base_url.trim());
 diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
-index f11acc1..bb7b7c3 100644
+index 9ac74aa..e4508e1 100644
 --- a/crates/codex-plus-core/src/watcher.rs
 +++ b/crates/codex-plus-core/src/watcher.rs
 @@ -16,7 +16,6 @@ const RESTART_STOP_WAIT_INTERVAL_MS: u64 = 100;
@@ -939,27 +933,36 @@ index f11acc1..bb7b7c3 100644
  #[cfg(target_os = "macos")]
  pub fn find_codex_processes() -> Vec<u32> {
      let mut ids = ["Codex", "ChatGPT"]
-@@ -297,16 +400,31 @@ pub fn find_session_index_cleanup_blocking_processes() -> Vec<u32> {
+@@ -297,19 +400,8 @@ pub fn find_session_index_cleanup_blocking_processes() -> Vec<u32> {
  
  #[cfg(windows)]
  pub fn stop_launcher_processes() {
+-    let processes = crate::windows_integration::enumerate_processes();
+-    let killable = filter_killable_launcher_processes(
+-        processes.iter().map(|process| {
+-            (
+-                process.process_id,
+-                process.parent_process_id,
+-                process.exe_file.as_str(),
+-            )
+-        }),
+-        std::process::id(),
+-    );
+-    for process_id in killable {
+-        let _ = crate::windows_integration::terminate_process(process_id);
 +    if let Ok(target_launcher_path) = std::env::current_exe() {
 +        stop_launcher_processes_for_path(&target_launcher_path);
-+    }
-+}
-+
-+#[cfg(not(windows))]
-+pub fn stop_launcher_processes() {}
-+
-+#[cfg(windows)]
-+pub fn stop_launcher_processes_and_wait() {
+     }
+ }
+ 
+@@ -325,16 +417,34 @@ pub fn stop_launcher_processes() {}
+ 
+ #[cfg(windows)]
+ pub fn stop_launcher_processes_and_wait() {
 +    if let Ok(target_launcher_path) = std::env::current_exe() {
 +        stop_launcher_processes_and_wait_for_path(&target_launcher_path);
 +    }
 +}
-+
-+#[cfg(not(windows))]
-+pub fn stop_launcher_processes_and_wait() {}
 +
 +#[cfg(windows)]
 +pub fn stop_launcher_processes_for_path(target_launcher_path: &Path) {
@@ -976,47 +979,38 @@ index f11acc1..bb7b7c3 100644
 +        &processes,
          std::process::id(),
 +        target_launcher_path,
-     );
-     for process_id in killable {
-         let _ = crate::windows_integration::terminate_process(process_id);
-@@ -314,20 +432,15 @@ pub fn stop_launcher_processes() {
- }
- 
- #[cfg(not(windows))]
--pub fn stop_launcher_processes() {}
++    );
++    for process_id in killable {
++        let _ = crate::windows_integration::terminate_process(process_id);
++    }
++}
++
++#[cfg(not(windows))]
 +pub fn stop_launcher_processes_for_path(_target_launcher_path: &Path) {}
- 
- #[cfg(windows)]
--pub fn stop_launcher_processes_and_wait() {
++
++#[cfg(windows)]
 +pub fn stop_launcher_processes_and_wait_for_path(target_launcher_path: &Path) {
-     let processes = crate::windows_integration::enumerate_processes();
--    let killable = filter_killable_launcher_processes(
--        processes.iter().map(|process| {
--            (
--                process.process_id,
--                process.parent_process_id,
--                process.exe_file.as_str(),
--            )
--        }),
++    let processes = crate::windows_integration::enumerate_processes();
 +    let killable = filter_killable_launcher_processes_for_path(
 +        &processes,
-         std::process::id(),
++        std::process::id(),
 +        target_launcher_path,
      );
      terminate_and_wait_for_exit(
          killable,
-@@ -337,7 +450,7 @@ pub fn stop_launcher_processes_and_wait() {
- }
+@@ -356,6 +466,9 @@ pub fn stop_launcher_processes_and_wait() {
+ #[cfg(not(any(windows, target_os = "macos")))]
+ pub fn stop_launcher_processes_and_wait() {}
  
- #[cfg(not(windows))]
--pub fn stop_launcher_processes_and_wait() {}
++#[cfg(not(windows))]
 +pub fn stop_launcher_processes_and_wait_for_path(_target_launcher_path: &Path) {}
- 
++
  #[cfg(windows)]
  pub fn stop_codex_processes() {
-@@ -361,6 +474,18 @@ pub fn stop_codex_processes_and_wait() {
- #[cfg(not(windows))]
- pub fn stop_codex_processes_and_wait() {}
+     for process_id in find_codex_processes() {
+@@ -508,6 +621,18 @@ fn macos_codex_process_ids_for_debug_port<'a>(
+     ids
+ }
  
 +#[cfg(windows)]
 +pub fn stop_codex_processes_and_wait_for_app_path(target_app_path: &Path) {
@@ -1034,18 +1028,20 @@ index f11acc1..bb7b7c3 100644
  fn terminate_and_wait_for_exit(process_ids: Vec<u32>, timeout_ms: u64, interval_ms: u64) {
      if process_ids.is_empty() {
 diff --git a/crates/codex-plus-core/tests/watcher.rs b/crates/codex-plus-core/tests/watcher.rs
-index 03feecd..78bd484 100644
+index 03feecd..edbd9a4 100644
 --- a/crates/codex-plus-core/tests/watcher.rs
 +++ b/crates/codex-plus-core/tests/watcher.rs
-@@ -8,6 +8,8 @@ use codex_plus_core::watcher::{
+@@ -6,7 +6,9 @@ use codex_plus_core::watcher::{
+ 
+ #[cfg(windows)]
  use codex_plus_core::watcher::{
-     WindowsProcessInfo, find_codex_processes_from_snapshot,
-     find_session_index_cleanup_blocking_processes_from_snapshot,
-+    filter_killable_launcher_processes_for_path, find_codex_processes_from_snapshot_for_app_path,
+-    WindowsProcessInfo, find_codex_processes_from_snapshot,
++    WindowsProcessInfo, filter_killable_launcher_processes_for_path,
++    find_codex_processes_from_snapshot, find_codex_processes_from_snapshot_for_app_path,
 +    find_codex_processes_from_snapshot_for_executable,
+     find_session_index_cleanup_blocking_processes_from_snapshot,
  };
  
- #[test]
 @@ -157,6 +159,131 @@ fn find_codex_processes_finds_local_install_with_capitial_c() {
      assert_eq!(find_codex_processes_from_snapshot(&processes), vec![42]);
  }

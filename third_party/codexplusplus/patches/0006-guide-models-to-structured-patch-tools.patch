@@ -1,12 +1,8 @@
-From f59f4db37c9bf6d1a4909ea6d03e800857972e0f Mon Sep 17 00:00:00 2001
+From 8993a82f0893091a241d24ff08ed59ba521a4e6a Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
 Subject: [PATCH 06/10] guide models to structured patch tools
 
----
- crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--
- .../codex-plus-core/tests/protocol_proxy.rs   | 240 +++++++++++++++++-
- 2 files changed, 353 insertions(+), 27 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
 index 8c8830d..6b397fa 100644

@@ -8,6 +8,10 @@ const root = join(import.meta.dirname, "..", "..");
 const patch1 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0001-isolation-scope-Anti-Codex-companion-runtime.patch"), "utf8");
 const patch2 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0002-cancel-loopback-streams-without-resets.patch"), "utf8");
 const patch10 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0010-fix-estimate-missing-chat-usage-for-native-compaction.patch"), "utf8");
+const patch1AddedLines = patch1
+  .split("\n")
+  .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+  .join("\n");
 const patch2AddedLines = patch2
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -43,6 +47,17 @@ test("isolated restart validates the exact configured copied app before any stop
   assert.match(patch1, /symlink_metadata/);
   assert.match(patch1, /stop_validated_restart_targets/);
   assert.match(patch1, /native_or_outside_restart_path_performs_zero_stops/);
+});
+
+test("non-isolated Manager restart targets only its companion launcher and debug port", () => {
+  const launcherPath = patch1AddedLines.indexOf("companion_binary_path(SILENT_BINARY)");
+  const launcherStop = patch1AddedLines.indexOf("stop_launcher_processes_and_wait_for_path(&launcher_path)", launcherPath);
+  const codexStop = patch1AddedLines.indexOf("stop_codex_processes_for_debug_port_and_wait(request.debug_port)", launcherStop);
+
+  assert.ok(launcherPath >= 0, "the Manager must resolve its own companion launcher path");
+  assert.ok(launcherStop > launcherPath, "the Manager must stop only that exact launcher path");
+  assert.ok(codexStop > launcherStop, "the existing debug-port-scoped Codex stop must remain intact");
+  assert.doesNotMatch(patch1AddedLines, /stop_launcher_processes_and_wait\(\)/);
 });
 
 test("local protocol proxy is loopback-only, authenticated, bounded, and timeout-aware", () => {

@@ -1,11 +1,8 @@
-From dedf8f46dfc6781a43903dd5e9e10911eb428eee Mon Sep 17 00:00:00 2001
+From d434b59394e8a74a388065ab992583569f7e5ef1 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
 Subject: [PATCH 04/10] fix: route Anti-Codex model slots
 
----
- crates/codex-plus-core/src/protocol_proxy.rs | 357 ++++++++++++++++++-
- 1 file changed, 346 insertions(+), 11 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
 index 3a89da5..0184adc 100644
