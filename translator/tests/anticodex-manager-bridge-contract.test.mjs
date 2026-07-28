@@ -909,6 +909,32 @@ test("Manager bridge invokes the real model refresh action", () => {
   assert.match(block, /postManagerJsonWithToken\([\s\S]*?"\/anticodex\/manager\/action"/);
 });
 
+test("Manager long actions enter pending UI without losing their late bridge result", () => {
+  const bridgeActionBlock = managerInject.match(/async function runActionViaBridge\(action\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const scriptActionBlock = managerInject.match(/async function runActionViaScript\(action\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const installActionsStart = managerInject.indexOf("function installActions()");
+  const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
+  const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
+  const bridgeRunActionBlock = source.match(/async function runAction\(action\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const uiTransportMs = Number(managerInject.match(/const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = (\d+);/)?.[1]);
+  const bridgeTransportMs = Number(source.match(/const MANAGER_ACTION_HTTP_TIMEOUT_MS = (\d+);/)?.[1]);
+  const longestForegroundMs = Number(
+    managerService.match(/overallNoTraffic:\s*\{[\s\S]*?timeoutMs:\s*(\d+),/)?.[1],
+  );
+
+  assert.match(bridgeActionBlock, /actionTransportTimeoutMs\(action\)/);
+  assert.doesNotMatch(bridgeActionBlock, /actionUiTimeoutMs\(action\)\s*\+\s*1000/);
+  assert.match(scriptActionBlock, /actionTransportTimeoutMs\(action\)/);
+  assert.doesNotMatch(scriptActionBlock, /actionUiTimeoutMs\(action\)\s*\+\s*1000/);
+  assert.match(installActionsBlock, /setTimeout\(\(\) => resolve\(\{ type: "timeout" \}\), actionUiTimeoutMs\(action\)\)/);
+  assert.match(installActionsBlock, /actionPromise\.then\(async \(lateOutcome\) =>/);
+  assert.match(installActionsBlock, /lateOutcome\.type === "error"[\s\S]*?result\.textContent = "\\u8fd0\\u884c\\u5931\\u8d25/);
+  assert.match(bridgeRunActionBlock, /managerActionHttpTimeoutMs\(action\)/);
+  assert.equal(longestForegroundMs, 240000);
+  assert.ok(bridgeTransportMs > longestForegroundMs);
+  assert.ok(uiTransportMs > bridgeTransportMs);
+});
+
 test("current Manager UI exposes no legacy session-controller action", () => {
   assert.match(managerInject, /const VERSION = "native-panel-v107"/);
   assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v107"/);

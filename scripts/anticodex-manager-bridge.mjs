@@ -30,6 +30,7 @@ const ALLOWED_MANAGER_BRIDGE_REQUESTS = new Map([
   ["/backend-api/wham/apps", new Set(["GET"])],
 ]);
 const MANAGER_BRIDGE_REQUEST_BODY_LIMIT = 1024 * 1024;
+const MANAGER_ACTION_HTTP_TIMEOUT_MS = 300000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const triStateText = (value) => value === true ? "true" : (value === false ? "false" : "unknown");
 
@@ -621,8 +622,12 @@ async function runAction(action) {
   return postManagerJsonWithToken(
     "/anticodex/manager/action",
     JSON.stringify({ action }),
-    action === "mcpSkills" ? MCP_SKILLS_MANAGER_HTTP_TIMEOUT_MS : 180000,
+    managerActionHttpTimeoutMs(action),
   );
+}
+
+function managerActionHttpTimeoutMs(action) {
+  return action === "mcpSkills" ? MCP_SKILLS_MANAGER_HTTP_TIMEOUT_MS : MANAGER_ACTION_HTTP_TIMEOUT_MS;
 }
 
 function reportSummaryLines(result) {
@@ -831,6 +836,8 @@ if (args.has("--self-test")) {
   assert.match(selfSource, /error\?\.statusCode !== 403/);
   assert.match(selfSource, /return postOnce\(await bootstrapManagerActionToken\(\)\)/);
   assert.match(selfSource, /return postManagerJsonWithToken\([\s\S]*?"\/anticodex\/manager\/action"/);
+  assert.ok(managerActionHttpTimeoutMs("overallNoTraffic") > 240000);
+  assert.equal(managerActionHttpTimeoutMs("mcpSkills"), MCP_SKILLS_MANAGER_HTTP_TIMEOUT_MS);
 
   const summary = latestReportsSummary({
     reportRoot: "C:\\tmp\\anticodex\\reports",

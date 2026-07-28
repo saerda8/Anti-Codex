@@ -84,6 +84,7 @@
     "postVerificationFull",
   ]);
   const BRIDGE_TIMEOUT_MS = 5000;
+  const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 310000;
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
   const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
@@ -614,7 +615,7 @@
     if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ === "function") {
       try {
         let payload;
-        const bridgeTimeoutMs = Math.max(BRIDGE_TIMEOUT_MS, actionUiTimeoutMs(action) + 1000);
+        const bridgeTimeoutMs = actionTransportTimeoutMs(action);
         const winner = await Promise.race([
           window.__ANTICODEX_RUN_MANAGER_ACTION__(action).then(p => { payload = p; return "bridge"; }),
           new Promise(resolve => setTimeout(() => resolve("timeout"), bridgeTimeoutMs)),
@@ -645,7 +646,7 @@
           const timer = setTimeout(() => {
             cleanup();
             reject(new Error("Anti-Codex manager action timed out."));
-          }, actionUiTimeoutMs(action) + 1000);
+          }, actionTransportTimeoutMs(action));
           function cleanup() {
             clearTimeout(timer);
             try { delete window[callbackName]; } catch { window[callbackName] = undefined; }
@@ -1265,6 +1266,11 @@
     if (action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
     if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
+  }
+
+  function actionTransportTimeoutMs(action) {
+    if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
+    return Math.max(BRIDGE_TIMEOUT_MS, MANAGER_ACTION_TRANSPORT_TIMEOUT_MS);
   }
 
   function pendingActionMaxMs(action) {
