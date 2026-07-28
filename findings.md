@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-29 Hidden Scheduled Node Host and Cross-Version Recovery
+
+- The visible Node window was not a Codex/CodexPlusPlus protocol issue. Both scheduled product entry points directly executed `node.exe`, so Windows could create a console before the JavaScript `--hide-console` path took effect.
+- Commit `4adb743` reuses the native Windows GUI script host for those two entries and keeps Node plus the original brokers unchanged. Runtime rollback now invokes the restored runtime's own repair contract before recovery launch; an older runtime can therefore restore its former direct-Node task even though it does not contain the new GUI-host file.
+- Focused regression passes `74/74`, PowerShell parsing `7/7`, hidden-host usage/success exits `64/0`, and two independent read-only reviews found no P0/P1/P2. No live scheduled task, runtime, Anti-Codex window, model route or native Codex process was touched.
+- Terra turn `019fa9d7-d5ca-7a53-8b0a-cdd899eae299` remains active without host guidance. It rebuilt the main and three platform videos at 59.6 seconds and is verifying loudness, ASR, mouth-bound lip evidence and ZIP reread; the final package and report were not yet present at the last read.
+
 ## 2026-07-28 Manager Long-Action Feedback and Claude Continuation
 
 - The Manager UI used a short “still running” display threshold as its transport deadline plus one second, while the service could legitimately work for up to 240 seconds. This made a healthy background action appear failed before its real result returned.
