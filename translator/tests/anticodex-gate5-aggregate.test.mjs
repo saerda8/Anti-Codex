@@ -11,6 +11,7 @@ import test from "node:test";
 const aggregateScriptUrl = new URL("../../scripts/test-anticodex-gate5-visible-integration.mjs", import.meta.url);
 const aggregateScriptPath = fileURLToPath(aggregateScriptUrl);
 const releaseGateScriptUrl = new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url);
+const sourcePreflightScriptUrl = new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url);
 
 test("Gate 5 is an offline explicit-evidence aggregate, not an old traffic/UI runner", async () => {
   const source = await readFile(aggregateScriptUrl, "utf8");
@@ -47,6 +48,22 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
     /round\?\.maxVisibleWindowCount/,
     /const sourceTimestampMs = reportTimestampMs\(data\)/,
   ]) assert.match(source, contract);
+});
+
+test("release validation rejects skipped, dirty, or old-revision source preflight evidence", async () => {
+  const [releaseSource, preflightSource] = await Promise.all([
+    readFile(releaseGateScriptUrl, "utf8"),
+    readFile(sourcePreflightScriptUrl, "utf8"),
+  ]);
+  assert.match(preflightSource, /git rev-parse HEAD/);
+  assert.match(preflightSource, /git status --porcelain/);
+  assert.match(preflightSource, /sourceGitHead\s*=/);
+  assert.match(preflightSource, /sourceGitClean\s*=/);
+  assert.match(releaseSource, /skipFullRegression/);
+  assert.match(releaseSource, /source_preflight_full_regression/);
+  assert.match(releaseSource, /source_preflight_git_revision/);
+  assert.match(releaseSource, /source_preflight_git_generated_dirty/);
+  assert.match(releaseSource, /source_preflight_git_dirty/);
 });
 
 function hash(value) {

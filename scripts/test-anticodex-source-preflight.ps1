@@ -667,6 +667,29 @@ function Test-GitDiffCheck {
     }
 }
 
+function Test-SourceGitRevision {
+    $gitCommand = Get-Command "git" -ErrorAction SilentlyContinue
+    if (-not $gitCommand) {
+        Add-Failure "git not found; source revision cannot be bound"
+        return [pscustomobject]@{ ok = $false; head = ""; reason = "git not found" }
+    }
+    $result = Invoke-SourceProcess -Name "git rev-parse HEAD" -FilePath $gitCommand.Source -Arguments @("-C", $SourceRoot, "rev-parse", "HEAD") -TimeoutSec 10
+    $head = @($result.stdoutTail | Where-Object { [string]$_ -match '^[0-9a-fA-F]{40}$' } | Select-Object -First 1)
+    $head = if ($head.Count -gt 0) { [string]$head[0] } else { "" }
+    if (-not $result.ok -or $head -notmatch '^[0-9a-fA-F]{40}$') {
+        Add-Failure "source git revision could not be resolved"
+        return [pscustomobject]@{ ok = $false; head = $head; clean = $false; exitCode = $result.exitCode }
+    }
+    $statusResult = Invoke-SourceProcess -Name "git status --porcelain" -FilePath $gitCommand.Source -Arguments @("-C", $SourceRoot, "status", "--porcelain=v1", "--untracked-files=normal") -TimeoutSec 10
+    $clean = $statusResult.ok -and @($statusResult.stdoutTail | Where-Object { [string]$_ -ne "" }).Count -eq 0
+    if (-not $statusResult.ok) {
+        Add-Failure "source git status could not be resolved"
+    } elseif (-not $clean) {
+        Add-Failure "source git worktree is dirty"
+    }
+    return [pscustomobject]@{ ok = $clean; head = $head.ToLowerInvariant(); clean = $clean; exitCode = $statusResult.exitCode }
+}
+
 function New-ReportPaths {
     param([string]$Name)
     New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
@@ -688,6 +711,7 @@ function Save-JsonReport {
 }
 
 try {
+    $checks["sourceGitRevision"] = Test-SourceGitRevision
     $checks["javascriptSyntax"] = Test-JavaScriptSyntax
     $checks["powershellSyntax"] = Test-PowerShellSyntax
     $checks["uiStateSelfTest"] = Test-UiStateSelfTest
@@ -720,6 +744,8 @@ $report = [ordered]@{
     coverageKind = "source-no-traffic"
     managerRealButtonsReportContractOk = $managerRealButtonsReportContractOk
     sourceRoot = Normalize-Path $SourceRoot
+    sourceGitHead = [string]$checks["sourceGitRevision"].head
+    sourceGitClean = [bool]$checks["sourceGitRevision"].clean
     startedAt = $startedAt.ToString("o")
     elapsedMs = $elapsedMs
     skipFullRegression = [bool]$SkipFullRegression

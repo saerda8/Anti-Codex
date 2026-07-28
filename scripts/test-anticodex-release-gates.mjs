@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -64,6 +65,22 @@ function sha256File(path) {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8").replace(/^\uFEFF/, ""));
+}
+
+function currentSourceGitState(root = sourceRoot) {
+  const run = (gitArgs) => spawnSync("git", ["-C", root, ...gitArgs], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const headResult = run(["rev-parse", "HEAD"]);
+  const head = String(headResult.stdout || "").trim().toLowerCase();
+  if (headResult.error || headResult.status !== 0 || !/^[0-9a-f]{40}$/.test(head)) {
+    return { ok: false, head, clean: false };
+  }
+  const statusResult = run(["status", "--porcelain=v1", "--untracked-files=normal"]);
+  if (statusResult.error || statusResult.status !== 0) return { ok: false, head, clean: false };
+  return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
 }
 
 const codexPlusPlusMetadata = readJson(join(sourceRoot, "third_party", "codexplusplus", "upstream.json"));
@@ -452,10 +469,17 @@ function validateLegacyZeroHit(report, failures) {
   }
 }
 
-function validateSourcePreflight(report, failures) {
+function validateSourcePreflight(report, failures, sourceGit = currentSourceGitState()) {
   if (report?.reportName !== "source-preflight" || report?.ok !== true || report?.noTraffic !== true || report?.usedRealTraffic !== false || report?.behaviorCovered !== true) failures.push("source_preflight_result");
   if (!empty(report?.failures)) failures.push("source_preflight_failures");
-  checkObjectOk(report, ["javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest", "localConnectorVerifier", "managerMojibakeContracts", "translatorRegression", "diffWhitespace"], failures, "source_preflight");
+  checkObjectOk(report, ["sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest", "localConnectorVerifier", "managerMojibakeContracts", "translatorRegression", "diffWhitespace"], failures, "source_preflight");
+  if (report?.skipFullRegression !== false || report?.checks?.translatorRegression?.skipped === true) failures.push("source_preflight_full_regression");
+  if (report?.sourceGitClean !== true || report?.checks?.sourceGitRevision?.clean !== true) failures.push("source_preflight_git_generated_dirty");
+  if (sourceGit?.ok !== true) failures.push("source_preflight_git_state");
+  else {
+    if (!/^[0-9a-f]{40}$/i.test(String(report?.sourceGitHead || "")) || String(report.sourceGitHead).toLowerCase() !== sourceGit.head) failures.push("source_preflight_git_revision");
+    if (sourceGit.clean !== true) failures.push("source_preflight_git_dirty");
+  }
 }
 
 function validateSyncReadiness(report, failures) {
@@ -675,6 +699,36 @@ function selfTest() {
     writeFileSync(path, `${JSON.stringify({ ...valid, ok: false })}\n`, "utf8");
     const tampered = inspectEvidence({ id: "selfTestTampered", path, signed: true, live: true, validate: validateLegacyZeroHit });
     if (tampered.hashValid !== false || tampered.satisfied) throw new Error("tampered evidence was accepted");
+    const sourceGitHead = "a".repeat(40);
+    const sourcePreflightFixture = {
+      reportName: "source-preflight",
+      ok: true,
+      noTraffic: true,
+      usedRealTraffic: false,
+      behaviorCovered: true,
+      skipFullRegression: false,
+      sourceGitHead,
+      sourceGitClean: true,
+      failures: [],
+      checks: Object.fromEntries([
+        "sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest",
+        "localConnectorVerifier", "managerMojibakeContracts", "translatorRegression", "diffWhitespace",
+      ].map((name) => [name, { ok: true }])),
+    };
+    sourcePreflightFixture.checks.sourceGitRevision.clean = true;
+    const validSourceFailures = [];
+    validateSourcePreflight(sourcePreflightFixture, validSourceFailures, { ok: true, head: sourceGitHead, clean: true });
+    if (validSourceFailures.length > 0) throw new Error(`valid source preflight rejected: ${validSourceFailures.join(",")}`);
+    for (const [name, candidate, gitState, expectedFailure] of [
+      ["skipped regression", { ...sourcePreflightFixture, skipFullRegression: true }, { ok: true, head: sourceGitHead, clean: true }, "source_preflight_full_regression"],
+      ["old revision", sourcePreflightFixture, { ok: true, head: "b".repeat(40), clean: true }, "source_preflight_git_revision"],
+      ["dirty source at preflight generation", { ...sourcePreflightFixture, sourceGitClean: false }, { ok: true, head: sourceGitHead, clean: true }, "source_preflight_git_generated_dirty"],
+      ["dirty source", sourcePreflightFixture, { ok: true, head: sourceGitHead, clean: false }, "source_preflight_git_dirty"],
+    ]) {
+      const failures = [];
+      validateSourcePreflight(candidate, failures, gitState);
+      if (!failures.includes(expectedFailure)) throw new Error(`source preflight accepted ${name}`);
+    }
     const placeholderFailures = [];
     validateGate8({ schema: "anticodex-gate8-final-long-task-v1", reportName: "gate8-final-long-task", gate: 8, ok: true }, placeholderFailures);
     if (placeholderFailures.length < 6) throw new Error("Gate 8 placeholder was not rejected comprehensively");
@@ -807,6 +861,7 @@ function selfTest() {
       "stale_signed_evidence_rejection",
       "filesystem_mtime_freshness_rejection",
       "tamper_rejection",
+      "source_preflight_full_current_revision",
       "gate5_deleted_artifact_rejection",
       "gate5_current_ui_evidence_required",
       "gate5_current_ui_deep_validation",
