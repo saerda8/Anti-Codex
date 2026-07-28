@@ -3309,3 +3309,9 @@
 - Controlled activation succeeded in transaction `20260727T132359870Z-5d2e43d103e1451687475264bc3e9f26`: 120 files verified, health ready, one visible Anti-Codex, rollback retained, source/installed hashes equal for all changed runtime entry points. Original Codex PID `40736` and all 11 recorded native package processes survived unchanged.
 - Restart selection and task selection are distinct. Fixed-route startup correctly came up as Antigravity / `gemini-3.1-pro-low`, while reopening task `019f9a93-0de5-71f3-9329-12e0e914e681` restored that task's composer label as `第三方 · gpt-5.6-terra 中`.
 - The no-traffic physical menu probe targeted the correct composer control but did not obtain the model option list; it sent no model request and no continuation. Until the native menu visibly selects Gemini, sending `继续` would risk spending third-party quota and is therefore refused.
+
+## 2026-07-28 Antigravity Historical-Image Overflow Finding
+
+- The preferred-provider stall was a product defect, not absent quota: Antigravity history conversion serialized old image-tool `data:image/...;base64` payloads into Cascade prompt text, eventually crossing Gemini's context limit and surfacing as generic retrying provider failures.
+- Commit `61695dc2` fixes the shared serialization boundary by replacing historical data-image URIs with a compact marker while preserving surrounding text and tool ids. Focused coverage passes `44/44`; source and installed translator hashes match after transaction `20260727T195829617Z-e5dfd32cd334464dbbe15b64bc7bb6e6`.
+- Gemini 3.1 Pro Low then completed turn `019fa52f-966c-7d22-b6b2-8707da761d19` in the original task and correct cwd with sustained real tool activity. The model's completion claim is not accepted yet; current-hash media, package and runtime audits are still decisive.

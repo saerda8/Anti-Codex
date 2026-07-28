@@ -3118,3 +3118,9 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Post-restart health is green on Antigravity / `gemini-3.1-pro-low`; six changed source/runtime files have exact SHA-256 parity. Original Codex retained all 11 recorded package processes and visible PID `40736` without a restart.
 - Fast installed UI state passes with `native-panel-v107`, the five Manager groups in contract order, advanced diagnostics collapsed and no fatal/reconnect page. The target task rollout is still unchanged since the aborted 14:16 turn.
 - A no-traffic physical model-menu probe reopened exact task `019f9a93-0de5-71f3-9329-12e0e914e681` but found its per-task composer still selected `第三方 · gpt-5.6-terra 中`; the menu did not expose the Gemini option to the verifier, so no `继续` was sent. Next action is a manual native-menu selection of Gemini 3.1 Pro Low followed by exactly `继续`; do not fall back to third-party while Gemini is available.
+
+## 2026-07-28 Antigravity History Repair And Current Acceptance
+
+- Commit `61695dc2` compacts only historical image data URIs before Antigravity Cascade serialization. Focused tests pass `44/44`; runtime transaction `20260727T195829617Z-e5dfd32cd334464dbbe15b64bc7bb6e6` installed the same translator bytes and restored one visible Anti-Codex without stopping original Codex.
+- Same-task Gemini 3.1 Pro Low turn `019fa52f-966c-7d22-b6b2-8707da761d19` used the correct deliverable cwd, produced real tool/file work and completed naturally. No host micro-stage or implementation prompt was sent.
+- Three independent read-only audits now bind the latest artifact hashes: media quality/lip sync, release package integrity, and native runtime/task evidence. Gate 8 and overall 100% remain red until all three pass. On failure, send only observable outcome feedback in this same task and let Anti-Codex plan the repair itself.
