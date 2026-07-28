@@ -646,7 +646,9 @@ async function runSupervisor(plan) {
     const previousAntigravityCatalog = readCatalogSafely(antigravityCatalogPath) ?? { ...bundledCatalog, models: [] };
     let antigravityCatalog = previousAntigravityCatalog;
     try {
-      const readiness = await antigravityClient.getReadiness();
+      const readiness = await antigravityClient.getReadiness(
+        plan.provider === "antigravity" ? { timeoutMs: 90_000 } : undefined,
+      );
       antigravityReady = readiness?.signedIn === true;
       if (antigravityReady) {
         const availableModels = await antigravityClient.listModels();
