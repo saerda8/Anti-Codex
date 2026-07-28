@@ -28,6 +28,14 @@ test("installed overall runs the verifier from the same audited source tree", as
   assert.match(source, /Join-Path \$PSScriptRoot "test-anticodex-ui-state\.mjs"/);
 });
 
+test("installed overall cold start uses the safe desktop shortcut broker", async () => {
+  const source = await readFile(scriptUrl, "utf8");
+
+  assert.match(source, /start-anticodex-shortcut-broker\.ps1/);
+  assert.match(source, /"-InstallRoot", "`"\$installRoot`""/);
+  assert.doesNotMatch(source, /"`"\$launcherScript`"", "-SkipUpdateCheck"/);
+});
+
 test("installed overall accepts the supervisor's CDP handoff without trusting a stale client PID", async () => {
   const source = await readFile(scriptUrl, "utf8");
 

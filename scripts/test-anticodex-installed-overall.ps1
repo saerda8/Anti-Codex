@@ -89,16 +89,16 @@ $stateRoot = Normalize-Path (Join-Path $env:APPDATA "anticodex")
 $activeHost = Normalize-Path (Join-Path $installRoot "codex-patched-app")
 $activeMainExe = Normalize-Path (Join-Path $activeHost "Anti-Codex.exe")
 $supervisorScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex-fixed-route.mjs")
-$launcherScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex.ps1")
+$shortcutBrokerScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex-shortcut-broker.ps1")
 
 $healthPair = Get-HealthPair
 if ($EnsureRunning -and -not (Test-HealthPairReady $healthPair)) {
-    if (-not (Test-Path -LiteralPath $launcherScript -PathType Leaf)) {
-        $failures.Add("Anti-Codex launcher is missing: $launcherScript") | Out-Null
+    if (-not (Test-Path -LiteralPath $shortcutBrokerScript -PathType Leaf)) {
+        $failures.Add("Anti-Codex shortcut broker is missing: $shortcutBrokerScript") | Out-Null
     } else {
         $powerShell = (Get-Command powershell.exe -ErrorAction Stop).Source
         Start-Process -FilePath $powerShell -ArgumentList @(
-            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherScript`"", "-SkipUpdateCheck"
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$shortcutBrokerScript`"", "-InstallRoot", "`"$installRoot`""
         ) -WindowStyle Hidden | Out-Null
         $deadline = [DateTime]::UtcNow.AddSeconds(120)
         do {
