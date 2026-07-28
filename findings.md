@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-07-28 Advisory CodexPlusPlus Release Discovery
+
+- Commit `7f695aa` makes Manager `检查更新` explicitly query the upstream CodexPlusPlus stable-release redirect. The live result is remote `v1.2.43`, project-fixed `1.2.43`, installed `1.2.43`.
+- Remote discovery is deliberately advisory: it cannot change top-level or component `updateNeeded`, `ok`, `reason`, the prompt gate or the sync launcher. It never rewrites `upstream.json`, fetches/rebases source, replays patches, builds a binary or installs an unverified release. A future newer tag is displayed as `待适配验证`.
+- PowerShell 5.1 parsing, targeted Manager/update tests, the real read-only query and full no-traffic source preflight are green; the full suite is `810/810`. Independent review found no P0/P1/P2.
+- Runtime transaction `20260728T071458551Z-1f11d7435e124095be8cf99f60c1d126` verified 121 files and safely deferred activation because the current Gemini long-task turn is active. It did not restart Anti-Codex, create a second window or affect native Codex. Installed real-click acceptance remains pending until the turn ends naturally.
+
 ## 2026-07-28 Independent Upstream Activation and Manager Truth
 
 - Official/active Codex are `26.721.4979.0`; CodexPlusPlus source/runtime/active are `1.2.43`, ten patches, SHA-256 `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`. Transaction `20260728T062534394Z-159c9255129d4f4fb123737f7b605311` activated 121 runtime files; an independent 282-file inventory found zero hash mismatch and no staged runtime.
