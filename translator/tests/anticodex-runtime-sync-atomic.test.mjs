@@ -160,6 +160,15 @@ function createFixture({ repairOk = true } = {}) {
     "'http://127.0.0.1:19999'\n",
   );
   writeFixture(join(activeRuntime, "old-active-sentinel.txt"), "old-active\n");
+  writeFixture(
+    join(activeRuntime, "scripts", "repair-anticodex-shortcuts.ps1"),
+    [
+      "param([string]$InstallRoot)",
+      "Set-Content -LiteralPath (Join-Path $InstallRoot 'restored-repair-invoked.txt') -Value 'legacy-runtime' -Encoding ASCII",
+      "[pscustomobject]@{ ok = $true } | ConvertTo-Json -Compress",
+      "",
+    ].join("\n"),
+  );
   mkdirSync(appData, { recursive: true });
 
   return {
@@ -488,11 +497,13 @@ test("failure immediately after the old active rename restores the complete old 
 test("activation failure restores the exact old active directory", () => {
   const fixture = createFixture({ repairOk: false });
   try {
+    assert.equal(existsSync(join(fixture.activeRuntime, "scripts", "start-anticodex-hidden-node.vbs")), false);
     const result = runSync(fixture);
     assert.notEqual(result.status, 0, result.stdout);
     assert.match(`${result.stderr}\n${result.stdout}`, /shortcuts could not be refreshed/i);
     assert.equal(readFileSync(join(fixture.activeRuntime, "old-active-sentinel.txt"), "utf8"), "old-active\n");
     assert.equal(existsSync(join(fixture.activeRuntime, "scripts", "start-anticodex.ps1")), false);
+    assert.equal(readFileSync(join(fixture.installRoot, "restored-repair-invoked.txt"), "utf8").trim(), "legacy-runtime");
     const state = JSON.parse(readFileSync(join(fixture.installRoot, "runtime-sync-state.json"), "utf8"));
     assert.equal(state.state, "rolled_back");
     assert.equal(state.activeRuntime, fixture.activeRuntime);
@@ -528,7 +539,9 @@ test("restart failure restores and relaunches the old runtime before returning f
       .map((line) => JSON.parse(line));
     assert.equal(attempts.length, 2);
     assert.equal(attempts[0].oldActivePresent, false);
+    assert.equal(attempts[0].restoredShortcutRepairPresent, false);
     assert.equal(attempts[1].oldActivePresent, true);
+    assert.equal(attempts[1].restoredShortcutRepairPresent, true);
     const state = JSON.parse(readFileSync(join(fixture.installRoot, "runtime-sync-state.json"), "utf8"));
     assert.equal(state.state, "rolled_back");
     assert.equal(state.restoredRuntimeReady, true);

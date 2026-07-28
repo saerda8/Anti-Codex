@@ -207,6 +207,7 @@ $requiredSourceFiles = @(
     "scripts\start-anticodex-shortcut-broker.ps1",
     "scripts\start-anticodex.ps1",
     "scripts\hide-anticodex-console.ps1",
+    "scripts\start-anticodex-hidden-node.vbs",
     "scripts\start-anticodex-task.mjs",
     "scripts\start-anticodex-update-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
@@ -1233,6 +1234,7 @@ function Invoke-AntiCodexFixedRouteLauncher {
         $attempt = [ordered]@{
             attempt = $attemptNumber
             oldActivePresent = Test-Path -LiteralPath (Join-Path $targetRuntimeFull "old-active-sentinel.txt") -PathType Leaf
+            restoredShortcutRepairPresent = Test-Path -LiteralPath (Join-Path $installRootFull "restored-repair-invoked.txt") -PathType Leaf
         }
         Add-Content -LiteralPath $testLaunchLog -Value ($attempt | ConvertTo-Json -Compress) -Encoding UTF8
         if ([string]$env:ANTICODEX_RUNTIME_SYNC_TEST_LAUNCH_MODE -ceq "fail-new-succeed-restored" -and
@@ -1579,6 +1581,17 @@ try {
             if ($activeMoved -and [IO.Directory]::Exists($rollbackRuntimeFull)) {
                 Move-AntiCodexRuntimeDirectory -Source $rollbackRuntimeFull -Destination $targetRuntimeFull
                 $activeMoved = $false
+            }
+            if ([IO.Directory]::Exists($targetRuntimeFull)) {
+                $restoredShortcutRepairScript = Join-Path $targetRuntimeFull "scripts\repair-anticodex-shortcuts.ps1"
+                if (-not (Test-Path -LiteralPath $restoredShortcutRepairScript -PathType Leaf)) {
+                    throw "The previous Anti-Codex runtime was restored but its shortcut repair script is missing."
+                }
+                $restoredShortcutRepairJson = (@(& $restoredShortcutRepairScript -InstallRoot $installRootFull) -join [Environment]::NewLine)
+                $restoredShortcutRepairResult = $restoredShortcutRepairJson | ConvertFrom-Json
+                if (-not $restoredShortcutRepairResult.ok) {
+                    throw "The previous Anti-Codex runtime was restored but its shortcuts could not be refreshed."
+                }
             }
             $restoredRuntimeFingerprint = Get-AntiCodexRuntimeGenerationFingerprint -Directory $targetRuntimeFull
             if (-not $NoRestart -and [IO.Directory]::Exists($targetRuntimeFull)) {

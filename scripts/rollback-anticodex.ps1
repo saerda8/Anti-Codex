@@ -215,6 +215,8 @@ $swapComponent = Join-Path $installRoot "rollback-swap-codexplusplus"
 $startAntiCodex = Join-Path $sourceRoot "scripts\start-anticodex.ps1"
 $launchTaskName = "Anti-Codex Launcher"
 $launchTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-task.mjs"
+$hiddenNodeHostScript = Join-Path $sourceRoot "scripts\start-anticodex-hidden-node.vbs"
+$wscript = Join-Path ([Environment]::SystemDirectory) "wscript.exe"
 $baseUrlResolver = Join-Path $sourceRoot "scripts\resolve-anticodex-base-url.ps1"
 $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) { $env:ANTICODEX_HOST_SYNC_MARKER } else { Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock" }
 $env:ANTICODEX_HOST_SYNC_MARKER = $hostSyncMarker
@@ -860,7 +862,7 @@ function Get-AntiCodexLaunchTaskEvidence {
     $actionCount = [int]$definition.Actions.Count
     $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
     $node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
-    $expectedArguments = "`"$launchTaskScript`" --hide-console"
+    $expectedArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$launchTaskScript`""
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
     $taskUserName = [string]$definition.Principal.UserId
@@ -868,7 +870,7 @@ function Get-AntiCodexLaunchTaskEvidence {
         $actionCount -eq 1 -and
         $task.Enabled -and
         $action -and
-        [string]$action.Path -ieq $node -and
+        [string]$action.Path -ieq $wscript -and
         [string]$action.Arguments -ceq $expectedArguments -and
         [string]$action.WorkingDirectory -ieq $installRoot -and
         ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and

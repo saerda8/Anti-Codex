@@ -239,6 +239,7 @@ $postSyncVerifier = Join-Path $scriptsRoot "test-anticodex-installed-overall.ps1
 $startScript = Join-Path $scriptsRoot "start-anticodex.ps1"
 $fixedRouteSupervisorScript = Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"
 $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+$wscript = Join-Path ([Environment]::SystemDirectory) "wscript.exe"
 $interactivePowerShell = $powershell
 $interactivePowerShellCandidate = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe" } else { "" }
 if ($interactivePowerShellCandidate -and (Test-Path -LiteralPath $interactivePowerShellCandidate -PathType Leaf)) {
@@ -250,12 +251,13 @@ if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyCo
 $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
 $launchTaskName = "Anti-Codex Launcher"
 $updateTaskName = "Anti-Codex Updater"
+$hiddenNodeHostScript = Join-Path $scriptsRoot "start-anticodex-hidden-node.vbs"
 $launchTaskScript = Join-Path $scriptsRoot "start-anticodex-task.mjs"
 $shortcutBrokerScript = Join-Path $scriptsRoot "start-anticodex-shortcut-broker.ps1"
-$launchTaskActionArguments = "`"$launchTaskScript`" --hide-console"
+$launchTaskActionArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$launchTaskScript`""
 $updateTaskScript = Join-Path $scriptsRoot "start-anticodex-update-task.mjs"
 $launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shortcutBrokerScript`" -InstallRoot `"$installRoot`""
-$updateTaskActionArguments = "`"$updateTaskScript`" --hide-console"
+$updateTaskActionArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$updateTaskScript`""
 $programsPath = [Environment]::GetFolderPath("Programs")
 if (-not $programsPath) {
     $programsPath = if ($env:APPDATA) { Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" } else { Join-Path $env:USERPROFILE "AppData\Roaming\Microsoft\Windows\Start Menu\Programs" }
@@ -300,7 +302,7 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
     Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock"
 }
 
-foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $launchTaskScript, $shortcutBrokerScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
+foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $hiddenNodeHostScript, $launchTaskScript, $shortcutBrokerScript, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure "sync readiness missing required path: $path"
     }
@@ -579,11 +581,11 @@ function Get-AntiCodexLaunchTaskEvidence {
         $actualExecute = if ($action) { [string]$action.Path } else { "" }
         $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
         $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
-        $argumentMatch = [regex]::Match($actualArguments, '^"([^"]+)"\s+--hide-console$')
-        $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+        $argumentMatch = [regex]::Match($actualArguments, '^//B //NoLogo "([^"]+)" "([^"]+)" "([^"]+)"$')
+        $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[3].Value } else { "" }
         try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
         $actionMatches = (
-            $actualExecute -ieq $node -and
+            $actualExecute -ieq $wscript -and
             $actualArguments -ceq $launchTaskActionArguments -and
             $actualWorkingDirectory -ieq $installRoot -and
             $actualScript -ieq $launchTaskScript
@@ -659,7 +661,7 @@ function Get-AntiCodexUpdateTaskEvidence {
         $taskUserName = [string]$definition.Principal.UserId
         $actionMatches = (
             $actionCount -eq 1 -and
-            $actualExecute -ieq $node -and
+            $actualExecute -ieq $wscript -and
             $actualArguments -ceq $updateTaskActionArguments -and
             $actualWorkingDirectory -ieq $installRoot
         )
@@ -686,7 +688,7 @@ function Get-AntiCodexUpdateTaskEvidence {
             ok = ($actionMatches -and $principalMatches -and $settingsMatch)
             exists = $true
             taskName = $updateTaskName
-            expectedExecute = $node
+            expectedExecute = $wscript
             actualExecute = $actualExecute
             expectedArguments = $updateTaskActionArguments
             actualArguments = $actualArguments

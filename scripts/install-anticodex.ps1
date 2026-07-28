@@ -439,6 +439,7 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\apply-anticodex-upstream.ps1"),
         (Join-Path $runtime "scripts\start-anticodex.ps1"),
         (Join-Path $runtime "scripts\hide-anticodex-console.ps1"),
+        (Join-Path $runtime "scripts\start-anticodex-hidden-node.vbs"),
         (Join-Path $runtime "scripts\start-anticodex-task.mjs"),
         (Join-Path $runtime "scripts\start-anticodex-shortcut-broker.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-update-task.mjs"),
