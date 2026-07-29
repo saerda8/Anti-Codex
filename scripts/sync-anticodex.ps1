@@ -673,7 +673,7 @@ function Start-AntiCodexAfterSync {
     }
     $task = Assert-AntiCodexLaunchTaskContract
     if ([int]$task.State -eq 3) {
-        [void]$task.Run($null)
+        Start-ScheduledTask -TaskName $launchTaskName
     } elseif ([int]$task.State -notin @(2, 4)) {
         throw "The isolated Anti-Codex launch task is not ready, queued, or running."
     }

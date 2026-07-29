@@ -186,7 +186,7 @@ try {
         if (-not $queued) {
             throw "Anti-Codex refused to replace a detailed update status while starting the updater task."
         }
-        [void]$taskEvidence.task.Run($null)
+        Start-ScheduledTask -TaskName $updateTaskName
         if (-not (Wait-AntiCodexUpdateTaskRunning -TimeoutSeconds 5)) {
             throw "The isolated Anti-Codex updater task did not enter the running state."
         }

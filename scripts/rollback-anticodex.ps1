@@ -910,7 +910,7 @@ function Start-AntiCodexThroughTask {
     }
     $evidence = Get-AntiCodexLaunchTaskEvidence
     if (-not $evidence.ok) { throw "The isolated Anti-Codex launch task is missing or stale." }
-    [void]$evidence.task.Run($null)
+    Start-ScheduledTask -TaskName $launchTaskName
 }
 
 function Wait-AntiCodexPostRollbackReady {

@@ -1282,7 +1282,7 @@ function Invoke-AntiCodexFixedRouteLauncher {
         $service.Connect()
         $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
         if ([int]$task.State -eq 3) {
-            [void]$task.Run($null)
+            Start-ScheduledTask -TaskName "Anti-Codex Launcher"
         } elseif ([int]$task.State -notin @(2, 4)) {
             throw "The isolated Anti-Codex launch task is not ready, queued, or running."
         }

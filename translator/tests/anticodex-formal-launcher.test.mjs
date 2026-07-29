@@ -140,10 +140,10 @@ test("host sync restarts outside native Codex process ownership", () => {
   assert.match(hostSync, /Schedule\.Service/);
   assert.equal([...hostSync.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
   assert.match(hostSync, /\$script:antiCodexScheduleService/);
-  assert.match(restart, /\.Run\(\$null\)/);
-  assert.match(restart, /\$task\.State -eq 3[\s\S]*?\.Run\(\$null\)/);
+  assert.match(restart, /Start-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.match(restart, /\$task\.State -eq 3[\s\S]*?Start-ScheduledTask/);
   assert.match(restart, /\$task\.State -notin @\(2, 4\)/);
-  assert.doesNotMatch(restart, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.doesNotMatch(restart, /\.Run\(\$null\)/);
   assert.doesNotMatch(restart, /Start-Process -FilePath \$powershell|cmd\.exe/);
 });
 
@@ -158,8 +158,8 @@ test("the built-in Manager sync delegates to an independent updater task", () =>
   assert.match(syncLauncher, /Schedule\.Service/);
   assert.equal([...syncLauncher.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
   assert.match(syncLauncher, /\$script:antiCodexScheduleService/);
-  assert.match(syncLauncher, /\.Run\(\$null\)/);
-  assert.doesNotMatch(syncLauncher, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.match(syncLauncher, /Start-ScheduledTask\s+-TaskName\s+\$updateTaskName/);
+  assert.doesNotMatch(syncLauncher, /\.Run\(\$null\)/);
   assert.match(syncLauncher, /function Get-AntiCodexUpdateTaskEvidence/);
   assert.match(syncLauncher, /function Wait-AntiCodexUpdateTaskRunning/);
   assert.match(syncLauncher, /if \(\$FromUpdateTask\)[\s\S]*?Get-AntiCodexUpdateTaskEvidence[\s\S]*?stateCode -ne 4[\s\S]*?& \$syncScript -FromUpdateTask/);
@@ -183,11 +183,11 @@ test("the built-in Manager sync delegates to an independent updater task", () =>
 test("the updater handoff publishes guarded status without overwriting detailed sync stages", () => {
   const readyGuard = syncLauncher.indexOf("[int]$taskEvidence.stateCode -ne 3");
   const queuedWrite = syncLauncher.indexOf('-Stage "updater_queued"', readyGuard);
-  const taskRun = syncLauncher.indexOf("$taskEvidence.task.Run($null)", queuedWrite);
+  const taskRun = syncLauncher.indexOf("Start-ScheduledTask -TaskName $updateTaskName", queuedWrite);
   assert.ok(readyGuard >= 0, "the launcher must require a Ready task before publishing queued status");
   assert.ok(queuedWrite > readyGuard, "queued status must be published after the Ready check");
   assert.ok(taskRun > queuedWrite, "queued status must be published immediately before the only task Run");
-  assert.equal([...syncLauncher.matchAll(/\$taskEvidence\.task\.Run\(\$null\)/g)].length, 1);
+  assert.equal([...syncLauncher.matchAll(/Start-ScheduledTask -TaskName \$updateTaskName/g)].length, 1);
   const queuedCalls = [...syncLauncher.matchAll(/^[^\r\n]*Set-AntiCodexUpdateOperation[^\r\n]*-Stage "updater_queued"[^\r\n]*$/gm)];
   assert.equal(queuedCalls.length, 2);
   for (const call of queuedCalls) assert.match(call[0], /-NewOperationId \$newOperationId/);
@@ -278,7 +278,8 @@ test("host sync gracefully releases the old launch task before starting the new 
   assert.ok(forcedStop > taskContract, "forced task stop must follow Launcher contract validation");
   assert.match(stopping, /Stop-AntiCodexLaunchTaskForMaintenance[\s\S]*?Wait-AntiCodexHostRelease[\s\S]*?Wait-AntiCodexComponentRelease/);
   assert.match(hostSync, /function Wait-AntiCodexLaunchTaskStopped/);
-  assert.match(hostSync, /\.Run\(\$null\)/);
+  assert.match(hostSync, /Start-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.doesNotMatch(hostSync, /\.Run\(\$null\)/);
   const restartStart = hostSync.indexOf("function Start-AntiCodexAfterSync");
   const restartEnd = hostSync.indexOf("function Get-OriginalCodexProcessSnapshot", restartStart);
   const restart = restartStart >= 0 && restartEnd > restartStart ? hostSync.slice(restartStart, restartEnd) : "";
@@ -334,8 +335,8 @@ test("automatic rollback stops and restarts only through the isolated Launcher t
   assert.match(rollback, /\$script:antiCodexScheduleService/);
   assert.match(rollback, /\.Stop\(0\)/);
   assert.match(rollback, /Wait-AntiCodexLaunchTaskStopped/);
-  assert.match(rollback, /\.Run\(\$null\)/);
-  assert.doesNotMatch(rollback, /Get-ScheduledTask|Start-ScheduledTask|Stop-ScheduledTask/);
+  assert.match(rollback, /Start-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.doesNotMatch(rollback, /\.Run\(\$null\)/);
   assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
 });
 
@@ -554,7 +555,8 @@ test("runtime sync relaunches through the durable isolated Launcher task", () =>
 
   assert.match(relaunch, /Schedule\.Service/);
   assert.match(relaunch, /Anti-Codex Launcher/);
-  assert.match(relaunch, /\.Run\(\$null\)/);
+  assert.match(relaunch, /Start-ScheduledTask\s+-TaskName\s+"Anti-Codex Launcher"/);
+  assert.doesNotMatch(relaunch, /\.Run\(\$null\)/);
   assert.doesNotMatch(relaunch, /Win32_Process|InlineSupervisor|start-anticodex\.ps1/);
 });
 
@@ -631,7 +633,7 @@ test("runtime sync starts a Ready Launcher or reuses a queued/running Launcher",
   const stop = relaunch.indexOf("$task.Stop(0)");
   const afterStop = stop >= 0 ? relaunch.slice(stop) : "";
 
-  assert.match(relaunch, /\$task\.State -eq 3[\s\S]*?\$task\.Run\(\$null\)/);
+  assert.match(relaunch, /\$task\.State -eq 3[\s\S]*?Start-ScheduledTask/);
   assert.match(relaunch, /\$task\.State -notin @\(2, 4\)/);
   assert.match(relaunch, /\$task\.State -in @\(2, 4\)[\s\S]*?\$task\.Stop\(0\)/);
   assert.match(afterStop, /while \(\[int\]\$task\.State -ne 3/);
