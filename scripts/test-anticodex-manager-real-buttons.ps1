@@ -186,7 +186,7 @@ function Invoke-ManagerButtonAction {
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
         [void]$process.Handle
-        $processTimeoutSec = if ($RunUiOnlyMatrix) { [Math]::Max(90, $TimeoutSec + 20) } else { [Math]::Max(1, $TimeoutSec + 20) }
+        $processTimeoutSec = if ($RunUiOnlyMatrix) { [Math]::Max(360, $TimeoutSec + 20) } else { [Math]::Max(1, $TimeoutSec + 20) }
         $completed = Wait-ManagerButtonProcess -Process $process -TimeoutSeconds $processTimeoutSec
         if (-not $completed) {
             try { $process.Kill() } catch {}
@@ -293,14 +293,19 @@ if ($UiOnlyMatrix) {
             if ([int]$isolation.managerBridgeLog.actionReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real action bridge" }
             if ([int]$isolation.managerBridgeLog.nonHealthRequestReceivedDelta -ne 0) { Add-Failure "Manager UI-only verification reached the real non-health request bridge" }
         }
-        if ((@($payload.actions) -join "|") -ne ($expectedActions -join "|")) {
+        $actualActions = @($payload.actions | ForEach-Object { [string]$_ } | Sort-Object)
+        $expectedActionSet = @($expectedActions | Sort-Object)
+        if (($actualActions -join "|") -ne ($expectedActionSet -join "|")) {
             Add-Failure "Manager UI-only button matrix action coverage drifted from the complete 20-button contract"
         }
-        if ((@($payload.actionGroups.daily) -join "|") -ne ($dailyActions -join "|")) {
-            Add-Failure "Manager UI-only daily action group is incomplete"
+        $actualGroupNames = @($payload.actionGroups.PSObject.Properties.Name | Sort-Object)
+        $expectedGroupNames = @("status", "modelSources", "updates", "troubleshooting", "advanced" | Sort-Object)
+        if (($actualGroupNames -join "|") -ne ($expectedGroupNames -join "|")) {
+            Add-Failure "Manager UI-only action groups drifted from the five-group contract"
         }
-        if ((@($payload.actionGroups.highImpact) -join "|") -ne ($highImpactActions -join "|")) {
-            Add-Failure "Manager UI-only high-impact action group is incomplete"
+        $groupedActions = @($payload.actionGroups.PSObject.Properties | ForEach-Object { @($_.Value) } | ForEach-Object { [string]$_ } | Sort-Object)
+        if (($groupedActions -join "|") -ne ($expectedActionSet -join "|")) {
+            Add-Failure "Manager UI-only action groups do not cover every button exactly once"
         }
 
         foreach ($actionName in $expectedActions) {

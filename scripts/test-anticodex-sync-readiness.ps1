@@ -359,7 +359,7 @@ if (-not (Has-Text $managerInjectScript "__ANTICODEX_MANAGER_API__")) { Add-Fail
 if (-not (Has-Text $managerInjectScript "apiCandidates")) { Add-Failure "manager injection missing gateway URL fallback candidates" }
 if (Has-Text $managerInjectScript 'createElement\("button"\)[\s\S]{0,500}anticodex-manager-button') { Add-Failure "manager injection still creates the removed floating Manager button" }
 if (-not (Has-Text $managerInjectScript "anticodex-panel")) { Add-Failure "manager injection missing embedded manager panel" }
-if (-not (Has-Text $managerInjectScript "native-panel-v110")) { Add-Failure "manager injection did not bump native panel version" }
+if (-not (Has-Text $managerInjectScript "native-panel-v111")) { Add-Failure "manager injection did not bump native panel version" }
 if (-not (Has-Text $managerInjectScript 'accountSwitch')) { Add-Failure "manager injection is missing the Antigravity account switch action" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager injection missing CDP action bridge support" }
 if (-not (Has-Text $managerInjectScript "/anticodex/manager/action-script")) { Add-Failure "manager injection missing script-based action endpoint" }
@@ -375,7 +375,7 @@ if (-not (Has-Text $managerBridgeScript "__ANTICODEX_ACK_MANAGER_ACTION__")) { A
 if (-not (Has-Text $managerBridgeScript "leaseCount")) { Add-Failure "manager bridge missing action queue leasing" }
 if (Has-Text $managerBridgeScript "splice\(0\)") { Add-Failure "manager bridge still destructively drains actions before acknowledgement" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager bridge missing page action function" }
-if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v110"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
+if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v111"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
 if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure "manager open injection still creates a separate script tag" }
 if (-not (Has-Text $validatorScript "resources\\codex\.exe")) { Add-Failure "candidate validator missing bundled Codex CLI check" }

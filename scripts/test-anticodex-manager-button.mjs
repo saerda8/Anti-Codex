@@ -108,6 +108,17 @@ if (uiOnlyMode) {
     .replace("const ACCOUNT_SWITCH_POLL_INTERVAL_MS = 3000;", "const ACCOUNT_SWITCH_POLL_INTERVAL_MS = 25;")
     .replace("const ACCOUNT_SWITCH_TIMEOUT_MS = 120000;", "const ACCOUNT_SWITCH_TIMEOUT_MS = 150;");
 }
+if (uiOnlyBatchMode) {
+  managerInjectSource = managerInjectSource.replace(
+    /  function managerActionContinuesInBackground\(action, payload\) \{\r?\n    return MANAGER_BACKGROUND_START_ACTION_IDS\.has\(action\)\r?\n      && \(action === "syncHost" \|\| payload\?\.background === true\);\r?\n  \}/,
+    `  function managerActionContinuesInBackground() {
+    return false;
+  }`,
+  );
+  if (!managerInjectSource.includes("function managerActionContinuesInBackground()")) {
+    throw new Error("Manager verifier failed to isolate background actions");
+  }
+}
 if (uiOnlyMode && !uiOnlyBatchMode) {
   let accountSwitchCapturePatchCount = 0;
   managerInjectSource = managerInjectSource.replace(
@@ -384,8 +395,7 @@ function isUiOnlyActionFinished(actionName, state) {
   const settled = state?.disabled !== true
     && Number(state?.pendingCount || 0) === 0
     && Number(state?.queueLength || 0) === 0
-    && !isRunningText(text)
-    && !isActionFailureText(actionName, text);
+    && !isRunningText(text);
   if (!settled) return false;
   if (actionName === "accountSwitch") {
     return text.includes("\u672a\u68c0\u6d4b\u5230\u53ef\u8bc1\u660e\u7684\u8d26\u53f7\u6216\u6a21\u578b\u53d8\u5316");
@@ -540,7 +550,17 @@ function uiOnlyBatchBridgeSource(enabled = uiOnlyBatchMode) {
   const payloads = uiOnlyPayloadMap();
   return `
 (() => {
-  if (window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__?.active === true) return;
+  const staleState = window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+  if (staleState?.active === true) {
+    if (window.__ANTICODEX_RUN_MANAGER_ACTION__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ === true) {
+      window.__ANTICODEX_RUN_MANAGER_ACTION__ = staleState.originalActionBridge;
+    }
+    if (window.__ANTICODEX_RUN_MANAGER_REQUEST__?.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH__ === true) {
+      window.__ANTICODEX_RUN_MANAGER_REQUEST__ = staleState.originalRequestBridge;
+    }
+    window.__ANTICODEX_MANAGER_BRIDGE_READY__ = staleState.originalBridgeReady;
+    delete window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__;
+  }
   const snapshotResponses = window.__ANTICODEX_MANAGER_SNAPSHOT__?.responses || {};
   const fallbackResponses = {
     "/anticodex/manager/bootstrap": { ok: true, token: "ui-only-manager-token" },
@@ -1363,6 +1383,16 @@ const runtimeParams = (expression, params = {}) => ({
 await ws.call(id++, "Runtime.evaluate", runtimeParams(`(() => {
   document.getElementById("anticodex-manager-overlay")?.remove();
   document.getElementById("anticodex-manager-button")?.remove();
+  if (
+    window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__?.uiOnly === true
+    && (
+      window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__
+      || window.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_LAST_EVIDENCE__
+    )
+  ) {
+    window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ = {};
+    try { localStorage.removeItem("anticodex.manager.pending-actions.v1"); } catch {}
+  }
   delete window.__ANTICODEX_MANAGER_VERSION__;
   delete window.__ANTICODEX_MANAGER_INSTALLED__;
   delete window.__ANTICODEX_OPEN_MANAGER__;

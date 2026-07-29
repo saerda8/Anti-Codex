@@ -774,6 +774,7 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.match(managerButtonTest, /const uiOnlyMatrix = flagEnabled\("--ui-only-matrix"\)/);
   assert.match(managerButtonTest, /const uiOnlyBatchMode = uiOnlyMatrix \|\| flagEnabled\("--ui-only-batch"\)/);
   assert.match(managerButtonTest, /const uiOnlyMode = verificationMode === "ui-only" \|\| uiOnlyBatchMode/);
+  assert.match(managerButtonTest, /if \(uiOnlyBatchMode\) \{[\s\S]*?function managerActionContinuesInBackground\(\) \{[\s\S]*?return false/);
   assert.match(managerButtonTest, /MANAGER_ALL_ACTION_IDS\.filter\(\(actionName\) => actionName !== "upstreamConfig"\)/);
   assert.match(managerButtonTest, /Object\.entries\(MANAGER_ACTION_GROUPS\)/);
   assert.match(managerButtonTest, /function managerActionLayoutFailures\(layout\)/);
@@ -784,7 +785,10 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.match(uiStateTest, /const actionGroups = Array\.from\(reopenedOverlay\?\.querySelectorAll\("\[data-action-group\]"\)/);
   assert.doesNotMatch(uiStateTest, /const actionGroups = Object\.fromEntries/);
   assert.match(managerButtonTest, /output\.mode = "ui-only-matrix"/);
+  assert.match(managerRealButtonsTest, /\$processTimeoutSec = if \(\$RunUiOnlyMatrix\) \{ \[Math\]::Max\(360,/);
   assert.match(managerButtonTest, /function uiOnlyBatchBridgeSource\(enabled = uiOnlyBatchMode\)/);
+  assert.match(managerButtonTest, /const staleState = window\.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__/);
+  assert.match(managerButtonTest, /localStorage\.removeItem\("anticodex\.manager\.pending-actions\.v1"\)/);
   assert.match(managerButtonTest, /__ANTICODEX_RUN_MANAGER_REQUEST__/);
   assert.match(managerButtonTest, /managerActionDelta === 0/);
   assert.match(managerButtonTest, /managerNonHealthRequestDelta === 0/);
@@ -795,6 +799,8 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.match(managerRealButtonsTest, /managerBridgeLog\.actionReceivedDelta/);
   assert.match(managerRealButtonsTest, /managerBridgeLog\.nonHealthRequestReceivedDelta/);
   assert.match(managerRealButtonsTest, /traffic\.requestDelta/);
+  assert.doesNotMatch(managerRealButtonsTest, /actionGroups\.daily|actionGroups\.highImpact/);
+  assert.match(managerRealButtonsTest, /\$expectedGroupNames = @\("status", "modelSources", "updates", "troubleshooting", "advanced"/);
 });
 
 test("Manager log counter excludes only the exact /health path", () => {
@@ -854,6 +860,10 @@ test("Manager ui-only matrix shortens account observation without editing produc
   assert.match(setup, /ui-only-model-fingerprint/);
   assert.match(setup, /failed to isolate account-switch state capture/i);
   assert.match(managerButtonTest, /function isUiOnlyActionFinished\(actionName, state\)/);
+  assert.doesNotMatch(
+    managerButtonTest.match(/function isUiOnlyActionFinished\(actionName, state\) \{[\s\S]*?\n\}/)?.[0] || "",
+    /isActionFailureText/,
+  );
   assert.match(managerButtonTest, /actionName === "accountSwitch"/);
 });
 
@@ -1192,8 +1202,9 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v110"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v110"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v111"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v111"/);
+  assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
     managerInject,
