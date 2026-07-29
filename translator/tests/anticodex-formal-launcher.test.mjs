@@ -254,10 +254,11 @@ test("the updater broker records an early missing-launcher failure without runni
   }
 });
 
-test("Manager names the updater queue and handoff stages in Chinese", () => {
+test("Manager names the updater queue, handoff, and component candidate stages in Chinese", () => {
   assert.match(managerInject, /updater_queued:\s*"\\u5df2\\u6392\\u961f\\uff0c\\u7b49\\u5f85\\u66f4\\u65b0\\u4efb\\u52a1"/);
   assert.match(managerInject, /updater_handoff:\s*"\\u66f4\\u65b0\\u4efb\\u52a1\\u5df2\\u63a5\\u7ba1"/);
   assert.match(managerInject, /updater_handoff_failed:\s*"\\u66f4\\u65b0\\u4efb\\u52a1\\u4ea4\\u63a5\\u5931\\u8d25"/);
+  assert.match(managerInject, /component_candidate:\s*"\\u51c6\\u5907 CodexPlusPlus \\u5019\\u9009\\u7ec4\\u4ef6"/);
 });
 
 test("host sync gracefully releases the old launch task before starting the new host", () => {
