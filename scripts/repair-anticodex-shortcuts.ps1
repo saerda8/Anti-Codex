@@ -111,6 +111,16 @@ function Get-AntiCodexRegisteredTask {
     return (Get-AntiCodexScheduleRoot).GetTask("\$TaskName")
 }
 
+function Set-AntiCodexExistingTaskAction {
+    param(
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [Parameter(Mandatory = $true)][string]$Arguments
+    )
+
+    $action = New-ScheduledTaskAction -Execute $wscript -Argument $Arguments -WorkingDirectory $installRootFull
+    Set-ScheduledTask -TaskPath "\" -TaskName $TaskName -Action $action -ErrorAction Stop | Out-Null
+}
+
 function Get-AntiCodexTaskStateName {
     param([int]$State)
     switch ($State) {
@@ -210,6 +220,17 @@ function Set-AntiCodexLaunchTask {
     $existing = Get-AntiCodexLaunchTaskEvidence
     if ($existing.ok) { return $existing }
 
+    $actionUpdateError = ""
+    if ($existing.exists) {
+        try {
+            Set-AntiCodexExistingTaskAction -TaskName $launchTaskName -Arguments $launchTaskActionArguments
+            $updated = Get-AntiCodexLaunchTaskEvidence
+            if ($updated.ok) { return $updated }
+        } catch {
+            $actionUpdateError = $_.Exception.Message
+        }
+    }
+
     $taskXmlPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-launch-task-" + [Guid]::NewGuid().ToString("N") + ".xml")
     try {
         $sidXml = [Security.SecurityElement]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
@@ -255,13 +276,17 @@ function Set-AntiCodexLaunchTask {
             throw (($taskOutput | ForEach-Object { [string]$_ }) -join " ")
         }
     } catch {
+        $registrationError = $_.Exception.Message
+        if ($actionUpdateError) {
+            $registrationError = "Existing task action update failed: $actionUpdateError Full task registration failed: $registrationError"
+        }
         return [pscustomobject]@{
             ok = $false
             exists = $false
             taskName = $launchTaskName
             expectedScript = $startScript
             actualScript = ""
-            error = $_.Exception.Message
+            error = $registrationError
         }
     } finally {
         if (Test-Path -LiteralPath $taskXmlPath -PathType Leaf) {
@@ -357,6 +382,17 @@ function Set-AntiCodexUpdateTask {
     $existing = Get-AntiCodexUpdateTaskEvidence
     if ($existing.ok) { return $existing }
 
+    $actionUpdateError = ""
+    if ($existing.exists) {
+        try {
+            Set-AntiCodexExistingTaskAction -TaskName $updateTaskName -Arguments $updateTaskActionArguments
+            $updated = Get-AntiCodexUpdateTaskEvidence
+            if ($updated.ok) { return $updated }
+        } catch {
+            $actionUpdateError = $_.Exception.Message
+        }
+    }
+
     $taskXmlPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-update-task-" + [Guid]::NewGuid().ToString("N") + ".xml")
     try {
         $sidXml = [Security.SecurityElement]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
@@ -401,12 +437,16 @@ function Set-AntiCodexUpdateTask {
             throw (($taskOutput | ForEach-Object { [string]$_ }) -join " ")
         }
     } catch {
+        $registrationError = $_.Exception.Message
+        if ($actionUpdateError) {
+            $registrationError = "Existing task action update failed: $actionUpdateError Full task registration failed: $registrationError"
+        }
         return [pscustomobject]@{
             ok = $false
             exists = $false
             taskName = $updateTaskName
             expectedScript = $updateTaskScript
-            error = $_.Exception.Message
+            error = $registrationError
         }
     } finally {
         if (Test-Path -LiteralPath $taskXmlPath -PathType Leaf) {

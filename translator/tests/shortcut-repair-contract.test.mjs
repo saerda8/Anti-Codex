@@ -347,11 +347,16 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   const mainSpecs = repairScript.match(/\$shortcutSpecs\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   const launchTaskEvidence = repairScript.match(/function Get-AntiCodexLaunchTaskEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   const launchTaskRegistration = repairScript.match(/function Set-AntiCodexLaunchTask[\s\S]*?return Get-AntiCodexLaunchTaskEvidence\s*\n\}/)?.[0] ?? "";
+  const updateTaskRegistration = repairScript.match(/function Set-AntiCodexUpdateTask[\s\S]*?return Get-AntiCodexUpdateTaskEvidence\s*\n\}/)?.[0] ?? "";
   const interactiveSpecs = mainSpecs.split(/\r?\n/).filter((entry) => /-UseLaunchTask\b/.test(entry));
   assert.equal(interactiveSpecs.length, 2);
   assert.ok(interactiveSpecs.every((entry) => /-UseLaunchTask\b/.test(entry)));
   assert.doesNotMatch(mainSpecs, /KeepLauncherAlive|Anti-Codex Launcher\.exe/);
-  assert.doesNotMatch(repairScript, /Register-ScheduledTask/);
+  assert.match(repairScript, /function Set-AntiCodexExistingTaskAction/);
+  assert.match(repairScript, /New-ScheduledTaskAction -Execute \$wscript -Argument \$Arguments -WorkingDirectory \$installRootFull/);
+  assert.match(repairScript, /Set-ScheduledTask -TaskPath "\\" -TaskName \$TaskName -Action \$action/);
+  assert.match(launchTaskRegistration, /if \(\$existing\.exists\)[\s\S]*?Set-AntiCodexExistingTaskAction[\s\S]*?if \(\$updated\.ok\) \{ return \$updated \}/);
+  assert.match(updateTaskRegistration, /if \(\$existing\.exists\)[\s\S]*?Set-AntiCodexExistingTaskAction[\s\S]*?if \(\$updated\.ok\) \{ return \$updated \}/);
   assert.match(repairScript, /Schedule\.Service/);
   assert.equal([...repairScript.matchAll(/New-Object -ComObject "Schedule\.Service"/g)].length, 1);
   assert.match(repairScript, /\$script:antiCodexScheduleService/);
@@ -370,7 +375,6 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /\$definition\.Settings\.AllowDemandStart/);
   assert.match(repairScript, /<Command>\$wscriptXml<\/Command>/);
   assert.match(repairScript, /\$launchTaskActionArguments\s*=\s*"\/\/B \/\/NoLogo `"\$hiddenNodeHostScript`" `"\$node`" `"\$launchTaskScript`""/);
-  assert.doesNotMatch(repairScript, /New-ScheduledTaskAction/);
   assert.match(repairScript, /\$shortcut\.TargetPath\s*=\s*\[string\]\$Spec\.expectedTarget/);
   assert.match(repairScript, /schtasks\.exe/);
   assert.match(repairScript, /Schedule\.Service/);
