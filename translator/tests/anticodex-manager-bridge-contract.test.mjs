@@ -362,6 +362,14 @@ test("startup Manager injection refreshes its CDP target after building the loca
   assert.ok(snapshotEnd >= 0 && targetLookup > snapshotEnd && socketOpen > targetLookup);
 });
 
+test("startup Manager watcher defers the full snapshot until its bridge is available", () => {
+  const injectOnce = extractNamedFunction(cdpInject, "injectOnce");
+  assert.match(
+    injectOnce,
+    /const snapshotPaths = managerWatchMode\s*\?\s*completeSnapshotPaths\.slice\(0,\s*2\)\s*:\s*completeSnapshotPaths/,
+  );
+});
+
 test("Manager bridge coalesces Target crashed recovery and never overlaps polls", async () => {
   const sessions = [fakeBridgeSession("old"), fakeBridgeSession("current")];
   let openCount = 0;

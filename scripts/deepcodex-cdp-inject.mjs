@@ -363,7 +363,7 @@ async function injectOnce() {
         referer: `${baseUrl}/anticodex/manager`,
       };
       try {
-        for (const path of [
+        const completeSnapshotPaths = [
           "/anticodex/manager/bootstrap",
           "/health",
           "/models",
@@ -374,21 +374,27 @@ async function injectOnce() {
           "/backend-api/ps/plugins/installed",
           "/backend-api/aip/connectors",
           "/backend-api/plugins/list",
-        ]) {
+        ];
+        const snapshotPaths = managerWatchMode
+          ? completeSnapshotPaths.slice(0, 2)
+          : completeSnapshotPaths;
+        for (const path of snapshotPaths) {
           try {
             candidateResponses[path] = await fetchManagerJson(baseUrl, path, { headers: trustedHeaders });
           } catch (err) {
             candidateErrors[path] = String(err?.message || err);
           }
         }
-        try {
-          candidateResponses["/backend-api/wham/apps"] = await fetchManagerJson(baseUrl, "/backend-api/wham/apps", {
-            method: "POST",
-            headers: { ...trustedHeaders, "content-type": "application/json" },
-            body: "{}",
-          });
-        } catch (err) {
-          candidateErrors["/backend-api/wham/apps"] = String(err?.message || err);
+        if (!managerWatchMode) {
+          try {
+            candidateResponses["/backend-api/wham/apps"] = await fetchManagerJson(baseUrl, "/backend-api/wham/apps", {
+              method: "POST",
+              headers: { ...trustedHeaders, "content-type": "application/json" },
+              body: "{}",
+            });
+          } catch (err) {
+            candidateErrors["/backend-api/wham/apps"] = String(err?.message || err);
+          }
         }
         candidateResponses["/backend-api/ps/plugins/installed"] ||= { plugins: [] };
         candidateResponses["/backend-api/aip/connectors"] ||= { connectors: [] };
