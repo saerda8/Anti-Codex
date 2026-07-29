@@ -234,7 +234,11 @@ $developmentWorkerMcpNames = @(
     "kilo-worker",
     "codebuddy-worker",
     "agnes-worker",
-    "antigravity-code-worker"
+    "antigravity-code-worker",
+    "xiaoqiang1",
+    "xiaoqiang2",
+    "xiaoqiang3",
+    "xiaoqiang4"
 )
 $excludedSharedDevelopmentMcpNames = @()
 $unexpectedLocalDevelopmentMcpNames = @()

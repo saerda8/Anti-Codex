@@ -25,6 +25,48 @@ function targetResponse(targets) {
   };
 }
 
+test("fixed-route renderer probe uses the platform WebSocket client", async () => {
+  const originalWebSocket = globalThis.WebSocket;
+  const snapshot = {
+    readyState: "complete",
+    hasBody: true,
+    text: "Anti-Codex 管理",
+    hasInteractive: true,
+    hasComposer: true,
+    primaryHeading: "",
+    buttonLabels: ["管理"],
+  };
+  class PlatformWebSocket {
+    constructor() {
+      queueMicrotask(() => this.onopen?.());
+    }
+
+    send(payload) {
+      const request = JSON.parse(payload);
+      queueMicrotask(() => this.onmessage?.({
+        data: JSON.stringify({
+          id: request.id,
+          result: { result: { value: snapshot } },
+        }),
+      }));
+    }
+
+    close() {}
+  }
+  globalThis.WebSocket = PlatformWebSocket;
+  try {
+    assert.equal(await cdpPageReady(18318, {
+      fetchImpl: async () => targetResponse([{
+        type: "page",
+        url: "app://-/index.html",
+        webSocketDebuggerUrl: "ws://127.0.0.1:18318/devtools/page/anticodex",
+      }]),
+    }), true);
+  } finally {
+    globalThis.WebSocket = originalWebSocket;
+  }
+});
+
 test("fixed-route readiness requires a hydrated copied-client renderer", async () => {
   const target = {
     type: "page",

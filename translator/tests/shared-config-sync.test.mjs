@@ -122,6 +122,10 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
     "codebuddy-worker",
     "agnes-worker",
     "antigravity-code-worker",
+    "xiaoqiang1",
+    "xiaoqiang2",
+    "xiaoqiang3",
+    "xiaoqiang4",
   ];
 
   const sourceLines = ['model = "gpt"', ""];
@@ -180,6 +184,10 @@ test("MCP verifier rejects development workers inside the Anti-Codex product con
     "codebuddy-worker",
     "agnes-worker",
     "antigravity-code-worker",
+    "xiaoqiang1",
+    "xiaoqiang2",
+    "xiaoqiang3",
+    "xiaoqiang4",
   ]) {
     assert.equal(verifier.includes(worker), true, `verifier must classify ${worker}`);
   }

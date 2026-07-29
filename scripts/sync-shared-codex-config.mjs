@@ -20,6 +20,10 @@ const developmentWorkerServers = new Set([
   "codebuddy-worker",
   "agnes-worker",
   "antigravity-code-worker",
+  "xiaoqiang1",
+  "xiaoqiang2",
+  "xiaoqiang3",
+  "xiaoqiang4",
 ]);
 const includeDevelopmentWorkers = options.includes("--include-development-workers");
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);

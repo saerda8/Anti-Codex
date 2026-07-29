@@ -2048,131 +2048,6 @@ function sendJson(response, statusCode, value) {
   response.end(body);
 }
 
-class CdpProbeSocket {
-  constructor(url) {
-    this.url = new URL(url);
-    this.socket = null;
-    this.buffer = Buffer.alloc(0);
-    this.pending = new Map();
-  }
-
-  async open(timeoutMs = 1_500) {
-    if (this.url.protocol !== "ws:" || !["127.0.0.1", "localhost", "::1"].includes(this.url.hostname)) {
-      throw new Error("CDP renderer probe must use a loopback WebSocket.");
-    }
-    const key = randomBytes(16).toString("base64");
-    this.socket = connect({ host: this.url.hostname, port: Number(this.url.port) });
-    await new Promise((resolveOpen, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timed out opening the CDP renderer probe.")), timeoutMs);
-      const fail = (error) => {
-        clearTimeout(timer);
-        reject(error);
-      };
-      this.socket.once("error", fail);
-      this.socket.once("connect", () => {
-        this.socket.write([
-          `GET ${this.url.pathname}${this.url.search} HTTP/1.1`,
-          `Host: ${this.url.host}`,
-          "Upgrade: websocket",
-          "Connection: Upgrade",
-          `Sec-WebSocket-Key: ${key}`,
-          "Sec-WebSocket-Version: 13",
-          "",
-          "",
-        ].join("\r\n"));
-      });
-      const onHandshake = (chunk) => {
-        this.buffer = Buffer.concat([this.buffer, chunk]);
-        const split = this.buffer.indexOf("\r\n\r\n");
-        if (split === -1) return;
-        const header = this.buffer.slice(0, split).toString("utf8");
-        this.buffer = this.buffer.slice(split + 4);
-        this.socket.off("data", onHandshake);
-        this.socket.off("error", fail);
-        clearTimeout(timer);
-        if (!/^HTTP\/1\.1 101\b/.test(header)) {
-          reject(new Error(`CDP WebSocket upgrade failed: ${header.split("\r\n")[0]}`));
-          return;
-        }
-        this.socket.on("data", (data) => this.onData(data));
-        this.parseFrames();
-        resolveOpen();
-      };
-      this.socket.on("data", onHandshake);
-    });
-  }
-
-  onData(chunk) {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    this.parseFrames();
-  }
-
-  parseFrames() {
-    while (this.buffer.length >= 2) {
-      const first = this.buffer[0];
-      const second = this.buffer[1];
-      let offset = 2;
-      let length = second & 0x7f;
-      if (length === 126) {
-        if (this.buffer.length < offset + 2) return;
-        length = this.buffer.readUInt16BE(offset);
-        offset += 2;
-      } else if (length === 127) {
-        if (this.buffer.length < offset + 8) return;
-        const high = this.buffer.readUInt32BE(offset);
-        const low = this.buffer.readUInt32BE(offset + 4);
-        if (high > 0x1fffff) throw new Error("CDP renderer response is too large.");
-        length = high * 0x100000000 + low;
-        offset += 8;
-      }
-      const masked = (second & 0x80) !== 0;
-      const maskLength = masked ? 4 : 0;
-      if (this.buffer.length < offset + maskLength + length) return;
-      let payload = this.buffer.slice(offset + maskLength, offset + maskLength + length);
-      if (masked) {
-        const mask = this.buffer.slice(offset, offset + 4);
-        payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
-      }
-      this.buffer = this.buffer.slice(offset + maskLength + length);
-      if ((first & 0x0f) !== 0x1) continue;
-      const message = JSON.parse(payload.toString("utf8"));
-      if (!message.id || !this.pending.has(message.id)) continue;
-      const pending = this.pending.get(message.id);
-      clearTimeout(pending.timer);
-      this.pending.delete(message.id);
-      if (message.error) pending.reject(new Error(JSON.stringify(message.error)));
-      else pending.resolve(message);
-    }
-  }
-
-  call(id, method, params, timeoutMs = 1_500) {
-    const payload = Buffer.from(JSON.stringify({ id, method, params }), "utf8");
-    const mask = randomBytes(4);
-    let header;
-    if (payload.length < 126) {
-      header = Buffer.from([0x81, 0x80 | payload.length]);
-    } else {
-      header = Buffer.alloc(4);
-      header[0] = 0x81;
-      header[1] = 0x80 | 126;
-      header.writeUInt16BE(payload.length, 2);
-    }
-    const masked = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
-    return new Promise((resolveCall, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Timed out waiting for ${method}.`));
-      }, timeoutMs);
-      this.pending.set(id, { resolve: resolveCall, reject, timer });
-      this.socket.write(Buffer.concat([header, mask, masked]));
-    });
-  }
-
-  close() {
-    this.socket?.destroy();
-  }
-}
-
 export function classifyCdpRendererSnapshot(snapshot) {
   const text = String(snapshot?.text ?? "").trim();
   const primaryHeading = String(snapshot?.primaryHeading ?? "").replace(/\s+/g, " ").trim();
@@ -2199,41 +2074,88 @@ export function isCdpRendererSnapshotReady(snapshot) {
 }
 
 async function cdpRendererReady(webSocketDebuggerUrl) {
-  const socket = new CdpProbeSocket(webSocketDebuggerUrl);
+  let socket = null;
   try {
-    await socket.open();
-    const result = await socket.call(1, "Runtime.evaluate", {
-      expression: `(() => {
-        const body = document.body;
-        const text = String(body?.innerText || body?.textContent || "").trim().slice(0, 8000);
-        const isVisible = (element) => {
-          const rect = element?.getBoundingClientRect?.();
-          const style = element ? getComputedStyle(element) : null;
-          return Boolean(rect && rect.width > 0 && rect.height > 0 && style?.display !== 'none' && style?.visibility !== 'hidden');
-        };
-        const primaryHeadingElement = Array.from(body?.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]') || [])
-          .find(isVisible);
-        return {
-          readyState: document.readyState,
-          hasBody: Boolean(body),
-          text,
-          hasInteractive: Boolean(body?.querySelector('textarea, [contenteditable="true"], button, a, [role="button"], [role="link"]')),
-          hasComposer: Boolean(body?.querySelector('[data-codex-composer], .ProseMirror')),
-          primaryHeading: String(primaryHeadingElement?.textContent || '').replace(/\\s+/g, ' ').trim(),
-          buttonLabels: Array.from(body?.querySelectorAll('button, [role="button"]') || [])
-            .filter(isVisible)
-            .map((button) => String(button.textContent || button.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
-            .filter(Boolean)
-            .slice(0, 40),
-        };
-      })()`,
-      returnByValue: true,
+    const url = new URL(webSocketDebuggerUrl);
+    if (url.protocol !== "ws:" || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) {
+      throw new Error("CDP renderer probe must use a loopback WebSocket.");
+    }
+    const result = await new Promise((resolveResult, reject) => {
+      socket = new globalThis.WebSocket(url.href);
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback(value);
+      };
+      const timer = setTimeout(
+        () => finish(reject, new Error("Timed out waiting for Runtime.evaluate.")),
+        1_500,
+      );
+      socket.onopen = () => {
+        try {
+          socket.send(JSON.stringify({
+            id: 1,
+            method: "Runtime.evaluate",
+            params: {
+              expression: `(() => {
+                const body = document.body;
+                const text = String(body?.innerText || body?.textContent || "").trim().slice(0, 8000);
+                const isVisible = (element) => {
+                  const rect = element?.getBoundingClientRect?.();
+                  const style = element ? getComputedStyle(element) : null;
+                  return Boolean(rect && rect.width > 0 && rect.height > 0 && style?.display !== 'none' && style?.visibility !== 'hidden');
+                };
+                const primaryHeadingElement = Array.from(body?.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]') || [])
+                  .find(isVisible);
+                return {
+                  readyState: document.readyState,
+                  hasBody: Boolean(body),
+                  text,
+                  hasInteractive: Boolean(body?.querySelector('textarea, [contenteditable="true"], button, a, [role="button"], [role="link"]')),
+                  hasComposer: Boolean(body?.querySelector('[data-codex-composer], .ProseMirror')),
+                  primaryHeading: String(primaryHeadingElement?.textContent || '').replace(/\\s+/g, ' ').trim(),
+                  buttonLabels: Array.from(body?.querySelectorAll('button, [role="button"]') || [])
+                    .filter(isVisible)
+                    .map((button) => String(button.textContent || button.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
+                    .filter(Boolean)
+                    .slice(0, 40),
+                };
+              })()`,
+              returnByValue: true,
+            },
+          }));
+        } catch (error) {
+          finish(reject, error);
+        }
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data));
+          if (message.id !== 1) return;
+          if (message.error) throw new Error(JSON.stringify(message.error));
+          finish(resolveResult, message);
+        } catch (error) {
+          finish(reject, error);
+        }
+      };
+      socket.onerror = () => finish(reject, new Error("CDP renderer WebSocket failed."));
+      socket.onclose = () => finish(reject, new Error("CDP renderer WebSocket closed."));
     });
     return classifyCdpRendererSnapshot(result?.result?.result?.value);
   } catch {
     return { ready: false, fatal: false };
   } finally {
-    socket.close();
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try {
+        socket.close();
+      } catch {}
+    }
   }
 }
 
