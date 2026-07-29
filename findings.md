@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-29 Manager Local-Feature Terminal Result Repair
+
+- The Manager button was wired and did start work, but `refreshFeatures` detached the verifier and returned only a start acknowledgement. When that child exited, the service removed an in-memory lock without reading or returning the final report, so the panel could never replace “已开始” with success or failure. The verifier itself also revisits about 46,700 files and the latest completed run took 134,292 ms, so the missing terminal result was highly visible.
+- Commit `85f4b6e6` reuses the existing foreground-singleton and late-result UI path with a 300-second service timeout; it adds no new controller or update protocol. TDD first rejected the detached definition and now passes with Manager/UI syntax checks. Runtime transaction `20260729T112511921Z-f32c0cf71ed34c8a819934a7be12e444` installed 121 matching files without restart.
+- The ecosystem rollup had one stale assertion requiring nine development MCP workers plus `node_repl`. Product configuration and its detailed MCP report correctly contain only `node_repl`, with development workers excluded. The rollup now requires `node_repl` and rejects any reported development-worker leak instead.
+- An operator mistakenly invoked the ecosystem rollup with an unsupported `--self-test` option before the new self-test existed; it wrote only a failed stale-report rollup and changed no product/runtime/config state. The supported self-test now passes in source and installed runtime.
+- Performance was not rewritten: current 134-second completion fits the five-minute truthful-result path. Optimize the repeated skill scans only if measured runs approach that bound. Physical button acceptance remains pending until the repaired desktop shortcut is launched by one real user double-click.
+
 ## 2026-07-29 Installed Launcher Regression Repair and Local Feature Drift
 
 - A real desktop shortcut invocation at `2026-07-29 18:17` reached fixed-route `ready` with `clientUiReady:true`, then the complete `wscript -> task launcher -> fixed-route supervisor -> CodexPlusPlus -> copied client` tree disappeared without shutdown state, error output, Application/WER/Crashpad evidence, or a nonzero task result. A second trace reproduced the same hard tree loss about 46 seconds after task start. The scheduled-task settings have no finite execution limit or restart policy; repository history instead isolates the regression to `4adb7435`, which replaced the stable direct-Node task action from `0dcc4023` with a waiting WScript GUI host.
