@@ -888,7 +888,7 @@ async function runSupervisor(plan) {
       }
       const cdpReady = await cdpPageReady(plan.ports.cdp);
       return cdpReady ? { clients, processScan } : null;
-    }, { timeoutMs: 90_000, intervalMs: 1_000, description });
+    }, { timeoutMs: 120_000, intervalMs: 1_000, description });
 
     const initialClient = await spawnCopiedClient();
     const ready = await waitForCopiedClientReady(initialClient, "fixed-route Anti-Codex");

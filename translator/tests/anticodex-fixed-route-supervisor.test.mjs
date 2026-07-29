@@ -76,6 +76,17 @@ test("cold Antigravity startup gets the existing desktop warmup budget without d
   assert.doesNotMatch(block, /listModels\(\{ timeoutMs:/);
 });
 
+test("copied-client readiness allows the official client's existing cold-start budget", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const start = source.indexOf("const waitForCopiedClientReady");
+  const end = source.indexOf("const initialClient", start);
+  assert.ok(start >= 0 && end > start);
+  const block = source.slice(start, end);
+
+  assert.match(block, /timeoutMs:\s*120_000/);
+  assert.doesNotMatch(block, /timeoutMs:\s*90_000/);
+});
+
 test("model refresh preserves the live provider and updates only the Antigravity model list", () => {
   const liveSettings = {
     activeRelayId: "anticodex-third-party",
