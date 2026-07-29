@@ -87,6 +87,25 @@ test("copied-client readiness allows the official client's existing cold-start b
   assert.doesNotMatch(block, /timeoutMs:\s*90_000/);
 });
 
+test("ready state waits for verified Manager injection", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const callStart = source.indexOf("const initialClient = await spawnCopiedClient()");
+  const readyStart = source.indexOf('state: "ready"', callStart);
+  const startupBlock = source.slice(callStart, readyStart);
+  assert.match(startupBlock, /const management = await startManagerSupport\(plan, childEnvironment\)/);
+
+  const supportStart = source.indexOf("async function startManagerSupport");
+  const supportEnd = source.indexOf("\nexport function scanCopiedClientProcessesSafely", supportStart);
+  assert.ok(supportStart >= 0 && supportEnd > supportStart);
+  const supportBlock = source.slice(supportStart, supportEnd);
+  const bootstrapStart = supportBlock.indexOf("const bootstrap = spawn(process.execPath");
+  const bootstrapReady = supportBlock.indexOf("await waitFor", bootstrapStart);
+  const watcherStart = supportBlock.indexOf('"--watch"', bootstrapReady);
+  assert.ok(bootstrapStart >= 0 && bootstrapReady > bootstrapStart && watcherStart > bootstrapReady);
+  assert.match(supportBlock, /if \(bootstrap\.exitCode === 0\) return true/);
+  assert.match(supportBlock, /throw new Error\(`Manager injection exited before readiness:/);
+});
+
 test("model refresh preserves the live provider and updates only the Antigravity model list", () => {
   const liveSettings = {
     activeRelayId: "anticodex-third-party",

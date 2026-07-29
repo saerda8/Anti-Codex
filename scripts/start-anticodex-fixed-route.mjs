@@ -893,7 +893,7 @@ async function runSupervisor(plan) {
     const initialClient = await spawnCopiedClient();
     const ready = await waitForCopiedClientReady(initialClient, "fixed-route Anti-Codex");
 
-    const management = startManagerSupport(plan, childEnvironment);
+    const management = await startManagerSupport(plan, childEnvironment);
     managerWatcher = management.watcher;
     managerBridge = management.bridge;
     [managerWatcherIdentity, managerBridgeIdentity] = await Promise.all([
@@ -1597,7 +1597,7 @@ function selectNativeToolCatalogTemplate(bundled) {
   return unrestrictedTemplate;
 }
 
-function startManagerSupport(plan, childEnvironment) {
+async function startManagerSupport(plan, childEnvironment) {
   const root = resolve(import.meta.dirname, "..");
   const injector = join(root, "scripts", "deepcodex-cdp-inject.mjs");
   const managerScript = join(root, "scripts", "anticodex-manager-inject.js");
@@ -1606,15 +1606,39 @@ function startManagerSupport(plan, childEnvironment) {
   if (missing.length) {
     throw new Error(`Fixed-route Manager support is incomplete: ${missing.join(", ")}`);
   }
-  const watcherLog = openSync(join(plan.paths.logs, "manager-inject.log"), "a");
-  const watcherErrorLog = openSync(join(plan.paths.logs, "manager-inject.err.log"), "a");
-  const bridgeLog = openSync(join(plan.paths.logs, "manager-bridge.log"), "a");
-  const bridgeErrorLog = openSync(join(plan.paths.logs, "manager-bridge.err.log"), "a");
   const managerEnvironment = {
     ...childEnvironment,
     DEEPCODEX_CDP_MANAGER_WATCH: "1",
     ANTICODEX_SUPERVISOR_PID: String(process.pid),
   };
+  const watcherLogPath = join(plan.paths.logs, "manager-inject.log");
+  const watcherErrorLogPath = join(plan.paths.logs, "manager-inject.err.log");
+  const bootstrapLog = openSync(watcherLogPath, "a");
+  const bootstrapErrorLog = openSync(watcherErrorLogPath, "a");
+  const bootstrap = spawn(process.execPath, [injector, String(plan.ports.cdp), managerScript], {
+    cwd: root,
+    env: { ...managerEnvironment, DEEPCODEX_CDP_MANAGER_WATCH: "0" },
+    windowsHide: true,
+    stdio: ["ignore", bootstrapLog, bootstrapErrorLog],
+  });
+  try {
+    await waitFor(() => {
+      if (bootstrap.exitCode === 0) return true;
+      if (bootstrap.exitCode !== null || bootstrap.signalCode !== null) {
+        throw new Error(`Manager injection exited before readiness: ${bootstrap.exitCode ?? bootstrap.signalCode}`);
+      }
+      return null;
+    }, { timeoutMs: 60_000, intervalMs: 100, description: "fixed-route Manager injection" });
+  } finally {
+    if (bootstrap.exitCode === null && bootstrap.signalCode === null) bootstrap.kill();
+    closeSync(bootstrapLog);
+    closeSync(bootstrapErrorLog);
+  }
+
+  const watcherLog = openSync(watcherLogPath, "a");
+  const watcherErrorLog = openSync(watcherErrorLogPath, "a");
+  const bridgeLog = openSync(join(plan.paths.logs, "manager-bridge.log"), "a");
+  const bridgeErrorLog = openSync(join(plan.paths.logs, "manager-bridge.err.log"), "a");
   const watcherStartedAtMs = Date.now();
   const watcher = spawn(process.execPath, [injector, String(plan.ports.cdp), managerScript, "--watch"], {
     cwd: root,
