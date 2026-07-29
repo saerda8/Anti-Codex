@@ -1211,6 +1211,13 @@ function publicChildEnvironment(plan) {
 }
 
 export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.env) {
+  const inheritedPath = Object.entries(baseEnvironment)
+    .find(([name]) => name.toLowerCase() === "path")?.[1] || "";
+  const pluginAppserver = join(plan.paths.codexHome, "plugins", ".plugin-appserver");
+  const pathEntries = String(inheritedPath).split(";").filter(Boolean);
+  if (!pathEntries.some((entry) => entry.toLowerCase() === pluginAppserver.toLowerCase())) {
+    pathEntries.unshift(pluginAppserver);
+  }
   const environment = {
     ...baseEnvironment,
     CODEX_PLUS_STATE_DIR: plan.paths.codexPlusPlusState,
@@ -1230,6 +1237,10 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
     DEEPCODEX_CDP_PORT: String(plan.ports.cdp),
     ANTICODEX_MANAGER_API: plan.managerBaseUrl,
   };
+  for (const name of Object.keys(environment)) {
+    if (name.toLowerCase() === "path") delete environment[name];
+  }
+  environment.Path = pathEntries.join(";");
   for (const name of [
     "GLOBAL_CODEX_HOME",
     "DEEPCODEX_SHARED_CODEX_HOME",

@@ -2179,6 +2179,7 @@ async function runManagerActionBatch(actions) {
   const button = overlay?.querySelector('button[data-action=' + ${safeActionName} + ']') || null;
   const result = overlay?.querySelector('[data-anticodex-result="action"]') || null;
   if (!overlay || !button || !result) return { ok: false, error: "Manager action control missing" };
+  button.closest("details")?.setAttribute("open", "");
   button.scrollIntoView({ block: "center", inline: "nearest" });
   await sleep(20);
   const closeButton = overlay.querySelector('[data-anticodex-close="true"]');
@@ -2294,6 +2295,8 @@ async function runManagerActionBatch(actions) {
         && Number(latest.pendingCount || 0) === 0
         && Number(latest.queueLength || 0) === 0
         && latest.disabled !== true;
+      const terminalFailure = settled
+        && (latest.lastOk === false || isActionFailureText(actionName, text));
       const visibleFinished = !latest.disabled
         && !isRunningText(text)
         && !isActionFailureText(actionName, text)
@@ -2302,7 +2305,9 @@ async function runManagerActionBatch(actions) {
         && hasActionSpecificResult(actionName, text);
       const uiOnlyFinished = uiOnlyMode && isUiOnlyActionFinished(actionName, { ...latest, text });
       const isFastMode = !uiOnlyMode && actionName === "mcpSkills" && timeoutMs <= 15000;
-      if (uiOnlyFinished) {
+      if (terminalFailure || drainedPayload?.ok === false) {
+        break;
+      } else if (uiOnlyFinished) {
         break;
       } else if (isFastMode) {
         const started = latest.disabled || isRunningText(text);
@@ -2649,6 +2654,10 @@ const initial = await evaluate(`
       sleep(100),
     ]);
   } while (Date.now() < deadline);
+  await Promise.resolve(openPromise).catch(() => undefined);
+  overlay = document.querySelector("#anticodex-manager-overlay");
+  button = overlay?.querySelector('button[data-action=' + ${safeAction} + ']') || null;
+  result = overlay?.querySelector('[data-anticodex-result="action"]') || null;
   if (!overlay) return { ok: false, error: "overlay missing", selectedContextId: ${JSON.stringify(pageContextId)} };
   if (!button) {
     return {
@@ -2663,6 +2672,7 @@ const initial = await evaluate(`
   if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function") {
     return { ok: false, error: "bridge missing", selectedContextId: ${JSON.stringify(pageContextId)}, text: overlay.textContent || "" };
   }
+  button.closest("details")?.setAttribute("open", "");
   const closeButton = overlay.querySelector('[data-anticodex-close="true"]');
   const closeRect = closeButton?.getBoundingClientRect();
   const closeProbePoints = closeRect ? [
@@ -2685,6 +2695,8 @@ const initial = await evaluate(`
       closeHitResults,
     };
   }
+  button.scrollIntoView({ block: "center", inline: "nearest" });
+  await sleep(20);
   const rect = button.getBoundingClientRect();
   const actionCenterX = rect.left + rect.width / 2;
   const actionCenterY = rect.top + rect.height / 2;
@@ -2896,6 +2908,8 @@ while (initial.ok && Date.now() < deadline) {
   const actionSettled = latest.lastAction === action
     && Number(latest.pendingCount || 0) === 0
     && Number(latest.queueLength || 0) === 0;
+  const terminalFailure = actionSettled
+    && (latest.lastOk === false || isFailureText(latestText));
   const visibleFinished = !latest.disabled
     && !isRunningText(latestText)
     && !isFailureText(latestText)
@@ -2917,7 +2931,9 @@ while (initial.ok && Date.now() < deadline) {
     && isFinishedText(drainedText)
     && (uiOnlyMode || !isUiOnlySmokeText(drainedText))
     && hasActionSpecificResult(action, drainedText);
-  if (uiOnlyFinished) {
+  if (terminalFailure || drainedPayload?.ok === false) {
+    break;
+  } else if (uiOnlyFinished) {
     break;
   } else if (drainedFinished) {
     latest = {

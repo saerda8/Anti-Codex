@@ -1044,6 +1044,7 @@ test("copied client environment removes original Codex pointers and provider sec
     OPENAI_API_KEY: "OPENAI_SECRET",
     ANTHROPIC_API_KEY: "ANTHROPIC_SECRET",
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
+    Path: "C:\\Windows\\System32",
   });
   assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
   const child = buildCopiedClientEnvironment(plan, supervisorChild);
@@ -1052,6 +1053,9 @@ test("copied client environment removes original Codex pointers and provider sec
   assert.equal(child.RUST_LOG, "info");
   assert.equal(child.CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED, "1");
   assert.equal(child.CODEX_SPARKLE_ENABLED, "false");
+  const sandboxHelperDirectory = join(plan.paths.codexHome, "plugins", ".plugin-appserver");
+  assert.equal(child.Path.split(";")[0], sandboxHelperDirectory);
+  assert.equal(child.Path.split(";").filter((entry) => entry === sandboxHelperDirectory).length, 1);
   for (const name of [
     "GLOBAL_CODEX_HOME",
     "DEEPCODEX_SHARED_CODEX_HOME",
