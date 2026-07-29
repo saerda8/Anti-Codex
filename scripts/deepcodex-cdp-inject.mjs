@@ -342,9 +342,6 @@ async function pickVisiblePageContextId(ws, frameId, nextId) {
 }
 
 async function injectOnce() {
-  const targets = await json(`http://127.0.0.1:${port}/json`);
-  const target = pickTarget(targets);
-  if (!target) throw new Error("No Codex page target found.");
   let source = fs.readFileSync(scriptPath, "utf8");
   const isManagerInject = scriptPath.toLowerCase().endsWith("anticodex-manager-inject.js");
   if (isManagerInject) {
@@ -428,6 +425,9 @@ async function injectOnce() {
         "})();",
       ].join("\n")
     : source;
+  const targets = await json(`http://127.0.0.1:${port}/json`);
+  const target = pickTarget(targets);
+  if (!target) throw new Error("No Codex page target found.");
   const ws = new LocalWebSocket(target.webSocketDebuggerUrl);
   await ws.open();
   let id = 1;

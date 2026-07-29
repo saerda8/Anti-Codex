@@ -353,6 +353,15 @@ test("all Manager CDP selectors skip an avatar overlay listed before the primary
   }
 });
 
+test("startup Manager injection refreshes its CDP target after building the local snapshot", () => {
+  const injectOnce = extractNamedFunction(cdpInject, "injectOnce");
+  const snapshotEnd = injectOnce.indexOf("const newDocumentSource");
+  const targetLookup = injectOnce.indexOf("const targets = await json");
+  const socketOpen = injectOnce.indexOf("const ws = new LocalWebSocket", targetLookup);
+
+  assert.ok(snapshotEnd >= 0 && targetLookup > snapshotEnd && socketOpen > targetLookup);
+});
+
 test("Manager bridge coalesces Target crashed recovery and never overlaps polls", async () => {
   const sessions = [fakeBridgeSession("old"), fakeBridgeSession("current")];
   let openCount = 0;
