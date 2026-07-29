@@ -937,6 +937,11 @@ test("Manager long actions enter pending UI without losing their late bridge res
   assert.ok(uiTransportMs > bridgeTransportMs);
 });
 
+test("Manager keeps structured verifier failures available for readable UI summaries", () => {
+  const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  assert.match(bridgeActionBlock, /payload\?\.ok !== false \|\| \(payload\?\.result && typeof payload\.result === "object"\)/);
+});
+
 test("Manager late action delivery is gated by the exact action generation token", () => {
   const bridgeSourceBlock = source.match(/export function createManagerBridgeSource\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");

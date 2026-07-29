@@ -656,7 +656,7 @@
               reconcileManagerPendingActions(payload.snapshot);
             }
           }
-          if (payload?.ok !== false) return payload;
+          if (payload?.ok !== false || (payload?.result && typeof payload.result === "object")) return payload;
           throw new Error(payload.message || "Anti-Codex manager action failed.");
         }
         if (location.protocol === "app:") throw new Error("Anti-Codex manager bridge timed out.");
