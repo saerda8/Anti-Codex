@@ -454,7 +454,7 @@ function Format-AccountPhaseSummary {
 }
 
 function Invoke-AccountProxyCheck {
-    $result = Invoke-ManagerScriptJson "test-anticodex-account-proxy-readiness.ps1" -Arguments @("-AllowUnready") -TimeoutMs 120000 -AllowFailureJson
+    $result = Invoke-ManagerScriptJson "test-anticodex-account-proxy-readiness.ps1" -Arguments @("-AllowUnready", "-NoRealRequest") -TimeoutMs 120000 -AllowFailureJson
     $action = Get-AccountActionText $result
     $modelLine = if ($result.models -and $result.models.selected) { "模型：$($result.models.selected)" } else { "模型：不可用" }
     $detail = if ($result.diagnosisDetail) { [string]$result.diagnosisDetail } else { [string]$result.diagnosis }
@@ -1063,7 +1063,7 @@ function Open-AntiCodexManagerPanel {
             if ((Test-Path -LiteralPath $injector -PathType Leaf) -and (Test-Path -LiteralPath $managerInject -PathType Leaf) -and (Test-Path -LiteralPath $opener -PathType Leaf)) {
                 $previousManagerApi = $env:ANTICODEX_MANAGER_API
                 $env:ANTICODEX_MANAGER_API = $baseUrl
-                    # Step 1: inject the latest native-panel-v109 manager script
+                    # Step 1: inject the latest native-panel-v110 manager script
                 $installOutput = @(& $node $injector "$port" $managerInject 2>&1)
                 $installExitCode = $LASTEXITCODE
                 if ($installExitCode -eq 0) {

@@ -5,8 +5,7 @@ param(
     [int]$TimeoutSec = 10,
     [switch]$RunSafeAction,
     [string]$SafeActionName = "refreshStatus",
-    [switch]$RunUpdateCheckAction,
-    [switch]$RunSessionResetAction
+    [switch]$RunUpdateCheckAction
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +62,9 @@ function Invoke-ManagerPost {
                 }
             } catch {}
         }
+        if (-not $body -and $_.ErrorDetails.Message) {
+            $body = [string]$_.ErrorDetails.Message
+        }
         return [pscustomobject]@{
             ok = $false
             status = $statusCode
@@ -83,43 +85,42 @@ $token = ""
 $corsHeader = $null
 $managerHtml = ""
 $managerActionNames = @()
-$dailyManagerActions = @()
-$highImpactManagerActions = @()
-$highImpactDangerCount = 0
-$expectedDailyManagerActions = @(
-    "refreshStatus",
-    "refreshModels",
-    "accountSwitch",
-    "accountProxy",
-    "syncReadiness",
-    "repairShortcuts",
-    "updateCheck",
-    "sourcePreflight",
-    "mcpSkills",
-    "pluginCapabilities",
-    "diagnosticsBundle",
-    "viewLatestReports"
-)
+$managerActionsByGroup = [ordered]@{}
+$highImpactDangerActions = @()
+$expectedActionGroups = [ordered]@{
+    status = @("refreshStatus")
+    modelSources = @("refreshModels", "accountSwitch")
+    updates = @("updateCheck", "syncHost")
+    troubleshooting = @("repairShortcuts", "diagnosticsBundle", "viewLatestReports")
+    advanced = @(
+        "accountProxy", "syncReadiness", "sourcePreflight", "mcpSkills",
+        "pluginCapabilities", "refreshFeatures", "fastOverallNoTraffic",
+        "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull"
+    )
+}
 $expectedHighImpactManagerActions = @(
     "syncHost",
-    "upstreamConfig",
     "refreshFeatures",
     "stabilitySoak",
     "coldRelaunch",
     "fastOverallNoTraffic",
     "overallNoTraffic",
-    "postVerificationFull",
-    "resetAntigravitySessionLock"
+    "postVerificationFull"
 )
 if ($manager) {
     $corsHeader = $manager.Headers["Access-Control-Allow-Origin"]
     if ($corsHeader) { Add-Failure "manager page exposes access-control-allow-origin: $corsHeader" }
     $managerHtml = [string]$manager.Content
-    $match = [regex]::Match($managerHtml, '(?:const|let)\s+managerActionToken\s*=\s*"([^"]+)"')
-    if ($match.Success) {
-        $token = $match.Groups[1].Value
-    } else {
-        Add-Failure "manager action token was not embedded in the local manager page"
+    try {
+        $bootstrap = Invoke-WebRequest -Uri "$BaseUrl/anticodex/manager/bootstrap" `
+            -Headers @{ "Origin" = $BaseUrl; "Referer" = "$BaseUrl/anticodex/manager" } `
+            -Proxy $null `
+            -TimeoutSec $TimeoutSec `
+            -UseBasicParsing
+        $token = [string](($bootstrap.Content | ConvertFrom-Json).token)
+        if (-not $token) { Add-Failure "manager bootstrap did not return an action token" }
+    } catch {
+        Add-Failure "manager bootstrap failed: $($_.Exception.Message)"
     }
     if ($managerHtml -match "/anticodex/manager/open") {
         Add-Failure "manager page still references old external open endpoint"
@@ -133,38 +134,28 @@ if ($manager) {
     if ($managerHtml -notmatch '<html lang="zh-CN"') {
         Add-Failure "manager page is not marked as zh-CN"
     }
-    if ($managerHtml -notmatch 'color-scheme:light dark' -or $managerHtml -notmatch '@media \(prefers-color-scheme:light\)') {
+    if ($managerHtml -notmatch 'color-scheme:\s*light dark' -or $managerHtml -notmatch '@media \(prefers-color-scheme:\s*dark\)') {
         Add-Failure "manager page does not follow the operating-system light/dark theme"
     }
     if ($managerHtml -notmatch 'id="actionResult"') {
         Add-Failure "manager page is missing the action result output"
     }
-    if ($managerHtml -notmatch 'document\.querySelectorAll\("button\[data-action\]"\)') {
+    if ($managerHtml -notmatch 'document\.querySelectorAll\("button\[data-manager-action\]"\)') {
         Add-Failure "manager page is missing data-action button binding"
     }
-    if ($managerHtml -notmatch 'setActionButtonsDisabled\(true\)' -or $managerHtml -notmatch 'finally\{setActionButtonsDisabled\(false\);') {
+    if ($managerHtml -notmatch 'buttons\.forEach\(\(item\) => \{ item\.disabled = true; \}\)' -or $managerHtml -notmatch 'buttons\.forEach\(\(item\) => \{ item\.disabled = false; \}\)') {
         Add-Failure "manager page action buttons do not disable and re-enable during requests"
     }
     if ($managerHtml -notmatch '/anticodex/manager/action') {
         Add-Failure "manager page is missing the local manager action endpoint"
     }
-    $hasRouteProviderFields = (
-        $managerHtml -match '/anticodex/model-routes' -and
-        $managerHtml -match 'function routeSummary' -and
-        $managerHtml -match 'providerProtocol' -and
-        $managerHtml -match 'transport' -and
-        $managerHtml -match 'Provider'
-    )
-    if (-not $hasRouteProviderFields) {
-        Add-Failure "manager page route summary is missing third-party provider/protocol/transport fields"
-    }
-    $noLoginNoticePattern = '\u4e0d\u8d70 ChatGPT \u767b\u5f55'
-    $noTrafficNoticePattern = '\u4e0d\u6d88\u8017\u6a21\u578b\u6d41\u91cf'
-    if ($managerHtml -notmatch $noLoginNoticePattern -or $managerHtml -notmatch $noTrafficNoticePattern) {
-        Add-Failure "manager page is missing the Chinese no-login/no-traffic notice"
+    $localOnlyNoticePattern = '只管理本机 Anti-Codex'
+    $impactNoticePattern = '真实流量或重启'
+    if ($managerHtml -notmatch $localOnlyNoticePattern -or $managerHtml -notmatch $impactNoticePattern) {
+        Add-Failure "manager page is missing the Chinese local-only/high-impact notice"
     }
 
-    $requiredManagerActions = @($expectedDailyManagerActions + $expectedHighImpactManagerActions)
+    $requiredManagerActions = @($expectedActionGroups.Values | ForEach-Object { @($_) })
     foreach ($requiredAction in $requiredManagerActions) {
         if ($managerHtml -notmatch ('data-manager-action="' + [regex]::Escape($requiredAction) + '"')) {
             Add-Failure "manager page is missing action button: $requiredAction"
@@ -172,25 +163,23 @@ if ($manager) {
     }
     $managerActionNames = [regex]::Matches($managerHtml, 'data-manager-action="([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
 
-    $dailySection = [regex]::Match($managerHtml, '<section class="action-section" data-action-group="daily"[\s\S]*?</section>')
-    $highImpactSection = [regex]::Match($managerHtml, '<section class="action-section" data-action-group="high-impact"[\s\S]*?</section>')
-    if (-not $dailySection.Success) { Add-Failure "manager page is missing the daily action group" }
-    if (-not $highImpactSection.Success) { Add-Failure "manager page is missing the high-impact action group" }
-    if ($dailySection.Success) {
-        $dailyManagerActions = [regex]::Matches($dailySection.Value, 'data-manager-action="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+    foreach ($groupName in $expectedActionGroups.Keys) {
+        $groupPattern = '<(?:section|details)[^>]*data-action-group="' + [regex]::Escape($groupName) + '"[\s\S]*?</(?:section|details)>'
+        $section = [regex]::Match($managerHtml, $groupPattern)
+        if (-not $section.Success) {
+            Add-Failure "manager page is missing action group: $groupName"
+            $managerActionsByGroup[$groupName] = @()
+            continue
+        }
+        $actual = @([regex]::Matches($section.Value, 'data-manager-action="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+        $managerActionsByGroup[$groupName] = $actual
+        if (@(Compare-Object @($expectedActionGroups[$groupName]) $actual).Count -gt 0) {
+            Add-Failure "manager action group '$groupName' does not match the approved inventory"
+        }
     }
-    if ($highImpactSection.Success) {
-        $highImpactManagerActions = [regex]::Matches($highImpactSection.Value, 'data-manager-action="([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
-        $highImpactDangerCount = [regex]::Matches($highImpactSection.Value, '<button[^>]*class="danger"').Count
-    }
-    if (@(Compare-Object $expectedDailyManagerActions $dailyManagerActions).Count -gt 0) {
-        Add-Failure "manager daily action group does not match the approved safe action inventory"
-    }
-    if (@(Compare-Object $expectedHighImpactManagerActions $highImpactManagerActions).Count -gt 0) {
-        Add-Failure "manager high-impact action group does not match the approved risk action inventory"
-    }
-    if ($highImpactDangerCount -ne $expectedHighImpactManagerActions.Count) {
-        Add-Failure "manager high-impact action buttons are not all styled as danger buttons"
+    $highImpactDangerActions = @([regex]::Matches($managerHtml, '<button class="danger" data-action="[^"]+" data-manager-action="([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    if (@(Compare-Object $expectedHighImpactManagerActions $highImpactDangerActions).Count -gt 0) {
+        Add-Failure "manager high-impact action buttons do not match the danger inventory"
     }
 }
 
@@ -257,107 +246,6 @@ if ($token) {
         }
     }
 
-    $sessionResetResult = $null
-    if ($RunSessionResetAction) {
-        $isIdle = $false
-        $diagnosticsErr = $null
-        $lockActive = $null
-        $lockQueued = $null
-        $activeRequestCount = $null
-        $canResetStaleLock = $false
-        try {
-            $diagResponse = Invoke-WebRequest -Uri "$BaseUrl/anticodex/diagnostics" -Method Get -Proxy $null -TimeoutSec $TimeoutSec -UseBasicParsing
-            if ($diagResponse.StatusCode -eq 200) {
-                $diagnostics = $diagResponse.Content | ConvertFrom-Json
-                if ($diagnostics -and $diagnostics.antigravitySessionLock) {
-                    $lockActive = $diagnostics.antigravitySessionLock.active
-                    $lockQueued = $diagnostics.antigravitySessionLock.queued
-                    if ($lockActive -eq $false -and $lockQueued -eq 0) {
-                        $isIdle = $true
-                    }
-                    if ($diagnostics.activeAntigravityRequests -and $diagnostics.activeAntigravityRequests.PSObject.Properties.Match("active").Count -gt 0) {
-                        $activeRequestCount = [int]$diagnostics.activeAntigravityRequests.active
-                        if ($activeRequestCount -eq 0) {
-                            $canResetStaleLock = $true
-                        }
-                    }
-                } else {
-                    $diagnosticsErr = "diagnostics output is missing antigravitySessionLock property"
-                }
-            } else {
-                $diagnosticsErr = "diagnostics returned status $($diagResponse.StatusCode)"
-            }
-        } catch {
-            $diagnosticsErr = $_.Exception.Message
-        }
-
-        if (-not $isIdle -and -not $canResetStaleLock) {
-            $sessionResetResult = [pscustomobject]@{
-                skipped = $true
-                reason = if ($diagnosticsErr) { $diagnosticsErr } else { "Session lock is not safe to reset (active=$lockActive, queued=$lockQueued, activeRequests=$activeRequestCount)" }
-            }
-        } else {
-            $resetBody = @{ action = "resetAntigravitySessionLock" } | ConvertTo-Json -Compress
-            $resetResponse = Invoke-ManagerPost -Headers @{
-                "x-anticodex-manager-token" = $token
-                "Origin" = $BaseUrl
-                "Referer" = "$BaseUrl/anticodex/manager"
-            } -Body $resetBody -RequestTimeoutSec $ActionTimeoutSec
-            
-            $payloadOk = $false
-            $resultOk = $false
-            $hasActiveReleased = $false
-            $hasQueuedCancelled = $false
-            $hasSnapshot = $false
-            
-            if ($resetResponse.status -eq 200) {
-                try {
-                    $payload = $resetResponse.body | ConvertFrom-Json
-                    if ($payload) {
-                        if ($payload.ok -eq $true) { $payloadOk = $true }
-                        if ($payload.result) {
-                            if ($payload.result.ok -eq $true) { $resultOk = $true }
-                            
-                            $resObj = $null
-                            if ($payload.result.PSObject.Properties.Match("activeReleased").Count -gt 0) {
-                                $resObj = $payload.result
-                            } elseif ($payload.result.result -and $payload.result.result.PSObject.Properties.Match("activeReleased").Count -gt 0) {
-                                $resObj = $payload.result.result
-                            }
-                            
-                            if ($resObj) {
-                                if ($resObj.PSObject.Properties.Match("activeReleased").Count -gt 0) { $hasActiveReleased = $true }
-                                if ($resObj.PSObject.Properties.Match("queuedCancelled").Count -gt 0) { $hasQueuedCancelled = $true }
-                                if ($resObj.PSObject.Properties.Match("snapshot").Count -gt 0) { $hasSnapshot = $true }
-                            }
-                        }
-                    }
-                } catch {
-                    Add-Failure "failed to parse session reset action response: $($_.Exception.Message)"
-                }
-            } else {
-                Add-Failure "session reset action returned status $($resetResponse.status), expected 200"
-            }
-            
-            if ($resetResponse.status -ne 200) { Add-Failure "session reset response status is $($resetResponse.status), expected 200" }
-            if (-not $payloadOk) { Add-Failure "session reset response payload.ok is not true" }
-            if (-not $resultOk) { Add-Failure "session reset response result.ok is not true" }
-            if (-not $hasActiveReleased) { Add-Failure "session reset response result does not contain activeReleased" }
-            if (-not $hasQueuedCancelled) { Add-Failure "session reset response result does not contain queuedCancelled" }
-            if (-not $hasSnapshot) { Add-Failure "session reset response result does not contain snapshot" }
-            
-            $sessionResetResult = [pscustomobject]@{
-                skipped = $false
-                status = $resetResponse.status
-                payloadOk = $payloadOk
-                resultOk = $resultOk
-                hasActiveReleased = $hasActiveReleased
-                hasQueuedCancelled = $hasQueuedCancelled
-                hasSnapshot = $hasSnapshot
-                resetMode = if ($isIdle) { "idle" } else { "stale-lock" }
-            }
-        }
-    }
 }
 
 # ── JSONP action-script bridge tests ──────────────────────────
@@ -465,16 +353,14 @@ $result = [pscustomobject]@{
     page = [pscustomobject]@{
         actionCount = @($managerActionNames).Count
         actionNames = @($managerActionNames)
-        dailyActionNames = @($dailyManagerActions)
-        highImpactActionNames = @($highImpactManagerActions)
-        highImpactDangerCount = $highImpactDangerCount
+        actionGroups = $managerActionsByGroup
+        highImpactActionNames = @($highImpactDangerActions)
         hasZhCn = [bool]($managerHtml -match '<html lang="zh-CN"')
-        hasAdaptiveTheme = [bool](($managerHtml -match 'color-scheme:light dark') -and ($managerHtml -match '@media \(prefers-color-scheme:light\)'))
+        hasAdaptiveTheme = [bool](($managerHtml -match 'color-scheme:\s*light dark') -and ($managerHtml -match '@media \(prefers-color-scheme:\s*dark\)'))
         hasActionResult = [bool]($managerHtml -match 'id="actionResult"')
-        hasButtonClickBinding = [bool]($managerHtml -match 'document\.querySelectorAll\("button\[data-action\]"\)')
-        hasDisableReenable = [bool](($managerHtml -match 'setActionButtonsDisabled\(true\)') -and ($managerHtml -match 'finally\{setActionButtonsDisabled\(false\);'))
-        hasNoLoginNoTrafficNotice = [bool](($managerHtml -match $noLoginNoticePattern) -and ($managerHtml -match $noTrafficNoticePattern))
-        hasRouteProviderFields = [bool]$hasRouteProviderFields
+        hasButtonClickBinding = [bool]($managerHtml -match 'document\.querySelectorAll\("button\[data-manager-action\]"\)')
+        hasDisableReenable = [bool](($managerHtml -match 'item\.disabled = true') -and ($managerHtml -match 'item\.disabled = false'))
+        hasLocalOnlyImpactNotice = [bool](($managerHtml -match $localOnlyNoticePattern) -and ($managerHtml -match $impactNoticePattern))
         hasNoExternalWindowOpen = [bool]($managerHtml -notmatch "window\.open|target=`"_blank`"")
         hasNoIframe = [bool]($managerHtml -notmatch "<iframe\b")
     }
@@ -488,7 +374,6 @@ $result = [pscustomobject]@{
         safeActionName = $SafeActionName
         updateCheckStatus = if ($updateCheck) { $updateCheck.status } else { $null }
         updateCheckRan = [bool]$RunUpdateCheckAction
-        sessionReset = if ($sessionResetResult) { $sessionResetResult } else { $null }
     }
     jsonp = [pscustomobject]@{
         actionName = $jsonpActionName

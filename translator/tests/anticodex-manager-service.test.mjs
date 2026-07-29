@@ -855,12 +855,27 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
 
   await t.test("viewLatestReports returns a summarized report payload", async () => {
     const reportsDir = path.join(tempDir, "reports");
+    const completedAt = new Date().toISOString();
     fs.mkdirSync(reportsDir, { recursive: true });
     fs.writeFileSync(path.join(reportsDir, "latest-source-preflight.json"), JSON.stringify({
       ok: true,
       elapsedMs: 123,
-      generatedAt: new Date().toISOString(),
+      generatedAt: completedAt,
       apiKey: "must-not-leak",
+    }), "utf8");
+    fs.writeFileSync(path.join(reportsDir, "latest-post-verification.json"), JSON.stringify({
+      ok: false,
+      state: "completed",
+      completedAt,
+      failures: ["visible acceptance failed"],
+    }), "utf8");
+    fs.writeFileSync(path.join(tempDir, "update-status.json"), JSON.stringify({
+      ok: true,
+      operation: {
+        state: "succeeded",
+        completedAt,
+        message: "sync completed",
+      },
     }), "utf8");
 
     const response = await fetch(`${baseUrl}/anticodex/manager/action`, {
@@ -878,7 +893,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body.action, "viewLatestReports");
     assert.equal(body.result.reportRoot, reportsDir);
     assert.ok(Array.isArray(body.result.reports));
-    assert.equal(body.result.existingCount, 1);
+    assert.equal(body.result.existingCount, 2);
 
     const report = body.result.reports.find((item) => item.fileName === "latest-source-preflight.json");
     assert.equal(report.exists, true);
@@ -887,8 +902,25 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(report.ok, true);
     assert.equal(report.effectiveOk, true);
     assert.equal(report.elapsedMs, 123);
+    assert.equal(report.reportedAt, completedAt);
     assert.equal(report.value, undefined);
     assert.equal(report.apiKey, undefined);
+
+    const postVerification = body.result.reports.find((item) => item.fileName === "latest-post-verification.json");
+    assert.equal(postVerification.exists, true);
+    assert.equal(postVerification.ok, false);
+    assert.equal(postVerification.firstFailure, "visible acceptance failed");
+    assert.equal(postVerification.reportedAt, completedAt);
+
+    const diagnosticsResponse = await fetch(`${baseUrl}/anticodex/diagnostics`);
+    assert.equal(diagnosticsResponse.status, 200);
+    const diagnostics = await diagnosticsResponse.json();
+    assert.equal(diagnostics.managerActionResults.postVerificationFull.ok, false);
+    assert.equal(diagnostics.managerActionResults.postVerificationFull.firstFailure, "visible acceptance failed");
+    assert.equal(diagnostics.managerActionResults.postVerificationFull.reportedAt, completedAt);
+    assert.equal(diagnostics.managerActionResults.syncHost.ok, true);
+    assert.equal(diagnostics.managerActionResults.syncHost.state, "succeeded");
+    assert.equal(diagnostics.managerActionResults.syncHost.reportedAt, completedAt);
   });
 
   await t.test("GET /anticodex/manager/action-script JSONP compatibility", async () => {

@@ -47,7 +47,7 @@ const MANAGER_ACTIONS = Object.freeze({
     accountProxy: {
         label: "账号/代理检查",
         script: "test-anticodex-account-proxy-readiness.ps1",
-        args: ["-AllowUnready"],
+        args: ["-AllowUnready", "-NoRealRequest"],
         timeoutMs: 120000,
         foregroundSingleton: true,
     },
@@ -769,6 +769,7 @@ function latestManagerReportItem(stateRoot, label, fileName, options = {}) {
     reason: String(value?.reason || "").slice(0, 500),
     elapsedMs: Number.isFinite(Number(value?.elapsedMs)) ? Number(value.elapsedMs) : null,
     ageMs,
+    reportedAt: Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : "",
     stale: Number.isFinite(ageMs) && ageMs > MANAGER_REPORT_STALE_MS,
     firstFailure: invalid ? parseError : String(failures[0] || "").slice(0, 500),
     publicDocumentationOk,
@@ -796,8 +797,10 @@ function latestManagerReportsPayload(stateRoot) {
     ["插件与应用", "latest-plugin-capabilities.json", true],
     ["本地连接器", "latest-local-connectors.json", true],
     ["后台进程", "latest-worker-process-hygiene.json", true],
+    ["本地功能刷新", "latest-refresh-features.json", true],
     ["冷启动恢复", "latest-cold-relaunch.json", true],
     ["稳定性巡检", "latest-stability-soak.json", true],
+    ["验证后完整检查", "latest-post-verification.json", true],
   ];
   const reports = reportFiles.map(([label, file, deferred]) => latestManagerReportItem(stateRoot, label, file, { deferred }));
   return {
@@ -1511,6 +1514,28 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     const installedFull = latestManagerReportItem(stateRoot, "Installed overall", "latest-installed-overall.json");
     const installedFast = latestManagerReportItem(stateRoot, "Installed overall fast", "latest-installed-overall-fast.json", { deferred: true });
     const releaseGates = latestManagerReportItem(stateRoot, "Release gates", "latest-release-gates.json");
+    const operation = updateStatus?.operation || {};
+    const operationState = String(operation.state || "").toLowerCase();
+    const operationReportedAt = String(operation.completedAt || operation.updatedAt || operation.startedAt || "");
+    const managerActionResults = {
+        refreshFeatures: latestManagerReportItem(stateRoot, "Local feature refresh", "latest-refresh-features.json", { deferred: true }),
+        stabilitySoak: latestManagerReportItem(stateRoot, "Stability soak", "latest-stability-soak.json", { deferred: true }),
+        coldRelaunch: latestManagerReportItem(stateRoot, "Cold relaunch", "latest-cold-relaunch.json", { deferred: true }),
+        postVerificationFull: latestManagerReportItem(stateRoot, "Post verification", "latest-post-verification.json", { deferred: true }),
+        syncHost: {
+            exists: Boolean(operationState && operationState !== "idle" && operationState !== "none"),
+            ok: ["succeeded", "success", "completed"].includes(operationState)
+              ? true
+              : (["failed", "failure", "rolled_back"].includes(operationState) ? false : null),
+            effectiveOk: ["succeeded", "success", "completed"].includes(operationState),
+            state: operationState,
+            reason: String(operation.message || "").slice(0, 500),
+            firstFailure: ["failed", "failure", "rolled_back"].includes(operationState)
+              ? String(operation.failureCode || operation.message || "").slice(0, 500)
+              : "",
+            reportedAt: Number.isFinite(Date.parse(operationReportedAt)) ? new Date(operationReportedAt).toISOString() : "",
+        },
+    };
     const backgroundItems = [...ACTIVE_BACKGROUND_ACTIONS.values()].map((item) => ({
         id: item.actionName,
         label: item.label,
@@ -1613,6 +1638,7 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
             persistedPid: Number.isInteger(Number(fixedStatus?.pid)) ? Number(fixedStatus.pid) : null,
         },
         updateStatus,
+        managerActionResults,
         postVerification: {
             present: releaseGates.exists,
             ok: releaseGates.effectiveOk,

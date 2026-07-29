@@ -7,7 +7,8 @@ param(
     [int]$RequestTimeoutSec = 90,
     [int]$RequestAttempts = 3,
     [int]$TotalRequestTimeoutSec = 180,
-    [switch]$AllowUnready
+    [switch]$AllowUnready,
+    [switch]$NoRealRequest
 )
 
 $ErrorActionPreference = "Stop"
@@ -394,7 +395,7 @@ $requestText = ""
 $requestMode = ""
 $requestBudgetExceeded = $false
 $requestMarker = "ACCOUNT_PROXY_READY_" + (Get-Random -Minimum 10000 -Maximum 99999)
-if ($healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeStaleButModelsAvailable) -and $models.Count -gt 0) {
+if (-not $NoRealRequest -and $healthBefore -and ($healthBefore.accountReady -eq $true -or $accountProbeStaleButModelsAvailable) -and $models.Count -gt 0) {
     $attemptCount = [Math]::Max(1, $RequestAttempts)
     $requestBudgetStartedAt = [DateTime]::UtcNow
     for ($attempt = 1; $attempt -le $attemptCount -and $requestText -notmatch [regex]::Escape($requestMarker); $attempt++) {

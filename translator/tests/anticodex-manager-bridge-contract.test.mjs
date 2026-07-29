@@ -18,6 +18,10 @@ const cdpInject = readFileSync(resolve(root, "scripts", "deepcodex-cdp-inject.mj
 const uiStateTest = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
 const managerButtonTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 const managerRealButtonsTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-real-buttons.ps1"), "utf8");
+const managerActionTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-action.ps1"), "utf8");
+const uiChatSmokeTest = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
+const realSmallProjectTest = readFileSync(resolve(root, "scripts", "test-anticodex-real-small-project.ps1"), "utf8");
+const accountProxyTest = readFileSync(resolve(root, "scripts", "test-anticodex-account-proxy-readiness.ps1"), "utf8");
 const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
 
 const completeSnapshotPaths = [
@@ -190,6 +194,30 @@ test("Manager third-party form saves configuration without switching the active 
   ]) {
     assert.equal(forbidden.test(block), false, `third-party form still exposes ${label}`);
   }
+});
+
+test("Manager account and proxy check is no-traffic and returns a readable result", () => {
+  assert.match(managerService, /accountProxy:\s*\{[\s\S]*?args:\s*\[[^\]]*"-NoRealRequest"[^\]]*\]/);
+  assert.match(accountProxyTest, /\[switch\]\$NoRealRequest/);
+  assert.match(accountProxyTest, /if \(-not \$NoRealRequest[\s\S]*?Invoke-LocalJsonSafe "real-response"/);
+
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`);
+  const summary = summarize("accountProxy", {
+    ok: true,
+    result: {
+      diagnosis: "ready",
+      diagnosisDetail: "ready",
+      suggestedAction: "",
+      account: { signedIn: true, planName: "Pro" },
+      models: { count: 3 },
+      realRequest: { attempted: false },
+      report: { latest: "C:\\reports\\latest-account-proxy-readiness.json" },
+    },
+  });
+  assert.match(summary, /账号\/代理检查：可用/);
+  assert.match(summary, /已登录/);
+  assert.match(summary, /模型数：3/);
+  assert.doesNotMatch(summary, /^\{/);
 });
 
 test("Manager injected UI owns third-party setup while the fallback page omits the unsupported fake action", () => {
@@ -1098,10 +1126,81 @@ test("Manager blocks every new action while any prior action is still running or
   assert.match(lateOutcomeBlock, /pending: stillPending/);
 });
 
+test("Manager correlates fresh background reports and keeps their final result visible", () => {
+  const lookupBlock = extractNamedFunction(managerInject, "managerSnapshotActionResult");
+  const summaryBlock = extractNamedFunction(managerInject, "managerActionResultSummary");
+  const reconcileBlock = extractNamedFunction(managerInject, "reconcileManagerPendingActions");
+  const lookup = vm.runInNewContext(`(${lookupBlock})`);
+  const summarize = vm.runInNewContext(`(${summaryBlock})`, {
+    ACTIONS: [["postVerificationFull", "验证后完整检查"]],
+  });
+  const completedAt = "2026-07-30T02:00:00.000Z";
+  const snapshot = {
+    responses: {
+      "/anticodex/diagnostics": {
+        managerActionResults: {
+          postVerificationFull: {
+            exists: true,
+            ok: false,
+            effectiveOk: false,
+            reportedAt: completedAt,
+            firstFailure: "visible acceptance failed",
+            latestPath: "C:\\reports\\latest-post-verification.json",
+          },
+        },
+      },
+    },
+  };
+
+  assert.equal(lookup(snapshot, "postVerificationFull", Date.parse(completedAt) + 1), null);
+  const fresh = lookup(snapshot, "postVerificationFull", Date.parse(completedAt) - 1);
+  assert.equal(fresh.firstFailure, "visible acceptance failed");
+  assert.match(summarize("postVerificationFull", fresh), /未通过/);
+  assert.match(summarize("postVerificationFull", fresh), /visible acceptance failed/);
+  assert.match(summarize("postVerificationFull", null), /没有发现本次新报告/);
+
+  assert.match(reconcileBlock, /managerSnapshotActionResult\(snapshot,\s*action,\s*startedAt\)/);
+  assert.match(reconcileBlock, /managerActionResultSummary\(action,\s*actionResult\)/);
+  assert.match(reconcileBlock, /__ANTICODEX_MANAGER_LAST_ACTION_RESULT__/);
+  assert.match(reconcileBlock, /liveResult\.textContent = managerSummary/);
+
+  const openManagerBlock = extractNamedFunction(managerInject, "openManager");
+  const preserveBlock = openManagerBlock.slice(
+    openManagerBlock.indexOf("const preserveLastActionResult"),
+    openManagerBlock.indexOf("const copyResultButton"),
+  );
+  assert.doesNotMatch(preserveBlock, /lastActionResult\.ok !== false/);
+  assert.doesNotMatch(preserveBlock, /includes\("\\u8fd0\\u884c\\u5931\\u8d25"\)/);
+
+  const installActionsStart = managerInject.indexOf("function installActions()");
+  const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
+  const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
+  const refreshBranch = installActionsBlock.slice(
+    installActionsBlock.indexOf('if (action === "refreshStatus"'),
+    installActionsBlock.indexOf("return;", installActionsBlock.indexOf('if (action === "refreshStatus"')) + 7,
+  );
+  assert.match(refreshBranch, /__ANTICODEX_MANAGER_LAST_ACTION_RESULT__\?\.managerSummary/);
+
+  const pendingStoreBlock = extractNamedFunction(managerInject, "managerPendingActions");
+  const pendingPersistBlock = extractNamedFunction(managerInject, "persistManagerPendingActions");
+  assert.match(pendingStoreBlock, /localStorage\.getItem\(MANAGER_PENDING_STORAGE_KEY\)/);
+  assert.match(pendingPersistBlock, /localStorage\.setItem\(MANAGER_PENDING_STORAGE_KEY/);
+  assert.match(managerInject, /}\s*managerPendingActions\(\);\s*function reconcileManagerPendingActions/);
+  assert.match(reconcileBlock, /persistManagerPendingActions\(\)/);
+  assert.match(installActionsBlock, /pendingActions\[action\] = actionStartedAt;\s*persistManagerPendingActions\(\)/);
+});
+
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v109"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v109"/);
-  for (const [name, text] of Object.entries({ source, managerInject, managerService })) {
+  assert.match(managerInject, /const VERSION = "native-panel-v110"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v110"/);
+  for (const [name, text] of Object.entries({
+    source,
+    managerInject,
+    managerService,
+    managerActionTest,
+    uiChatSmokeTest,
+    realSmallProjectTest,
+  })) {
     assert.doesNotMatch(text, /resetAntigravitySessionLock/, `${name} still exposes the removed session reset`);
   }
 });

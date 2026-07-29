@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v109";
+  const VERSION = "native-panel-v110";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -95,6 +95,7 @@
   const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 340000;
   const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
   const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
+  const MANAGER_PENDING_STORAGE_KEY = "anticodex.manager.pending-actions.v1";
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
   const SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS = 50000;
@@ -1215,6 +1216,18 @@
       "\u8bf7\u5728 Antigravity \u4e2d\u5207\u6362\u8d26\u53f7\uff0c\u5b8c\u6210\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002",
       r.nextAction === "refreshModels" ? "\u4e0b\u4e00\u6b65\uff1a\u5237\u65b0\u6a21\u578b" : "",
     ].filter(Boolean).join("\n");
+    if (action === "accountProxy") {
+      const ready = unwrapped.diagnosis === "ready";
+      return [
+        `\u8d26\u53f7/\u4ee3\u7406\u68c0\u67e5\uff1a${ready ? "\u53ef\u7528" : "\u9700\u8981\u5904\u7406"}`,
+        `\u8d26\u53f7\uff1a${unwrapped.account?.signedIn ? "\u5df2\u767b\u5f55" : "\u672a\u786e\u8ba4"}${unwrapped.account?.planName ? ` / ${unwrapped.account.planName}` : ""}`,
+        `\u6a21\u578b\u6570\uff1a${unwrapped.models?.count ?? "\u672a\u77e5"}`,
+        `\u8bca\u65ad\uff1a${unwrapped.diagnosisDetail || unwrapped.diagnosis || "\u672a\u77e5"}`,
+        unwrapped.suggestedAction ? `\u5efa\u8bae\uff1a${unwrapped.suggestedAction}` : "",
+        unwrapped.realRequest?.attempted ? "\u771f\u5b9e\u8bf7\u6c42\uff1a\u5df2\u6267\u884c" : "\u771f\u5b9e\u8bf7\u6c42\uff1a\u672a\u6267\u884c\uff08\u4e0d\u8017\u6a21\u578b\u989d\u5ea6\uff09",
+        unwrapped.report?.latest ? `\u62a5\u544a\uff1a${unwrapped.report.latest}` : "",
+      ].filter(Boolean).join("\n");
+    }
     if (action === "updateCheck") {
       const remoteState = unwrapped.components?.remoteState || "not_checked";
       const remoteTag = unwrapped.components?.remoteTag || "\u672a\u77e5";
@@ -1362,11 +1375,12 @@
   }
 
   function actionStillPending(action) {
-    const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+    const pendingActions = managerPendingActions();
     const startedAt = Number(pendingActions[action] || 0);
     if (!startedAt) return false;
     if (Date.now() - startedAt > pendingActionMaxMs(action)) {
       delete pendingActions[action];
+      persistManagerPendingActions();
       return false;
     }
     return true;
@@ -1390,14 +1404,73 @@
     return running;
   }
 
+  function managerSnapshotActionResult(snapshot, action, startedAtValue) {
+    const actionResult = snapshot?.responses?.["/anticodex/diagnostics"]?.managerActionResults?.[action];
+    const reportedAt = Date.parse(String(actionResult?.reportedAt || ""));
+    const startedAt = Number(startedAtValue || 0);
+    if (!actionResult || actionResult.exists === false || !Number.isFinite(reportedAt)) return null;
+    if (startedAt && reportedAt < startedAt) return null;
+    return actionResult;
+  }
+
+  function managerActionResultSummary(action, actionResult) {
+    const label = ACTIONS.find(([id]) => id === action)?.[1] || action;
+    if (!actionResult) return `${label}\uff1a\u540e\u53f0\u8fdb\u7a0b\u5df2\u7ed3\u675f\uff0c\u4f46\u6ca1\u6709\u53d1\u73b0\u672c\u6b21\u65b0\u62a5\u544a\u3002`;
+    const ok = actionResult.effectiveOk === true || actionResult.ok === true;
+    const detail = actionResult.firstFailure || actionResult.reason || "";
+    return [
+      `${label}\uff1a${ok ? "\u5df2\u5b8c\u6210\u5e76\u901a\u8fc7" : "\u5df2\u5b8c\u6210\u4f46\u672a\u901a\u8fc7"}`,
+      detail ? `\u8bf4\u660e\uff1a${detail}` : "",
+      actionResult.latestPath ? `\u62a5\u544a\uff1a${actionResult.latestPath}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  function managerPendingActions() {
+    if (window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ && typeof window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ === "object") {
+      return window.__ANTICODEX_MANAGER_PENDING_ACTIONS__;
+    }
+    let pending = {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(MANAGER_PENDING_STORAGE_KEY) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) pending = parsed;
+    } catch {}
+    window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ = pending;
+    return pending;
+  }
+
+  function persistManagerPendingActions() {
+    try {
+      localStorage.setItem(MANAGER_PENDING_STORAGE_KEY, JSON.stringify(managerPendingActions()));
+    } catch {}
+  }
+
+  managerPendingActions();
+
   function reconcileManagerPendingActions(snapshot) {
-    const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+    const pendingActions = managerPendingActions();
     const running = managerSnapshotRunningActionIds(snapshot);
     const now = Date.now();
     for (const [action, startedAtValue] of Object.entries(pendingActions)) {
       const startedAt = Number(startedAtValue || 0);
       if (running.has(action) || (startedAt && now - startedAt <= MANAGER_PENDING_REPORT_GRACE_MS)) continue;
+      const actionResult = managerSnapshotActionResult(snapshot, action, startedAt);
+      const managerSummary = managerActionResultSummary(action, actionResult);
+      const ok = actionResult?.effectiveOk === true || actionResult?.ok === true;
+      window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
+        ...(actionResult || {}),
+        ok,
+        action,
+        managerSummary,
+        pending: false,
+      };
+      const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
+      if (liveResult) {
+        liveResult.classList.toggle("anticodex-error", !ok);
+        liveResult.removeAttribute("data-anticodex-running");
+        liveResult.textContent = managerSummary;
+      }
       delete pendingActions[action];
+      persistManagerPendingActions();
     }
     return running;
   }
@@ -1664,12 +1737,13 @@
     const lastActionSummary = String(lastActionResult?.managerSummary || "");
     const preserveLastActionResult = Boolean(
       lastActionSummary &&
-      lastActionResult.ok !== false &&
       lastActionResult.uiOnly !== true &&
-      !lastActionSummary.includes("ui-only manager button smoke") &&
-      !lastActionSummary.includes("\u8fd0\u884c\u5931\u8d25")
+      !lastActionSummary.includes("ui-only manager button smoke")
     );
-    if (preserveLastActionResult) result.textContent = lastActionSummary;
+    if (preserveLastActionResult) {
+      result.textContent = lastActionSummary;
+      result.classList.toggle("anticodex-error", lastActionResult.ok === false);
+    }
     const copyResultButton = el("button", { type: "button", className: "anticodex-copy-result", text: "\u590d\u5236\u7ed3\u679c" });
     copyResultButton.onclick = async () => {
       try {
@@ -2110,9 +2184,11 @@
               const remainingReported = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
               const remainingAction = remainingPending || remainingReported;
               const remainingLabel = ACTIONS.find(([id]) => id === remainingAction)?.[1] || remainingAction;
+              const settledSummary = String(window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__?.managerSummary || "");
+              result.classList.toggle("anticodex-error", !remainingAction && window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__?.ok === false);
               result.textContent = remainingAction
                 ? `\u72b6\u6001\u5df2\u5237\u65b0\uff1a${remainingLabel}\u4ecd\u5728\u540e\u53f0\u8fd0\u884c\u3002`
-                : "\u72b6\u6001\u5df2\u5237\u65b0\uff1a\u540e\u53f0\u4efb\u52a1\u5df2\u7ed3\u675f\uff0c\u53ef\u4ee5\u7ee7\u7eed\u64cd\u4f5c\u3002";
+                : (settledSummary || "\u72b6\u6001\u5df2\u5237\u65b0\uff1a\u540e\u53f0\u4efb\u52a1\u5df2\u7ed3\u675f\uff0c\u53ef\u4ee5\u7ee7\u7eed\u64cd\u4f5c\u3002");
               return;
             }
             result.textContent = "\u5df2\u6709\u7ba1\u7406\u4efb\u52a1\u5728\u8fd0\u884c\u3002\u5b8c\u6210\u540e\u672c\u9875\u4f1a\u81ea\u52a8\u663e\u793a\u7ed3\u679c\uff1b\u671f\u95f4\u4e0d\u4f1a\u91cd\u590d\u542f\u52a8\u5176\u4ed6\u68c0\u67e5\u3001\u540c\u6b65\u6216\u91cd\u542f\u4efb\u52a1\u3002";
@@ -2157,8 +2233,9 @@
               progressActive = false;
               const continuesInBackground = managerActionContinuesInBackground(action, outcome.payload);
               if (continuesInBackground) {
-                const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+                const pendingActions = managerPendingActions();
                 pendingActions[action] = actionStartedAt;
+                persistManagerPendingActions();
                 reconcileManagerPendingActions(outcome.payload?.snapshot);
               }
               if (window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ !== actionToken) return;
@@ -2193,8 +2270,9 @@
               progressActive = false;
               const managerSummary = timeoutText(action, label);
               const pendingStartedAt = Date.now();
-              const pendingActions = window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ ||= {};
+              const pendingActions = managerPendingActions();
               pendingActions[action] = pendingStartedAt;
+              persistManagerPendingActions();
               window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
                 ok: true,
                 action,
@@ -2207,9 +2285,11 @@
                   && managerActionContinuesInBackground(action, lateOutcome.payload);
                 if (continuesInBackground) {
                   pendingActions[action] = pendingActions[action] || pendingStartedAt;
+                  persistManagerPendingActions();
                   reconcileManagerPendingActions(lateOutcome.payload?.snapshot);
                 } else if (pendingActions[action] === pendingStartedAt) {
                   delete pendingActions[action];
+                  persistManagerPendingActions();
                 }
                 const isCurrentActionToken = window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
                 if (!isCurrentActionToken) return;

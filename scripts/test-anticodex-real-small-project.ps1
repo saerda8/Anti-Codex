@@ -76,43 +76,6 @@ function Invoke-ResponsesJson {
         -Proxy $null
 }
 
-function Invoke-SafeSessionResetIfIdle {
-    param([string]$Reason = "real_small_project_timeout")
-    try {
-        $diagnostics = Invoke-RestMethod -Uri "$script:ResolvedBaseUrl/anticodex/diagnostics" -Proxy $null -TimeoutSec 8
-        $lockActive = $diagnostics -and $diagnostics.antigravitySessionLock -and $diagnostics.antigravitySessionLock.active -eq $true
-        $queued = if ($diagnostics -and $diagnostics.antigravitySessionLock) { [int]$diagnostics.antigravitySessionLock.queued } else { 0 }
-        $activeRequests = if ($diagnostics -and $diagnostics.activeAntigravityRequests) { [int]$diagnostics.activeAntigravityRequests.active } else { 1 }
-        if (-not $lockActive -or $activeRequests -ne 0) {
-            return [pscustomobject]@{ attempted = $false; reason = "not_idle_or_no_lock"; lockActive = $lockActive; queued = $queued; activeRequests = $activeRequests }
-        }
-
-        $manager = Invoke-WebRequest -Uri "$script:ResolvedBaseUrl/anticodex/manager" -Proxy $null -TimeoutSec 8 -UseBasicParsing
-        $token = ""
-        if ($manager.Content -match 'managerActionToken="([^"]+)"') {
-            $token = $matches[1]
-        } elseif ($manager.Content -match 'name="anti-codex-manager-token"\s+content="([^"]+)"') {
-            $token = $matches[1]
-        }
-        if (-not $token) {
-            return [pscustomobject]@{ attempted = $false; reason = "manager_token_missing"; lockActive = $lockActive; queued = $queued; activeRequests = $activeRequests }
-        }
-
-        $body = @{ action = "resetAntigravitySessionLock"; reason = $Reason } | ConvertTo-Json -Compress
-        $reset = Invoke-RestMethod `
-            -Uri "$script:ResolvedBaseUrl/anticodex/manager/action" `
-            -Method Post `
-            -Headers @{ "x-anticodex-manager-token" = $token; "Origin" = $script:ResolvedBaseUrl; "Referer" = "$script:ResolvedBaseUrl/anticodex/manager" } `
-            -ContentType "application/json" `
-            -Body $body `
-            -Proxy $null `
-            -TimeoutSec 20
-        return [pscustomobject]@{ attempted = $true; ok = ($reset.ok -eq $true); lockActive = $lockActive; queued = $queued; activeRequests = $activeRequests; reset = $reset }
-    } catch {
-        return [pscustomobject]@{ attempted = $false; reason = "reset_failed"; error = $_.Exception.Message }
-    }
-}
-
 function Get-ResponseItems {
     param($Response)
     if ($Response -and $Response.output) { return @($Response.output) }
@@ -332,9 +295,9 @@ try {
         }
     }
 
-    $sessionResetAfterFailure = $null
-    if ($failures.Count -gt 0) {
-        $sessionResetAfterFailure = Invoke-SafeSessionResetIfIdle
+    $failureCleanup = [pscustomobject]@{
+        attempted = $false
+        reason = if ($failures.Count -eq 0) { "task_passed" } else { "no_owned_active_response_id" }
     }
 
     $payload = [pscustomobject]@{
@@ -362,14 +325,13 @@ try {
         }
         final_text = $finalText
         health = $health
-        sessionResetAfterFailure = $sessionResetAfterFailure
+        failureCleanup = $failureCleanup
     }
     Save-Report $payload
     Write-Output ($payload | ConvertTo-Json -Depth 24 -Compress)
     if (-not $payload.ok) { exit 1 }
 } catch {
     Add-Failure $_.Exception.Message
-    $resetAfterFailure = Invoke-SafeSessionResetIfIdle
     $payload = [pscustomobject]@{
         ok = $false
         reportName = "real-small-project"
@@ -383,7 +345,7 @@ try {
         elapsedMs = [int]((Get-Date) - $started).TotalMilliseconds
         marker = $marker
         artifact = [pscustomobject]@{ directory = $artifactDir; files = @($writtenFiles) }
-        sessionResetAfterFailure = $resetAfterFailure
+        failureCleanup = [pscustomobject]@{ attempted = $false; reason = "no_owned_active_response_id" }
     }
     Save-Report $payload
     Write-Output ($payload | ConvertTo-Json -Depth 24 -Compress)

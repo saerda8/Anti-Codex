@@ -951,17 +951,6 @@ async function collectModelRouteEvidence(before) {
   };
 }
 
-async function resetBackendSessionLock(url) {
-  const headers = { origin: url, referer: `${url}/anticodex/manager` };
-  const boot = await httpJson(`${url}/anticodex/manager/bootstrap`, headers);
-  const token = boot?.token;
-  if (!token) throw new Error("manager bootstrap did not return a token");
-  return httpJsonPost(`${url}/anticodex/manager/action`, { action: "resetAntigravitySessionLock" }, {
-    ...headers,
-    "x-anticodex-manager-token": token,
-  });
-}
-
 class LocalWebSocket {
   constructor(url) {
     this.url = new URL(url);
@@ -5172,7 +5161,6 @@ async function submitDesktopPromptAndWait(ws, prompt, expectedMarker, waitMs, op
           maxInputItems: Number(options.maxInputItems || 0),
         };
         failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(effectiveRealSubmit)}, max=${Number(options.maxInputItems || 0)}`);
-        try { await resetBackendSessionLock(baseUrl); } catch {}
         submitSucceeded = false;
       }
     }
@@ -6301,28 +6289,11 @@ async function main() {
           lastError: null,
         };
       } else {
-        try {
-          backendResetBeforeSubmit = await resetBackendSessionLock(baseUrl);
-          await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-        } catch (error) {
-          backendResetBeforeSubmit = { ok: false, error: error instanceof Error ? error.message : String(error) };
-        }
+        backendResetBeforeSubmit = {
+          skipped: true,
+          reason: "global_session_reset_removed_waiting_for_idle",
+        };
         initialIdle = await waitForIdleDiagnostics(baseUrl, 45_000);
-        if (!diagnosticsAreIdle(initialIdle.diagnostics)) {
-          try {
-            backendResetBeforeSubmit = {
-              first: backendResetBeforeSubmit,
-              retry: await resetBackendSessionLock(baseUrl),
-            };
-            await new Promise((resolveDelay) => setTimeout(resolveDelay, 1200));
-            initialIdle = await waitForIdleDiagnostics(baseUrl, 20_000);
-          } catch (error) {
-            backendResetBeforeSubmit = {
-              first: backendResetBeforeSubmit,
-              retry: { ok: false, error: error instanceof Error ? error.message : String(error) },
-            };
-          }
-        }
       }
     }
     modelRoutesBefore = await readModelRoutesEvidence();
@@ -6519,22 +6490,10 @@ async function main() {
         failures.push("desktop task did not become idle after the assistant reply");
       }
       if (failures.length > 0 && submitSucceeded && diagnosticsShowsActiveTask(diagnostics)) {
-        try {
-          const reset = await resetBackendSessionLock(baseUrl);
-          const afterReset = await waitForStableIdleDiagnostics(baseUrl, 20_000, 3_000);
-          failureCleanup = {
-            attempted: true,
-            reset,
-            stableIdleObserved: afterReset.stable === true,
-            diagnostics: afterReset.diagnostics,
-            error: afterReset.lastError || null,
-          };
-          diagnostics = afterReset.diagnostics || diagnostics;
-          if (afterReset.stable !== true) failures.push("desktop task failure cleanup did not stop active requests");
-        } catch (error) {
-          failureCleanup = { attempted: true, error: error instanceof Error ? error.message : String(error) };
-          failures.push(`desktop task failure cleanup failed: ${failureCleanup.error}`);
-        }
+        failureCleanup = {
+          attempted: false,
+          reason: "owned_turn_still_active",
+        };
       } else {
         failureCleanup = {
           attempted: false,
@@ -6942,7 +6901,6 @@ async function main() {
             maxInputItems,
           };
           failures.push(`desktop submit carried too much restored context: inputItems=${realSubmitInputItems(effectiveRealSubmit)}, max=${maxInputItems}`);
-          try { await resetBackendSessionLock(baseUrl); } catch {}
           submitSucceeded = false;
         }
       }
@@ -7033,7 +6991,6 @@ async function main() {
               ...(submitEvidence || {}),
               contextGuard: { ok: false, inputItems, maxInputItems: 80 },
             };
-            try { await resetBackendSessionLock(baseUrl); } catch {}
             break;
           }
         } catch {}
@@ -7400,8 +7357,10 @@ async function main() {
       }
       repairPrompt = buildAutonomousReasoningContinuationPrompt(currentFailures, artifactEvidence);
       try {
-        const resetEvidence = await resetBackendSessionLock(baseUrl);
         const idleBeforeContinuation = await waitForIdleDiagnostics(baseUrl, 15_000);
+        if (!diagnosticsAreIdle(idleBeforeContinuation.diagnostics)) {
+          throw new Error("previous owned turn is still active; refusing a global session reset");
+        }
         let visibleIdleBeforeContinuation = await waitForVisibleComposerIdle(ws, 10_000);
         let staleComposerRecovery = null;
         if (diagnosticsAreIdle(idleBeforeContinuation.diagnostics) && visibleIdleBeforeContinuation?.ok !== true) {
@@ -7416,7 +7375,7 @@ async function main() {
         }
         autonomousContinuationNewChatEvidence = {
           strategy: "same-task-continuation",
-          resetEvidence,
+          resetEvidence: { attempted: false, reason: "previous_turn_became_idle" },
           diagnosticsIdleBeforeContinuation: diagnosticsAreIdle(idleBeforeContinuation.diagnostics),
           visibleIdleBeforeContinuation,
           staleComposerRecovery,
@@ -7525,22 +7484,10 @@ async function main() {
     artifactEvidence = finalAgenticStepFlowEvidence;
   }
   if (failures.length > 0 && submitSucceeded && diagnosticsShowsActiveTask(diagnostics)) {
-    try {
-      const reset = await resetBackendSessionLock(baseUrl);
-      const afterReset = await waitForStableIdleDiagnostics(baseUrl, 20_000, 3_000);
-      failureCleanup = {
-        attempted: true,
-        reset,
-        stableIdleObserved: afterReset.stable === true,
-        diagnostics: afterReset.diagnostics,
-        error: afterReset.lastError || null,
-      };
-      diagnostics = afterReset.diagnostics || diagnostics;
-      if (afterReset.stable !== true) failures.push("desktop task failure cleanup did not stop active requests");
-    } catch (error) {
-      failureCleanup = { attempted: true, error: error instanceof Error ? error.message : String(error) };
-      failures.push(`desktop task failure cleanup failed: ${failureCleanup.error}`);
-    }
+    failureCleanup = {
+      attempted: false,
+      reason: "owned_turn_still_active",
+    };
   } else {
     failureCleanup = {
       attempted: false,
