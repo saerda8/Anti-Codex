@@ -85,7 +85,9 @@ function extractBalanced(sourceText, start, open, close) {
 function extractNamedFunction(sourceText, name) {
   const start = sourceText.indexOf(`function ${name}(`);
   assert.ok(start >= 0, `missing function ${name}`);
-  const bodyStart = sourceText.indexOf("{", start);
+  const paramsStart = sourceText.indexOf("(", start);
+  const params = extractBalanced(sourceText, paramsStart, "(", ")");
+  const bodyStart = sourceText.indexOf("{", paramsStart + params.length);
   const body = extractBalanced(sourceText, bodyStart, "{", "}");
   return sourceText.slice(start, bodyStart) + body;
 }
@@ -476,7 +478,7 @@ test("Manager bridge redelivers a completed payload after reconnect without reru
   const deliverStart = source.indexOf("async function deliver(request, session)");
   const deliverEnd = source.indexOf("controller = new ManagerBridgeRecoveryController", deliverStart);
   const deliverBlock = source.slice(deliverStart, deliverEnd);
-  assert.equal((deliverBlock.match(/runAction\(action\)/g) || []).length, 1);
+  assert.equal((deliverBlock.match(/runAction\(action,/g) || []).length, 1);
   assert.match(deliverBlock, /const deliveryExpression =/);
   assert.match(deliverBlock, /await deliverManagerPayloadWithReconnect\(controller, session, deliveryExpression\)/);
   controller.stop();
@@ -593,9 +595,7 @@ test("Manager bridge owns reconnects without exiting or launching another client
 });
 
 test("Manager bridge snapshots identify themselves to the launcher-owned service", () => {
-  const start = source.indexOf("async function managerSnapshot()");
-  const end = source.indexOf("async function runManagerRequest", start);
-  const block = source.slice(start, end);
+  const block = extractNamedFunction(source, "managerSnapshot");
   assert.match(block, /const trustedHeaders\s*=\s*\{/);
   assert.match(block, /origin:\s*baseUrl/);
   assert.match(block, /referer:\s*`\$\{baseUrl\}\/anticodex\/manager`/);
@@ -603,9 +603,7 @@ test("Manager bridge snapshots identify themselves to the launcher-owned service
 });
 
 test("Manager bridge and startup injector both build complete read snapshots", () => {
-  const snapshotStart = source.indexOf("async function managerSnapshot()");
-  const snapshotEnd = source.indexOf("async function runManagerRequest", snapshotStart);
-  const bridgeBlock = source.slice(snapshotStart, snapshotEnd);
+  const bridgeBlock = extractNamedFunction(source, "managerSnapshot");
   const injectorBlock = cdpInject.match(/const snapshot = \{[\s\S]*?source = \[/)?.[0] ?? "";
   for (const path of completeSnapshotPaths) {
     assert.match(bridgeBlock, new RegExp(path.replaceAll("/", "\\/")), `bridge snapshot is missing ${path}`);
@@ -906,9 +904,31 @@ test("Manager verifier restores any action bridge that it replaces", () => {
 });
 
 test("Manager bridge invokes the real model refresh action", () => {
-  const block = source.match(/async function runAction\(action\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const block = extractNamedFunction(source, "runAction");
   assert.doesNotMatch(block, /action === "refreshModels"[\s\S]*?`\$\{baseUrl\}\/models`/);
   assert.match(block, /postManagerJsonWithToken\([\s\S]*?"\/anticodex\/manager\/action"/);
+});
+
+test("only an explicit refresh status action performs the slow snapshot source verification", () => {
+  const bridgeSourceBlock = source.match(/export function createManagerBridgeSource\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const snapshotStart = source.indexOf("async function managerSnapshot");
+  const snapshotEnd = source.indexOf("async function bootstrapManagerActionToken", snapshotStart);
+  const snapshotBlock = source.slice(snapshotStart, snapshotEnd);
+  const runActionBlock = source.match(/async function runAction\(action[\s\S]*?\n\}/)?.[0] ?? "";
+  const deliveryStart = source.indexOf("async function deliver(request, session)");
+  const deliveryEnd = source.indexOf("async function pollOnce()", deliveryStart);
+  const deliveryBlock = source.slice(deliveryStart, deliveryEnd);
+  const actionUiTimeoutBlock = extractNamedFunction(managerInject, "actionUiTimeoutMs");
+
+  assert.match(bridgeSourceBlock, /silent:\s*action === "refreshStatus"/);
+  assert.match(snapshotBlock, /verifySnapshotFreshness = false/);
+  assert.match(snapshotBlock, /snapshotFreshness=refresh/);
+  assert.match(runActionBlock, /managerSnapshot\(\{ verifySnapshotFreshness \}\)/);
+  assert.match(deliveryBlock, /request\.silent !== true/);
+  assert.match(deliveryBlock, /completedPayload\.snapshot \|\|= await managerSnapshot\(\)/);
+  assert.match(managerInject, /snapshotStatus\?\.state === "unverified"/);
+  assert.match(managerInject, /snapshotStatus\?\.state === "check_failed"/);
+  assert.match(actionUiTimeoutBlock, /action === "refreshStatus"[\s\S]*?SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS/);
 });
 
 test("Manager long actions enter pending UI without losing their late bridge result", () => {
@@ -917,7 +937,7 @@ test("Manager long actions enter pending UI without losing their late bridge res
   const installActionsStart = managerInject.indexOf("function installActions()");
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
   const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
-  const bridgeRunActionBlock = source.match(/async function runAction\(action\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const bridgeRunActionBlock = extractNamedFunction(source, "runAction");
   const uiTransportMs = Number(managerInject.match(/const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = (\d+);/)?.[1]);
   const bridgeTransportMs = Number(source.match(/const MANAGER_ACTION_HTTP_TIMEOUT_MS = (\d+);/)?.[1]);
   const longestForegroundMs = Number(

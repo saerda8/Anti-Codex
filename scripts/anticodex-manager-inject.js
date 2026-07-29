@@ -97,6 +97,7 @@
   const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
+  const SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS = 50000;
   const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
   const MCP_SKILLS_ACTION_UI_TIMEOUT_MS = 440000;
   const HIGH_IMPACT_CONFIRMATION_MS = 15000;
@@ -984,7 +985,11 @@
     if (!stale) return null;
     const reason = snapshotStatus?.staleReason === "source_changed"
       ? "\u539f\u751f Codex \u672c\u5730\u529f\u80fd\u5df2\u53d8\u5316"
-      : (snapshotStatus?.state === "missing" ? "\u5feb\u7167\u7f3a\u5931" : "\u5feb\u7167\u5df2\u8fc7\u671f\u6216\u6807\u8bb0\u65e0\u6548");
+      : (snapshotStatus?.state === "unverified"
+          ? "\u5feb\u7167\u5c1a\u672a\u4e0e\u5f53\u524d\u539f\u751f Codex \u6838\u5bf9"
+          : (snapshotStatus?.state === "check_failed"
+              ? "\u5feb\u7167\u6838\u5bf9\u5931\u8d25"
+              : (snapshotStatus?.state === "missing" ? "\u5feb\u7167\u7f3a\u5931" : "\u5feb\u7167\u5df2\u8fc7\u671f\u6216\u6807\u8bb0\u65e0\u6548")));
     return card("\u672c\u5730\u529f\u80fd\u5feb\u7167\u9700\u5237\u65b0", el("div", { className: "anticodex-result anticodex-warn", text: [
       reason,
       refreshText || "\u8bf7\u70b9\u201c\u5237\u65b0\u672c\u5730\u529f\u80fd\u201d\uff0c\u5b8c\u6210\u540e\u518d\u8fd0\u884c MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u68c0\u67e5\u3002",
@@ -1331,6 +1336,7 @@
   }
 
   function actionUiTimeoutMs(action) {
+    if (action === "refreshStatus") return SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS;
     if (action === "accountSwitch") return 65000;
     if (action === "fastOverallNoTraffic") return 90000;
     if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
@@ -1767,17 +1773,22 @@
         const connectorInventoryCount = collectionCount(connectors, ["connectors", "data", "items"]);
         const callableAppToolCount = collectionCount(appTools, ["tools", "data", "items"]);
         const snapshotStatus = localFeatures.snapshotStatus || {};
-        const snapshotStateText = snapshotStatus.state === "fresh"
-          ? "\u65b0\u9c9c"
-          : (snapshotStatus.state === "stale"
-            ? "\u5df2\u8fc7\u671f"
-            : (snapshotStatus.state === "invalid" ? "\u6807\u8bb0\u65e0\u6548" : "\u6807\u8bb0\u7f3a\u5931"));
+        const snapshotStateText = ({
+          fresh: "\u65b0\u9c9c",
+          stale: "\u5df2\u8fc7\u671f",
+          invalid: "\u6807\u8bb0\u65e0\u6548",
+          missing: "\u6807\u8bb0\u7f3a\u5931",
+          unverified: "\u5c1a\u672a\u6838\u5bf9",
+          check_failed: "\u6838\u5bf9\u5931\u8d25",
+        })[snapshotStatus.state] || "\u672a\u77e5";
         const snapshotAgeText = Number.isFinite(Number(snapshotStatus.ageHours))
           ? `${Number(snapshotStatus.ageHours).toFixed(1)} \u5c0f\u65f6`
           : "\u672a\u77e5";
         const snapshotRefreshText = snapshotStatus.staleReason === "source_changed"
           ? "\u539f\u751f Codex \u672c\u5730\u529f\u80fd\u5df2\u53d8\u5316\uff0c\u8bf7\u70b9\u201c\u5237\u65b0\u672c\u5730\u529f\u80fd\u201d"
-          : (snapshotStatus.stale ? "\u5feb\u7167\u5df2\u8fc7\u671f\u6216\u7f3a\u5931\uff0c\u8bf7\u70b9\u201c\u5237\u65b0\u672c\u5730\u529f\u80fd\u201d" : "\u5f53\u524d\u65e0\u9700\u5237\u65b0");
+          : (snapshotStatus.state === "unverified" || snapshotStatus.state === "check_failed"
+              ? "\u8bf7\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u6838\u5bf9\u5f53\u524d\u539f\u751f Codex"
+              : (snapshotStatus.stale ? "\u5feb\u7167\u5df2\u8fc7\u671f\u6216\u7f3a\u5931\uff0c\u8bf7\u70b9\u201c\u5237\u65b0\u672c\u5730\u529f\u80fd\u201d" : "\u5f53\u524d\u65e0\u9700\u5237\u65b0"));
         const modelList = Array.isArray(models?.data) ? models.data : [];
         const modelText = modelList.map((model) => {
           const id = String(model?.id || "");

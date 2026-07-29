@@ -24,6 +24,10 @@ const MANAGER_REPORT_STALE_MS_RAW = Number(process.env.ANTICODEX_MANAGER_REPORT_
 const MANAGER_REPORT_STALE_MS = Number.isFinite(MANAGER_REPORT_STALE_MS_RAW)
   ? Math.max(60 * 1000, MANAGER_REPORT_STALE_MS_RAW)
   : 24 * 60 * 60 * 1000;
+const STARTUP_SNAPSHOT_SCHEMA = "anticodex-startup-snapshots-ready-v1";
+const SNAPSHOT_SOURCE_CHECK_CACHE = new Map();
+const SNAPSHOT_SOURCE_CHECK_MAX_AGE_MS = 5 * 60 * 1000;
+const SNAPSHOT_SOURCE_CHECK_FAILURE_MAX_AGE_MS = 15 * 1000;
 
 const MANAGER_ACTIONS = Object.freeze({
     refreshStatus: {
@@ -622,6 +626,92 @@ function readJsonIfPresent(fullPath) {
   } catch {
     return null;
   }
+}
+
+function snapshotExtraSkillsRoots(marker) {
+  const roots = Array.isArray(marker?.extraSkillsRoots)
+    ? marker.extraSkillsRoots
+    : [marker?.agentsSkillsPath];
+  return [...new Set(roots.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function snapshotSourceCheckKey(codexHome, marker) {
+  return JSON.stringify([
+    path.resolve(codexHome || "."),
+    String(marker?.updatedAt || ""),
+    String(marker?.sourceFingerprint || ""),
+    String(marker?.sharedCodexHome || ""),
+    snapshotExtraSkillsRoots(marker),
+  ]);
+}
+
+function cachedSnapshotSourceCheck(codexHome, marker) {
+  const key = snapshotSourceCheckKey(codexHome, marker);
+  const cached = SNAPSHOT_SOURCE_CHECK_CACHE.get(key);
+  if (!cached || cached.promise) return null;
+  if (Number(cached.expiresAt) <= Date.now()) {
+    SNAPSHOT_SOURCE_CHECK_CACHE.delete(key);
+    return null;
+  }
+  return cached.result || null;
+}
+
+async function verifySnapshotSource(codexHome, marker) {
+  const key = snapshotSourceCheckKey(codexHome, marker);
+  const existing = SNAPSHOT_SOURCE_CHECK_CACHE.get(key);
+  if (existing?.promise) return existing.promise;
+
+  const promise = (async () => {
+    const verifiedAt = new Date().toISOString();
+    try {
+      const sharedCodexHome = String(marker?.sharedCodexHome || "");
+      if (!sharedCodexHome || !fs.existsSync(sharedCodexHome)) {
+        throw new Error("Shared Codex home is unavailable.");
+      }
+      const extraSkillsRoots = snapshotExtraSkillsRoots(marker);
+      const env = { ...process.env };
+      if (extraSkillsRoots.length > 0) env.ANTICODEX_EXTRA_SKILLS_ROOTS = extraSkillsRoots.join(path.delimiter);
+      const scriptPath = path.resolve(__dirname, "sync-shared-codex-plugin-host.mjs");
+      const { stdout } = await execFileAsync(process.execPath, [
+        scriptPath,
+        codexHome,
+        sharedCodexHome,
+        "--print-startup-source-fingerprint",
+      ], {
+        env,
+        timeout: 45000,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      });
+      const parsed = JSON.parse(String(stdout || ""));
+      if (!parsed?.sourceFingerprint) throw new Error("Source fingerprint is missing.");
+      const result = {
+        ok: true,
+        sourceFingerprint: String(parsed.sourceFingerprint),
+        sourceMtimeMax: parsed.sourceMtimeMax || null,
+        verifiedAt,
+      };
+      const matches = result.sourceFingerprint === String(marker?.sourceFingerprint || "");
+      SNAPSHOT_SOURCE_CHECK_CACHE.set(key, {
+        result,
+        expiresAt: matches ? Date.now() + SNAPSHOT_SOURCE_CHECK_MAX_AGE_MS : Number.POSITIVE_INFINITY,
+      });
+      return result;
+    } catch (error) {
+      const result = {
+        ok: false,
+        error: String(error?.message || error || "Snapshot source verification failed.").slice(0, 500),
+        verifiedAt,
+      };
+      SNAPSHOT_SOURCE_CHECK_CACHE.set(key, {
+        result,
+        expiresAt: Date.now() + SNAPSHOT_SOURCE_CHECK_FAILURE_MAX_AGE_MS,
+      });
+      return result;
+    }
+  })();
+  SNAPSHOT_SOURCE_CHECK_CACHE.set(key, { promise });
+  return promise;
 }
 
 function reportTimestampMs(report, fullPath) {
@@ -1369,7 +1459,7 @@ function validateLocalConnectorIds(connectorIds, stateRoot) {
 }
 
 // Diagnostics helper
-async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken = "") {
+async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken = "", options = {}) {
     const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
     const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
     const fixedStatus = readJsonIfPresent(stateRoot ? path.join(stateRoot, "fixed-route-status.json") : "");
@@ -1383,6 +1473,39 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     const snapshotMarker = readJsonIfPresent(codexHome ? path.join(codexHome, ".anticodex-startup-snapshots-ready.json") : "");
     const snapshotTimestamp = Date.parse(String(snapshotMarker?.updatedAt || ""));
     const snapshotAgeMs = Number.isFinite(snapshotTimestamp) ? Math.max(0, Date.now() - snapshotTimestamp) : null;
+    const snapshotMaxAgeHours = Math.max(1, Number(process.env.ANTICODEX_STARTUP_SNAPSHOT_MAX_AGE_HOURS) || 24);
+    const snapshotMarkerValid = snapshotMarker?.schema === STARTUP_SNAPSHOT_SCHEMA
+      && Number.isFinite(snapshotTimestamp)
+      && typeof snapshotMarker?.sourceFingerprint === "string"
+      && snapshotMarker.sourceFingerprint.length > 0
+      && typeof snapshotMarker?.sharedCodexHome === "string"
+      && snapshotMarker.sharedCodexHome.length > 0;
+    const snapshotAgeHours = Number.isFinite(snapshotAgeMs) ? snapshotAgeMs / 3600000 : null;
+    let snapshotSourceCheck = snapshotMarkerValid && snapshotAgeHours <= snapshotMaxAgeHours
+      ? cachedSnapshotSourceCheck(codexHome, snapshotMarker)
+      : null;
+    if (snapshotMarkerValid && snapshotAgeHours <= snapshotMaxAgeHours && options.verifySnapshotFreshness === true) {
+      snapshotSourceCheck = await verifySnapshotSource(codexHome, snapshotMarker);
+    }
+    const sourceFingerprintMatches = snapshotSourceCheck?.ok === true
+      ? snapshotSourceCheck.sourceFingerprint === snapshotMarker.sourceFingerprint
+      : null;
+    const snapshotState = !snapshotMarker
+      ? "missing"
+      : (!snapshotMarkerValid
+          ? "invalid"
+          : (snapshotAgeHours > snapshotMaxAgeHours
+              ? "stale"
+              : (snapshotSourceCheck?.ok === false
+                  ? "check_failed"
+                  : (!snapshotSourceCheck
+                      ? "unverified"
+                      : (sourceFingerprintMatches ? "fresh" : "stale")))));
+    const snapshotStaleReason = snapshotState === "stale"
+      ? (snapshotAgeHours > snapshotMaxAgeHours ? "age" : "source_changed")
+      : (snapshotState === "invalid"
+          ? "invalid_marker"
+          : (snapshotState === "missing" ? "missing" : (snapshotState === "unverified" ? "unverified" : (snapshotState === "check_failed" ? "check_failed" : null))));
     const sourcePreflight = latestManagerReportItem(stateRoot, "Source preflight", "latest-source-preflight.json");
     const syncReadiness = latestManagerReportItem(stateRoot, "Sync readiness", "latest-sync-readiness.json");
     const installedFull = latestManagerReportItem(stateRoot, "Installed overall", "latest-installed-overall.json");
@@ -1463,10 +1586,20 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
             skipped: false,
             source: "isolated-startup-snapshot-marker",
             snapshotStatus: {
-                state: snapshotMarker ? "fresh" : "missing",
-                stale: false,
-                ageHours: Number.isFinite(snapshotAgeMs) ? snapshotAgeMs / 3600000 : null,
-                maxAgeHours: 24,
+                present: Boolean(snapshotMarker),
+                state: snapshotState,
+                stale: snapshotState !== "fresh",
+                staleReason: snapshotStaleReason,
+                updatedAt: snapshotMarkerValid ? snapshotMarker.updatedAt : null,
+                ageHours: snapshotAgeHours,
+                maxAgeHours: snapshotMaxAgeHours,
+                sourceMtimeMax: snapshotMarker?.sourceMtimeMax || null,
+                currentSourceMtimeMax: snapshotSourceCheck?.sourceMtimeMax || null,
+                sourceFingerprintPresent: typeof snapshotMarker?.sourceFingerprint === "string" && snapshotMarker.sourceFingerprint.length > 0,
+                sourceFingerprintComparable: snapshotSourceCheck?.ok === true,
+                sourceFingerprintMatches,
+                verifiedAt: snapshotSourceCheck?.verifiedAt || null,
+                verificationError: snapshotSourceCheck?.ok === false ? snapshotSourceCheck.error : null,
             },
         },
         toolBridge: { mode: "codex-native-harness", active: routeReady, owner: "codex" },
@@ -1928,7 +2061,9 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/anticodex/diagnostics") {
       const fast = url.searchParams.get("fast") === "1";
-      return jsonResponse(res, 200, await diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken), req);
+      return jsonResponse(res, 200, await diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthToken, {
+        verifySnapshotFreshness: url.searchParams.get("snapshotFreshness") === "refresh",
+      }), req);
     }
 
     if (req.method === "GET" && pathname === "/anticodex/model-routes") {

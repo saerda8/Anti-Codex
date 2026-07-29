@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createServer } from "node:http";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -233,6 +234,95 @@ test("local connector verifier recognizes the deliberate offline Manager health 
   assert.match(code, /managerHealth\.schema,\s*"anticodex-manager-service-v1"/);
   assert.match(code, /managerHealth\.role,\s*"launcher-management-only"/);
   assert.doesNotMatch(code, /response\.ok\s*\|\|\s*response\.status\s*===\s*503/);
+});
+
+test("snapshot freshness is fail-closed until an explicit source check proves the marker", async () => {
+  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-snapshot-status-"));
+  const codexHome = path.join(stateRoot, "codex-home-deepseek-app");
+  const sharedHome = path.join(stateRoot, "shared-codex");
+  const agentsSkills = path.join(stateRoot, "agents-skills");
+  const sharedSkill = path.join(sharedHome, "skills", "shared-demo");
+  const agentSkill = path.join(agentsSkills, "agent-demo");
+  const connectorFile = path.join(sharedHome, "cache", "codex_app_directory", "connectors.json");
+  const appToolsFile = path.join(sharedHome, "cache", "codex_apps_tools", "tools.json");
+  const syncScript = path.resolve(__dirname, "../../scripts/sync-shared-codex-plugin-host.mjs");
+  let manager = null;
+
+  try {
+    for (const directory of [
+      sharedSkill,
+      agentSkill,
+      path.dirname(connectorFile),
+      path.dirname(appToolsFile),
+    ]) fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(sharedSkill, "SKILL.md"), "---\nname: shared-demo\ndescription: test\n---\n", "utf8");
+    fs.writeFileSync(path.join(agentSkill, "SKILL.md"), "---\nname: agent-demo\ndescription: test\n---\n", "utf8");
+    for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      fs.writeFileSync(path.join(sharedHome, name), `${name}\n`, "utf8");
+    }
+    fs.writeFileSync(connectorFile, '{"connectors":["one"]}\n', "utf8");
+    fs.writeFileSync(appToolsFile, '{"tools":["one"]}\n', "utf8");
+
+    const sync = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {
+      encoding: "utf8",
+      env: { ...process.env, ANTICODEX_EXTRA_SKILLS_ROOTS: agentsSkills },
+    });
+    assert.equal(sync.status, 0, sync.stderr || sync.stdout);
+
+    manager = createAntiCodexManagerService({
+      port: 0,
+      host: "127.0.0.1",
+      stateRoot,
+      fixedHealthUrl: "http://127.0.0.1:1/anticodex/fixed-route/health",
+    });
+    const server = await manager.listen();
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const readStatus = async (verify = false) => {
+      const response = await fetch(`${baseUrl}/anticodex/diagnostics${verify ? "?snapshotFreshness=refresh" : ""}`);
+      assert.equal(response.status, 200);
+      return (await response.json()).localFeatures.snapshotStatus;
+    };
+
+    const initial = await readStatus();
+    assert.equal(initial.state, "unverified");
+    assert.equal(initial.stale, true);
+    assert.equal(initial.staleReason, "unverified");
+    const verified = await readStatus(true);
+    assert.equal(verified.state, "fresh");
+    assert.equal(verified.stale, false);
+    assert.equal(verified.sourceFingerprintMatches, true);
+
+    const originalConnector = fs.readFileSync(connectorFile, "utf8");
+    fs.writeFileSync(connectorFile, originalConnector, "utf8");
+    assert.equal((await readStatus(true)).state, "fresh");
+
+    fs.writeFileSync(connectorFile, '{"connectors":["two"]}\n', "utf8");
+    const changed = await readStatus(true);
+    assert.equal(changed.state, "stale");
+    assert.equal(changed.stale, true);
+    assert.equal(changed.staleReason, "source_changed");
+    assert.equal(changed.sourceFingerprintMatches, false);
+
+    const markerPath = path.join(codexHome, ".anticodex-startup-snapshots-ready.json");
+    const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+    fs.writeFileSync(markerPath, JSON.stringify({
+      ...marker,
+      updatedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    }), "utf8");
+    const aged = await readStatus();
+    assert.equal(aged.state, "stale");
+    assert.equal(aged.stale, true);
+    assert.equal(aged.staleReason, "age");
+
+    fs.writeFileSync(markerPath, JSON.stringify({ ...marker, schema: "wrong-schema" }), "utf8");
+    const invalid = await readStatus();
+    assert.equal(invalid.state, "invalid");
+    assert.equal(invalid.stale, true);
+    assert.equal(invalid.staleReason, "invalid_marker");
+  } finally {
+    if (manager) await manager.close();
+    fs.rmSync(stateRoot, { recursive: true, force: true });
+  }
 });
 
 test("Anti-Codex Manager Service API contract and security suite", async (t) => {

@@ -414,7 +414,13 @@ export function createManagerBridgeSource() {
   globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action, actionToken = "") => new Promise((resolve) => {
     const id = Date.now() + ":" + Math.random().toString(36).slice(2);
     globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve };
-    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action, actionToken, leaseCount: 0 });
+    globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({
+      id,
+      action,
+      actionToken,
+      silent: action === "refreshStatus" && globalThis.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true,
+      leaseCount: 0,
+    });
   });
   globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ = (path, options = {}) => new Promise((resolve) => {
     const id = Date.now() + ":" + Math.random().toString(36).slice(2);
@@ -522,14 +528,14 @@ function pickTarget(targets) {
     || null;
 }
 
-async function managerSnapshot() {
+async function managerSnapshot({ verifySnapshotFreshness = false } = {}) {
   const responses = {};
   const errors = {};
   const trustedHeaders = {
     origin: baseUrl,
     referer: `${baseUrl}/anticodex/manager`,
   };
-  for (const path of [
+  for (const responsePath of [
     "/anticodex/manager/bootstrap",
     "/health",
     "/models",
@@ -541,8 +547,12 @@ async function managerSnapshot() {
     "/backend-api/aip/connectors",
     "/backend-api/plugins/list",
   ]) {
-    try { responses[path] = await httpJson(`${baseUrl}${path}`, { timeout: 10000, headers: trustedHeaders }); }
-    catch (error) { errors[path] = error.message; }
+    const requestPath = responsePath === "/anticodex/diagnostics" && verifySnapshotFreshness
+      ? `${responsePath}?snapshotFreshness=refresh`
+      : responsePath;
+    const timeout = responsePath === "/anticodex/diagnostics" && verifySnapshotFreshness ? 45000 : 10000;
+    try { responses[responsePath] = await httpJson(`${baseUrl}${requestPath}`, { timeout, headers: trustedHeaders }); }
+    catch (error) { errors[responsePath] = error.message; }
   }
   try { responses["/backend-api/wham/apps"] = await httpJson(`${baseUrl}/backend-api/wham/apps`, {
     method: "POST",
@@ -617,8 +627,10 @@ async function runManagerRequest(pathValue, options = {}) {
   return postManagerJsonWithToken(path, body, timeout);
 }
 
-async function runAction(action) {
-  if (action === "refreshStatus") return { ok: true, action, result: { ok: true }, snapshot: await managerSnapshot() };
+async function runAction(action, { verifySnapshotFreshness = false } = {}) {
+  if (action === "refreshStatus") {
+    return { ok: true, action, result: { ok: true }, snapshot: await managerSnapshot({ verifySnapshotFreshness }) };
+  }
   return postManagerJsonWithToken(
     "/anticodex/manager/action",
     JSON.stringify({ action }),
@@ -969,9 +981,11 @@ async function main() {
             value: await runManagerRequest(request.path, request.options),
           };
         } else {
-          completedPayload = await runAction(action);
+          completedPayload = await runAction(action, {
+            verifySnapshotFreshness: action === "refreshStatus" && request.silent !== true,
+          });
           completedPayload.action ||= action;
-          completedPayload.snapshot = await managerSnapshot();
+          completedPayload.snapshot ||= await managerSnapshot();
           completedPayload.managerSummary = managerSummary(action, completedPayload);
         }
       } catch (error) {
