@@ -92,7 +92,7 @@
     "postVerificationFull",
   ]);
   const BRIDGE_TIMEOUT_MS = 5000;
-  const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 310000;
+  const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 340000;
   const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
   const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
   const ACTION_UI_TIMEOUT_MS = 5000;
@@ -703,7 +703,8 @@
             reconcileManagerPendingActions(payload.snapshot);
           }
         }
-        return payload;
+        if (payload?.ok !== false || (payload?.result && typeof payload.result === "object")) return payload;
+        throw new Error(payload.message || "Anti-Codex manager action failed.");
       } catch (error) {
         lastError = error;
       }

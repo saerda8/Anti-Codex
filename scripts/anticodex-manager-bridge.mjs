@@ -30,7 +30,7 @@ const ALLOWED_MANAGER_BRIDGE_REQUESTS = new Map([
   ["/backend-api/wham/apps", new Set(["GET"])],
 ]);
 const MANAGER_BRIDGE_REQUEST_BODY_LIMIT = 1024 * 1024;
-const MANAGER_ACTION_HTTP_TIMEOUT_MS = 300000;
+const MANAGER_ACTION_HTTP_TIMEOUT_MS = 330000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const triStateText = (value) => value === true ? "true" : (value === false ? "false" : "unknown");
 

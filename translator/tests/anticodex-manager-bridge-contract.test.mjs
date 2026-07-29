@@ -923,6 +923,9 @@ test("Manager long actions enter pending UI without losing their late bridge res
   const longestForegroundMs = Number(
     managerService.match(/overallNoTraffic:\s*\{[\s\S]*?timeoutMs:\s*(\d+),/)?.[1],
   );
+  const refreshFeaturesMs = Number(
+    managerService.match(/refreshFeatures:\s*\{[\s\S]*?timeoutMs:\s*(\d+),/)?.[1],
+  );
 
   assert.match(bridgeActionBlock, /actionTransportTimeoutMs\(action\)/);
   assert.doesNotMatch(bridgeActionBlock, /actionUiTimeoutMs\(action\)\s*\+\s*1000/);
@@ -933,13 +936,21 @@ test("Manager long actions enter pending UI without losing their late bridge res
   assert.match(installActionsBlock, /lateOutcome\.type === "error"[\s\S]*?result\.textContent = "\\u8fd0\\u884c\\u5931\\u8d25/);
   assert.match(bridgeRunActionBlock, /managerActionHttpTimeoutMs\(action\)/);
   assert.equal(longestForegroundMs, 240000);
+  assert.equal(refreshFeaturesMs, 300000);
   assert.ok(bridgeTransportMs > longestForegroundMs);
+  assert.ok(bridgeTransportMs > refreshFeaturesMs);
   assert.ok(uiTransportMs > bridgeTransportMs);
 });
 
 test("Manager keeps structured verifier failures available for readable UI summaries", () => {
   const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
   assert.match(bridgeActionBlock, /payload\?\.ok !== false \|\| \(payload\?\.result && typeof payload\.result === "object"\)/);
+});
+
+test("Manager script fallback rejects failed receipts unless they include structured verifier output", () => {
+  const scriptActionBlock = extractNamedFunction(managerInject, "runActionViaScript");
+  assert.match(scriptActionBlock, /payload\?\.ok !== false \|\| \(payload\?\.result && typeof payload\.result === "object"\)/);
+  assert.match(scriptActionBlock, /throw new Error\(payload\.message \|\| "Anti-Codex manager action failed\."\)/);
 });
 
 test("Manager late action delivery is gated by the exact action generation token", () => {
