@@ -1301,11 +1301,10 @@ function Invoke-AntiCodexFixedRouteLauncher {
         $health = Wait-AntiCodexHealth -Seconds 1
         $fixedRoute = Wait-AntiCodexFixedRouteHealth -Seconds 1
         $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
-        if ($health -and $fixedRoute -and [int]$task.State -eq 4) { break }
-        if ([int]$task.State -notin @(2, 4)) { break }
+        if ($health -and $fixedRoute) { break }
     } while ([DateTime]::UtcNow -lt $deadline)
 
-    $ready = ($null -ne $health -and $null -ne $fixedRoute -and [int]$task.State -eq 4)
+    $ready = ($null -ne $health -and $null -ne $fixedRoute)
     if (-not $ready -and [int]$task.State -in @(2, 4)) {
         $null = Invoke-AntiCodexFixedRouteShutdown
         $task.Stop(0)

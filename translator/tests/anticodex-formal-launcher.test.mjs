@@ -639,6 +639,18 @@ test("runtime sync starts a Ready Launcher or reuses a queued/running Launcher",
   assert.match(afterStop, /while \(\[int\]\$task\.State -ne 3/);
 });
 
+test("runtime sync accepts verified health through Launcher state transitions", () => {
+  const start = runtimeSync.indexOf("function Invoke-AntiCodexFixedRouteLauncher");
+  const end = runtimeSync.indexOf("$syntaxCheckedJavaScriptFiles", start);
+  const relaunch = start >= 0 && end > start ? runtimeSync.slice(start, end) : "";
+  const pollingStart = relaunch.indexOf("$deadline =");
+  const pollingEnd = relaunch.indexOf("return [pscustomobject]", pollingStart);
+  const polling = relaunch.slice(pollingStart, pollingEnd);
+
+  assert.doesNotMatch(polling, /if \(\[int\]\$task\.State -notin @\(2, 4\)\) \{ break \}/);
+  assert.match(polling, /\$ready = \(\$null -ne \$health -and \$null -ne \$fixedRoute\)/);
+});
+
 test("runtime sync no-restart mode verifies copied files without polling live health", () => {
   assert.match(runtimeSync, /\$runtimeHashMismatches\s*=\s*@\(/);
   assert.match(runtimeSync, /function Get-AntiCodexSha256/);
