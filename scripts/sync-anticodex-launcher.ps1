@@ -28,6 +28,7 @@ $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"
 $updateTaskName = "Anti-Codex Updater"
 $syncScript = Join-Path $scriptRoot "sync-anticodex.ps1"
 $updateTaskScript = Join-Path $scriptRoot "start-anticodex-update-task.mjs"
+$updateStatusModule = Join-Path $scriptRoot "anticodex-update-status.psm1"
 $hiddenNodeHostScript = Join-Path $scriptRoot "start-anticodex-hidden-node.vbs"
 $wscript = Join-Path ([Environment]::SystemDirectory) "wscript.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -124,6 +125,19 @@ function Wait-AntiCodexUpdateTaskRunning {
     return $false
 }
 
+function Set-AntiCodexUpdaterHandoffFailure {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    if (-not (Get-Command Set-AntiCodexUpdateOperation -ErrorAction SilentlyContinue)) {
+        return
+    }
+    try {
+        [void](Set-AntiCodexUpdateOperation -State "failed" -Stage "updater_handoff_failed" -Message $Message -FailureCode "updater_handoff_failed" -ExpectedStates @("running") -ExpectedStages @("updater_queued", "updater_handoff"))
+    } catch {
+        Write-Warning "Anti-Codex could not record updater handoff failure: $($_.Exception.Message)"
+    }
+}
+
 try {
     if ($installRoot -ne $expectedRoot) {
         throw "Anti-Codex sync launcher may only run from $expectedRoot"
@@ -137,6 +151,10 @@ try {
     if (-not (Test-Path -LiteralPath $hiddenNodeHostScript -PathType Leaf)) {
         throw "Anti-Codex hidden Node host is missing: $hiddenNodeHostScript"
     }
+    if (-not (Test-Path -LiteralPath $updateStatusModule -PathType Leaf)) {
+        throw "Anti-Codex update status component is missing: $updateStatusModule"
+    }
+    Import-Module $updateStatusModule -Force
 
     $taskEvidence = Get-AntiCodexUpdateTaskEvidence
     if (-not $taskEvidence.ok) {
@@ -148,6 +166,7 @@ try {
         if ([int]$taskEvidence.stateCode -ne 4) {
             throw "Anti-Codex sync refused an unverified updater-task context."
         }
+        [void](Set-AntiCodexUpdateOperation -State "running" -Stage "updater_handoff" -Message "The isolated updater task has taken over the sync." -ExpectedStates @("running") -ExpectedStages @("updater_queued"))
         $global:LASTEXITCODE = 0
         & $syncScript -FromUpdateTask
         if ($LASTEXITCODE -ne 0) {
@@ -161,14 +180,27 @@ try {
             Write-Host "Anti-Codex update is already running in the isolated updater task."
             exit 0
         }
+        if ([int]$taskEvidence.stateCode -ne 3) {
+            throw "The isolated Anti-Codex updater task is not ready."
+        }
+        $newOperationId = [Guid]::NewGuid().ToString("N")
+        $queued = Set-AntiCodexUpdateOperation -State "running" -Stage "updater_queued" -Message "Waiting for the isolated updater task to take over." -NewOperationId $newOperationId -ExpectedStates @("idle", "succeeded", "failed", "rolled_back")
+        if (-not $queued) {
+            $queued = Set-AntiCodexUpdateOperation -State "running" -Stage "updater_queued" -Message "Waiting for the isolated updater task to take over." -NewOperationId $newOperationId -ExpectedStates @("running") -ExpectedStages @("updater_queued", "updater_handoff")
+        }
+        if (-not $queued) {
+            throw "Anti-Codex refused to replace a detailed update status while starting the updater task."
+        }
         [void]$taskEvidence.task.Run($null)
         if (-not (Wait-AntiCodexUpdateTaskRunning -TimeoutSeconds 5)) {
             throw "The isolated Anti-Codex updater task did not enter the running state."
         }
+        [void](Set-AntiCodexUpdateOperation -State "running" -Stage "updater_handoff" -Message "The isolated updater task has taken over the sync." -ExpectedStates @("running") -ExpectedStages @("updater_queued"))
         Write-Host "Anti-Codex update was handed to the isolated updater task."
         exit 0
     }
 } catch {
+    Set-AntiCodexUpdaterHandoffFailure -Message $_.Exception.Message
     Show-AntiCodexPopup `
         -Title "Anti-Codex Sync Failed" `
         -Icon 16 `

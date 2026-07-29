@@ -1524,6 +1524,9 @@
   function updateOperationStageText(operation) {
     return ({
       none: "\u65e0",
+      updater_queued: "\u5df2\u6392\u961f\uff0c\u7b49\u5f85\u66f4\u65b0\u4efb\u52a1",
+      updater_handoff: "\u66f4\u65b0\u4efb\u52a1\u5df2\u63a5\u7ba1",
+      updater_handoff_failed: "\u66f4\u65b0\u4efb\u52a1\u4ea4\u63a5\u5931\u8d25",
       candidate_build: "\u6784\u5efa\u5019\u9009\u7248",
       candidate_validation: "\u6821\u9a8c\u5019\u9009\u7248",
       stopping_host: "\u505c\u6b62\u5f53\u524d\u5ba2\u6237\u7aef",

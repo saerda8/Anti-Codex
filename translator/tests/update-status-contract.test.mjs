@@ -186,6 +186,137 @@ Get-AntiCodexUpdateStatus | ConvertTo-Json -Depth 8 -Compress`
   }
 });
 
+test("Set-AntiCodexUpdateOperation atomically advances only expected states and stages", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-conditional-write-"));
+  try {
+    const psScript = resolve(tempDir, "run-test.ps1");
+    fs.writeFileSync(
+      psScript,
+      `$ErrorActionPreference = "Stop"
+$env:DEEPCODEX_STATE_ROOT = '${tempDir.replace(/\\/g, '\\\\')}'
+Import-Module '${targetModule.replace(/\\/g, '\\\\')}'
+$queued = Set-AntiCodexUpdateOperation -State 'running' -Stage 'updater_queued' -ExpectedStates @('idle')
+$handoff = Set-AntiCodexUpdateOperation -State 'running' -Stage 'updater_handoff' -ExpectedStages @('updater_queued')
+[pscustomobject]@{
+  queued = [bool]$queued
+  handoff = [bool]$handoff
+  status = Get-AntiCodexUpdateStatus
+} | ConvertTo-Json -Depth 8 -Compress`
+    );
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+
+    if (result.status !== 0) {
+      throw new Error(
+        `PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`
+      );
+    }
+
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(parsed.queued, true);
+    assert.equal(parsed.handoff, true);
+    assert.equal(parsed.status.operation?.state, "running");
+    assert.equal(parsed.status.operation?.stage, "updater_handoff");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("a Ready-task retry starts a new update operation identity", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-new-operation-"));
+  try {
+    const psScript = resolve(tempDir, "run-test.ps1");
+    fs.writeFileSync(
+      psScript,
+      `$ErrorActionPreference = "Stop"
+$env:DEEPCODEX_STATE_ROOT = '${tempDir.replace(/\\/g, '\\\\')}'
+Import-Module '${targetModule.replace(/\\/g, '\\\\')}'
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'updater_queued' | Out-Null
+$before = Get-AntiCodexUpdateStatus
+$oldOperationId = [string]$before.operation.operationId
+$oldStartedAt = [string]$before.operation.startedAt
+Start-Sleep -Milliseconds 10
+$newOperationId = [Guid]::NewGuid().ToString('N')
+$written = Set-AntiCodexUpdateOperation -State 'running' -Stage 'updater_queued' -NewOperationId $newOperationId -ExpectedStates @('running') -ExpectedStages @('updater_queued', 'updater_handoff')
+$after = Get-AntiCodexUpdateStatus
+[pscustomobject]@{
+  written = [bool]$written
+  oldOperationId = $oldOperationId
+  newOperationId = [string]$after.operation.operationId
+  oldStartedAt = $oldStartedAt
+  newStartedAt = [string]$after.operation.startedAt
+} | ConvertTo-Json -Depth 8 -Compress`
+    );
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+
+    if (result.status !== 0) {
+      throw new Error(
+        `PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`
+      );
+    }
+
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(parsed.written, true);
+    assert.notEqual(parsed.newOperationId, parsed.oldOperationId);
+    assert.equal(parsed.newOperationId.length, 32);
+    assert.notEqual(parsed.newStartedAt, parsed.oldStartedAt);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("conditional updater handoff failures cannot overwrite candidate or terminal status", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-protected-write-"));
+  try {
+    const psScript = resolve(tempDir, "run-test.ps1");
+    fs.writeFileSync(
+      psScript,
+      `$ErrorActionPreference = "Stop"
+$env:DEEPCODEX_STATE_ROOT = '${tempDir.replace(/\\/g, '\\\\')}'
+Import-Module '${targetModule.replace(/\\/g, '\\\\')}'
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'candidate_build' | Out-Null
+$candidateWrite = Set-AntiCodexUpdateOperation -State 'failed' -Stage 'updater_handoff_failed' -ExpectedStates @('running') -ExpectedStages @('updater_queued', 'updater_handoff')
+$candidateStatus = Get-AntiCodexUpdateStatus
+Set-AntiCodexUpdateOperation -State 'succeeded' -Stage 'complete' | Out-Null
+$terminalWrite = Set-AntiCodexUpdateOperation -State 'failed' -Stage 'updater_handoff_failed' -ExpectedStates @('running') -ExpectedStages @('updater_queued', 'updater_handoff')
+$terminalStatus = Get-AntiCodexUpdateStatus
+[pscustomobject]@{
+  candidateWrite = [bool]$candidateWrite
+  candidateState = [string]$candidateStatus.operation.state
+  candidateStage = [string]$candidateStatus.operation.stage
+  terminalWrite = [bool]$terminalWrite
+  terminalState = [string]$terminalStatus.operation.state
+  terminalStage = [string]$terminalStatus.operation.stage
+} | ConvertTo-Json -Depth 8 -Compress`
+    );
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+
+    if (result.status !== 0) {
+      throw new Error(
+        `PowerShell exited code ${result.status}\nSTDERR: ${result.stderr}\nSTDOUT: ${result.stdout}`
+      );
+    }
+
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(parsed.candidateWrite, false);
+    assert.equal(parsed.candidateState, "running");
+    assert.equal(parsed.candidateStage, "candidate_build");
+    assert.equal(parsed.terminalWrite, false);
+    assert.equal(parsed.terminalState, "succeeded");
+    assert.equal(parsed.terminalStage, "complete");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("RED: update check preserves an existing running operation", () => {
   const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-check-"));
   try {

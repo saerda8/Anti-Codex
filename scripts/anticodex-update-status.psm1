@@ -149,19 +149,36 @@ function Set-AntiCodexUpdateOperation {
         [string]$Message,
         [string]$FailureCode,
         [bool]$RollbackAvailable = $false,
+        [string]$NewOperationId,
+        [string[]]$ExpectedStates,
+        [string[]]$ExpectedStages,
         [string]$StateRoot
     )
 
     $resolvedStateRoot = Get-AntiCodexUpdateStateRoot -StateRoot $StateRoot
+    $hasExpectedStates = $PSBoundParameters.ContainsKey("ExpectedStates") -and $ExpectedStates.Count -gt 0
+    $hasExpectedStages = $PSBoundParameters.ContainsKey("ExpectedStages") -and $ExpectedStages.Count -gt 0
+    $conditionalWrite = $hasExpectedStates -or $hasExpectedStages
     try {
-        Invoke-AntiCodexUpdateStatusLocked {
+        $written = Invoke-AntiCodexUpdateStatusLocked {
             $status = Get-AntiCodexUpdateStatus -StateRoot $resolvedStateRoot
             $existingOperation = Get-AntiCodexObjectProperty -InputObject $status -Name "operation"
+            $existingState = [string](Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "state")
+            $existingStage = [string](Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "stage")
+            if (($hasExpectedStates -and $existingState -notin $ExpectedStates) -or
+                ($hasExpectedStages -and $existingStage -notin $ExpectedStages)) {
+                return $false
+            }
+
             $now = [DateTimeOffset]::UtcNow.ToString("o")
             $operationId = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "operationId"
             $startedAt = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "startedAt"
 
-            if ([string]::IsNullOrWhiteSpace($operationId) -or $State -eq "running" -and (Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "state") -ne "running") {
+            if (-not [string]::IsNullOrWhiteSpace($NewOperationId)) {
+                $operationId = $NewOperationId
+                $startedAt = $now
+            }
+            elseif ([string]::IsNullOrWhiteSpace($operationId) -or $State -eq "running" -and (Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "state") -ne "running") {
                 $operationId = [Guid]::NewGuid().ToString("N")
                 $startedAt = $now
             }
@@ -190,10 +207,17 @@ function Set-AntiCodexUpdateOperation {
                 $operationProperty.Value = $operation
             }
             Write-AntiCodexUpdateStatusFile -Status $status -StateRoot $resolvedStateRoot
+            return $true
+        }
+        if ($conditionalWrite) {
+            return [bool]$written
         }
     }
     catch {
         Write-Warning "Anti-Codex could not persist update operation state: $($_.Exception.Message)"
+        if ($conditionalWrite) {
+            return $false
+        }
     }
 }
 

@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import * as taskLauncher from "../../scripts/start-anticodex-task.mjs";
 
@@ -23,6 +25,7 @@ const updateTaskBroker = readFileSync(resolve(root, "scripts", "start-anticodex-
 const hiddenNodeHost = readFileSync(resolve(root, "scripts", "start-anticodex-hidden-node.vbs"), "utf8");
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
+const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
 const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
 
 test("controlled route restarts do not accumulate signal listeners", () => {
@@ -180,6 +183,81 @@ test("the built-in Manager sync delegates to an independent updater task", () =>
   assert.match(updateTaskBroker, /process\.exitCode\s*=\s*exitCode/);
   assert.match(syncLauncher, /\$definition\.Triggers\.Count\s+-eq\s+0/);
   assert.match(syncLauncher, /\$definition\.Settings\.AllowDemandStart/);
+});
+
+test("the updater handoff publishes guarded status without overwriting detailed sync stages", () => {
+  const readyGuard = syncLauncher.indexOf("[int]$taskEvidence.stateCode -ne 3");
+  const queuedWrite = syncLauncher.indexOf('-Stage "updater_queued"', readyGuard);
+  const taskRun = syncLauncher.indexOf("$taskEvidence.task.Run($null)", queuedWrite);
+  assert.ok(readyGuard >= 0, "the launcher must require a Ready task before publishing queued status");
+  assert.ok(queuedWrite > readyGuard, "queued status must be published after the Ready check");
+  assert.ok(taskRun > queuedWrite, "queued status must be published immediately before the only task Run");
+  assert.equal([...syncLauncher.matchAll(/\$taskEvidence\.task\.Run\(\$null\)/g)].length, 1);
+  const queuedCalls = [...syncLauncher.matchAll(/^[^\r\n]*Set-AntiCodexUpdateOperation[^\r\n]*-Stage "updater_queued"[^\r\n]*$/gm)];
+  assert.equal(queuedCalls.length, 2);
+  for (const call of queuedCalls) assert.match(call[0], /-NewOperationId \$newOperationId/);
+
+  assert.match(syncLauncher, /Set-AntiCodexUpdateOperation[^\r\n]*-Stage "updater_handoff"[^\r\n]*-ExpectedStates[^\r\n]*-ExpectedStages/);
+  assert.match(syncLauncher, /Set-AntiCodexUpdateOperation[^\r\n]*-State "failed"[^\r\n]*-Stage "updater_handoff_failed"[^\r\n]*-ExpectedStates[^\r\n]*-ExpectedStages/);
+  assert.match(syncLauncher, /-ExpectedStages @\("updater_queued", "updater_handoff"\)/);
+
+  assert.match(updateTaskBroker, /anticodex-update-status\.psm1/);
+  assert.match(updateTaskBroker, /markUpdaterHandoffFailed/);
+  assert.match(updateTaskBroker, /ExpectedStates/);
+  assert.match(updateTaskBroker, /ExpectedStages/);
+  assert.match(updateTaskBroker, /result\.error[\s\S]*markUpdaterHandoffFailed/);
+  assert.match(updateTaskBroker, /exitCode[\s\S]*?!== 0[\s\S]*markUpdaterHandoffFailed/);
+});
+
+test("the updater broker records an early missing-launcher failure without running a task", { skip: process.platform !== "win32" }, () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "anticodex-updater-broker-"));
+  try {
+    const localAppData = join(tempRoot, "Local");
+    const appData = join(tempRoot, "Roaming");
+    const installRoot = join(localAppData, "Anti-Codex");
+    const scriptRoot = join(installRoot, "runtime", "scripts");
+    const stateRoot = join(appData, "anticodex");
+    mkdirSync(scriptRoot, { recursive: true });
+    mkdirSync(stateRoot, { recursive: true });
+    const brokerPath = join(scriptRoot, "start-anticodex-update-task.mjs");
+    copyFileSync(resolve(root, "scripts", "start-anticodex-update-task.mjs"), brokerPath);
+    copyFileSync(resolve(root, "scripts", "anticodex-update-status.psm1"), join(scriptRoot, "anticodex-update-status.psm1"));
+    writeFileSync(join(stateRoot, "update-status.json"), JSON.stringify({
+      operation: {
+        state: "running",
+        stage: "updater_queued",
+        operationId: "queued-before-broker",
+        startedAt: "2001-01-01T00:00:00.000Z",
+      },
+    }));
+
+    const result = spawnSync(process.execPath, [brokerPath], {
+      cwd: installRoot,
+      env: {
+        ...process.env,
+        LOCALAPPDATA: localAppData,
+        APPDATA: appData,
+        DEEPCODEX_STATE_ROOT: stateRoot,
+      },
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 20_000,
+    });
+
+    assert.notEqual(result.status, 0);
+    const status = JSON.parse(readFileSync(join(stateRoot, "update-status.json"), "utf8"));
+    assert.equal(status.operation?.state, "failed");
+    assert.equal(status.operation?.stage, "updater_handoff_failed");
+    assert.equal(status.operation?.operationId, "queued-before-broker");
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("Manager names the updater queue and handoff stages in Chinese", () => {
+  assert.match(managerInject, /updater_queued:\s*"\\u5df2\\u6392\\u961f\\uff0c\\u7b49\\u5f85\\u66f4\\u65b0\\u4efb\\u52a1"/);
+  assert.match(managerInject, /updater_handoff:\s*"\\u66f4\\u65b0\\u4efb\\u52a1\\u5df2\\u63a5\\u7ba1"/);
+  assert.match(managerInject, /updater_handoff_failed:\s*"\\u66f4\\u65b0\\u4efb\\u52a1\\u4ea4\\u63a5\\u5931\\u8d25"/);
 });
 
 test("host sync gracefully releases the old launch task before starting the new host", () => {
