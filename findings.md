@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-07-29 Clean-Revision Preflight, Truthful Updater Handoff, and Claude Continuation
+
+- Commits `08cc8153`, `cc90a40` and `d8a115d7` are narrow source-only closure changes. Manager actions cannot overlap or accept stale late results; source preflight evidence is rejected if it was generated from a dirty or different revision; and the isolated updater now records queue, handoff and handoff failure without overwriting candidate-build or terminal stages.
+- Fresh syntax and focused contracts pass: update status `25/25`, formal launcher `41/41`, Manager bridge `42/42`. Final independent review found no P0/P1. The sole non-blocking edge is an updater process missing its Windows user environment or the status module itself, where no trustworthy state writer exists; normal installed task prerequisites exclude that case.
+- Read-only current-state checks still report official/active Codex `26.721.4979.0` and CodexPlusPlus project/runtime/active `v1.2.43`, ten patches and matching binary hash. No update or activation is needed for those upstream versions; the three new source commits are intentionally not installed while the autonomous media turn is active.
+- Gemini result turn `019faa41-c28b-7ea0-937c-a6209ffa163c` was independently rejected for face/mouth-obscuring subtitles, dialogue/product mismatch, ASR reference gaming, missing real music contribution, false flat-path claims and insufficient final-mouth/audio binding. The same task received only that observable result evaluation. Follow-up turn `019faa7c-fefb-7e92-ab9e-988a1ff037b8` ended on explicit HTTP 429 without agent output.
+- The native composer model menu was switched from Gemini to Antigravity / Claude Sonnet 4.6, and exact `继续` started turn `019fabb7-c2dc-7b33-bf55-cde419452178` in the original task and cwd. Native context compaction completed; no third-party API, second task, duplicate client or production method instruction was used. Gate 8 and overall 100% remain red pending a new result plus independent acceptance and installed product gates.
+
 ## 2026-07-29 Final Manager Race Closure and Active Gemini Rework
 
 - Commits `c191a856` and `653e1cd2` are narrow source-only closure changes. Manager refreshes, quota rechecks, normal results, late results, close and reinjection now share exact action-token ownership; stale work cannot overwrite a newer snapshot/result or reopen a closed panel. The rollback product code is unchanged; only its Windows test child timeout increases from 10 to 30 seconds and now surfaces `ETIMEDOUT` explicitly.
