@@ -10,6 +10,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  writeSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
@@ -1613,39 +1614,38 @@ async function startManagerSupport(plan, childEnvironment) {
   };
   const watcherLogPath = join(plan.paths.logs, "manager-inject.log");
   const watcherErrorLogPath = join(plan.paths.logs, "manager-inject.err.log");
-  const bootstrapLog = openSync(watcherLogPath, "a");
-  const bootstrapErrorLog = openSync(watcherErrorLogPath, "a");
-  const bootstrap = spawn(process.execPath, [injector, String(plan.ports.cdp), managerScript], {
-    cwd: root,
-    env: { ...managerEnvironment, DEEPCODEX_CDP_MANAGER_WATCH: "0" },
-    windowsHide: true,
-    stdio: ["ignore", bootstrapLog, bootstrapErrorLog],
-  });
-  try {
-    await waitFor(() => {
-      if (bootstrap.exitCode === 0) return true;
-      if (bootstrap.exitCode !== null || bootstrap.signalCode !== null) {
-        throw new Error(`Manager injection exited before readiness: ${bootstrap.exitCode ?? bootstrap.signalCode}`);
-      }
-      return null;
-    }, { timeoutMs: 60_000, intervalMs: 100, description: "fixed-route Manager injection" });
-  } finally {
-    if (bootstrap.exitCode === null && bootstrap.signalCode === null) bootstrap.kill();
-    closeSync(bootstrapLog);
-    closeSync(bootstrapErrorLog);
-  }
-
   const watcherLog = openSync(watcherLogPath, "a");
   const watcherErrorLog = openSync(watcherErrorLogPath, "a");
-  const bridgeLog = openSync(join(plan.paths.logs, "manager-bridge.log"), "a");
-  const bridgeErrorLog = openSync(join(plan.paths.logs, "manager-bridge.err.log"), "a");
   const watcherStartedAtMs = Date.now();
   const watcher = spawn(process.execPath, [injector, String(plan.ports.cdp), managerScript, "--watch"], {
     cwd: root,
     env: managerEnvironment,
     windowsHide: true,
-    stdio: ["ignore", watcherLog, watcherErrorLog],
+    stdio: ["ignore", "pipe", watcherErrorLog],
   });
+  let watcherOutput = "";
+  let watcherReady = false;
+  watcher.stdout.on("data", (chunk) => {
+    try { writeSync(watcherLog, chunk); } catch {}
+    watcherOutput = `${watcherOutput}${chunk.toString("utf8")}`.slice(-4096);
+    if (/"watching"\s*:\s*true/.test(watcherOutput)) watcherReady = true;
+  });
+  watcher.once("close", () => { closeSync(watcherLog); closeSync(watcherErrorLog); });
+  try {
+    await waitFor(() => {
+      if (watcherReady) return true;
+      if (watcher.exitCode !== null || watcher.signalCode !== null) {
+        throw new Error(`Manager watcher exited before readiness: ${watcher.exitCode ?? watcher.signalCode}`);
+      }
+      return null;
+    }, { timeoutMs: 60_000, intervalMs: 100, description: "fixed-route Manager watcher" });
+  } catch (error) {
+    if (watcher.exitCode === null && watcher.signalCode === null) watcher.kill();
+    throw error;
+  }
+
+  const bridgeLog = openSync(join(plan.paths.logs, "manager-bridge.log"), "a");
+  const bridgeErrorLog = openSync(join(plan.paths.logs, "manager-bridge.err.log"), "a");
   const bridgeStartedAtMs = Date.now();
   const bridge = spawn(process.execPath, [
     bridgeScript,
@@ -1657,7 +1657,6 @@ async function startManagerSupport(plan, childEnvironment) {
     windowsHide: true,
     stdio: ["ignore", bridgeLog, bridgeErrorLog],
   });
-  watcher.once("close", () => { closeSync(watcherLog); closeSync(watcherErrorLog); });
   bridge.once("close", () => { closeSync(bridgeLog); closeSync(bridgeErrorLog); });
   return { watcher, bridge, watcherStartedAtMs, bridgeStartedAtMs };
 }

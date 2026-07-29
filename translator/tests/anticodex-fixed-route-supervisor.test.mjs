@@ -98,12 +98,13 @@ test("ready state waits for verified Manager injection", () => {
   const supportEnd = source.indexOf("\nexport function scanCopiedClientProcessesSafely", supportStart);
   assert.ok(supportStart >= 0 && supportEnd > supportStart);
   const supportBlock = source.slice(supportStart, supportEnd);
-  const bootstrapStart = supportBlock.indexOf("const bootstrap = spawn(process.execPath");
-  const bootstrapReady = supportBlock.indexOf("await waitFor", bootstrapStart);
-  const watcherStart = supportBlock.indexOf('"--watch"', bootstrapReady);
-  assert.ok(bootstrapStart >= 0 && bootstrapReady > bootstrapStart && watcherStart > bootstrapReady);
-  assert.match(supportBlock, /if \(bootstrap\.exitCode === 0\) return true/);
-  assert.match(supportBlock, /throw new Error\(`Manager injection exited before readiness:/);
+  const watcherStart = supportBlock.indexOf('"--watch"');
+  const watcherReady = supportBlock.indexOf("await waitFor", watcherStart);
+  const bridgeStart = supportBlock.indexOf("const bridge = spawn", watcherReady);
+  assert.ok(watcherStart >= 0 && watcherReady > watcherStart && bridgeStart > watcherReady);
+  assert.match(supportBlock, /"watching"\\s\*:\\s\*true/);
+  assert.match(supportBlock, /throw new Error\(`Manager watcher exited before readiness:/);
+  assert.doesNotMatch(supportBlock, /const bootstrap = spawn/);
 });
 
 test("model refresh preserves the live provider and updates only the Antigravity model list", () => {
