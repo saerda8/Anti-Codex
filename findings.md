@@ -3389,3 +3389,9 @@
 - Independent inspection accepts master SHA-256 `1d5b1f84e92dd24f6ac4327c3795d7515eb86e78887da2bb34d20942be44623f`. All five evidence sheets and JSON ROIs cover the mouth, Face Landmarker yields 49-50 lip samples per window, and the evidence WAV matches all 769,707 samples re-decoded from the current MP4.
 - Unprompted medium ASR remains aligned with the SRT; subtitles stay below faces/mouths; decode, black, freeze, silence, loudness, true peak and music checks pass. The rebuilt ZIP has 23 readable entries and its 21-item manifest hashes match every packaged artifact.
 - Gate 8's autonomous deliverable is green. The `anti-codex` heartbeat was deleted; remaining work is product-source checkpoint, guarded installed update, physical Manager/updater checks, installed release gates and final cleanup/audit.
+
+## 2026-07-29 Full-Preflight Host-Limit Finding
+
+- The complete source preflight sent no model traffic and found no new product assertion failure. Its translator aggregate failed because the candidate test's 30-second process timeout was too short under parallel Windows load and the current token returns access denied for creating junctions.
+- The timeout is now 120 seconds with an explicit spawn-error assertion. Junction coverage still executes the exact production guards: it creates real junctions when allowed, otherwise substitutes only the queried test path's `ReparsePoint` attribute after an exact permission failure. Non-permission setup failures remain fatal.
+- Focused reruns pass candidate `13/13`, atomic runtime sync `10/10`, and runtime-isolation contract `6/6`. This proves the portability repair itself; the complete clean source preflight must still be rerun before installed activation.

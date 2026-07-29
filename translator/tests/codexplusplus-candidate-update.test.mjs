@@ -135,7 +135,7 @@ Add-Content -LiteralPath $env:ANTICODEX_TEST_LOG -Value "hygiene runtime-clean"
 }
 
 function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot) {
-  return spawnSync(
+  const result = spawnSync(
     "powershell.exe",
     [
       "-NoLogo",
@@ -159,10 +159,12 @@ function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot) {
         ...env,
       },
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: 120_000,
       windowsHide: true,
     },
   );
+  assert.equal(result.error, undefined, result.error?.message);
+  return result;
 }
 
 test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex", () => {

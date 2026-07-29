@@ -197,6 +197,7 @@ function runSync(fixture, options = {}) {
     timeout = 120_000,
     noRestart = true,
     env: envOverrides = {},
+    wrapperPrelude = [],
   } = options;
   const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
   const wrapper = join(fixture.root, "run-sync.ps1");
@@ -207,6 +208,7 @@ function runSync(fixture, options = {}) {
     [
       "$ErrorActionPreference = 'Stop'",
       "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop",
+      ...wrapperPrelude,
       `& ${quote(syncScript)} -SourceRoot ${quote(fixture.sourceRoot)} -TargetRuntime ${quote(fixture.activeRuntime)}${noRestartArgument} -TimeoutSec 1 ${forwarded}`,
       "",
     ].join("\n"),
@@ -461,9 +463,38 @@ test("runtime sync refuses a reparse-point runtime-versions root without touchin
   const externalRoot = mkdtempSync(join(tmpdir(), "anticodex-runtime-versions-external-"));
   const versionsLink = join(fixture.installRoot, "runtime-versions");
   writeFixture(join(externalRoot, "outside-sentinel.txt"), "outside\n");
-  symlinkSync(externalRoot, versionsLink, "junction");
+  let wrapperPrelude = [];
   try {
-    const result = runSync(fixture);
+    symlinkSync(externalRoot, versionsLink, "junction");
+  } catch (error) {
+    if (error?.code !== "EPERM") throw error;
+    mkdirSync(versionsLink, { recursive: true });
+    wrapperPrelude = [String.raw`
+function Get-Item {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [switch]$Force
+    )
+    $item = Microsoft.PowerShell.Management\Get-Item -LiteralPath $LiteralPath -Force:$Force -ErrorAction Stop
+    if ([IO.Path]::GetFullPath($LiteralPath).Equals(
+        [IO.Path]::GetFullPath($env:ANTICODEX_TEST_REPARSE_PATH),
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        return [pscustomobject]@{
+            PSIsContainer = $true
+            Attributes = ($item.Attributes -bor [IO.FileAttributes]::ReparsePoint)
+            FullName = $item.FullName
+        }
+    }
+    return $item
+}`];
+  }
+  try {
+    const result = runSync(fixture, {
+      env: { ANTICODEX_TEST_REPARSE_PATH: versionsLink },
+      wrapperPrelude,
+    });
     assert.notEqual(result.status, 0, result.stdout);
     assert.match(`${result.stderr}\n${result.stdout}`, /reparse|junction/i);
     assert.equal(readFileSync(join(externalRoot, "outside-sentinel.txt"), "utf8"), "outside\n");

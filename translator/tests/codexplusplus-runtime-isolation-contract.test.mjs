@@ -173,11 +173,36 @@ try {
     [IO.File]::WriteAllText($externalFile, 'sentinel')
     $junctionId = 'r1234567890123-abcdef06'
     $junctionRoot = Join-Path $tempRoot $junctionId
-    New-Item -ItemType Junction -Path $junctionRoot -Target $external -ErrorAction Stop | Out-Null
+    $mockedJunction = $false
+    try {
+        New-Item -ItemType Junction -Path $junctionRoot -Target $external -ErrorAction Stop | Out-Null
+    } catch {
+        if ($_.CategoryInfo.Reason -ne 'Win32Exception' -or $_.Exception.NativeErrorCode -ne 5) { throw }
+        New-Item -ItemType Directory -Path $junctionRoot -ErrorAction Stop | Out-Null
+        $mockedJunction = $true
+        $script:MockReparsePath = [IO.Path]::GetFullPath($junctionRoot)
+        function Get-Item {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory = $true)][string]$LiteralPath,
+                [switch]$Force
+            )
+            $item = Microsoft.PowerShell.Management\Get-Item -LiteralPath $LiteralPath -Force:$Force -ErrorAction Stop
+            if ([IO.Path]::GetFullPath($LiteralPath).Equals($script:MockReparsePath, [StringComparison]::OrdinalIgnoreCase)) {
+                return [pscustomobject]@{
+                    PSIsContainer = $true
+                    Attributes = ($item.Attributes -bor [IO.FileAttributes]::ReparsePoint)
+                    FullName = $item.FullName
+                }
+            }
+            return $item
+        }
+    }
     try {
         Remove-IsolationRunRoot -RunRoot $junctionRoot -TempRoot $tempRoot -ExpectedRunId $junctionId -QuiescenceMilliseconds 25 | Out-Null
         $results.junctionRejected = $false
     } catch { $results.junctionRejected = (Test-Path -LiteralPath $externalFile -PathType Leaf) }
+    if ($mockedJunction) { Remove-Item Function:\Get-Item -Force -ErrorAction Stop }
     [IO.Directory]::Delete($junctionRoot, $false)
 
     $lockedId = 'r1234567890123-abcdef07'
