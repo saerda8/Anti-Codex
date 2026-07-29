@@ -29,12 +29,10 @@ $updateTaskName = "Anti-Codex Updater"
 $syncScript = Join-Path $scriptRoot "sync-anticodex.ps1"
 $updateTaskScript = Join-Path $scriptRoot "start-anticodex-update-task.mjs"
 $updateStatusModule = Join-Path $scriptRoot "anticodex-update-status.psm1"
-$hiddenNodeHostScript = Join-Path $scriptRoot "start-anticodex-hidden-node.vbs"
-$wscript = Join-Path ([Environment]::SystemDirectory) "wscript.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
 $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
-$expectedTaskArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$updateTaskScript`""
+$expectedTaskArguments = "`"$updateTaskScript`" --hide-console"
 $script:antiCodexScheduleService = $null
 $script:antiCodexScheduleRoot = $null
 
@@ -82,7 +80,7 @@ function Get-AntiCodexUpdateTaskEvidence {
         $actionCount -eq 1 -and
         $task.Enabled -and
         $action -and
-        [string]$action.Path -ieq $wscript -and
+        [string]$action.Path -ieq $node -and
         [string]$action.Arguments -ceq $expectedTaskArguments -and
         [string]$action.WorkingDirectory -ieq $installRoot
     )
@@ -147,9 +145,6 @@ try {
     }
     if (-not (Test-Path -LiteralPath $updateTaskScript -PathType Leaf)) {
         throw "Anti-Codex updater task broker is missing: $updateTaskScript"
-    }
-    if (-not (Test-Path -LiteralPath $hiddenNodeHostScript -PathType Leaf)) {
-        throw "Anti-Codex hidden Node host is missing: $hiddenNodeHostScript"
     }
     if (-not (Test-Path -LiteralPath $updateStatusModule -PathType Leaf)) {
         throw "Anti-Codex update status component is missing: $updateStatusModule"

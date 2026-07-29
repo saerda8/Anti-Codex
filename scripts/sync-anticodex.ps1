@@ -204,8 +204,7 @@ $postSyncVerifier = Join-Path $sourceRoot "scripts\test-anticodex-installed-over
 $updateChecker = Join-Path $sourceRoot "scripts\check-anticodex-update.ps1"
 $updateStatusModule = Join-Path $sourceRoot "scripts\anticodex-update-status.psm1"
 $updateTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-update-task.mjs"
-$hiddenNodeHostScript = Join-Path $sourceRoot "scripts\start-anticodex-hidden-node.vbs"
-foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule, $updateTaskScript, $hiddenNodeHostScript)) {
+foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule, $updateTaskScript)) {
     if (-not (Test-Path -LiteralPath $requiredScript)) {
         throw "Anti-Codex update component is missing: $requiredScript"
     }
@@ -238,8 +237,7 @@ $syncLauncherScript = Join-Path $sourceRoot "scripts\sync-anticodex-launcher.ps1
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
 $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
-$wscript = Join-Path ([Environment]::SystemDirectory) "wscript.exe"
-$expectedUpdateTaskArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$updateTaskScript`""
+$expectedUpdateTaskArguments = "`"$updateTaskScript`" --hide-console"
 $script:antiCodexScheduleService = $null
 $script:antiCodexScheduleRoot = $null
 
@@ -285,7 +283,7 @@ function Assert-AntiCodexUpdateTaskContext {
         [int]$task.State -ne 4 -or
         -not $task.Enabled -or
         -not $action -or
-        [string]$action.Path -ine $wscript -or
+        [string]$action.Path -ine $node -or
         [string]$action.Arguments -cne $expectedUpdateTaskArguments -or
         [string]$action.WorkingDirectory -ine $installRoot -or
         ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or
@@ -626,14 +624,14 @@ function Assert-AntiCodexLaunchTaskContract {
     $actionCount = [int]$definition.Actions.Count
     $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
     $node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
-    $expectedArguments = "//B //NoLogo `"$hiddenNodeHostScript`" `"$node`" `"$launchTaskScript`""
+    $expectedArguments = "`"$launchTaskScript`" --hide-console"
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
     $taskUserName = [string]$definition.Principal.UserId
     if ($actionCount -ne 1 -or
         -not $task.Enabled -or
         -not $action -or
-        [string]$action.Path -ine $wscript -or
+        [string]$action.Path -ine $node -or
         [string]$action.Arguments -cne $expectedArguments -or
         [string]$action.WorkingDirectory -ine $installRoot -or
         ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or

@@ -22,7 +22,6 @@ const conversationCleanup = readFileSync(resolve(root, "scripts", "clear-anticod
 const hostSync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
 const syncLauncher = readFileSync(resolve(root, "scripts", "sync-anticodex-launcher.ps1"), "utf8");
 const updateTaskBroker = readFileSync(resolve(root, "scripts", "start-anticodex-update-task.mjs"), "utf8");
-const hiddenNodeHost = readFileSync(resolve(root, "scripts", "start-anticodex-hidden-node.vbs"), "utf8");
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
@@ -171,10 +170,6 @@ test("the built-in Manager sync delegates to an independent updater task", () =>
   assert.match(shortcutRepair, /start-anticodex-update-task\.mjs/);
   assert.match(syncLauncher, /start-anticodex-update-task\.mjs/);
   assert.match(hostSync, /start-anticodex-update-task\.mjs/);
-  assert.match(shortcutRepair, /start-anticodex-hidden-node\.vbs/);
-  assert.match(syncLauncher, /start-anticodex-hidden-node\.vbs/);
-  assert.match(hostSync, /start-anticodex-hidden-node\.vbs/);
-  assert.match(hiddenNodeHost, /\.Run\(command,\s*0,\s*True\)/);
   assert.match(updateTaskBroker, /spawnSync\(powershell/);
   assert.match(updateTaskBroker, /sync-anticodex-launcher\.ps1/);
   assert.match(updateTaskBroker, /"-FromUpdateTask"/);
@@ -291,7 +286,7 @@ test("host sync gracefully releases the old launch task before starting the new 
   const contractEnd = hostSync.indexOf("function Stop-AntiCodexLaunchTaskForMaintenance", contractStart);
   const contract = contractStart >= 0 && contractEnd > contractStart ? hostSync.slice(contractStart, contractEnd) : "";
   assert.match(restart, /Assert-AntiCodexLaunchTaskContract/);
-  assert.match(contract, /action\.Path[\s\S]*?\$wscript/);
+  assert.match(contract, /action\.Path[\s\S]*?\$node/);
   assert.match(contract, /Principal\.LogonType[\s\S]*?-ne 3/);
   assert.match(contract, /Settings\.MultipleInstances[\s\S]*?-ne 2/);
   assert.match(contract, /Triggers\.Count[\s\S]*?-ne 0/);
@@ -485,7 +480,6 @@ test("install and runtime sync require every fixed-route production module", () 
     "scripts\\apply-anticodex-upstream.ps1",
     "scripts\\start-anticodex-task.mjs",
     "scripts\\start-anticodex-shortcut-broker.ps1",
-    "scripts\\start-anticodex-hidden-node.vbs",
     "scripts\\start-anticodex-update-task.mjs",
     "scripts\\start-anticodex-fixed-route.mjs",
     "scripts\\anticodex-manager-service.mjs",
@@ -530,7 +524,8 @@ test("runtime sync restarts only the fixed three-layer supervisor", () => {
   const requiredList = runtimeSync.match(/\$requiredSourceFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   const syntaxList = runtimeSync.match(/\$syntaxCheckedJavaScriptFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   assert.match(requiredList, /scripts\\start-anticodex-update-task\.mjs/);
-  assert.match(requiredList, /scripts\\start-anticodex-hidden-node\.vbs/);
+  assert.doesNotMatch(requiredList, /scripts\\start-anticodex-hidden-node\.vbs/);
+  assert.match(runtimeSync, /\$legacyRuntimeFiles[\s\S]*?scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(syntaxList, /scripts\\start-anticodex-update-task\.mjs/);
   for (const legacy of [
     "translator\\adaptive-server.mjs",
@@ -694,7 +689,7 @@ test("standalone Manager recovery uses the formal fixed-route launcher", () => {
 test("installer requires fixed-route modules and removes legacy runtime files", () => {
   const requiredRuntimeList = installer.match(/foreach \(\$requiredRuntimePath in @\(([\s\S]*?)\n\s*\)\)/)?.[1] ?? "";
   assert.match(requiredRuntimeList, /scripts\\start-anticodex-update-task\.mjs/);
-  assert.match(requiredRuntimeList, /scripts\\start-anticodex-hidden-node\.vbs/);
+  assert.doesNotMatch(requiredRuntimeList, /scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(requiredRuntimeList, /scripts\\start-anticodex-shortcut-broker\.ps1/);
   for (const legacy of [
     "translator\\adaptive-server.mjs",
@@ -706,6 +701,7 @@ test("installer requires fixed-route modules and removes legacy runtime files", 
     assert.ok(!requiredRuntimeList.includes(legacy), `installer still requires ${legacy}`);
   }
   assert.match(installer, /\$legacyRuntimeFiles\s*=\s*@\(/);
+  assert.match(installer, /scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(installer, /scripts\\start-anticodex-task-hidden\.vbs/);
   assert.match(installer, /scripts\\start-anticodex-task-hidden\.ps1/);
   assert.match(installer, /Remove-Item -LiteralPath \$legacyPath -Force/);

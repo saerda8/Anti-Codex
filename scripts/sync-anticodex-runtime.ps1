@@ -232,7 +232,6 @@ $requiredSourceFiles = @(
     "scripts\start-anticodex-shortcut-broker.ps1",
     "scripts\start-anticodex.ps1",
     "scripts\hide-anticodex-console.ps1",
-    "scripts\start-anticodex-hidden-node.vbs",
     "scripts\start-anticodex-task.mjs",
     "scripts\start-anticodex-update-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
@@ -412,6 +411,7 @@ function Copy-AntiCodexPublicDocs {
 
 $legacyRuntimeFiles = @(
     "scripts\AntiCodexLauncher.cs",
+    "scripts\start-anticodex-hidden-node.vbs",
     "scripts\start-anticodex-task.cmd",
     "scripts\start-anticodex-task-hidden.vbs",
     "scripts\start-anticodex-task-hidden.ps1",
