@@ -1215,7 +1215,7 @@
       const remoteLine = remoteState === "current"
         ? `\u8fdc\u7aef\u4e0a\u6e38\uff1a${remoteTag}\uff08\u9879\u76ee\u5df2\u8ddf\u8fdb\uff09`
         : remoteState === "newer_available"
-          ? `\u8fdc\u7aef\u4e0a\u6e38\uff1a${remoteTag}\uff08\u5f85\u9002\u914d\u9a8c\u8bc1\uff09`
+          ? `\u8fdc\u7aef\u4e0a\u6e38\uff1a${remoteTag}\uff08\u5f85\u72ec\u7acb\u5019\u9009\u9a8c\u8bc1\uff1b\u540c\u6b65\u53ea\u5b89\u88c5\u9879\u76ee\u5df2\u63a5\u53d7\u7248\u672c\uff09`
           : remoteState === "project_ahead"
             ? `\u8fdc\u7aef\u4e0a\u6e38\uff1a${remoteTag}\uff08\u9879\u76ee\u7248\u672c\u9886\u5148\uff09`
             : remoteState === "failed" ? "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u68c0\u67e5\u5931\u8d25" : "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5";

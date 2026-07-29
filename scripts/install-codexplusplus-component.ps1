@@ -23,6 +23,26 @@ function Get-AntiCodexSha256 {
     }
 }
 
+function Test-ExactJsonString {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string]$Expected
+    )
+
+    return $Value -is [string] -and $Value -ceq $Expected
+}
+
+function Assert-JsonString {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace($Value)) {
+        throw "CodexPlusPlus metadata $Name must be a non-empty string."
+    }
+}
+
 $expectedInstallRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"))
 $resolvedInstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $allowedInstallRoots = @(
@@ -47,7 +67,21 @@ if (-not (Test-Path -LiteralPath $sourceMetadata -PathType Leaf)) {
 
 $metadataRaw = [IO.File]::ReadAllText($sourceMetadata, [Text.Encoding]::UTF8)
 $metadata = $metadataRaw | ConvertFrom-Json
-if ([string]$metadata.component -ne "CodexPlusPlus" -or [string]$metadata.license -ne "AGPL-3.0-only") {
+$requiredMetadataStrings = [ordered]@{
+    component = $metadata.component
+    repository = $metadata.repository
+    license = $metadata.license
+    version = $metadata.version
+    tag = $metadata.tag
+    upstreamCommit = $metadata.upstreamCommit
+    isolationPatchCommit = $metadata.isolationPatchCommit
+    patchCommit = $metadata.patchCommit
+    "verification.launcherReleaseBuild" = $metadata.verification.launcherReleaseBuild
+}
+foreach ($name in $requiredMetadataStrings.Keys) {
+    Assert-JsonString -Value $requiredMetadataStrings[$name] -Name $name
+}
+if ($metadata.component -cne "CodexPlusPlus" -or $metadata.license -cne "AGPL-3.0-only") {
     throw "CodexPlusPlus metadata component/license is invalid."
 }
 $expectedHash = ([string]$metadata.verification.launcherReleaseBuild).Replace("sha256:", "").ToLowerInvariant()
@@ -68,8 +102,128 @@ if ($SourceBinary) {
     $sourceCandidates.Add($destinationBinary)
     $activeBinary = Join-Path $expectedInstallRoot "components\codexplusplus\codex-plus-plus.exe"
     $sourceCandidates.Add($activeBinary)
-    $localBuild = Join-Path $env:LOCALAPPDATA "Temp\CodexPlusPlus-analysis-20260714\target\x86_64-pc-windows-msvc\release\codex-plus-plus.exe"
-    $sourceCandidates.Add($localBuild)
+    $identityParts = @(
+        [string]$metadata.version,
+        [string]$metadata.upstreamCommit,
+        [string]$metadata.patchCommit
+    )
+    if (@($identityParts | Where-Object {
+        [string]::IsNullOrWhiteSpace($_) -or $_ -in @(".", "..") -or $_ -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$'
+    }).Count -eq 0) {
+        $preparedCandidateRoot = Join-Path $expectedInstallRoot (
+            "component-sources\codexplusplus\candidates\$($metadata.version)\$($metadata.upstreamCommit)\$($metadata.patchCommit)"
+        )
+        $preparedCandidateBinary = Join-Path $preparedCandidateRoot "codex-plus-plus.exe"
+        $preparedCandidateMetadata = Join-Path $preparedCandidateRoot "upstream.proposed.json"
+        $preparedCandidateReport = Join-Path $preparedCandidateRoot "candidate.json"
+        if ((Test-Path -LiteralPath $preparedCandidateBinary -PathType Leaf) -and
+            (Test-Path -LiteralPath $preparedCandidateMetadata -PathType Leaf) -and
+            (Test-Path -LiteralPath $preparedCandidateReport -PathType Leaf)) {
+            try {
+                $proposed = [IO.File]::ReadAllText(
+                    $preparedCandidateMetadata,
+                    [Text.Encoding]::UTF8
+                ) | ConvertFrom-Json
+                $candidateReport = [IO.File]::ReadAllText(
+                    $preparedCandidateReport,
+                    [Text.Encoding]::UTF8
+                ) | ConvertFrom-Json
+                $prepareCandidateScript = Join-Path $PSScriptRoot "prepare-codexplusplus-candidate.ps1"
+                $isolationAudit = Join-Path $PSScriptRoot "test-codexplusplus-isolation-compatibility.mjs"
+                $managedCargoRunner = Join-Path $PSScriptRoot "invoke-anticodex-cargo-xwin.ps1"
+                $hygieneVerifier = Join-Path $PSScriptRoot "test-anticodex-docker-build-hygiene.ps1"
+                foreach ($inputPath in @(
+                    $prepareCandidateScript,
+                    $isolationAudit,
+                    $managedCargoRunner,
+                    $hygieneVerifier
+                )) {
+                    if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
+                        throw "Prepared-candidate verifier input is missing: $inputPath"
+                    }
+                }
+                $runnerText = [IO.File]::ReadAllText($managedCargoRunner, [Text.Encoding]::UTF8)
+                $runnerImageMatch = [regex]::Match(
+                    $runnerText,
+                    '(?m)^\s*\$image\s*=\s*"(?<value>[^"]+)"\s*$'
+                )
+                if (-not $runnerImageMatch.Success) {
+                    throw "Prepared-candidate runner has no fixed image identity."
+                }
+                $expectedBuildCommands = @(
+                    "fmt --all -- --check",
+                    "test --locked -p codex-plus-core --test protocol_proxy",
+                    "test --locked -p codex-plus-core --test watcher",
+                    "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
+                    "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher"
+                )
+                $reportedBuildCommands = @($candidateReport.build.commands)
+                $buildCommandsMatch = $reportedBuildCommands.Count -eq $expectedBuildCommands.Count
+                if ($buildCommandsMatch) {
+                    for ($index = 0; $index -lt $expectedBuildCommands.Count; $index += 1) {
+                        if (-not (Test-ExactJsonString -Value $reportedBuildCommands[$index] -Expected $expectedBuildCommands[$index])) {
+                            $buildCommandsMatch = $false
+                            break
+                        }
+                    }
+                }
+                $proposedPatches = @($proposed.patches)
+                $acceptedPatches = @($metadata.patches)
+                $patchesMatch = $proposedPatches.Count -eq $acceptedPatches.Count
+                if ($patchesMatch) {
+                    for ($index = 0; $index -lt $acceptedPatches.Count; $index += 1) {
+                        if (-not (Test-ExactJsonString -Value $proposedPatches[$index].file -Expected $acceptedPatches[$index].file) -or
+                            -not (Test-ExactJsonString -Value $proposedPatches[$index].sha256 -Expected $acceptedPatches[$index].sha256) -or
+                            -not (Test-ExactJsonString -Value $proposedPatches[$index].scope -Expected $acceptedPatches[$index].scope)) {
+                            $patchesMatch = $false
+                            break
+                        }
+                    }
+                }
+                $identityMatches = (
+                    (Test-ExactJsonString -Value $proposed.component -Expected $metadata.component) -and
+                    (Test-ExactJsonString -Value $proposed.repository -Expected $metadata.repository) -and
+                    (Test-ExactJsonString -Value $proposed.license -Expected $metadata.license) -and
+                    (Test-ExactJsonString -Value $proposed.version -Expected $metadata.version) -and
+                    (Test-ExactJsonString -Value $proposed.tag -Expected $metadata.tag) -and
+                    (Test-ExactJsonString -Value $proposed.upstreamCommit -Expected $metadata.upstreamCommit) -and
+                    (Test-ExactJsonString -Value $proposed.isolationPatchCommit -Expected $metadata.isolationPatchCommit) -and
+                    (Test-ExactJsonString -Value $proposed.patchCommit -Expected $metadata.patchCommit) -and
+                    (Test-ExactJsonString -Value $proposed.verification.launcherReleaseBuild -Expected "sha256:$expectedHash") -and
+                    $candidateReport.ok -is [bool] -and
+                    $candidateReport.ok -eq $true -and
+                    (Test-ExactJsonString -Value $candidateReport.schema -Expected "codexplusplus-candidate-v1") -and
+                    (Test-ExactJsonString -Value $candidateReport.version -Expected $metadata.version) -and
+                    (Test-ExactJsonString -Value $candidateReport.tag -Expected $metadata.tag) -and
+                    (Test-ExactJsonString -Value $candidateReport.upstreamCommit -Expected $metadata.upstreamCommit) -and
+                    (Test-ExactJsonString -Value $candidateReport.isolationPatchCommit -Expected $metadata.isolationPatchCommit) -and
+                    (Test-ExactJsonString -Value $candidateReport.patchCommit -Expected $metadata.patchCommit) -and
+                    (Test-ExactJsonString -Value $candidateReport.binary.sha256 -Expected $expectedHash) -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.sourceMetadata.path -Expected "upstream.input.json") -and
+                    $candidateReport.inputs.sourceMetadata.sha256 -is [string] -and
+                    $candidateReport.inputs.sourceMetadata.sha256 -match '^[0-9a-f]{64}$' -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.prepareScript.path -Expected "scripts/prepare-codexplusplus-candidate.ps1") -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.prepareScript.sha256 -Expected (Get-AntiCodexSha256 -Path $prepareCandidateScript).ToLowerInvariant()) -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.isolationAudit.path -Expected "scripts/test-codexplusplus-isolation-compatibility.mjs") -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.isolationAudit.sha256 -Expected (Get-AntiCodexSha256 -Path $isolationAudit).ToLowerInvariant()) -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.managedCargoRunner.path -Expected "scripts/invoke-anticodex-cargo-xwin.ps1") -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.managedCargoRunner.sha256 -Expected (Get-AntiCodexSha256 -Path $managedCargoRunner).ToLowerInvariant()) -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.hygieneVerifier.path -Expected "scripts/test-anticodex-docker-build-hygiene.ps1") -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.hygieneVerifier.sha256 -Expected (Get-AntiCodexSha256 -Path $hygieneVerifier).ToLowerInvariant()) -and
+                    (Test-ExactJsonString -Value $candidateReport.build.runnerImage -Expected $runnerImageMatch.Groups["value"].Value) -and
+                    $candidateReport.build.lockedDependencies -is [bool] -and
+                    $candidateReport.build.lockedDependencies -eq $true -and
+                    $buildCommandsMatch -and
+                    $patchesMatch
+                )
+                if ($identityMatches) {
+                    $sourceCandidates.Add($preparedCandidateBinary)
+                }
+            } catch {
+                # An untrusted or incomplete prepared candidate is simply ineligible.
+            }
+        }
+    }
 }
 
 $resolvedSourceBinary = ""
@@ -103,7 +257,11 @@ $verifiedPatches = @()
 $metadataRoot = Split-Path -Parent $sourceMetadata
 $resolvedMetadataRoot = [IO.Path]::GetFullPath($metadataRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 foreach ($patch in @($metadata.patches)) {
-    $relativePatch = [string]$patch.file
+    if ($patch.file -isnot [string] -or $patch.sha256 -isnot [string] -or
+        $patch.scope -isnot [string]) {
+        throw "CodexPlusPlus patch identity fields must be strings."
+    }
+    $relativePatch = $patch.file
     if (-not $relativePatch -or [IO.Path]::IsPathRooted($relativePatch)) {
         throw "CodexPlusPlus patch path is invalid: $relativePatch"
     }
@@ -146,6 +304,7 @@ $result = [ordered]@{
     }
     patches = $verifiedPatches
     verifyOnly = [bool]$VerifyOnly
+    backupCleanupWarning = $null
 }
 
 if ($VerifyOnly) {
@@ -198,6 +357,7 @@ $stagingManifest = Join-Path $stagingComponent "component-manifest.json"
 $stagingNotice = Join-Path $stagingComponent "LICENSE-NOTICE.txt"
 $oldMoved = $false
 $newActivated = $false
+$activationCommitted = $false
 $installMutex = New-Object Threading.Mutex($false, "Local\AntiCodexCodexPlusPlusInstall")
 $installMutexOwned = $false
 
@@ -281,14 +441,22 @@ Anti-Codex keeps this executable, metadata and state at a separate component bou
         throw "Installed CodexPlusPlus metadata does not match the verified snapshot."
     }
     $null = [IO.File]::ReadAllText($manifestPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    $activationCommitted = $true
 
     if ($oldMoved) {
-        Assert-NoInstallReparsePoint -Path $backupComponent
-        Remove-Item -LiteralPath $backupComponent -Recurse -Force
-        $oldMoved = $false
+        try {
+            Assert-NoInstallReparsePoint -Path $backupComponent
+            Remove-Item -LiteralPath $backupComponent -Recurse -Force
+            $oldMoved = $false
+        } catch {
+            $result.backupCleanupWarning = "Verified new component remains active; old backup cleanup failed: $($_.Exception.Message)"
+        }
     }
 } catch {
     $installError = $_
+    if ($activationCommitted) {
+        throw $installError
+    }
     if ($newActivated -and (Test-Path -LiteralPath $componentRoot)) {
         Assert-NoInstallReparsePoint -Path $componentRoot
         Remove-Item -LiteralPath $componentRoot -Recurse -Force

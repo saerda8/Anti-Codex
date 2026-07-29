@@ -100,7 +100,7 @@ test("Manager update summaries unwrap results and show advisory CodexPlusPlus re
     for (const scenario of [
       { updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
       { updateNeeded: false, components: { remoteState: "current", remoteTag: "v1.2.43" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.43\uff08\u9879\u76ee\u5df2\u8ddf\u8fdb\uff09/ },
-      { updateNeeded: false, components: { remoteState: "newer_available", remoteTag: "v1.2.44", remoteNewerThanProject: true }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.44\uff08\u5f85\u9002\u914d\u9a8c\u8bc1\uff09/ },
+      { updateNeeded: false, components: { remoteState: "newer_available", remoteTag: "v1.2.44", remoteNewerThanProject: true }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.44\uff08\u5f85\u72ec\u7acb\u5019\u9009\u9a8c\u8bc1\uff1b\u540c\u6b65\u53ea\u5b89\u88c5\u9879\u76ee\u5df2\u63a5\u53d7\u7248\u672c\uff09/ },
       { updateNeeded: false, components: { remoteState: "failed" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u68c0\u67e5\u5931\u8d25/ },
     ]) {
       const payload = {

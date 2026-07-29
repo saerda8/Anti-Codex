@@ -64,14 +64,20 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 
 `upstream.json` records the patch hash and verification state.
 
+## Preparing a New Upstream Candidate
+
+Run `scripts\prepare-codexplusplus-candidate.ps1 -Tag vX.Y.Z` from the Anti-Codex source tree. The script fetches only that exact tag, verifies the current project patch hashes, replays them without automatic conflict resolution, runs the isolation audit and the existing managed Cargo checks, then writes a content-addressed candidate under `%LOCALAPPDATA%\Anti-Codex\component-sources\codexplusplus\candidates`.
+
+The candidate contains clean patched source, the release launcher, `candidate.json` and `upstream.proposed.json`. It never changes the project patches or `upstream.json`, never installs or activates a component, and never stops or restarts Anti-Codex. A patch conflict therefore requires an explicit patch review and project commit. After that commit, the component installer accepts only the candidate whose version, upstream commit, patch commit and binary hash exactly match the committed metadata; the existing guarded sync remains the sole activation and rollback path.
+
 ## Current Verification Boundary
 
 - All ten patches replay on pinned upstream `v1.2.43` to head `7505a6d48ca05923139b8406811f72ab3e5247c4` and tree `42e6155185508512b9eb799832d3de994e047056`; an independent replay from the project patch files produced the same tree. Patch 0001 was manually rebased across upstream Manager/watcher changes; patches 0002-0010 retained stable patch identities.
 - `cargo fmt --all -- --check` passed in the clean candidate. The protocol proxy suite passes 59/59 and the watcher suite passes 11/11.
-- Project security-boundary tests pass 6/6, isolation audit passes 7/7 and the ten-patch Gate 8 binding passes 34/34. The component installer passes 24/25; its remaining junction setup is blocked before product code by this Windows session's `EPERM` symlink policy.
+- Project security-boundary tests pass 6/6, isolation audit passes 7/7 and the ten-patch Gate 8 binding passes 34/34. The independent candidate preparer passes 13/13 and the component installer passes 33/33, including verifier-provenance invalidation, old-to-new metadata promotion, prepared-candidate identity rejection and the component-junction boundary.
 - Pinned `messense/cargo-xwin:0.23.0` Windows x64 Manager check and release launcher build passed. The temporary ignored build-only frontend stub used by the Manager check was removed afterward.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - Release launcher build: passed; 17,252,864 bytes; SHA-256 `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`.
-- Installed-runtime proof for `v1.2.43` is pending guarded candidate activation. The currently active component stays untouched until source replay, project contracts and rollback readiness pass.
+- The active component metadata and manifest are both `v1.2.43`; its installed launcher SHA-256 is `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`, matching the committed release hash. Current-client release gates remain separate later verification.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

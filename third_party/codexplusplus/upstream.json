@@ -62,11 +62,11 @@
   "verification": {
     "patchReplay": "ten canonical 1/10 through 10/10 patches were replayed onto upstream v1.2.43; patch 0001 was manually rebased for the upstream manager-command and watcher changes, patches 0002 through 0010 retained stable patch identities, candidate head 7505a6d48ca05923139b8406811f72ab3e5247c4 and an independent project-patch replay produced the identical tree 42e6155185508512b9eb799832d3de994e047056",
     "sourceIsolationAudit": "candidate diff remains limited to the documented ten-patch isolation, transport, helper, model-slot, multimodal, patch-tool, stream-order, audit, body-limit and usage-estimation boundaries",
-    "auditRegressionTests": "59/59 protocol proxy Rust tests and 11/11 watcher tests passed in the clean v1.2.43 candidate; project security boundaries passed 6/6, isolation audit passed 7/7 and Gate 8 binding passed 34/34; component installer passed 24/25 with the remaining junction setup blocked before product code by Windows EPERM",
+    "auditRegressionTests": "59/59 protocol proxy Rust tests and 11/11 watcher tests passed in the clean v1.2.43 candidate; project security boundaries passed 6/6, isolation audit passed 7/7 and Gate 8 binding passed 34/34; independent candidate preparation passed 13/13 and the component installer passed 33/33 without skips",
     "cargoFmt": "cargo fmt --all -- --check passed in the clean v1.2.43 candidate; regenerated project patches pass git diff --check and independent replay",
     "cargoCheck": "pinned messense/cargo-xwin:0.23.0 Windows x64 Manager cargo check passed with a temporary ignored build-only frontend stub that was removed afterward",
     "windowsNativeTests": "Windows x64 release launcher built successfully; protocol proxy and watcher regressions ran in the pinned Linux container because the Windows host lacks link.exe/cl.exe",
     "launcherReleaseBuild": "sha256:7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05",
-    "runtimeIsolation": "pending installed-runtime verification after guarded candidate activation; all ephemeral build containers were automatically deleted and no client process or model route was changed"
+    "runtimeIsolation": "active v1.2.43 component metadata, manifest and launcher hash are verified; all ephemeral build containers were automatically deleted and no client process or model route was changed"
   }
 }

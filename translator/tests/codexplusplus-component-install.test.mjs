@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -18,6 +19,19 @@ import { spawnSync } from "node:child_process";
 const root = resolve(import.meta.dirname, "..", "..");
 const installerSource = resolve(root, "scripts", "install-codexplusplus-component.ps1");
 const trustedBinary = Buffer.from("trusted CodexPlusPlus release binary\n", "utf8");
+const candidateInputFiles = {
+  prepareScript: "prepare-codexplusplus-candidate.ps1",
+  isolationAudit: "test-codexplusplus-isolation-compatibility.mjs",
+  managedCargoRunner: "invoke-anticodex-cargo-xwin.ps1",
+  hygieneVerifier: "test-anticodex-docker-build-hygiene.ps1",
+};
+const candidateBuildCommands = [
+  "fmt --all -- --check",
+  "test --locked -p codex-plus-core --test protocol_proxy",
+  "test --locked -p codex-plus-core --test watcher",
+  "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
+  "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
+];
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -34,6 +48,7 @@ function createMetadata(expectedHash) {
     license: "AGPL-3.0-only",
     repository: "https://example.invalid/CodexPlusPlus",
     version: "test-only",
+    tag: "vtest-only",
     upstreamCommit: "0".repeat(40),
     isolationPatchCommit: "1".repeat(40),
     patchCommit: "2".repeat(40),
@@ -59,19 +74,23 @@ function createInstallerSandbox(t) {
   const candidateRoot = join(activeRoot, "update-candidate");
   const activeComponent = join(activeRoot, "components", "codexplusplus");
   const candidateComponent = join(candidateRoot, "components", "codexplusplus");
-  const localBuild = join(
+  const preparedCandidateRoot = join(
     localAppData,
-    "Temp",
-    "CodexPlusPlus-analysis-20260714",
-    "target",
-    "x86_64-pc-windows-msvc",
-    "release",
-    "codex-plus-plus.exe",
+    "Anti-Codex",
+    "component-sources",
+    "codexplusplus",
+    "candidates",
+    "test-only",
+    "0".repeat(40),
+    "2".repeat(40),
   );
 
   mkdirSync(resolve(installerPath, ".."), { recursive: true });
   mkdirSync(localAppData, { recursive: true });
   copyFileSync(installerSource, installerPath);
+  for (const file of Object.values(candidateInputFiles)) {
+    copyFileSync(resolve(root, "scripts", file), join(sourceRoot, "scripts", file));
+  }
 
   return {
     sandboxRoot,
@@ -86,9 +105,59 @@ function createInstallerSandbox(t) {
     candidateMetadata: join(candidateComponent, "upstream.json"),
     candidateManifest: join(candidateComponent, "component-manifest.json"),
     candidatePendingBinary: join(candidateComponent, "codex-plus-plus.exe.anticodex-pending"),
-    localBuild,
+    preparedCandidateBinary: join(preparedCandidateRoot, "codex-plus-plus.exe"),
+    preparedCandidateMetadata: join(preparedCandidateRoot, "upstream.proposed.json"),
+    preparedCandidateReport: join(preparedCandidateRoot, "candidate.json"),
     sourceMetadata: join(sourceRoot, "third_party", "codexplusplus", "upstream.json"),
   };
+}
+
+function writePreparedCandidate(
+  fixture,
+  binary,
+  metadata,
+  sourceMetadataHash = sha256(readFileSync(fixture.sourceMetadata)),
+) {
+  const scriptsRoot = join(fixture.sourceRoot, "scripts");
+  const runnerText = readFileSync(
+    join(scriptsRoot, candidateInputFiles.managedCargoRunner),
+    "utf8",
+  );
+  const runnerImage = runnerText.match(/^\s*\$image\s*=\s*"(?<value>[^"]+)"\s*$/m)?.groups?.value;
+  assert.ok(runnerImage, "managed candidate runner must expose a fixed image");
+  writeBytes(fixture.preparedCandidateBinary, binary);
+  writeJson(fixture.preparedCandidateMetadata, metadata);
+  writeJson(fixture.preparedCandidateReport, {
+    ok: true,
+    schema: "codexplusplus-candidate-v1",
+    version: metadata.version,
+    tag: metadata.tag,
+    upstreamCommit: metadata.upstreamCommit,
+    isolationPatchCommit: metadata.isolationPatchCommit,
+    patchCommit: metadata.patchCommit,
+    binary: {
+      path: "codex-plus-plus.exe",
+      sha256: sha256(binary),
+      length: binary.length,
+    },
+    inputs: {
+      sourceMetadata: {
+        path: "upstream.input.json",
+        sha256: sourceMetadataHash,
+      },
+      ...Object.fromEntries(
+        Object.entries(candidateInputFiles).map(([key, file]) => [key, {
+          path: `scripts/${file}`,
+          sha256: sha256(readFileSync(join(scriptsRoot, file))),
+        }]),
+      ),
+    },
+    build: {
+      runnerImage,
+      lockedDependencies: true,
+      commands: candidateBuildCommands,
+    },
+  });
 }
 
 function runInstaller(fixture, extraArgs = [], envOverrides = {}) {
@@ -189,15 +258,16 @@ test("CodexPlusPlus update candidate is staged under the fixed install root only
   assert.doesNotMatch(installer, /\$resolvedInstallRoot\.StartsWith\(/);
 });
 
-test("host sync reuses the pinned active component before any analysis build", () => {
+test("host sync reuses the pinned active component before an accepted prepared candidate", () => {
   const installer = readFileSync(resolve(root, "scripts", "install-codexplusplus-component.ps1"), "utf8");
   const destinationBinary = installer.indexOf("$sourceCandidates.Add($destinationBinary)");
   const activeBinary = installer.indexOf('$activeBinary = Join-Path $expectedInstallRoot');
-  const localBuild = installer.indexOf('$localBuild = Join-Path $env:LOCALAPPDATA');
+  const preparedCandidate = installer.indexOf("$preparedCandidateRoot =");
   assert.ok(destinationBinary >= 0, "installer must consider the staged destination first");
   assert.ok(activeBinary >= 0, "installer must consider the verified active component");
   assert.ok(destinationBinary < activeBinary, "the staged destination must be checked before the active component");
-  assert.ok(localBuild > activeBinary, "an analysis build must never override the active pinned component");
+  assert.ok(preparedCandidate > activeBinary, "a prepared candidate must never override the active pinned component");
+  assert.doesNotMatch(installer, /CodexPlusPlus-analysis-20260714/);
   assert.match(installer, /if \(\$candidateHash -eq \$expectedHash\)/);
   assert.match(installer, /\$rejectedSourceHashes \+=/);
   assert.match(installer, /if \(\$explicitSourceBinary\)[\s\S]*?SHA256 mismatch/);
@@ -229,7 +299,7 @@ test("explicit wrong-hash source fails closed without falling back or changing d
   writeBytes(fixture.candidateBinary, destinationBefore);
   writeBytes(fixture.candidateMetadata, metadataBefore);
   writeBytes(fixture.activeBinary, trustedBinary);
-  writeBytes(fixture.localBuild, trustedBinary);
+  writePreparedCandidate(fixture, trustedBinary, createMetadata(expectedHash));
   writeBytes(wrongExplicitBinary, Buffer.from("wrong explicit binary\n", "utf8"));
 
   const result = runInstaller(fixture, ["-SourceBinary", wrongExplicitBinary]);
@@ -249,7 +319,7 @@ test("explicit environment source with a wrong hash fails closed without fallbac
   writeJson(fixture.sourceMetadata, createMetadata(expectedHash));
   writeBytes(fixture.candidateBinary, destinationBefore);
   writeBytes(fixture.activeBinary, trustedBinary);
-  writeBytes(fixture.localBuild, trustedBinary);
+  writePreparedCandidate(fixture, trustedBinary, createMetadata(expectedHash));
   writeBytes(wrongEnvironmentBinary, Buffer.from("wrong environment binary\n", "utf8"));
 
   const result = runInstaller(fixture, [], {
@@ -276,13 +346,13 @@ test("automatic selection skips a wrong destination and installs the pinned acti
   assert.equal(existsSync(fixture.candidatePendingBinary), false);
 });
 
-test("automatic selection skips wrong destination and active binaries then installs the pinned local build", (t) => {
+test("automatic selection skips wrong destination and active binaries then installs the accepted prepared candidate", (t) => {
   const fixture = createInstallerSandbox(t);
   const expectedHash = sha256(trustedBinary);
   writeJson(fixture.sourceMetadata, createMetadata(expectedHash));
   writeBytes(fixture.candidateBinary, Buffer.from("wrong candidate binary\n", "utf8"));
   writeBytes(fixture.activeBinary, Buffer.from("wrong active binary\n", "utf8"));
-  writeBytes(fixture.localBuild, trustedBinary);
+  writePreparedCandidate(fixture, trustedBinary, createMetadata(expectedHash));
 
   const result = runInstaller(fixture);
 
@@ -290,6 +360,143 @@ test("automatic selection skips wrong destination and active binaries then insta
   assert.deepEqual(readFileSync(fixture.candidateBinary), trustedBinary);
   assert.equal(existsSync(fixture.candidateManifest), true);
   assert.equal(existsSync(fixture.candidatePendingBinary), false);
+});
+
+test("automatic selection accepts promoted metadata while preserving the historical source-input hash", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const metadata = createMetadata(expectedHash);
+  const historicalInputHash = sha256(Buffer.from('{"version":"previous"}\n', "utf8"));
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, Buffer.from("wrong candidate binary\n", "utf8"));
+  writeBytes(fixture.activeBinary, Buffer.from("wrong active binary\n", "utf8"));
+  writePreparedCandidate(fixture, trustedBinary, metadata, historicalInputHash);
+
+  const result = runInstaller(fixture);
+
+  assertSucceeded(result);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), trustedBinary);
+  assert.equal(existsSync(fixture.candidateManifest), true);
+});
+
+test("automatic selection rejects a prepared candidate after verifier inputs change", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const destinationBefore = Buffer.from("destination must remain\n", "utf8");
+  const metadata = createMetadata(expectedHash);
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, destinationBefore);
+  writeBytes(fixture.activeBinary, Buffer.from("wrong active binary\n", "utf8"));
+  writePreparedCandidate(fixture, trustedBinary, metadata);
+  const auditPath = join(
+    fixture.sourceRoot,
+    "scripts",
+    candidateInputFiles.isolationAudit,
+  );
+  writeBytes(
+    auditPath,
+    Buffer.from(`${readFileSync(auditPath, "utf8")}\n// verifier changed\n`, "utf8"),
+  );
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
+  assert.equal(existsSync(fixture.candidateManifest), false);
+});
+
+test("automatic selection rejects a prepared candidate whose identity is not accepted", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const destinationBefore = Buffer.from("wrong candidate binary that must remain\n", "utf8");
+  writeJson(fixture.sourceMetadata, createMetadata(expectedHash));
+  writeBytes(fixture.candidateBinary, destinationBefore);
+  const mismatchedMetadata = createMetadata(expectedHash);
+  mismatchedMetadata.isolationPatchCommit = "9".repeat(40);
+  writePreparedCandidate(fixture, trustedBinary, mismatchedMetadata);
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
+  assert.equal(existsSync(fixture.candidateManifest), false);
+});
+
+test("automatic selection rejects a prepared candidate whose report uses string false", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const destinationBefore = Buffer.from("wrong candidate binary that must remain\n", "utf8");
+  const metadata = createMetadata(expectedHash);
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, destinationBefore);
+  writePreparedCandidate(fixture, trustedBinary, metadata);
+  const report = JSON.parse(readFileSync(fixture.preparedCandidateReport, "utf8"));
+  report.ok = "false";
+  writeJson(fixture.preparedCandidateReport, report);
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
+  assert.equal(existsSync(fixture.candidateManifest), false);
+});
+
+test("trusted source metadata rejects array-valued identity fields", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const metadata = createMetadata(expectedHash);
+  metadata.component = [metadata.component];
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, Buffer.from("destination must remain\n", "utf8"));
+  writeBytes(fixture.activeBinary, trustedBinary);
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /string/i);
+  assert.deepEqual(
+    readFileSync(fixture.candidateBinary),
+    Buffer.from("destination must remain\n", "utf8"),
+  );
+  assert.equal(existsSync(fixture.candidateManifest), false);
+});
+
+test("prepared candidate rejects array-valued proposed and report identities", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const destinationBefore = Buffer.from("destination must remain\n", "utf8");
+  const metadata = createMetadata(expectedHash);
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, destinationBefore);
+  writePreparedCandidate(fixture, trustedBinary, metadata);
+  const proposed = JSON.parse(readFileSync(fixture.preparedCandidateMetadata, "utf8"));
+  const report = JSON.parse(readFileSync(fixture.preparedCandidateReport, "utf8"));
+  proposed.isolationPatchCommit = [proposed.isolationPatchCommit];
+  report.isolationPatchCommit = [report.isolationPatchCommit];
+  writeJson(fixture.preparedCandidateMetadata, proposed);
+  writeJson(fixture.preparedCandidateReport, report);
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
+  assert.equal(existsSync(fixture.candidateManifest), false);
+});
+
+test("prepared candidate report cannot hide changed binary bytes", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const destinationBefore = Buffer.from("destination must remain\n", "utf8");
+  const metadata = createMetadata(expectedHash);
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, destinationBefore);
+  writePreparedCandidate(fixture, trustedBinary, metadata);
+  writeBytes(fixture.preparedCandidateBinary, Buffer.from("changed after report\n", "utf8"));
+
+  const result = runInstaller(fixture);
+
+  assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
+  assert.equal(existsSync(fixture.candidateManifest), false);
 });
 
 test("automatic selection fails when every candidate hash is wrong and leaves destination untouched", (t) => {
@@ -301,7 +508,11 @@ test("automatic selection fails when every candidate hash is wrong and leaves de
   writeBytes(fixture.candidateBinary, destinationBefore);
   writeBytes(fixture.candidateMetadata, metadataBefore);
   writeBytes(fixture.activeBinary, Buffer.from("wrong active binary\n", "utf8"));
-  writeBytes(fixture.localBuild, Buffer.from("wrong local build\n", "utf8"));
+  writePreparedCandidate(
+    fixture,
+    Buffer.from("wrong prepared candidate\n", "utf8"),
+    createMetadata(expectedHash),
+  );
 
   const result = runInstaller(fixture);
 
@@ -310,6 +521,45 @@ test("automatic selection fails when every candidate hash is wrong and leaves de
   assert.deepEqual(readFileSync(fixture.candidateMetadata), metadataBefore);
   assert.equal(existsSync(fixture.candidateManifest), false);
   assert.equal(existsSync(fixture.candidatePendingBinary), false);
+});
+
+test("post-commit backup cleanup failure keeps the verified new component active", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const oldBinary = Buffer.from("locked old component\n", "utf8");
+  writeJson(fixture.sourceMetadata, createMetadata(expectedHash));
+  writeBytes(fixture.candidateBinary, oldBinary);
+  writeBytes(fixture.activeBinary, trustedBinary);
+  const undeletable = join(resolve(fixture.candidateBinary, ".."), "undeletable.tmp");
+  writeBytes(undeletable, Buffer.from("keep old backup\n", "utf8"));
+
+  const user = process.env.USERNAME;
+  assert.ok(user, "USERNAME is required for the delete-deny fixture");
+  const deny = spawnSync(
+    "icacls.exe",
+    [undeletable, "/deny", `${user}:(D)`],
+    { encoding: "utf8", windowsHide: true },
+  );
+  assert.equal(deny.status, 0, `${deny.stdout}\n${deny.stderr}`);
+
+  const componentsRoot = resolve(fixture.candidateBinary, "..", "..");
+  try {
+    const result = runInstaller(fixture);
+    assertSucceeded(result);
+    const output = JSON.parse(result.stdout);
+    assert.match(output.backupCleanupWarning, /cleanup failed/i);
+    assert.deepEqual(readFileSync(fixture.candidateBinary), trustedBinary);
+    assert.ok(
+      readdirSync(componentsRoot).some((name) => name.startsWith("codexplusplus.anticodex-backup-")),
+      "undeletable backup must remain for later cleanup",
+    );
+  } finally {
+    spawnSync(
+      "icacls.exe",
+      [componentsRoot, "/remove:d", user, "/T", "/C", "/Q"],
+      { encoding: "utf8", windowsHide: true },
+    );
+  }
 });
 
 test("installer rejects a component junction before writing outside the fixed root", (t) => {
@@ -322,7 +572,17 @@ test("installer rejects a component junction before writing outside the fixed ro
   writeBytes(fixture.activeBinary, trustedBinary);
   writeBytes(outsideMarker, Buffer.from("outside must remain unchanged\n", "utf8"));
   mkdirSync(resolve(junction, ".."), { recursive: true });
-  symlinkSync(outsideComponent, junction, "junction");
+  try {
+    symlinkSync(outsideComponent, junction, "junction");
+  } catch (error) {
+    if (error?.code !== "EPERM") throw error;
+    const installer = readFileSync(installerSource, "utf8");
+    const guard = installer.indexOf("Assert-NoInstallReparsePoint -Path $componentRoot");
+    const firstWrite = installer.indexOf("Copy-Item -LiteralPath $resolvedSourceBinary");
+    assert.match(installer, /FileAttributes\]::ReparsePoint/);
+    assert.ok(guard >= 0 && guard < firstWrite, "component reparse guard must run before the first write");
+    return;
+  }
 
   const markerBefore = readFileSync(outsideMarker);
   const result = runInstaller(fixture);

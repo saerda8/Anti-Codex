@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$RequireRuntimeClean
+)
 
 $ErrorActionPreference = "Stop"
 $scriptsRoot = Split-Path -Parent $PSCommandPath
@@ -26,9 +28,43 @@ if ($rules -notmatch 'docker create.*sleep infinity') {
     $failures.Add("project rules do not ban persistent ad-hoc build shells")
 }
 
+if ($RequireRuntimeClean) {
+    if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) {
+        $failures.Add("Docker CLI is unavailable; build-container cleanup cannot be verified")
+    } else {
+        $buildContainers = [System.Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase
+        )
+        $queries = @(
+            @("ps", "-a", "--filter", "label=com.anticodex.ephemeral-build=true", "--format", "{{.ID}} {{.Names}}"),
+            @("ps", "-a", "--filter", "name=anticodex-cpp-", "--format", "{{.ID}} {{.Names}}")
+        )
+        foreach ($query in $queries) {
+            $previousErrorAction = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = "Continue"
+                $output = @(& docker.exe @query 2>&1)
+                $exitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $previousErrorAction
+            }
+            if ($exitCode -ne 0) {
+                $failures.Add("Docker build-container cleanup query failed")
+                continue
+            }
+            foreach ($line in $output) {
+                $text = ([string]$line).Trim()
+                if ($text) { [void]$buildContainers.Add($text) }
+            }
+        }
+        if ($buildContainers.Count -gt 0) {
+            $failures.Add("Anti-Codex build containers remain: $(@($buildContainers) -join '; ')")
+        }
+    }
+}
+
 if ($failures.Count -gt 0) {
-    $failures | ForEach-Object { Write-Error $_ }
-    exit 1
+    throw ($failures -join [Environment]::NewLine)
 }
 
 Write-Output "Anti-Codex Docker build hygiene: PASS"
