@@ -7,6 +7,31 @@ param(
     [int]$TimeoutSec = 45
 )
 
+if ($PSVersionTable.PSEdition -eq "Core") {
+    $windowsPowerShell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+    if (-not (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) {
+        throw "Windows PowerShell is required to synchronize the Anti-Codex runtime: $windowsPowerShell"
+    }
+    $delegateArgs = @(
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $PSCommandPath,
+        "-TargetRuntime", $TargetRuntime,
+        "-TimeoutSec", "$TimeoutSec"
+    )
+    if ($SourceRoot) { $delegateArgs += @("-SourceRoot", $SourceRoot) }
+    if ($BaseUrl) { $delegateArgs += @("-BaseUrl", $BaseUrl) }
+    if ($NoRestart) { $delegateArgs += "-NoRestart" }
+    $delegateOutput = & $windowsPowerShell @delegateArgs
+    $delegateExitCode = $LASTEXITCODE
+    if ($delegateExitCode -ne 0) {
+        throw "Windows PowerShell Anti-Codex runtime sync exited with code $delegateExitCode."
+    }
+    $delegateOutput
+    return
+}
+
 $ErrorActionPreference = "Stop"
 
 if (-not ("AntiCodex.Native.VerifiedProcessHandle" -as [type])) {

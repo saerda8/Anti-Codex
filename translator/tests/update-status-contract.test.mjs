@@ -11,10 +11,11 @@ const targetModule = resolve(projectRoot, "scripts", "anticodex-update-status.ps
 const updateChecker = resolve(projectRoot, "scripts", "check-anticodex-update.ps1");
 const installer = resolve(projectRoot, "scripts", "install-anticodex.ps1");
 const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
+const runtimeSync = resolve(projectRoot, "scripts", "sync-anticodex-runtime.ps1");
 const POWERSHELL_TIMEOUT_MS = 10_000;
 
-test("installer and host sync delegate Appx work when hosted by PowerShell Core", () => {
-  for (const scriptPath of [installer, hostSync]) {
+test("Windows maintenance scripts delegate to Windows PowerShell when hosted by PowerShell Core", () => {
+  for (const scriptPath of [installer, hostSync, runtimeSync]) {
     const script = fs.readFileSync(scriptPath, "utf8");
     assert.match(script, /\$PSVersionTable\.PSEdition\s+-eq\s+["']Core["']/);
     assert.match(script, /\[Environment\]::SystemDirectory/);
