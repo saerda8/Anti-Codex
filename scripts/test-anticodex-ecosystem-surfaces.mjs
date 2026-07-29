@@ -5,8 +5,6 @@ import os from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const REGULAR_MCP_MIN_COUNT = 10; // 9 regular workers plus node_repl.
-
 const REQUIRED_REPORTS = [
   {
     id: "refreshFeatures",
@@ -30,7 +28,11 @@ const REQUIRED_REPORTS = [
     validate(report, fail) {
       if (report.ok !== true) fail("mcp-skills ok=false");
       if (report.mcp?.smoke?.passed !== true) fail("mcp-skills smoke not passed");
-      if (Number(report.mcp?.count || 0) < REGULAR_MCP_MIN_COUNT) fail(`mcp-skills MCP count below expected ${REGULAR_MCP_MIN_COUNT}`);
+      if (Number(report.mcp?.count || 0) < 1 || report.mcp?.hasNodeRepl !== true) fail("mcp-skills node_repl missing");
+      if (report.mcp?.developmentWorkersAllowed === true
+        || (report.mcp?.unexpectedLocalDevelopmentMcpNames || []).length > 0) {
+        fail("mcp-skills development workers leaked into the product");
+      }
       if (Number(report.skills?.count || 0) < 1) fail("mcp-skills missing skill inventory");
       if (report.skills?.smoke?.readable !== true) fail("mcp-skills skill smoke not readable");
     },
@@ -155,6 +157,39 @@ function writeReport(payload, reportRoot) {
 function main() {
   if (hasArg("--help") || hasArg("-h")) {
     printHelp();
+    return;
+  }
+  if (hasArg("--self-test")) {
+    const failures = [];
+    REQUIRED_REPORTS.find((spec) => spec.id === "mcpSkills").validate({
+      ok: true,
+      mcp: {
+        count: 1,
+        hasNodeRepl: true,
+        developmentWorkersAllowed: false,
+        unexpectedLocalDevelopmentMcpNames: [],
+        smoke: { passed: true },
+      },
+      skills: { count: 1, smoke: { readable: true } },
+    }, (message) => failures.push(message));
+    const leakFailures = [];
+    REQUIRED_REPORTS.find((spec) => spec.id === "mcpSkills").validate({
+      ok: true,
+      mcp: {
+        count: 2,
+        hasNodeRepl: true,
+        developmentWorkersAllowed: false,
+        unexpectedLocalDevelopmentMcpNames: ["deepseek-code-worker"],
+        smoke: { passed: true },
+      },
+      skills: { count: 1, smoke: { readable: true } },
+    }, (message) => leakFailures.push(message));
+    if (!leakFailures.some((message) => message.includes("development workers leaked"))) {
+      failures.push("mcp-skills self-test accepted a leaked development worker");
+    }
+    const output = { ok: failures.length === 0, failures };
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+    if (!output.ok) process.exit(1);
     return;
   }
   const startedAt = Date.now();

@@ -542,6 +542,12 @@ function currentStaticManagerUiFailures({ injectSource, managerServiceSource }) 
   if (!/anticodex-manager-service-v1/.test(managerServiceSource) || !/launcher-management-only/.test(managerServiceSource)) {
     failures.push("manager service identity contract is missing");
   }
+  const refreshFeaturesAction = managerServiceSource.match(/refreshFeatures:\s*\{([\s\S]*?)\n\s*\},/)?.[1] || "";
+  if (!/timeoutMs:\s*300000/.test(refreshFeaturesAction)
+    || !/foregroundSingleton:\s*true/.test(refreshFeaturesAction)
+    || /\bbackground:\s*true/.test(refreshFeaturesAction)) {
+    failures.push("refreshFeatures must return its final result through the foreground singleton action");
+  }
   if (/resetAntigravitySessionLock|secondAccountLoginStatus|Anti-Codex Manager|Gate 7/.test(managerHtml)) {
     failures.push("manager service still exposes a removed or internal-only product label/action");
   }

@@ -97,10 +97,8 @@ const MANAGER_ACTIONS = Object.freeze({
         label: "刷新本地功能",
         script: "refresh-anticodex-local-features.ps1",
         args: [],
-        timeoutMs: 10000,
-        background: true,
-        singletonProcessPattern: "refresh-anticodex-local-features\\.ps1",
-        backgroundLockMaxMs: 10 * 60000,
+        timeoutMs: 300000,
+        foregroundSingleton: true,
     },
     stabilitySoak: {
         label: "稳定性巡检（耗真实流量）",
