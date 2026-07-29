@@ -753,6 +753,7 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
 
   assert.deepEqual(verifierGroups, EXPECTED_ACTION_GROUPS);
   assert.deepEqual(uiStateGroups, EXPECTED_ACTION_GROUPS);
+  assert.match(uiStateTest, /actionLayoutFailures\(managerPageActionLayout,\s*"manager page",\s*EXPECTED_FALLBACK_ACTION_GROUPS\)/);
   assert.deepEqual(verifierActions, EXPECTED_ACTION_IDS);
   assert.equal(new Set(verifierActions).size, verifierActions.length, "each Manager action must belong to exactly one UI group");
   assert.equal(injectedHighImpact.includes("upstreamConfig"), false, "third-party setup must be an ordinary action");
@@ -779,7 +780,7 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.match(managerButtonTest, /const groups = Array\.from\(overlay\?\.querySelectorAll\("\[data-action-group\]"\)/);
   assert.match(managerButtonTest, /const actionLayout = await readManagerActionLayout\(\)/);
   assert.match(managerButtonTest, /actionLayoutFailures\.length === 0/);
-  assert.match(uiStateTest, /function actionLayoutFailures\(layout, label\)/);
+  assert.match(uiStateTest, /function actionLayoutFailures\(layout, label, expectedGroups = EXPECTED_ACTION_GROUPS\)/);
   assert.match(uiStateTest, /const actionGroups = Array\.from\(reopenedOverlay\?\.querySelectorAll\("\[data-action-group\]"\)/);
   assert.doesNotMatch(uiStateTest, /const actionGroups = Object\.fromEntries/);
   assert.match(managerButtonTest, /output\.mode = "ui-only-matrix"/);

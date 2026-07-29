@@ -66,6 +66,10 @@ const EXPECTED_ACTION_GROUPS = Object.freeze({
     "overallNoTraffic", "stabilitySoak", "coldRelaunch", "postVerificationFull",
   ]),
 });
+const EXPECTED_FALLBACK_ACTION_GROUPS = Object.freeze({
+  ...EXPECTED_ACTION_GROUPS,
+  modelSources: Object.freeze(EXPECTED_ACTION_GROUPS.modelSources.filter((action) => action !== "upstreamConfig")),
+});
 const EXPECTED_ACTION_IDS = Object.freeze(Object.values(EXPECTED_ACTION_GROUPS).flat());
 const EXPECTED_HIGH_IMPACT_ACTION_IDS = Object.freeze([
   "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
@@ -195,24 +199,25 @@ function actionLayoutFromHtml(html, actionAttribute) {
   return { groups, buttons };
 }
 
-function actionLayoutFailures(layout, label) {
+function actionLayoutFailures(layout, label, expectedGroups = EXPECTED_ACTION_GROUPS) {
   const failures = [];
   const groups = layout?.groups || [];
   const buttons = layout?.buttons || [];
-  const expectedGroupNames = Object.keys(EXPECTED_ACTION_GROUPS);
+  const expectedGroupNames = Object.keys(expectedGroups);
+  const expectedActionIds = Object.values(expectedGroups).flat();
   const unexpectedGroups = groups.filter((group) => !expectedGroupNames.includes(group.id)).map((group) => group.id);
   if (unexpectedGroups.length > 0) failures.push(`${label} has unexpected action groups: ${JSON.stringify(unexpectedGroups)}`);
   for (const groupName of expectedGroupNames) {
     const matches = groups.filter((group) => group.id === groupName);
     if (matches.length !== 1) {
       failures.push(`${label} has ${matches.length} ${groupName} groups, expected 1`);
-    } else if (JSON.stringify(matches[0].actionIds) !== JSON.stringify(EXPECTED_ACTION_GROUPS[groupName])) {
+    } else if (JSON.stringify(matches[0].actionIds) !== JSON.stringify(expectedGroups[groupName])) {
       failures.push(`${label} ${groupName} actions are incorrect: ${JSON.stringify(matches[0].actionIds)}`);
     }
   }
-  const expectedGroupByAction = new Map(Object.entries(EXPECTED_ACTION_GROUPS)
+  const expectedGroupByAction = new Map(Object.entries(expectedGroups)
     .flatMap(([group, actionIds]) => actionIds.map((action) => [action, group])));
-  for (const action of EXPECTED_ACTION_IDS) {
+  for (const action of expectedActionIds) {
     const matches = buttons.filter((button) => button.action === action);
     if (matches.length !== 1) failures.push(`${label} has ${matches.length} ${action} buttons, expected 1`);
   }
@@ -1165,7 +1170,7 @@ try {
   if (!managerPage.hasActionResult) failures.push("manager page missing action result area");
   if (!managerPage.hasHighImpactConfirmation) failures.push("manager page missing high-impact confirmation");
   if (managerPage.hasOldOpenEndpoint) failures.push("manager page still references old /anticodex/manager/open endpoint");
-  failures.push(...actionLayoutFailures(managerPageActionLayout, "manager page"));
+  failures.push(...actionLayoutFailures(managerPageActionLayout, "manager page", EXPECTED_FALLBACK_ACTION_GROUPS));
   if (!sameActionIds(managerPage.dangerActionIds, EXPECTED_HIGH_IMPACT_ACTION_IDS)) failures.push(`manager page danger actions are incorrect: ${JSON.stringify(managerPage.dangerActionIds)}`);
   if (!managerPage.advancedCollapsed || managerPage.advancedLabel !== "高级诊断") failures.push("manager page advanced diagnostics are not collapsed with the visible label 高级诊断");
 
