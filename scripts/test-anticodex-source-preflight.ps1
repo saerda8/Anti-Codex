@@ -477,7 +477,7 @@ function Test-ManagerRealButtonsReportContract {
 
     Add-ManagerRealButtonsAssertion -Name "script-readable" -Ok ([bool]$text)
     Add-ManagerRealButtonsAssertion -Name "release-required-actions-explicit" -Ok (
-        $text -match '\$releaseRequiredActions\s*=\s*@\("pluginCapabilities",\s*"mcpSkills"\)'
+        $text -match '\$releaseRequiredActions\s*=\s*@\("updateCheck",\s*"repairShortcuts",\s*"pluginCapabilities",\s*"mcpSkills"\)'
     )
     Add-ManagerRealButtonsAssertion -Name "partial-report-name-present" -Ok (
         $text -match 'manager-real-buttons-partial'
