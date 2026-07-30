@@ -101,10 +101,15 @@ function quotedStrings(sourceText) {
 }
 
 test("Manager update summaries unwrap results and show advisory CodexPlusPlus releases", () => {
-  for (const [sourceText, functionName] of [[source, "managerSummary"], [managerInject, "summaryText"]]) {
+  for (const [sourceText, functionName] of [
+    [source, "managerSummary"],
+    [managerInject, "summaryText"],
+    [managerButtonTest, "managerSummaryFromActionPayload"],
+  ]) {
     const summarize = vm.runInNewContext(`(${extractNamedFunction(sourceText, functionName)})`);
     for (const scenario of [
-      { updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
+      { resultOk: true, updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
+      { resultOk: false, updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
       { updateNeeded: false, components: { remoteState: "current", remoteTag: "v1.2.43" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.43\uff08\u9879\u76ee\u5df2\u8ddf\u8fdb\uff09/ },
       { updateNeeded: false, components: { remoteState: "newer_available", remoteTag: "v1.2.44", remoteNewerThanProject: true }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1av1\.2\.44\uff08\u5f85\u72ec\u7acb\u5019\u9009\u9a8c\u8bc1\uff1b\u540c\u6b65\u53ea\u5b89\u88c5\u9879\u76ee\u5df2\u63a5\u53d7\u7248\u672c\uff09/ },
       { updateNeeded: false, components: { remoteState: "failed" }, status: /\u65e0\u9700\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u68c0\u67e5\u5931\u8d25/ },
@@ -113,7 +118,7 @@ test("Manager update summaries unwrap results and show advisory CodexPlusPlus re
         ok: true,
         result: {
           result: {
-            ok: true,
+            ok: scenario.resultOk ?? true,
             updateNeeded: scenario.updateNeeded,
             source: { packageVersion: "26.source" },
             active: { packageVersion: "26.active" },
@@ -921,6 +926,12 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   assert.doesNotMatch(uiStateTest, /const actionGroups = Object\.fromEntries/);
   assert.match(managerButtonTest, /output\.mode = "ui-only-matrix"/);
   assert.match(managerRealButtonsTest, /\$processTimeoutSec = if \(\$RunUiOnlyMatrix\) \{ \[Math\]::Max\(360,/);
+  assert.match(managerRealButtonsTest, /\[string\[\]\]\$Actions\s*=\s*@\([^)]*"updateCheck"[^)]*"repairShortcuts"[^)]*\)/);
+  assert.match(managerRealButtonsTest, /\$allowedActions\s*=\s*@\([^)]*"updateCheck"[^)]*"repairShortcuts"[^)]*\)/);
+  assert.doesNotMatch(
+    managerRealButtonsTest.match(/\$allowedActions\s*=\s*@\([^)]*\)/)?.[0] ?? "",
+    /syncHost|coldRelaunch|stabilitySoak|postVerificationFull/,
+  );
   assert.match(managerButtonTest, /function uiOnlyBatchBridgeSource\(enabled = uiOnlyBatchMode\)/);
   assert.match(managerButtonTest, /const staleState = window\.__ANTICODEX_MANAGER_BUTTON_UI_ONLY_BATCH_STATE__/);
   assert.match(managerButtonTest, /localStorage\.removeItem\("anticodex\.manager\.pending-actions\.v1"\)/);

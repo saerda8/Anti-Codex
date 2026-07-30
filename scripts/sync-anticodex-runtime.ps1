@@ -230,6 +230,7 @@ $requiredSourceFiles = @(
     "scripts\apply-anticodex-upstream.ps1",
     "scripts\repair-anticodex-shortcuts.ps1",
     "scripts\start-anticodex-shortcut-broker.ps1",
+    "scripts\start-anticodex-scheduled-node.ps1",
     "scripts\start-anticodex.ps1",
     "scripts\hide-anticodex-console.ps1",
     "scripts\start-anticodex-task.mjs",

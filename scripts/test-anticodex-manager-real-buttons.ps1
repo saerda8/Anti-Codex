@@ -6,7 +6,7 @@ param(
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$CdpPort = 0,
     [int]$ExpectedOriginalCodexPid = 0,
-    [string[]]$Actions = @("pluginCapabilities", "mcpSkills"),
+    [string[]]$Actions = @("updateCheck", "repairShortcuts", "pluginCapabilities", "mcpSkills"),
     [switch]$UiOnlyMatrix,
     [int]$TimeoutSec = 480,
     [int]$MaxAttempts = 2
@@ -367,7 +367,7 @@ $actionList = @($Actions |
     ForEach-Object { $_ -split "," } |
     ForEach-Object { $_.Trim() } |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-$allowedActions = @("mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")
+$allowedActions = @("updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")
 $allowedActionSet = @{}
 foreach ($allowedAction in $allowedActions) { $allowedActionSet[$allowedAction] = $true }
 $invalidActions = @($actionList | Where-Object { -not $allowedActionSet.ContainsKey($_) })
@@ -375,7 +375,7 @@ foreach ($invalidAction in $invalidActions) {
     Add-Failure "unsupported Manager action requested: $invalidAction"
 }
 $actionList = @($actionList | Where-Object { $allowedActionSet.ContainsKey($_) })
-$releaseRequiredActions = @("pluginCapabilities", "mcpSkills")
+$releaseRequiredActions = @("updateCheck", "repairShortcuts", "pluginCapabilities", "mcpSkills")
 $canonicalReleaseReport = $true
 foreach ($requiredAction in $releaseRequiredActions) {
     if ($actionList -notcontains $requiredAction) {

@@ -13,6 +13,10 @@ const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync
 const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 const launchTask = readFileSync(resolve(root, "scripts", "start-anticodex-task.mjs"), "utf8");
 const consoleHideScript = readFileSync(resolve(root, "scripts", "hide-anticodex-console.ps1"), "utf8");
+const scheduledNodeBrokerPath = resolve(root, "scripts", "start-anticodex-scheduled-node.ps1");
+const scheduledNodeBroker = existsSync(scheduledNodeBrokerPath)
+  ? readFileSync(scheduledNodeBrokerPath, "utf8")
+  : "";
 const shortcutBrokerPath = resolve(root, "scripts", "start-anticodex-shortcut-broker.ps1");
 const shortcutBroker = existsSync(shortcutBrokerPath) ? readFileSync(shortcutBrokerPath, "utf8") : "";
 const shortcutRestoreAcceptancePath = resolve(root, "scripts", "test-anticodex-shortcut-restore.ps1");
@@ -60,7 +64,10 @@ test("interactive shortcut broker recovers the exact hidden main window without 
   assert.match(shortcutBroker, /\$eligibleWindowCount \+= \$candidateCount/);
   assert.match(shortcutBroker, /\$eligibleWindowCount -ne 1 -or \$eligibleWindows\.Count -ne 1/);
   assert.match(runningBranch, /exit 0/);
-  assert.match(runningBranch, /throw "An exact Anti-Codex process is running, but its unique main window could not be restored\."/);
+  assert.match(shortcutBroker, /\$windowDiscoveryDeadline\s*=\s*\[DateTime\]::UtcNow\.AddSeconds\((?:[5-9]|[1-9]\d+)\)/);
+  assert.match(shortcutBroker, /function Show-AntiCodexShortcutFailure/);
+  assert.match(runningBranch, /Show-AntiCodexShortcutFailure/);
+  assert.doesNotMatch(runningBranch, /throw "An exact Anti-Codex process is running, but its unique main window could not be restored\."/);
   assert.doesNotMatch(runningBranch, /\[void\]\(Focus-ExactAntiCodexWindow/);
   assert.doesNotMatch(runningBranch, /Start-ScheduledTask/);
   assert.doesNotMatch(runningBranch, /\.Run\(/);
@@ -313,15 +320,22 @@ test("shortcut repair resolves PowerShell without relying on a populated WINDIR"
   assert.doesNotMatch(repairScript, /\$env:WINDIR/);
 });
 
-test("scheduled tasks execute Node directly so a GUI host cannot reclaim the runtime", () => {
+test("scheduled tasks create Node without a console and keep the hidden broker attached", () => {
   const launchTaskRegistration = repairScript.match(/function Set-AntiCodexLaunchTask[\s\S]*?return Get-AntiCodexLaunchTaskEvidence\s*\n\}/)?.[0] ?? "";
   const updateTaskRegistration = repairScript.match(/function Set-AntiCodexUpdateTask[\s\S]*?return Get-AntiCodexUpdateTaskEvidence\s*\n\}/)?.[0] ?? "";
-  assert.match(repairScript, /\$launchTaskActionArguments\s*=\s*"`"\$launchTaskScript`" --hide-console"/);
-  assert.match(repairScript, /\$updateTaskActionArguments\s*=\s*"`"\$updateTaskScript`" --hide-console"/);
-  assert.match(launchTaskRegistration, /<Command>\$nodeXml<\/Command>/);
-  assert.match(updateTaskRegistration, /<Command>\$nodeXml<\/Command>/);
-  assert.doesNotMatch(launchTaskRegistration, /<Command>\$wscriptXml<\/Command>/);
-  assert.doesNotMatch(updateTaskRegistration, /<Command>\$wscriptXml<\/Command>/);
+  assert.equal(existsSync(scheduledNodeBrokerPath), true);
+  assert.match(scheduledNodeBroker, /ProcessStartInfo/);
+  assert.match(scheduledNodeBroker, /UseShellExecute\s*=\s*\$false/);
+  assert.match(scheduledNodeBroker, /CreateNoWindow\s*=\s*\$true/);
+  assert.match(scheduledNodeBroker, /WindowStyle\s*=\s*\[Diagnostics\.ProcessWindowStyle\]::Hidden/);
+  assert.match(scheduledNodeBroker, /WaitForExit\(\)/);
+  assert.match(repairScript, /\$scheduledTaskBrokerScript\s*=\s*Join-Path[\s\S]*start-anticodex-scheduled-node\.ps1/);
+  assert.match(repairScript, /\$launchTaskActionArguments\s*=\s*[^\r\n]*\$scheduledTaskBrokerScript[^\r\n]*-TaskKind\s+launcher/);
+  assert.match(repairScript, /\$updateTaskActionArguments\s*=\s*[^\r\n]*\$scheduledTaskBrokerScript[^\r\n]*-TaskKind\s+updater/);
+  assert.match(launchTaskRegistration, /<Command>\$powershellXml<\/Command>/);
+  assert.match(updateTaskRegistration, /<Command>\$powershellXml<\/Command>/);
+  assert.doesNotMatch(launchTaskRegistration, /<Command>\$nodeXml<\/Command>/);
+  assert.doesNotMatch(updateTaskRegistration, /<Command>\$nodeXml<\/Command>/);
 });
 
 test("interactive restore shortcuts prefer the stable PowerShell 7 alias with a Windows PowerShell fallback", () => {
@@ -343,7 +357,7 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.ok(interactiveSpecs.every((entry) => /-UseLaunchTask\b/.test(entry)));
   assert.doesNotMatch(mainSpecs, /KeepLauncherAlive|Anti-Codex Launcher\.exe/);
   assert.match(repairScript, /function Set-AntiCodexExistingTaskAction/);
-  assert.match(repairScript, /New-ScheduledTaskAction -Execute \$node -Argument \$Arguments -WorkingDirectory \$installRootFull/);
+  assert.match(repairScript, /New-ScheduledTaskAction -Execute \$powershell -Argument \$Arguments -WorkingDirectory \$installRootFull/);
   assert.match(repairScript, /Set-ScheduledTask -TaskPath "\\" -TaskName \$TaskName -Action \$action/);
   assert.match(launchTaskRegistration, /if \(\$existing\.exists\)[\s\S]*?Set-AntiCodexExistingTaskAction[\s\S]*?if \(\$updated\.ok\) \{ return \$updated \}/);
   assert.match(updateTaskRegistration, /if \(\$existing\.exists\)[\s\S]*?Set-AntiCodexExistingTaskAction[\s\S]*?if \(\$updated\.ok\) \{ return \$updated \}/);
@@ -363,8 +377,8 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.doesNotMatch(launchTaskEvidence, /RestartInterval\s+-eq\s+"PT1M"/);
   assert.match(repairScript, /\$definition\.Triggers\.Count\s+-eq\s+0/);
   assert.match(repairScript, /\$definition\.Settings\.AllowDemandStart/);
-  assert.match(repairScript, /<Command>\$nodeXml<\/Command>/);
-  assert.match(repairScript, /\$launchTaskActionArguments\s*=\s*"`"\$launchTaskScript`" --hide-console"/);
+  assert.match(repairScript, /<Command>\$powershellXml<\/Command>/);
+  assert.match(repairScript, /-TaskKind\s+launcher/);
   assert.match(repairScript, /\$shortcut\.TargetPath\s*=\s*\[string\]\$Spec\.expectedTarget/);
   assert.match(repairScript, /schtasks\.exe/);
   assert.match(repairScript, /Schedule\.Service/);
@@ -376,9 +390,8 @@ test("interactive Anti-Codex shortcuts use a short focus broker before the isola
   assert.match(repairScript, /expectedArguments/);
   assert.match(launchTask, /start-anticodex-fixed-route\.mjs/);
   assert.match(launchTask, /spawn\(process\.execPath, plan\.supervisorArgs/);
-  assert.doesNotMatch(launchTaskRegistration, /<Command>\$powershell/);
-  assert.match(launchTask, /hide-anticodex-console\.ps1/);
-  assert.match(launchTask, /spawnSync\(powershell/);
+  assert.match(launchTaskRegistration, /<Command>\$powershellXml<\/Command>/);
+  assert.match(scheduledNodeBroker, /\[ValidateSet\("launcher", "updater"\)\]/);
   assert.match(consoleHideScript, /AttachConsole/);
   assert.match(consoleHideScript, /ShowWindow/);
   assert.match(repairScript, /start-anticodex-shortcut-broker\.ps1/);
@@ -395,11 +408,12 @@ test("launch and Manager update tasks never retry failed product operations", ()
   assert.match(repairScript, /\$updateTaskName\s*=\s*"Anti-Codex Updater"/);
   assert.match(updateTaskRegistration, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
   assert.doesNotMatch(updateTaskRegistration, /<RestartOnFailure>/);
-  assert.match(updateTaskRegistration, /<Command>\$nodeXml<\/Command>/);
-  assert.match(updateTaskRegistration, /expectedScript\s*=\s*\$updateTaskScript/);
+  assert.match(updateTaskRegistration, /<Command>\$powershellXml<\/Command>/);
+  assert.match(updateTaskRegistration, /expectedScript\s*=\s*\$scheduledTaskBrokerScript/);
   assert.match(requiredTargets, /\$updateTaskScript/);
+  assert.match(requiredTargets, /\$scheduledTaskBrokerScript/);
   assert.doesNotMatch(requiredTargets, /\$hiddenNodeHostScript|\$wscript/);
-  assert.match(repairScript, /\$updateTaskActionArguments\s*=\s*"`"\$updateTaskScript`" --hide-console"/);
+  assert.match(repairScript, /\$updateTaskActionArguments\s*=\s*[^\r\n]*\$scheduledTaskBrokerScript[^\r\n]*-TaskKind\s+updater/);
   assert.match(launchTaskEvidence, /\$task\.Enabled/);
   assert.match(updateTaskEvidence, /\$task\.Enabled/);
   assert.match(launchTaskEvidence, /\$definition\.Settings\.RestartCount\s+-eq\s+0/);
@@ -455,7 +469,7 @@ test("sync readiness verifies the short focus broker and isolated launch task", 
   assert.doesNotMatch(syncReadiness, /Get-ScheduledTask/);
   assert.doesNotMatch(syncReadiness, /\.Run\(`\$null\)/);
   assert.doesNotMatch(syncReadiness, /Start-ScheduledTask -TaskName/);
-  assert.match(syncReadiness, /\$actualExecute\s+-ieq\s+\$node/);
+  assert.match(syncReadiness, /\$actualExecute\s+-ieq\s+\$powershell/);
   assert.match(syncReadiness, /expectedTarget = if \(\$UseLaunchTask\) \{ \$interactivePowerShell \} else \{ \$powershell \}/);
   assert.match(syncReadiness, /\$shortcutBrokerScript\s*=\s*Join-Path \$scriptsRoot "start-anticodex-shortcut-broker\.ps1"/);
   assert.match(syncReadiness, /launchMode = if \(\$UseLaunchTask\) \{ "shortcut-broker" \}/);
@@ -479,6 +493,7 @@ test("runtime sync removes the retired native bootstrap source", () => {
   assert.match(requiredList, /scripts\\hide-anticodex-console\.ps1/);
   assert.doesNotMatch(requiredList, /scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(requiredList, /scripts\\start-anticodex-task\.mjs/);
+  assert.match(requiredList, /scripts\\start-anticodex-scheduled-node\.ps1/);
   assert.match(requiredList, /scripts\\start-anticodex-shortcut-broker\.ps1/);
   assert.match(requiredList, /scripts\\start-anticodex-update-task\.mjs/);
 });

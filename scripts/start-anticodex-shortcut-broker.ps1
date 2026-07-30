@@ -15,6 +15,22 @@ if ($installRootFull -ine $expectedRoot) {
 
 $expectedExecutable = [IO.Path]::GetFullPath((Join-Path $installRootFull "codex-patched-app\Anti-Codex.exe"))
 
+function Show-AntiCodexShortcutFailure {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    try {
+        $logRoot = Join-Path $env:APPDATA "anticodex\logs"
+        New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+        Add-Content -LiteralPath (Join-Path $logRoot "anticodex-shortcut.err.log") `
+            -Value ("{0} {1}" -f [DateTime]::UtcNow.ToString("o"), $Message) `
+            -Encoding UTF8
+    } catch {}
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void]$shell.Popup($Message, 12, "Anti-Codex", 16)
+    } catch {}
+}
+
 function Get-ExactAntiCodexProcesses {
     $matchedProcesses = New-Object System.Collections.Generic.List[object]
     foreach ($candidate in @(Get-Process -Name "Anti-Codex" -ErrorAction SilentlyContinue)) {
@@ -112,7 +128,8 @@ public static class AntiCodexShortcutWindow {
         return [int]$foregroundProcessId
     }
 
-    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+    $windowDiscoveryDeadline = [DateTime]::UtcNow.AddSeconds(8)
+    do {
         $eligibleWindows = New-Object System.Collections.Generic.List[object]
         $eligibleWindowCount = 0
         foreach ($candidate in $Processes) {
@@ -170,7 +187,7 @@ public static class AntiCodexShortcutWindow {
             Start-Sleep -Milliseconds 25
         } while ([DateTime]::UtcNow -lt $confirmationDeadline)
         Start-Sleep -Milliseconds 75
-    }
+    } while ([DateTime]::UtcNow -lt $windowDiscoveryDeadline)
     return $false
 }
 
@@ -179,11 +196,18 @@ if ($matchingProcesses.Count -gt 0) {
     if (Focus-ExactAntiCodexWindow -Processes $matchingProcesses) {
         exit 0
     }
-    throw "An exact Anti-Codex process is running, but its unique main window could not be restored."
+    Show-AntiCodexShortcutFailure -Message "Anti-Codex is running, but its main window is not ready. Wait a moment and try the shortcut again."
+    exit 1
 }
 
 if (-not (Test-Path -LiteralPath $expectedExecutable -PathType Leaf)) {
-    throw "Anti-Codex executable is missing: $expectedExecutable"
+    Show-AntiCodexShortcutFailure -Message "Anti-Codex executable is missing. Run 【修复快捷方式】 in 管理 and try again."
+    exit 1
 }
 
-Start-ScheduledTask -TaskName "Anti-Codex Launcher"
+try {
+    Start-ScheduledTask -TaskName "Anti-Codex Launcher"
+} catch {
+    Show-AntiCodexShortcutFailure -Message ("Anti-Codex could not start. Run 【修复快捷方式】 in 管理 and try again.`n`n" + $_.Exception.Message)
+    exit 1
+}

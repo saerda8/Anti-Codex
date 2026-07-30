@@ -1288,7 +1288,7 @@
             ? `\u8fdc\u7aef\u4e0a\u6e38\uff1a${remoteTag}\uff08\u9879\u76ee\u7248\u672c\u9886\u5148\uff09`
             : remoteState === "failed" ? "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u68c0\u67e5\u5931\u8d25" : "\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5";
       return [
-        `\u66f4\u65b0\u68c0\u67e5\uff1a${unwrapped.ok !== true ? "\u68c0\u67e5\u4e0d\u53ef\u7528" : (unwrapped.updateNeeded ? "\u9700\u8981\u540c\u6b65" : "\u65e0\u9700\u540c\u6b65")}`,
+        `\u66f4\u65b0\u68c0\u67e5\uff1a${unwrapped.updateNeeded ? "\u9700\u8981\u540c\u6b65" : (unwrapped.ok !== true ? "\u68c0\u67e5\u4e0d\u53ef\u7528" : "\u65e0\u9700\u540c\u6b65")}`,
         `Codex\uff1a\u672c\u673a\u5b98\u65b9 ${unwrapped.source?.packageVersion || "\u672a\u68c0\u67e5"} / Anti-Codex ${unwrapped.active?.packageVersion || "\u672a\u5b89\u88c5"}`,
         `CodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a ${unwrapped.components?.sourceVersion || "\u672a\u68c0\u67e5"} / \u5df2\u5b89\u88c5 ${unwrapped.components?.activeVersion || "\u672a\u5b89\u88c5"}`,
         remoteLine,
