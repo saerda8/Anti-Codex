@@ -42,6 +42,19 @@ test("host packaging preserves official host bytes and uses external Anti-Codex 
   assert.doesNotMatch(installer, /patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT|&\s+\$PATCH_EXE_ICON_SCRIPT/);
 });
 
+test("host gates require the local node_repl runtime and sandbox helper", () => {
+  for (const source of [installer, candidateValidator, updateChecker]) {
+    assert.match(source, /resources\\codex-windows-sandbox-setup\.exe/);
+    assert.match(source, /resources\\cua_node\\bin\\node_repl\.exe/);
+    assert.match(source, /resources\\cua_node\\bin\\node\.exe/);
+  }
+  for (const source of [installer, candidateValidator, updateChecker]) {
+    assert.match(source, /sandboxHelper/);
+    assert.match(source, /nodeRepl/);
+    assert.match(source, /nodeRuntime/);
+  }
+});
+
 test("candidate validation requires one complete primary-window focus/restore repaint", () => {
   assert.match(candidateValidator, /"config-write"/);
   assert.match(candidateValidator, /configWriteBridgePattern/);

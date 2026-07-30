@@ -309,6 +309,9 @@ function Write-HostManifest {
             antiCodexExe = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "Anti-Codex.exe")
             appAsar = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\app.asar")
             codexCli = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\codex.exe")
+            sandboxHelper = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\codex-windows-sandbox-setup.exe")
+            nodeRepl = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\cua_node\bin\node_repl.exe")
+            nodeRuntime = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\cua_node\bin\node.exe")
             hostIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\icon.ico")
             trayIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "resources\codex-tray.ico")
             appRootIcon = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "icon.ico")
@@ -490,7 +493,14 @@ $stagedDesktopHost = Resolve-CodexDesktopHost -AppRoot $copiedCodexStaging
 if (-not $stagedDesktopHost) {
     throw "The copied Codex host is missing a desktop host executable (ChatGPT.exe or Codex.exe)."
 }
-foreach ($requiredHostFile in @($stagedDesktopHost, "resources\app.asar", "resources\codex.exe")) {
+foreach ($requiredHostFile in @(
+    $stagedDesktopHost,
+    "resources\app.asar",
+    "resources\codex.exe",
+    "resources\codex-windows-sandbox-setup.exe",
+    "resources\cua_node\bin\node_repl.exe",
+    "resources\cua_node\bin\node.exe"
+)) {
     if (-not (Test-Path -LiteralPath (Join-Path $copiedCodexStaging $requiredHostFile) -PathType Leaf)) {
         throw "The copied Codex host is incomplete: $requiredHostFile"
     }

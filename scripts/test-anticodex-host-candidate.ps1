@@ -114,6 +114,9 @@ $required = @(
     (Join-Path $candidateAppRoot $detectedDesktopHost),
     (Join-Path $candidateAppRoot "resources\app.asar"),
     (Join-Path $candidateAppRoot "resources\codex.exe"),
+    (Join-Path $candidateAppRoot "resources\codex-windows-sandbox-setup.exe"),
+    (Join-Path $candidateAppRoot "resources\cua_node\bin\node_repl.exe"),
+    (Join-Path $candidateAppRoot "resources\cua_node\bin\node.exe"),
     (Join-Path $candidateAppRoot "resources\icon.ico"),
     (Join-Path $candidateAppRoot "resources\codex-tray.ico"),
     (Join-Path $candidateAppRoot "icon.ico")
@@ -255,6 +258,9 @@ $expectedHashes = [ordered]@{
     antiCodexExe = Get-AntiCodexSha256 -Path $antiCodex
     appAsar = Get-AntiCodexSha256 -Path $asarPath
     codexCli = Get-AntiCodexSha256 -Path $codex
+    sandboxHelper = Get-AntiCodexSha256 -Path (Join-Path $candidateAppRoot "resources\codex-windows-sandbox-setup.exe")
+    nodeRepl = Get-AntiCodexSha256 -Path (Join-Path $candidateAppRoot "resources\cua_node\bin\node_repl.exe")
+    nodeRuntime = Get-AntiCodexSha256 -Path (Join-Path $candidateAppRoot "resources\cua_node\bin\node.exe")
     hostIcon = Get-AntiCodexSha256 -Path $hostIcon
     trayIcon = Get-AntiCodexSha256 -Path $trayIcon
     appRootIcon = Get-AntiCodexSha256 -Path $appRootIcon
