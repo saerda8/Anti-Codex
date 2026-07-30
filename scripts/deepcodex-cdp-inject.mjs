@@ -565,7 +565,7 @@ for (let i = 0; i < attempts; i++) {
       if (!managerDisconnectedSince) managerDisconnectedSince = Date.now();
       if (Date.now() - managerDisconnectedSince >= Math.max(5000, managerDisconnectMs)) {
         console.error(`[deepcodex-cdp-inject] manager watcher disconnected timeout: ${lastError?.message || lastError}`);
-        process.exit(0);
+        managerDisconnectedSince = Date.now();
       }
     }
     await sleep(delayMs);

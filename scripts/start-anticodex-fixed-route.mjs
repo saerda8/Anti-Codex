@@ -914,6 +914,9 @@ async function runSupervisor(plan) {
       ok: true,
       state: "ready",
       clientUiReady: true,
+      managerSupportReady: true,
+      managerFailureReason: null,
+      managerBridgeFallbackRequired: false,
       readyAt: new Date().toISOString(),
       antigravityReady,
       catalogModelCount: catalog?.models?.length ?? null,
@@ -931,6 +934,65 @@ async function runSupervisor(plan) {
     while (!closing) {
       if (launcher.exitCode !== null) {
         throw new Error(`CodexPlusPlus protocol proxy exited while Anti-Codex was running: ${launcher.exitCode}`);
+      }
+      let managerSupport = inspectManagerSupportChildren(managerWatcher, managerBridge);
+      if (!managerSupport.ok) {
+        if (
+          status.managerFailureReason !== managerSupport.failure
+          || status.managerBridgeFallbackRequired !== managerSupport.bridgeFallbackRequired
+        ) {
+          status = {
+            ...status,
+            ok: false,
+            state: "degraded",
+            managerSupportReady: false,
+            managerFailureReason: managerSupport.failure,
+            managerBridgeFallbackRequired: managerSupport.bridgeFallbackRequired,
+            managerDegradedAt: status.managerDegradedAt || new Date().toISOString(),
+          };
+          writeStatus(plan.paths.statusFile, status);
+        }
+        if (managerSupport.restartWatcher) {
+          try {
+            const watcherRecovery = await startManagerWatcher(plan, childEnvironment);
+            managerWatcher = watcherRecovery.watcher;
+            managerWatcherIdentity = await captureSpawnedProcessIdentity(managerWatcher, {
+              expectedExecutablePath: process.execPath,
+              expectedParentProcessId: process.pid,
+              startedAtMs: watcherRecovery.watcherStartedAtMs,
+            });
+            managerSupport = inspectManagerSupportChildren(managerWatcher, managerBridge);
+            const managerRecovered = managerSupport.ok;
+            const clientReady = status.clientUiReady !== false && !status.clientFailureReason;
+            status = {
+              ...status,
+              ok: managerRecovered && clientReady,
+              state: managerRecovered && clientReady ? "ready" : "degraded",
+              managerSupportReady: managerRecovered,
+              managerFailureReason: managerSupport.failure,
+              managerBridgeFallbackRequired: managerSupport.bridgeFallbackRequired,
+              managerSupportError: null,
+              managerRecoveredAt: managerRecovered ? new Date().toISOString() : null,
+              processes: {
+                ...status.processes,
+                managerWatcher: managerWatcher.pid,
+              },
+            };
+            writeStatus(plan.paths.statusFile, status);
+          } catch (watcherError) {
+            status = {
+              ...status,
+              ok: false,
+              state: "degraded",
+              managerSupportReady: false,
+              managerFailureReason: "manager_watcher_recovery_failed",
+              managerSupportError: String(watcherError?.message ?? watcherError),
+            };
+            writeStatus(plan.paths.statusFile, status);
+            await sleep(1_000);
+            continue;
+          }
+        }
       }
       const clientSession = await observeCopiedClientSession(ownedClients, {
         isCdpReady: () => cdpPageReady(plan.ports.cdp, { returnStatus: true }),
@@ -953,11 +1015,12 @@ async function runSupervisor(plan) {
           degradedAt: status.degradedAt || new Date().toISOString(),
         };
         writeStatus(plan.paths.statusFile, status);
-      } else if (clientSession.ready && status.state === "degraded") {
+      } else if (clientSession.ready && status.clientFailureReason) {
+        const managerReady = !status.managerFailureReason;
         status = {
           ...status,
-          ok: true,
-          state: "ready",
+          ok: managerReady,
+          state: managerReady ? "ready" : "degraded",
           clientUiReady: true,
           clientFailureReason: null,
           recoveredAt: new Date().toISOString(),
@@ -1016,12 +1079,16 @@ async function runSupervisor(plan) {
             break;
           }
           clientMissingSince = null;
+          const recoveredManagerSupport = inspectManagerSupportChildren(managerWatcher, managerBridge);
           status = {
             ...status,
-            ok: true,
-            state: "ready",
+            ok: recoveredManagerSupport.ok,
+            state: recoveredManagerSupport.ok ? "ready" : "degraded",
             clientUiReady: true,
             clientFailureReason: null,
+            managerSupportReady: recoveredManagerSupport.ok,
+            managerFailureReason: recoveredManagerSupport.failure,
+            managerBridgeFallbackRequired: recoveredManagerSupport.bridgeFallbackRequired,
             recoveredAt: new Date().toISOString(),
             processes: {
               ...status.processes,
@@ -1598,20 +1665,23 @@ function selectNativeToolCatalogTemplate(bundled) {
   return unrestrictedTemplate;
 }
 
-async function startManagerSupport(plan, childEnvironment) {
-  const root = resolve(import.meta.dirname, "..");
-  const injector = join(root, "scripts", "deepcodex-cdp-inject.mjs");
-  const managerScript = join(root, "scripts", "anticodex-manager-inject.js");
-  const bridgeScript = join(root, "scripts", "anticodex-manager-bridge.mjs");
-  const missing = [injector, managerScript, bridgeScript].filter((path) => !existsSync(path));
-  if (missing.length) {
-    throw new Error(`Fixed-route Manager support is incomplete: ${missing.join(", ")}`);
-  }
-  const managerEnvironment = {
+function managerSupportEnvironment(childEnvironment) {
+  return {
     ...childEnvironment,
     DEEPCODEX_CDP_MANAGER_WATCH: "1",
     ANTICODEX_SUPERVISOR_PID: String(process.pid),
   };
+}
+
+async function startManagerWatcher(plan, childEnvironment) {
+  const root = resolve(import.meta.dirname, "..");
+  const injector = join(root, "scripts", "deepcodex-cdp-inject.mjs");
+  const managerScript = join(root, "scripts", "anticodex-manager-inject.js");
+  const missing = [injector, managerScript].filter((path) => !existsSync(path));
+  if (missing.length) {
+    throw new Error(`Fixed-route Manager support is incomplete: ${missing.join(", ")}`);
+  }
+  const managerEnvironment = managerSupportEnvironment(childEnvironment);
   const watcherLogPath = join(plan.paths.logs, "manager-inject.log");
   const watcherErrorLogPath = join(plan.paths.logs, "manager-inject.err.log");
   const watcherLog = openSync(watcherLogPath, "a");
@@ -1643,7 +1713,16 @@ async function startManagerSupport(plan, childEnvironment) {
     if (watcher.exitCode === null && watcher.signalCode === null) watcher.kill();
     throw error;
   }
+  return { watcher, watcherStartedAtMs };
+}
 
+async function startManagerBridge(plan, childEnvironment) {
+  const root = resolve(import.meta.dirname, "..");
+  const bridgeScript = join(root, "scripts", "anticodex-manager-bridge.mjs");
+  if (!existsSync(bridgeScript)) {
+    throw new Error(`Fixed-route Manager support is incomplete: ${bridgeScript}`);
+  }
+  const managerEnvironment = managerSupportEnvironment(childEnvironment);
   const bridgeLog = openSync(join(plan.paths.logs, "manager-bridge.log"), "a");
   const bridgeErrorLog = openSync(join(plan.paths.logs, "manager-bridge.err.log"), "a");
   const bridgeStartedAtMs = Date.now();
@@ -1655,10 +1734,77 @@ async function startManagerSupport(plan, childEnvironment) {
     cwd: root,
     env: managerEnvironment,
     windowsHide: true,
-    stdio: ["ignore", bridgeLog, bridgeErrorLog],
+    stdio: ["ignore", "pipe", bridgeErrorLog],
+  });
+  let bridgeOutput = "";
+  let bridgeReady = false;
+  bridge.stdout.on("data", (chunk) => {
+    try { writeSync(bridgeLog, chunk); } catch {}
+    bridgeOutput = `${bridgeOutput}${chunk.toString("utf8")}`.slice(-4096);
+    if (
+      /"event"\s*:\s*"manager-bridge-connected"/.test(bridgeOutput)
+      || /"ok"\s*:\s*true[\s\S]*?"port"\s*:/.test(bridgeOutput)
+    ) {
+      bridgeReady = true;
+    }
   });
   bridge.once("close", () => { closeSync(bridgeLog); closeSync(bridgeErrorLog); });
-  return { watcher, bridge, watcherStartedAtMs, bridgeStartedAtMs };
+  try {
+    await waitFor(() => {
+      if (bridgeReady) return true;
+      if (bridge.exitCode !== null || bridge.signalCode !== null) {
+        throw new Error(`Manager bridge exited before readiness: ${bridge.exitCode ?? bridge.signalCode}`);
+      }
+      return null;
+    }, { timeoutMs: 60_000, intervalMs: 100, description: "fixed-route Manager bridge" });
+  } catch (error) {
+    if (bridge.exitCode === null && bridge.signalCode === null) bridge.kill();
+    throw error;
+  }
+  return { bridge, bridgeStartedAtMs };
+}
+
+async function startManagerSupport(plan, childEnvironment) {
+  const watcherSupport = await startManagerWatcher(plan, childEnvironment);
+  try {
+    const bridgeSupport = await startManagerBridge(plan, childEnvironment);
+    return { ...watcherSupport, ...bridgeSupport };
+  } catch (error) {
+    if (
+      watcherSupport.watcher.exitCode === null
+      && watcherSupport.watcher.signalCode === null
+    ) {
+      watcherSupport.watcher.kill();
+    }
+    throw error;
+  }
+}
+
+export function inspectManagerSupportChildren(watcher, bridge) {
+  const bridgeExited = !bridge || bridge.exitCode !== null || bridge.signalCode !== null;
+  if (bridgeExited) {
+    return {
+      ok: false,
+      failure: "manager_bridge_exited",
+      restartWatcher: false,
+      bridgeFallbackRequired: true,
+    };
+  }
+  const watcherExited = !watcher || watcher.exitCode !== null || watcher.signalCode !== null;
+  if (watcherExited) {
+    return {
+      ok: false,
+      failure: "manager_watcher_exited",
+      restartWatcher: true,
+      bridgeFallbackRequired: false,
+    };
+  }
+  return {
+    ok: true,
+    failure: null,
+    restartWatcher: false,
+    bridgeFallbackRequired: false,
+  };
 }
 
 export function scanCopiedClientProcessesSafely(scan = getCopiedClientProcesses) {

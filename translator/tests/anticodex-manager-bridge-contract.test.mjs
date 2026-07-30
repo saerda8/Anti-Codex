@@ -688,6 +688,124 @@ test("third-party profile reads and writes use a bounded renderer-to-Manager req
   assert.match(getJsonBlock, /managerRequestViaBridge\(path[\s\S]*?apiCandidates\(\)/);
 });
 
+test("Manager abandons an unleased stale bridge request before the long action timeout", async () => {
+  const staleErrorSource = extractNamedFunction(managerInject, "managerBridgeStaleError");
+  const invokeSource = extractNamedFunction(managerInject, "invokeManagerBridgeWithPickup");
+  const context = {
+    Date,
+    Error,
+    Promise,
+    Set,
+    MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
+    MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
+    wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+    window: {
+      __ANTICODEX_MANAGER_ACTION_QUEUE__: [],
+      __ANTICODEX_MANAGER_ACTION_PROMISES__: {},
+    },
+  };
+  vm.runInNewContext(
+    `${staleErrorSource}\n${invokeSource}\nthis.invokeManagerBridgeWithPickup = invokeManagerBridgeWithPickup;`,
+    context,
+  );
+
+  const bridgePromise = () => new Promise((resolvePromise) => {
+    const id = "stale-request";
+    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve: resolvePromise };
+    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action: "syncHost", leaseCount: 0 });
+  });
+  const startedAt = Date.now();
+  await assert.rejects(
+    context.invokeManagerBridgeWithPickup(bridgePromise),
+    (error) => error?.code === "ANTICODEX_MANAGER_BRIDGE_STALE",
+  );
+  assert.ok(Date.now() - startedAt < 500);
+  assert.equal(context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length, 0);
+  assert.equal(context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__["stale-request"], undefined);
+});
+
+test("Manager uses the bridge only after pickup and safely falls back when app bridge is stale", () => {
+  const requestBlock = extractNamedFunction(managerInject, "managerRequestViaBridge");
+  const actionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  const snapshotBlock = extractNamedFunction(managerInject, "refreshManagerSnapshot");
+  const liveJsonBlock = extractNamedFunction(managerInject, "managerGetLiveJson");
+  const postJsonBlock = extractNamedFunction(managerInject, "managerPostJson");
+
+  assert.match(requestBlock, /invokeManagerBridgeWithPickup/);
+  assert.match(actionBlock, /invokeManagerBridgeWithPickup/);
+  assert.match(snapshotBlock, /runActionViaBridge\("refreshStatus", actionToken\)/);
+  assert.match(actionBlock, /isManagerBridgeStaleError\(error\)[\s\S]*?runActionViaScript\(action, actionToken\)/);
+  assert.match(liveJsonBlock, /location\.protocol === "app:" && !isManagerBridgeStaleError\(error\)/);
+  assert.match(postJsonBlock, /location\.protocol === "app:" && !isManagerBridgeStaleError\(error\)/);
+});
+
+test("Manager app-page stale action falls back once, while a leased action is never replayed", async () => {
+  const staleErrorSource = extractNamedFunction(managerInject, "managerBridgeStaleError");
+  const isStaleSource = extractNamedFunction(managerInject, "isManagerBridgeStaleError");
+  const invokeSource = extractNamedFunction(managerInject, "invokeManagerBridgeWithPickup");
+  const actionSource = extractNamedFunction(managerInject, "runActionViaBridge");
+  let fallbackCalls = 0;
+  const context = {
+    Date,
+    Error,
+    Number,
+    Promise,
+    Set,
+    MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
+    MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
+    actionTransportTimeoutMs: () => 500,
+    browserReachableApiBase: (value) => value,
+    reconcileManagerPendingActions: () => {},
+    runActionViaScript: async (action) => {
+      fallbackCalls += 1;
+      return { ok: true, action, transport: "script" };
+    },
+    setTimeout,
+    wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+    location: { protocol: "app:" },
+    window: {
+      __ANTICODEX_MANAGER_ACTION_QUEUE__: [],
+      __ANTICODEX_MANAGER_ACTION_PROMISES__: {},
+    },
+  };
+  vm.runInNewContext(
+    `var activeApi = "http://127.0.0.1:8484";
+${staleErrorSource}
+${isStaleSource}
+${invokeSource}
+async ${actionSource}
+this.runActionViaBridge = runActionViaBridge;`,
+    context,
+  );
+
+  context.window.__ANTICODEX_RUN_MANAGER_ACTION__ = (action) => new Promise((resolvePromise) => {
+    const id = "stale-action";
+    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve: resolvePromise };
+    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push({ id, action, leaseCount: 0 });
+  });
+  const fallback = await context.runActionViaBridge("syncHost");
+  assert.equal(fallback.transport, "script");
+  assert.equal(fallbackCalls, 1);
+
+  context.window.__ANTICODEX_RUN_MANAGER_ACTION__ = (action) => new Promise((resolvePromise) => {
+    const id = "leased-action";
+    const request = { id, action, leaseCount: 0 };
+    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id] = { resolve: resolvePromise };
+    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push(request);
+    setTimeout(() => {
+      request.leaseCount = 1;
+      setTimeout(() => {
+        context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
+        delete context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
+        resolvePromise({ ok: true, action, transport: "bridge" });
+      }, 10);
+    }, 2);
+  });
+  const leased = await context.runActionViaBridge("syncHost");
+  assert.equal(leased.transport, "bridge");
+  assert.equal(fallbackCalls, 1);
+});
+
 test("Manager initial render consumes its complete snapshot without serial bridge fan-out", () => {
   const getJsonBlock = managerInject.match(/async function getJson\(path, options = \{\}\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
   assert.match(getJsonBlock, /options\.preferSnapshot === true[\s\S]*?return snapshotFallback/);
@@ -1053,7 +1171,7 @@ test("Manager late action delivery is gated by the exact action generation token
   assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__/);
   assert.doesNotMatch(snapshotRefreshBlock, /__ANTICODEX_MANAGER_PENDING_ACTIONS__/);
   assert.match(snapshotRefreshBlock, /reconcileManagerPendingActions\(payload\.snapshot\)/);
-  assert.match(snapshotRefreshBlock, /__ANTICODEX_RUN_MANAGER_ACTION__\("refreshStatus", actionToken\)/);
+  assert.match(snapshotRefreshBlock, /runActionViaBridge\("refreshStatus", actionToken\)/);
   assert.match(snapshotRefreshBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
   assert.match(removeManagerBlock, /invalidateManagerActionToken\("closed"\)/);
   assert.match(managerInject.slice(0, managerInject.indexOf("const DEFAULT_API")), /invalidateManagerActionToken\("reinject"\)/);

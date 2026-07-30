@@ -94,7 +94,7 @@ test("ready state waits for verified Manager injection", () => {
   const startupBlock = source.slice(callStart, readyStart);
   assert.match(startupBlock, /const management = await startManagerSupport\(plan, childEnvironment\)/);
 
-  const supportStart = source.indexOf("async function startManagerSupport");
+  const supportStart = source.indexOf("async function startManagerWatcher");
   const supportEnd = source.indexOf("\nexport function scanCopiedClientProcessesSafely", supportStart);
   assert.ok(supportStart >= 0 && supportEnd > supportStart);
   const supportBlock = source.slice(supportStart, supportEnd);
@@ -104,7 +104,55 @@ test("ready state waits for verified Manager injection", () => {
   assert.ok(watcherStart >= 0 && watcherReady > watcherStart && bridgeStart > watcherReady);
   assert.match(supportBlock, /"watching"\\s\*:\\s\*true/);
   assert.match(supportBlock, /throw new Error\(`Manager watcher exited before readiness:/);
+  assert.match(supportBlock, /manager-bridge-connected/);
+  assert.match(supportBlock, /description:\s*"fixed-route Manager bridge"/);
   assert.doesNotMatch(supportBlock, /const bootstrap = spawn/);
+});
+
+test("Manager watcher keeps retrying owner-alive CDP disconnects instead of exiting", () => {
+  const source = readFileSync(injectorPath, "utf8");
+  const catchStart = source.indexOf("} catch (err) {", source.indexOf("for (let i = 0; i < attempts; i++)"));
+  const retryStart = source.indexOf("if (managerWatchMode) {", catchStart);
+  const retryEnd = source.indexOf("await sleep(delayMs);", retryStart);
+  assert.ok(catchStart >= 0 && retryStart > catchStart && retryEnd > retryStart);
+  const retryBlock = source.slice(retryStart, retryEnd);
+
+  assert.match(retryBlock, /manager watcher disconnected timeout/);
+  assert.match(retryBlock, /managerDisconnectedSince = Date\.now\(\)/);
+  assert.doesNotMatch(retryBlock, /process\.exit/);
+});
+
+test("steady-state Manager supervision restarts only the safe watcher and degrades on bridge exit", () => {
+  assert.equal(typeof fixedRoute.inspectManagerSupportChildren, "function");
+  const running = { exitCode: null, signalCode: null };
+  assert.deepEqual(fixedRoute.inspectManagerSupportChildren(running, running), {
+    ok: true,
+    failure: null,
+    restartWatcher: false,
+    bridgeFallbackRequired: false,
+  });
+  assert.deepEqual(fixedRoute.inspectManagerSupportChildren({ exitCode: 1, signalCode: null }, running), {
+    ok: false,
+    failure: "manager_watcher_exited",
+    restartWatcher: true,
+    bridgeFallbackRequired: false,
+  });
+  assert.deepEqual(fixedRoute.inspectManagerSupportChildren(running, { exitCode: null, signalCode: "SIGTERM" }), {
+    ok: false,
+    failure: "manager_bridge_exited",
+    restartWatcher: false,
+    bridgeFallbackRequired: true,
+  });
+
+  const source = readFileSync(supervisorPath, "utf8");
+  const steadyStart = source.indexOf("let clientMissingSince = null");
+  const steadyEnd = source.indexOf("\n  } catch (error)", steadyStart);
+  assert.ok(steadyStart >= 0 && steadyEnd > steadyStart);
+  const steadyBlock = source.slice(steadyStart, steadyEnd);
+  assert.match(steadyBlock, /inspectManagerSupportChildren\(managerWatcher, managerBridge\)/);
+  assert.match(steadyBlock, /managerFailureReason/);
+  assert.match(steadyBlock, /await startManagerWatcher\(plan, childEnvironment\)/);
+  assert.doesNotMatch(steadyBlock, /startManagerBridge\(/);
 });
 
 test("model refresh preserves the live provider and updates only the Antigravity model list", () => {

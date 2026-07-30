@@ -92,6 +92,8 @@
     "postVerificationFull",
   ]);
   const BRIDGE_TIMEOUT_MS = 5000;
+  const MANAGER_BRIDGE_PICKUP_TIMEOUT_MS = 2000;
+  const MANAGER_BRIDGE_PICKUP_POLL_MS = 50;
   const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 340000;
   const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
   const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
@@ -406,6 +408,50 @@
     );
   }
 
+  function managerBridgeStaleError() {
+    const error = new Error("Anti-Codex manager bridge is not receiving requests.");
+    error.code = "ANTICODEX_MANAGER_BRIDGE_STALE";
+    return error;
+  }
+
+  function isManagerBridgeStaleError(error) {
+    return error?.code === "ANTICODEX_MANAGER_BRIDGE_STALE";
+  }
+
+  function invokeManagerBridgeWithPickup(invoke) {
+    const queueBefore = Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__)
+      ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__
+      : [];
+    const existingIds = new Set(queueBefore.map((request) => String(request?.id || "")).filter(Boolean));
+    const payloadPromise = invoke();
+    const queuedRequest = (Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__)
+      ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__
+      : []).find((request) => request?.id && !existingIds.has(String(request.id)));
+    if (!queuedRequest?.id) return payloadPromise;
+
+    return (async () => {
+      const requestId = String(queuedRequest.id);
+      const deadline = Date.now() + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        const current = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [])
+          .find((request) => String(request?.id || "") === requestId);
+        if (!current || Number(current.leaseCount || 0) > 0) return payloadPromise;
+        await wait(MANAGER_BRIDGE_PICKUP_POLL_MS);
+      }
+
+      const current = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [])
+        .find((request) => String(request?.id || "") === requestId);
+      if (!current || Number(current.leaseCount || 0) > 0) return payloadPromise;
+      window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [])
+        .filter((request) => String(request?.id || "") !== requestId);
+      if (window.__ANTICODEX_MANAGER_ACTION_PROMISES__) {
+        delete window.__ANTICODEX_MANAGER_ACTION_PROMISES__[requestId];
+      }
+      void Promise.resolve(payloadPromise).catch(() => {});
+      throw managerBridgeStaleError();
+    })();
+  }
+
   async function getJson(path, options = {}) {
     const snapshotFallback = snapshotResponse(path);
     const allowSnapshotFallback = options.allowSnapshotFallback !== false
@@ -448,11 +494,11 @@
     let payload;
     try {
       payload = await Promise.race([
-        window.__ANTICODEX_RUN_MANAGER_REQUEST__(path, {
+        invokeManagerBridgeWithPickup(() => window.__ANTICODEX_RUN_MANAGER_REQUEST__(path, {
           method: String(options.method || "GET").toUpperCase(),
           timeoutMs,
           ...(options.body === undefined ? {} : { body: options.body }),
-        }),
+        })),
         new Promise((resolve) => {
           timeout = setTimeout(() => resolve({ __timedOut: true }), timeoutMs + 1000);
         }),
@@ -473,7 +519,7 @@
       try {
         return await managerRequestViaBridge(path, { ...options, method: "GET" });
       } catch (error) {
-        if (location.protocol === "app:") throw error;
+        if (location.protocol === "app:" && !isManagerBridgeStaleError(error)) throw error;
       }
     }
     return getJsonFrom(activeApi, path, options);
@@ -507,7 +553,7 @@
           body,
         });
       } catch (error) {
-        if (location.protocol === "app:") throw error;
+        if (location.protocol === "app:" && !isManagerBridgeStaleError(error)) throw error;
       }
     }
     if (!managerToken) await refreshManagerToken();
@@ -611,7 +657,7 @@
     window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ = true;
     try {
       const payload = await Promise.race([
-        window.__ANTICODEX_RUN_MANAGER_ACTION__("refreshStatus", actionToken),
+        runActionViaBridge("refreshStatus", actionToken),
         new Promise((resolve) => setTimeout(() => resolve(null), LOAD_SNAPSHOT_TIMEOUT_MS)),
       ]);
       if (!payload && window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken) {
@@ -646,7 +692,9 @@
         let payload;
         const bridgeTimeoutMs = actionTransportTimeoutMs(action);
         const winner = await Promise.race([
-          window.__ANTICODEX_RUN_MANAGER_ACTION__(action, actionToken).then(p => { payload = p; return "bridge"; }),
+          invokeManagerBridgeWithPickup(
+            () => window.__ANTICODEX_RUN_MANAGER_ACTION__(action, actionToken),
+          ).then(p => { payload = p; return "bridge"; }),
           new Promise(resolve => setTimeout(() => resolve("timeout"), bridgeTimeoutMs)),
         ]);
         if (winner === "bridge") {
@@ -663,6 +711,7 @@
         }
         if (location.protocol === "app:") throw new Error("Anti-Codex manager bridge timed out.");
       } catch (error) {
+        if (isManagerBridgeStaleError(error)) return runActionViaScript(action, actionToken);
         if (location.protocol === "app:") throw error;
       }
     }
