@@ -185,6 +185,23 @@ export function buildMcpProductEnvironment({
   for (const name of Object.keys(environment)) {
     if (name.toLowerCase() === "path") delete environment[name];
   }
+  for (const name of [
+    "GLOBAL_CODEX_HOME",
+    "DEEPCODEX_SHARED_CODEX_HOME",
+    "CODEX_ELECTRON_DEV_PARENT_PID",
+    "CODEX_ELECTRON_DEV_WEBVIEW_PID",
+    "OPENAI_API_KEY",
+    "OPENAI_API_BASE",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CODEX_API_KEY",
+    "UPSTREAM_PROTOCOL",
+    "UPSTREAM_URL",
+    "UPSTREAM_MODEL",
+    "UPSTREAM_API_KEY",
+  ]) environment[name] = "";
   return {
     ...environment,
     Path: [helperDirectory, ...String(inheritedPath).split(";").filter(Boolean)]

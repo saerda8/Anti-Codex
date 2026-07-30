@@ -147,7 +147,11 @@ test("runRealMcpSmoke reports a real stdio tool call result", async () => {
       installRoot,
       stateRoot,
       codexHome,
-      baseEnvironment: { PATH: "C:\\base" },
+      baseEnvironment: {
+        PATH: "C:\\base",
+        GLOBAL_CODEX_HOME: "C:\\native-codex",
+        OPENAI_API_KEY: "must-not-leak",
+      },
     });
 
     const report = await runRealMcpSmoke({
@@ -175,6 +179,8 @@ test("runRealMcpSmoke reports a real stdio tool call result", async () => {
     assert.equal(productEnvironment.Path.split(";")[0], join(codexHome, "plugins", ".plugin-appserver"));
     assert.equal(productEnvironment.CODEX_HOME, codexHome);
     assert.equal(productEnvironment.APPDATA, join(stateRoot, "windows-appdata"));
+    assert.equal(productEnvironment.GLOBAL_CODEX_HOME, "");
+    assert.equal(productEnvironment.OPENAI_API_KEY, "");
     assert.equal(report.ok, true);
     assert.equal(report.serverName, "node_repl");
     assert.equal(report.toolName, "echo");
