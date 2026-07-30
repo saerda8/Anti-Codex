@@ -21,6 +21,8 @@ test("saved third-party profiles expose only CodexPlusPlus-native protocols", ()
 test("Antigravity and third-party choices persist independently", () => {
   assert.match(profile, /antigravityModel/);
   assert.match(profile, /GetRuntime[\s\S]*apiKey = \$runtimeApiKey/);
+  assert.doesNotMatch(profile, /UseAntigravity/);
+  assert.doesNotMatch(profile, /mode = "third-party"/);
   assert.match(launcher, /const runtimeProfile = readThirdPartyRuntimeProfile\(plan, env\)/);
   assert.match(launcher, /if \(thirdPartyConfigured && apiKey\)/);
   assert.match(controlApi, /antigravityModelsFromCatalog/);

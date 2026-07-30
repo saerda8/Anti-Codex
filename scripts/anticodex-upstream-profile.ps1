@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty", "UseAntigravity")]
+    [ValidateSet("GetPublic", "GetRuntime", "SaveThirdParty")]
     [string]$Action,
 
     [string]$StateRoot,
@@ -11,7 +11,6 @@ param(
     [string]$BaseUrl = "",
     [string]$Model = "",
     [int]$ContextWindow = 272000,
-    [string]$AntigravityModel = "",
     [string]$ApiKey = "",
     [string]$TestStatus = "pending",
     [string]$CapabilitiesJson = "{}"
@@ -73,7 +72,7 @@ function Read-Profile {
         $parsed = $json | ConvertFrom-Json
         return [Ordered]@{
             schemaVersion = [int](Get-SafeProperty $parsed "schemaVersion" 1)
-            mode = [string](Get-SafeProperty $parsed "mode" "antigravity")
+            mode = "antigravity"
             protocol = [string](Get-SafeProperty $parsed "protocol" "")
             baseUrl = [string](Get-SafeProperty $parsed "baseUrl" "")
             model = [string](Get-SafeProperty $parsed "model" "")
@@ -185,11 +184,7 @@ try {
         }
         "GetRuntime" {
             $profile = Read-Profile
-            $runtimeApiKey = if ($profile.mode -eq "third-party") {
-                Unprotect-ApiKey
-            } else {
-                Unprotect-ApiKey -AllowUnreadable
-            }
+            $runtimeApiKey = Unprotect-ApiKey -AllowUnreadable
             $runtime = [Ordered]@{
                 schemaVersion = $profile.schemaVersion
                 mode = $profile.mode
@@ -228,7 +223,7 @@ try {
 
             $profile = [Ordered]@{
                 schemaVersion = 1
-                mode = "third-party"
+                mode = "antigravity"
                 protocol = $Protocol
                 baseUrl = $BaseUrl.TrimEnd("/")
                 model = $Model
@@ -237,15 +232,6 @@ try {
                 lastTestStatus = $TestStatus
                 lastTestAt = [DateTime]::UtcNow.ToString("o")
                 capabilities = Read-Capabilities
-            }
-            Write-Profile $profile
-            Public-Profile $profile | ConvertTo-Json -Depth 20
-        }
-        "UseAntigravity" {
-            $profile = Read-Profile
-            $profile["mode"] = "antigravity"
-            if (-not [string]::IsNullOrWhiteSpace($AntigravityModel)) {
-                $profile["antigravityModel"] = $AntigravityModel.Trim()
             }
             Write-Profile $profile
             Public-Profile $profile | ConvertTo-Json -Depth 20

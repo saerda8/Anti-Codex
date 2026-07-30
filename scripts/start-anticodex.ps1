@@ -561,18 +561,14 @@ function Set-AntiCodexProviderEnvironment {
     } else {
         ""
     }
-    $model = if (-not [string]::IsNullOrWhiteSpace($savedAntigravityModel)) {
+    $antigravityModel = if (-not [string]::IsNullOrWhiteSpace($savedAntigravityModel)) {
         $savedAntigravityModel
     } else {
         "gemini-3-flash-agent"
     }
+    $model = $antigravityModel
 
-    if ($null -eq $NativeSelection) {
-        if ($RuntimeProfile -and [string]$RuntimeProfile.mode -eq "third-party") {
-            $provider = "third-party"
-            $model = [string]$RuntimeProfile.model
-        }
-    } else {
+    if ($null -ne $NativeSelection) {
         $selectedNativeModel = [string]$NativeSelection.model
         $thirdPartySlot = "anticodex/third-party"
         $thirdPartyPrefix = "$thirdPartySlot/"
@@ -612,12 +608,23 @@ function Set-AntiCodexProviderEnvironment {
         }
         $env:UPSTREAM_API_KEY = [string]$RuntimeProfile.apiKey
         $env:UPSTREAM_CONTEXT_WINDOW = [string]$RuntimeProfile.contextWindow
+        $providerModels = @([string]$RuntimeProfile.model)
+        if ($RuntimeProfile.capabilities -and $RuntimeProfile.capabilities.PSObject.Properties["providerModels"]) {
+            foreach ($candidate in @($RuntimeProfile.capabilities.providerModels)) {
+                $candidateModel = [string]$candidate
+                if (-not [string]::IsNullOrWhiteSpace($candidateModel) -and $providerModels -notcontains $candidateModel) {
+                    $providerModels += $candidateModel
+                }
+            }
+        }
+        $env:ANTICODEX_THIRD_PARTY_MODELS = ConvertTo-Json -InputObject ([object[]]$providerModels) -Compress
     } else {
         Remove-Item Env:UPSTREAM_PROTOCOL -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_URL -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_MODEL -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_API_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:UPSTREAM_CONTEXT_WINDOW -ErrorAction SilentlyContinue
+        Remove-Item Env:ANTICODEX_THIRD_PARTY_MODELS -ErrorAction SilentlyContinue
         if ($provider -eq "third-party") {
             throw "The saved third-party profile is incomplete."
         }
@@ -625,6 +632,7 @@ function Set-AntiCodexProviderEnvironment {
 
     $env:ANTICODEX_PROVIDER = $provider
     $env:ANTICODEX_MODEL = $model
+    $env:ANTICODEX_ANTIGRAVITY_MODEL = $antigravityModel
     return [pscustomobject]@{ provider = $provider; model = $model }
 }
 

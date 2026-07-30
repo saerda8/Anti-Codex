@@ -836,7 +836,6 @@ async function runUpstreamProfileScript(action, values = {}, stateRoot = "", scr
     addArg("BaseUrl", values.baseUrl);
     addArg("Model", values.model);
     addArg("ContextWindow", values.contextWindow);
-    addArg("AntigravityModel", values.antigravityModel);
     addArg("TestStatus", values.testStatus);
     addArg("CapabilitiesJson", values.capabilitiesJson);
     const { stdout } = await execFileAsync(powershellPath(), args, {

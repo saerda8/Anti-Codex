@@ -208,7 +208,7 @@ test("model refresh derives the third-party catalog from live hot-switch setting
 
   assert.deepEqual(options, {
     thirdPartyModel: "gpt-5.6-terra",
-    thirdPartyModels: ["gpt-5.6-terra"],
+    thirdPartyModels: ["gpt-5.6-terra", "gpt-5.6-sol"],
     thirdPartyContextWindow: 128000,
   });
 });

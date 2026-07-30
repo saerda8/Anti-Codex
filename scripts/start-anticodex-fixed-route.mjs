@@ -26,6 +26,7 @@ import { ownerProcessIsAlive } from "./lib/anticodex-owner-process.mjs";
 import {
   ANTIGRAVITY_MODEL_SLOT,
   ANTIGRAVITY_RELAY_ID,
+  THIRD_PARTY_MODEL_PREFIX,
   THIRD_PARTY_MODEL_SLOT,
   THIRD_PARTY_RELAY_ID,
   buildCodexPlusPlusSettings,
@@ -313,6 +314,12 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
         apiKey: env.UPSTREAM_API_KEY,
       }
     : null;
+  const thirdPartyModels = thirdPartyConfig
+    ? uniqueThirdPartyModels([
+        thirdPartyModel,
+        ...parseThirdPartyModelsJson(env.ANTICODEX_THIRD_PARTY_MODELS),
+      ])
+    : [];
   if (provider === "third-party" && !thirdPartyConfig) {
     throw new Error("Saved third-party route is incomplete");
   }
@@ -359,7 +366,10 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
         catalogPath,
         localProxyKey,
         thirdPartyConfig,
-        relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(thirdPartyModel)],
+        relayModelList: [
+          THIRD_PARTY_MODEL_SLOT,
+          ...thirdPartyModels.map(thirdPartyNativeModel),
+        ],
       })
     : null;
   const route = provider === "third-party" ? thirdPartyRoute : antigravityRoute;
@@ -389,6 +399,7 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
     model: route.model,
     antigravityModel,
     thirdPartyConfig,
+    thirdPartyModels,
     modelContextWindow,
     headless,
     ports,
@@ -678,7 +689,7 @@ async function runSupervisor(plan) {
     let catalog = buildUnifiedModelCatalog(bundledCatalog, {
       antigravityCatalog,
       thirdPartyModel: thirdPartyRoute?.model,
-      thirdPartyModels: thirdPartyRoute?.model ? [thirdPartyRoute.model] : [],
+      thirdPartyModels: plan.thirdPartyModels,
       thirdPartyContextWindow: thirdPartyRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
     });
     writeTextAtomic(unifiedCatalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
@@ -691,10 +702,7 @@ async function runSupervisor(plan) {
         if (entry.profileId === ANTIGRAVITY_RELAY_ID) {
           return { ...entry, relayModelList: [ANTIGRAVITY_MODEL_SLOT, ...antigravityModelIds] };
         }
-        return {
-          ...entry,
-          relayModelList: [THIRD_PARTY_MODEL_SLOT, thirdPartyNativeModel(entry.model)],
-        };
+        return entry;
       });
     };
     const runtimeRelayRoutes = runtimeRelayRoutesForCatalog(antigravityCatalog);
@@ -1587,9 +1595,17 @@ export function thirdPartyCatalogOptionsFromSettings(settings, fallbackRoute = n
   const profiles = Array.isArray(settings?.relayProfiles) ? settings.relayProfiles : [];
   const profile = profiles.find((entry) => String(entry?.id || "") === THIRD_PARTY_RELAY_ID) ?? null;
   const thirdPartyModel = String(profile?.testModel || fallbackRoute?.model || "").trim();
+  const modelList = profile?.modelList
+    ?? (Array.isArray(fallbackRoute?.relayModelList) ? fallbackRoute.relayModelList.join("\n") : "");
+  const thirdPartyModels = uniqueThirdPartyModels([
+    thirdPartyModel,
+    ...String(modelList).split(/\r?\n/)
+      .filter((model) => model.startsWith(THIRD_PARTY_MODEL_PREFIX))
+      .map((model) => model.slice(THIRD_PARTY_MODEL_PREFIX.length)),
+  ]);
   return {
     thirdPartyModel,
-    thirdPartyModels: thirdPartyModel ? [thirdPartyModel] : [],
+    thirdPartyModels,
     thirdPartyContextWindow: contextWindow(
       profile?.contextWindow ?? fallbackRoute?.modelContextWindow ?? DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
       DEFAULT_THIRD_PARTY_CONTEXT_WINDOW,
@@ -2572,6 +2588,35 @@ function requiredEnv(env, name) {
 function optionalText(value) {
   const text = String(value ?? "").trim();
   return text || undefined;
+}
+
+function parseThirdPartyModelsJson(value) {
+  const json = optionalText(value);
+  if (!json) return [];
+  let models;
+  try {
+    models = JSON.parse(json);
+  } catch {
+    throw new Error("ANTICODEX_THIRD_PARTY_MODELS must be valid JSON.");
+  }
+  if (!Array.isArray(models)) {
+    throw new Error("ANTICODEX_THIRD_PARTY_MODELS must be a JSON array.");
+  }
+  return models;
+}
+
+function uniqueThirdPartyModels(values) {
+  const models = [];
+  const seen = new Set();
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const model = value.trim();
+    if (!model || /[\r\n]/.test(model) || seen.has(model)) continue;
+    seen.add(model);
+    models.push(model);
+    if (models.length === 200) break;
+  }
+  return models;
 }
 
 function truthy(value) {

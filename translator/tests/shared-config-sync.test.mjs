@@ -168,7 +168,7 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   execFileSync(process.execPath, [syncSharedConfig, source, includeTarget, "--include-development-workers"]);
   const included = fs.readFileSync(includeTarget, "utf8");
   for (const worker of developmentWorkers) {
-    assert.match(included, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}\\]`));
+    assert.doesNotMatch(included, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}([.\\]])`));
   }
 });
 
@@ -195,7 +195,7 @@ test("MCP verifier rejects development workers inside the Anti-Codex product con
   assert.match(verifier, /must not include development MCP worker/);
 });
 
-test("DeepCodex-only plugin registrations are written back to current and global config", () => {
+test("DeepCodex-only plugin registrations stay local and cannot restore development MCP workers", () => {
   const dir = tempDir();
   const current = path.join(dir, "current.toml");
   const previous = path.join(dir, "previous.toml");
@@ -218,6 +218,9 @@ test("DeepCodex-only plugin registrations are written back to current and global
     '[plugins."hyperframes@openai-curated"]',
     "enabled = true",
     "",
+    "[mcp_servers.deepseek-code-worker]",
+    'command = "worker.exe"',
+    "",
   ].join("\n"));
 
   fs.writeFileSync(global, [
@@ -235,6 +238,8 @@ test("DeepCodex-only plugin registrations are written back to current and global
 
   assert.deepEqual(result.restored, ['[plugins."remotion@openai-curated"]']);
   assert.match(currentNext, /\[plugins\."remotion@openai-curated"\]\nenabled = true/);
-  assert.match(globalNext, /\[plugins\."remotion@openai-curated"\]\nenabled = true/);
+  assert.doesNotMatch(currentNext, /\[mcp_servers\.deepseek-code-worker\]/);
+  assert.doesNotMatch(globalNext, /\[plugins\."remotion@openai-curated"\]\nenabled = true/);
+  assert.doesNotMatch(globalNext, /\[mcp_servers\.deepseek-code-worker\]/);
   assert.doesNotMatch(globalNext, /\[plugins\."hyperframes@openai-curated"\]\nenabled = true/);
 });

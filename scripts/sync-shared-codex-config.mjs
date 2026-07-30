@@ -2,10 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [, , sourcePath, targetPath, ...options] = process.argv;
+const [, , sourcePath, targetPath] = process.argv;
 
 if (!sourcePath || !targetPath) {
-  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config> [--include-development-workers]");
+  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config>");
   process.exit(2);
 }
 
@@ -25,7 +25,6 @@ const developmentWorkerServers = new Set([
   "xiaoqiang3",
   "xiaoqiang4",
 ]);
-const includeDevelopmentWorkers = options.includes("--include-development-workers");
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
 
@@ -168,13 +167,13 @@ function render(blocks) {
 function mergeSharedBlocks(targetBlocks, sourceBlocks) {
   const sourceShared = sourceBlocks
     .filter(isShared)
-    .filter((block) => includeDevelopmentWorkers || !isDevelopmentWorkerBlock(block))
+    .filter((block) => !isDevelopmentWorkerBlock(block))
     .map(normalizeWindowsMcpShim)
     .map(normalizeMissingWindowsMcpCommand);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
   const keptTargetBlocks = targetBlocks.filter(
-    (block) => (includeDevelopmentWorkers || !isDevelopmentWorkerBlock(block))
+    (block) => !isDevelopmentWorkerBlock(block)
       && (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
   );
   return [...keptTargetBlocks, ...sourceShared];

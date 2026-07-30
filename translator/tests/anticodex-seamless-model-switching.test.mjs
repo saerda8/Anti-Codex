@@ -17,7 +17,10 @@ import {
   buildTaskLaunchPlan,
   buildTaskLauncherEnvironment,
 } from "../../scripts/start-anticodex-task.mjs";
-import { buildUnifiedModelCatalog } from "../../scripts/start-anticodex-fixed-route.mjs";
+import {
+  buildFixedRoutePlan,
+  buildUnifiedModelCatalog,
+} from "../../scripts/start-anticodex-fixed-route.mjs";
 import { saveThirdPartyCodexPlusPlusSettings } from "../../scripts/anticodex-manager-service.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
@@ -67,6 +70,30 @@ test("CodexPlusPlus keeps Antigravity and third-party relays resident at the sam
   ]);
   assert.match(settings.relayProfiles[0].modelList, /gemini-3\.1-pro-low/);
   assert.match(settings.relayProfiles[1].modelList, /anticodex\/third-party\/gpt-5\.5/);
+});
+
+test("third-party startup keeps Antigravity as the unknown-model fallback and preserves every saved provider model", () => {
+  const plan = buildFixedRoutePlan([], {
+    LOCALAPPDATA: "C:\\Users\\XD\\AppData\\Local",
+    APPDATA: "C:\\Users\\XD\\AppData\\Roaming",
+    ANTICODEX_PROVIDER: "third-party",
+    ANTICODEX_MODEL: "gpt-5.6-terra",
+    ANTICODEX_ANTIGRAVITY_MODEL: "gemini-3.1-pro-low",
+    UPSTREAM_PROTOCOL: "openai-compatible",
+    UPSTREAM_URL: "http://127.0.0.1:8080",
+    UPSTREAM_MODEL: "gpt-5.6-terra",
+    UPSTREAM_API_KEY: "saved-third-party-key",
+    ANTICODEX_THIRD_PARTY_MODELS: JSON.stringify(["gpt-5.6-terra", "gpt-5.6-sol"]),
+  });
+  const thirdParty = plan.relayRoutes.find((route) => route.profileId === THIRD_PARTY_RELAY_ID);
+
+  assert.equal(plan.settings.activeRelayId, ANTIGRAVITY_RELAY_ID);
+  assert.equal(plan.settings.relayTestModel, "gemini-3.1-pro-low");
+  assert.deepEqual(thirdParty.relayModelList, [
+    THIRD_PARTY_MODEL_SLOT,
+    thirdPartyNativeModel("gpt-5.6-terra"),
+    thirdPartyNativeModel("gpt-5.6-sol"),
+  ]);
 });
 
 test("one stable native catalog exposes Gemini, Claude and third-party choices together", () => {
@@ -221,12 +248,13 @@ test("formal PowerShell launcher restores the native model selection and keeps t
   assert.match(readBlock, /model\s*\\s\*=/);
   assert.match(block, /anticodex\/third-party/);
   assert.match(block, /StartsWith\(\$thirdPartyPrefix/);
-  assert.match(block, /if \(\$null -eq \$NativeSelection\)[\s\S]*?\$RuntimeProfile\.mode/);
+  assert.doesNotMatch(block, /if \(\$null -eq \$NativeSelection\)[\s\S]*?\$RuntimeProfile\.mode/);
   assert.doesNotMatch(block, /\$runtimeMode\s*=|if \(\$runtimeMode -eq "third-party"\)/);
   assert.match(block, /\$thirdPartyConfigured\s*=/);
   assert.match(block, /if \(\$thirdPartyConfigured\)[\s\S]*?\$env:UPSTREAM_URL\s*=/);
   assert.match(block, /\$env:UPSTREAM_MODEL\s*=\s*if \(\$provider -eq "third-party"\)\s*\{\s*\$model\s*\}\s*else\s*\{\s*\[string\]\$RuntimeProfile\.model\s*\}/);
   assert.match(block, /\$env:UPSTREAM_API_KEY\s*=\s*\[string\]\$RuntimeProfile\.apiKey/);
+  assert.match(block, /\$env:ANTICODEX_THIRD_PARTY_MODELS\s*=/);
 });
 
 test("Manager saves provider settings and leaves native model selection to the composer", () => {

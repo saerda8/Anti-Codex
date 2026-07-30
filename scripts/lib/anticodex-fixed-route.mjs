@@ -181,6 +181,7 @@ export function buildCodexPlusPlusSettings(options = {}) {
   if (!relayRoutes.some((relayRoute) => relayRoute.profileId === route.profileId)) {
     throw new Error("active route must be included in relayRoutes");
   }
+  const fallbackRoute = relayRoutes.find((relayRoute) => relayRoute.profileId === ANTIGRAVITY_RELAY_ID) ?? route;
   const userDataDir = String(options.userDataDir ?? "").trim();
   if (!userDataDir || !isAbsolute(userDataDir)) throw new Error("userDataDir must be absolute");
   const codexExtraArgs = [
@@ -226,8 +227,8 @@ export function buildCodexPlusPlusSettings(options = {}) {
         ? relayRoute.relayModelList
         : [relayRoute.clientModel ?? relayRoute.model]).join("\n"),
     })),
-    activeRelayId: route.profileId,
-    relayTestModel: route.model,
+    activeRelayId: fallbackRoute.profileId,
+    relayTestModel: fallbackRoute.model,
   };
 }
 

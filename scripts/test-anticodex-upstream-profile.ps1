@@ -116,7 +116,7 @@ try {
         TestStatus = "success"
         CapabilitiesJson = '{"stream":true,"toolCalls":true}'
     }
-    Assert-Equal $saved.mode "third-party" "saved mode"
+    Assert-Equal $saved.mode "antigravity" "saving provider settings does not switch mode"
     Assert-Equal $saved.protocol "openai-compatible" "saved protocol"
     Assert-Equal $saved.baseUrl "https://api.custom.example/v1" "saved baseUrl trims slash"
     Assert-Equal $saved.model "custom-gpt" "saved model"
@@ -143,7 +143,7 @@ try {
     }
 
     $runtime = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
-    Assert-Equal $runtime.mode "third-party" "runtime mode"
+    Assert-Equal $runtime.mode "antigravity" "runtime fallback mode"
     Assert-Equal $runtime.apiKey "sk-proj-mysecretkey1234" "runtime apiKey"
     Assert-Equal $runtime.contextWindow 128000 "runtime context window"
     Assert-OnlyProperties $runtime $runtimeFields "runtime profile after SaveThirdParty"
@@ -151,17 +151,12 @@ try {
     # DPAPI corrupt / fail closed tests
     $encryptedKey = [System.IO.File]::ReadAllBytes($keyPath)
     [System.IO.File]::WriteAllBytes($keyPath, [byte[]](1, 2, 3, 4))
-    if (-not (Test-ProfileFails @{
+    $runtimeWithUnreadableKey = Invoke-ProfileJson -Parameters @{
         Action = "GetRuntime"
         StateRoot = $StateRoot
-    })) { Fail-Test "unreadable existing third-party key must fail closed" }
-
-    $recoveredToAntigravity = Invoke-ProfileJson -Parameters @{
-        Action = "UseAntigravity"
-        StateRoot = $StateRoot
     }
-    Assert-Equal $recoveredToAntigravity.mode "antigravity" "corrupt third-party key can still restore Antigravity"
-    Assert-OnlyProperties $recoveredToAntigravity $publicFields "recovered to Antigravity public profile"
+    Assert-Equal $runtimeWithUnreadableKey.mode "antigravity" "corrupt third-party key cannot change fallback mode"
+    Assert-Equal $runtimeWithUnreadableKey.apiKey "" "corrupt inactive third-party key stays unavailable"
 
     # Restore valid key
     [System.IO.File]::WriteAllBytes($keyPath, $encryptedKey)
@@ -247,19 +242,13 @@ try {
         Assert-Equal $result.baseUrl $goodUrl "valid URL should save"
     }
 
-    $back = Invoke-ProfileJson -Parameters @{ Action = "UseAntigravity"; StateRoot = $StateRoot; AntigravityModel = "claude-sonnet-4-6" }
-    Assert-Equal $back.mode "antigravity" "UseAntigravity mode"
-    Assert-Equal $back.antigravityModel "claude-sonnet-4-6" "UseAntigravity persists selected model"
-    Assert-Equal $back.protocol "openai-compatible" "UseAntigravity preserves protocol"
-    Assert-Equal $back.baseUrl "http://[::1]:8080" "UseAntigravity preserves baseUrl"
-    Assert-Equal $back.model "m" "UseAntigravity preserves model"
-    Assert-Equal $back.keyConfigured $true "UseAntigravity preserves key state"
-    Assert-OnlyProperties $back $publicFields "UseAntigravity profile preserves third-party info"
-
     $runtimeBack = Invoke-ProfileJson -Parameters @{ Action = "GetRuntime"; StateRoot = $StateRoot }
-    Assert-Equal $runtimeBack.antigravityModel "claude-sonnet-4-6" "runtime exposes selected Antigravity model"
+    Assert-Equal $runtimeBack.mode "antigravity" "provider configuration never changes fallback mode"
+    Assert-Equal $runtimeBack.protocol "openai-compatible" "runtime preserves provider protocol"
+    Assert-Equal $runtimeBack.baseUrl "http://[::1]:8080" "runtime preserves provider baseUrl"
+    Assert-Equal $runtimeBack.model "m" "runtime preserves provider model"
 
-    Assert-Equal (Get-Content -LiteralPath $historyPath -Raw) $historyMarker "provider switching preserves response history"
+    Assert-Equal (Get-Content -LiteralPath $historyPath -Raw) $historyMarker "provider configuration preserves response history"
 
     $bytes = [System.IO.File]::ReadAllBytes($profilePath)
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {

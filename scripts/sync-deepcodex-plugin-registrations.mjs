@@ -9,7 +9,7 @@ if (!configPath || !previousPath) {
   process.exit(2);
 }
 
-const sharedSectionRe = /^\[(marketplaces|plugins|mcp_servers)\./;
+const sharedSectionRe = /^\[(marketplaces|plugins)\./;
 
 function splitTomlBlocks(text) {
   const blocks = [];
@@ -71,10 +71,7 @@ const deepCodexOnly = previousBlocks.filter(
 );
 
 const wroteCurrent = appendMissingBlocks(configPath, currentBlocks, deepCodexOnly);
-let wroteGlobal = false;
-if (globalPath) {
-  wroteGlobal = appendMissingBlocks(globalPath, globalBlocks, deepCodexOnly);
-}
+const wroteGlobal = false;
 
 console.log(JSON.stringify({
   ok: true,

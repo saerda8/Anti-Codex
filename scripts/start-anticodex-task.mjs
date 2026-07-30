@@ -249,9 +249,7 @@ function readNativeSelection(codexHome) {
 
 function resolveLaunchSelection(profile, nativeSelection) {
   if (nativeSelection === null) {
-    return profile.mode === "third-party"
-      ? { provider: "third-party", model: profile.model }
-      : { provider: "antigravity", model: profile.antigravityModel };
+    return { provider: "antigravity", model: profile.antigravityModel };
   }
 
   const selectedModel = text(nativeSelection.model) ?? "";
@@ -392,6 +390,8 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     "UPSTREAM_MODEL",
     "UPSTREAM_API_KEY",
     "UPSTREAM_CONTEXT_WINDOW",
+    "ANTICODEX_THIRD_PARTY_MODELS",
+    "ANTICODEX_ANTIGRAVITY_MODEL",
     "DEEPCODEX_DISABLE_GPU",
     "ANTICODEX_DISABLE_GPU",
   ]) delete env[key];
@@ -409,6 +409,7 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     DEEPCODEX_PROJECTS_ROOT: join(plan.userProfile, "Documents", "anticodex"),
     ANTICODEX_PROVIDER: plan.provider,
     ANTICODEX_MODEL: plan.model,
+    ANTICODEX_ANTIGRAVITY_MODEL: plan.profile.antigravityModel,
   });
   if (plan.disableGpu) {
     env.DEEPCODEX_DISABLE_GPU = "1";
@@ -431,6 +432,11 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
       UPSTREAM_MODEL: plan.provider === "third-party" ? plan.model : runtimeProfile.model,
       UPSTREAM_API_KEY: apiKey,
       UPSTREAM_CONTEXT_WINDOW: String(runtimeProfile.contextWindow),
+      ANTICODEX_THIRD_PARTY_MODELS: JSON.stringify(
+        Array.isArray(runtimeProfile.capabilities?.providerModels)
+          ? runtimeProfile.capabilities.providerModels
+          : [],
+      ),
     });
   }
   return env;

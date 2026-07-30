@@ -40,6 +40,9 @@ function configuredThirdPartyProfile(mode = "third-party") {
     baseUrl: "http://127.0.0.1:8080",
     model: "gpt-5.6-terra",
     contextWindow: 1_000_000,
+    capabilities: {
+      providerModels: ["gpt-5.6-terra", "gpt-5.6-sol"],
+    },
   };
 }
 
@@ -92,33 +95,46 @@ test("task launcher keeps software rendering as an explicit recovery fallback", 
 });
 
 test("task launcher preserves third-party CodexPlusPlus routing without exposing the key in its plan", () => {
+  const fixture = nativeModelFixture("anticodex/third-party/gpt-5.6-terra");
+  const plan = buildTaskLaunchPlan({
+    env: fixture.env,
+    profile: configuredThirdPartyProfile(),
+  });
+
+  try {
+    assert.equal(plan.provider, "third-party");
+    assert.equal(plan.model, "gpt-5.6-terra");
+    assert.equal(plan.publicProfile.baseUrl, "http://127.0.0.1:8080");
+    assert.equal("apiKey" in plan.publicProfile, false);
+
+    const childEnv = buildTaskLauncherEnvironment(plan, {
+      ...fixture.env,
+      UPSTREAM_API_KEY: "must-be-removed",
+    }, {
+      ...plan.profile,
+      apiKey: "runtime-secret",
+    });
+    assert.equal(childEnv.UPSTREAM_PROTOCOL, "openai-compatible");
+    assert.equal(childEnv.UPSTREAM_URL, "http://127.0.0.1:8080");
+    assert.equal(childEnv.UPSTREAM_MODEL, "gpt-5.6-terra");
+    assert.equal(childEnv.UPSTREAM_API_KEY, "runtime-secret");
+    assert.deepEqual(JSON.parse(childEnv.ANTICODEX_THIRD_PARTY_MODELS), [
+      "gpt-5.6-terra",
+      "gpt-5.6-sol",
+    ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("legacy third-party mode cannot select a provider when native model selection is missing", () => {
   const plan = buildTaskLaunchPlan({
     env: baseEnv,
-    profile: {
-      mode: "third-party",
-      protocol: "openai-compatible",
-      baseUrl: "http://127.0.0.1:8080",
-      model: "gpt-5.6-terra",
-      contextWindow: 1000000,
-    },
+    profile: configuredThirdPartyProfile("third-party"),
   });
 
-  assert.equal(plan.provider, "third-party");
-  assert.equal(plan.model, "gpt-5.6-terra");
-  assert.equal(plan.publicProfile.baseUrl, "http://127.0.0.1:8080");
-  assert.equal("apiKey" in plan.publicProfile, false);
-
-  const childEnv = buildTaskLauncherEnvironment(plan, {
-    ...baseEnv,
-    UPSTREAM_API_KEY: "must-be-removed",
-  }, {
-    ...plan.profile,
-    apiKey: "runtime-secret",
-  });
-  assert.equal(childEnv.UPSTREAM_PROTOCOL, "openai-compatible");
-  assert.equal(childEnv.UPSTREAM_URL, "http://127.0.0.1:8080");
-  assert.equal(childEnv.UPSTREAM_MODEL, "gpt-5.6-terra");
-  assert.equal(childEnv.UPSTREAM_API_KEY, "runtime-secret");
+  assert.equal(plan.provider, "antigravity");
+  assert.equal(plan.model, "gemini-3-flash-agent");
 });
 
 test("task launcher honors an ordinary native Gemini selection over legacy third-party mode", () => {
