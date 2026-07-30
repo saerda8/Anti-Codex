@@ -444,6 +444,8 @@ function hasActionSpecificResult(actionName, text) {
   if (actionName === "updateCheck") return text.includes("\u66f4\u65b0\u68c0\u67e5")
     && text.includes("CodexPlusPlus")
     && (text.includes("\u65e0\u9700\u540c\u6b65") || text.includes("\u9700\u8981\u540c\u6b65") || text.includes("\u68c0\u67e5\u4e0d\u53ef\u7528"));
+  if (actionName === "repairShortcuts") return text.includes("\u5feb\u6377\u65b9\u5f0f\u4fee\u590d")
+    && (text.includes("\u5b8c\u6210") || text.includes("\u5df2\u4fee\u590d"));
   if (actionName === "sourcePreflight") return text.includes("\u6e90\u7801\u9884\u68c0") && text.includes("\u8017\u65f6");
   if (actionName === "pluginCapabilities") return text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u53ef\u8c03\u7528\u9a8c\u8bc1");
   if (actionName === "mcpSkills") return text.includes("MCP/Skill") && text.includes("\u6e05\u5355\u53ef\u89c1") && text.includes("\u771f\u5b9e\u5de5\u5177\u8c03\u7528");
@@ -926,6 +928,7 @@ if (args.has("--self-test")) {
   assert.equal(hasActionSpecificResult("updateCheck", "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002"), false);
   assert.equal(hasActionSpecificResult("updateCheck", "\u66f4\u65b0\u68c0\u67e5\uff1a\u65e0\u9700\u540c\u6b65\nCodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1.2.43 / \u5df2\u5b89\u88c5 1.2.43"), true);
   assert.equal(hasActionSpecificResult("updateCheck", "\u66f4\u65b0\u68c0\u67e5\uff1a\u9700\u8981\u540c\u6b65\nCodexPlusPlus\uff1a\u9879\u76ee\u56fa\u5b9a 1.2.43 / \u5df2\u5b89\u88c5 1.2.39"), true);
+  assert.equal(hasActionSpecificResult("repairShortcuts", "\u5feb\u6377\u65b9\u5f0f\u4fee\u590d\uff1a\u5b8c\u6210 \u5df2\u4fee\u590d\uff1a5"), true);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("sourcePreflight", "\u6e90\u7801\u9884\u68c0\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a21000 ms"), true);
   assert.equal(isFinishedText("\u8fd8\u6ca1\u6709\u53ef\u663e\u793a\u7684\u9a8c\u6536\u62a5\u544a\u3002"), true);
