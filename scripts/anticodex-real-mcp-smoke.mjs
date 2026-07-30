@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { runMcpStdioCall, runMcpStdioList } from "./mcp-stdio-client.mjs";
+import { resolveProductPaths } from "./lib/anticodex-fixed-route.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -62,6 +63,7 @@ export async function getCodexMcpServerDefinition({
 
 export async function runRealMcpSmoke({
   definition,
+  productEnvironment = {},
   toolName = "js",
   toolArguments,
   expectedMarker,
@@ -77,7 +79,10 @@ export async function runRealMcpSmoke({
   const result = await runMcpStdioCall({
     command: definition.transport.command,
     args: Array.isArray(definition.transport.args) ? definition.transport.args : [],
-    env: definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {},
+    env: {
+      ...productEnvironment,
+      ...(definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {}),
+    },
     cwd: definition.transport.cwd || undefined,
     toolName,
     arguments: toolArguments ?? {},
@@ -104,6 +109,7 @@ export async function runRealMcpSmoke({
 
 export async function runRealMcpListSmoke({
   definition,
+  productEnvironment = {},
   timeoutMs = 10000,
 } = {}) {
   if (!definition?.transport?.command) {
@@ -116,7 +122,10 @@ export async function runRealMcpListSmoke({
   const result = await runMcpStdioList({
     command: definition.transport.command,
     args: Array.isArray(definition.transport.args) ? definition.transport.args : [],
-    env: definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {},
+    env: {
+      ...productEnvironment,
+      ...(definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {}),
+    },
     cwd: definition.transport.cwd || undefined,
     timeoutMs,
   });
@@ -161,6 +170,35 @@ function defaultStateRoot() {
   return join(process.env.APPDATA || join(process.env.USERPROFILE || "", "AppData", "Roaming"), "anticodex");
 }
 
+export function buildMcpProductEnvironment({
+  installRoot,
+  stateRoot,
+  codexHome,
+  baseEnvironment = process.env,
+} = {}) {
+  const paths = resolveProductPaths(installRoot, stateRoot);
+  const isolatedHome = codexHome || paths.codexHome;
+  const helperDirectory = join(isolatedHome, "plugins", ".plugin-appserver");
+  const inheritedPath = Object.entries(baseEnvironment)
+    .find(([name]) => name.toLowerCase() === "path")?.[1] || "";
+  const environment = { ...baseEnvironment };
+  for (const name of Object.keys(environment)) {
+    if (name.toLowerCase() === "path") delete environment[name];
+  }
+  return {
+    ...environment,
+    Path: [helperDirectory, ...String(inheritedPath).split(";").filter(Boolean)]
+      .filter((entry, index, entries) => entries.findIndex((item) => item.toLowerCase() === entry.toLowerCase()) === index)
+      .join(";"),
+    CODEX_HOME: isolatedHome,
+    CODEX_HOME_DIR: isolatedHome,
+    APPDATA: paths.isolatedAppData,
+    LOCALAPPDATA: paths.isolatedLocalAppData,
+    TEMP: paths.temp,
+    TMP: paths.temp,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const installRoot = resolve(String(args["install-root"] || defaultInstallRoot()));
@@ -172,6 +210,12 @@ async function main() {
   const codexHome = resolve(String(args["codex-home"] || join(stateRoot, "codex-home-deepseek-app")));
   const marker = String(args.marker || `ANTICODEX_REAL_MCP_${Date.now()}`);
   const code = String(args.code || `nodeRepl.write("${marker}=42")`);
+  const productEnvironment = buildMcpProductEnvironment({ installRoot, stateRoot, codexHome });
+  await Promise.all([
+    mkdir(productEnvironment.APPDATA, { recursive: true }),
+    mkdir(productEnvironment.LOCALAPPDATA, { recursive: true }),
+    mkdir(productEnvironment.TEMP, { recursive: true }),
+  ]);
 
   const definition = await getCodexMcpServerDefinition({
     codexCli,
@@ -181,9 +225,10 @@ async function main() {
   });
   const listOnly = args["list-only"] === true || args["list-only"] === "1" || args["list-only"] === "true";
   const report = listOnly
-    ? await runRealMcpListSmoke({ definition, timeoutMs })
+    ? await runRealMcpListSmoke({ definition, productEnvironment, timeoutMs })
     : await runRealMcpSmoke({
         definition,
+        productEnvironment,
         toolName: String(args.tool || "js"),
         toolArguments: { code },
         expectedMarker: marker,

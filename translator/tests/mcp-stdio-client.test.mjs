@@ -41,11 +41,14 @@ lines.on("line", (line) => {
       }
     }) + "\\n");
   } else if (message.method === "tools/call") {
+    const text = message.params?.arguments?.envName
+      ? process.env[message.params.arguments.envName] || ""
+      : message.params?.arguments?.text || "";
     process.stdout.write(JSON.stringify({
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        content: [{ type: "text", text: message.params?.arguments?.text || "" }]
+        content: [{ type: "text", text }]
       }
     }) + "\\n");
   }
@@ -136,7 +139,16 @@ test("runRealMcpSmoke reports a real stdio tool call result", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "real-mcp-smoke-test-"));
   try {
     const fakeServer = createFakeMcpServer(tempDir);
-    const { runRealMcpSmoke } = await import("../../scripts/anticodex-real-mcp-smoke.mjs");
+    const { buildMcpProductEnvironment, runRealMcpSmoke } = await import("../../scripts/anticodex-real-mcp-smoke.mjs");
+    const installRoot = join(tempDir, "install");
+    const stateRoot = join(tempDir, "state");
+    const codexHome = join(stateRoot, "codex-home");
+    const productEnvironment = buildMcpProductEnvironment({
+      installRoot,
+      stateRoot,
+      codexHome,
+      baseEnvironment: { PATH: "C:\\base" },
+    });
 
     const report = await runRealMcpSmoke({
       definition: {
@@ -146,21 +158,28 @@ test("runRealMcpSmoke reports a real stdio tool call result", async () => {
           type: "stdio",
           command: process.execPath,
           args: [fakeServer],
-          env: {},
+          env: { ANTICODEX_ENV_PRECEDENCE: "definition" },
           cwd: null,
         },
       },
+      productEnvironment: {
+        ...productEnvironment,
+        ANTICODEX_ENV_PRECEDENCE: "product",
+      },
       toolName: "echo",
-      toolArguments: { text: MARKER },
-      expectedMarker: MARKER,
+      toolArguments: { envName: "ANTICODEX_ENV_PRECEDENCE" },
+      expectedMarker: "definition",
       timeoutMs: 5000,
     });
 
+    assert.equal(productEnvironment.Path.split(";")[0], join(codexHome, "plugins", ".plugin-appserver"));
+    assert.equal(productEnvironment.CODEX_HOME, codexHome);
+    assert.equal(productEnvironment.APPDATA, join(stateRoot, "windows-appdata"));
     assert.equal(report.ok, true);
     assert.equal(report.serverName, "node_repl");
     assert.equal(report.toolName, "echo");
     assert.equal(report.markerObserved, true);
-    assert.match(report.text, new RegExp(MARKER));
+    assert.equal(report.text, "definition");
     assert.equal(report.commandName, process.platform === "win32" ? "node.exe" : "node");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

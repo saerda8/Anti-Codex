@@ -16,6 +16,10 @@ function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-config-sync-"));
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 test("shared config sync preserves DeepCodex-only plugin registrations", () => {
   const dir = tempDir();
   const source = path.join(dir, "global.toml");
@@ -105,6 +109,55 @@ test("shared config sync removes stale local MCP server blocks", () => {
   assert.doesNotMatch(next, /\[mcp_servers\.stale_worker\.tools\.old_call\]/);
   assert.match(next, /\[mcp_servers\.node_repl\]\ncommand = "node"\nargs = \[\]/);
   assert.match(next, /\[mcp_servers\.shared_worker\]\ncommand = "node"\nargs = \["shared\.mjs"\]/);
+});
+
+test("shared config sync localizes node_repl and removes the native Codex pipe", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const codexHome = path.join(dir, "state", "codex-home");
+  const target = path.join(codexHome, "config.toml");
+  const installRoot = path.join(dir, "Anti-Codex");
+  fs.mkdirSync(codexHome, { recursive: true });
+
+  fs.writeFileSync(source, [
+    "[mcp_servers.node_repl]",
+    'command = "C:\\\\Users\\\\XD\\\\AppData\\\\Local\\\\OpenAI\\\\Codex\\\\runtimes\\\\cua_node\\\\bin\\\\node_repl.exe"',
+    "args = []",
+    "",
+    "[mcp_servers.node_repl.env]",
+    'NODE_REPL_NODE_PATH = "C:\\\\Users\\\\XD\\\\AppData\\\\Local\\\\OpenAI\\\\Codex\\\\runtimes\\\\cua_node\\\\bin\\\\node.exe"',
+    'NODE_REPL_NODE_MODULE_DIRS = "C:\\\\Users\\\\XD\\\\AppData\\\\Local\\\\OpenAI\\\\Codex\\\\runtimes\\\\cua_node\\\\bin\\\\node_modules"',
+    'NODE_REPL_TRUSTED_CODE_PATHS = "C:\\\\Users\\\\XD\\\\.codex"',
+    'CODEX_HOME = "C:\\\\Users\\\\XD\\\\.codex"',
+    'CODEX_CLI_PATH = "G:\\\\Trae-Project\\\\Coexconfig\\\\codex.exe"',
+    'SKY_CUA_NATIVE_PIPE = "1"',
+    'SKY_CUA_NATIVE_PIPE_DIRECTORY = "\\\\\\\\.\\\\pipe\\\\codex-computer-use-native"',
+    'BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"',
+    "",
+  ].join("\n"));
+  fs.writeFileSync(target, "");
+
+  execFileSync(process.execPath, [
+    syncSharedConfig,
+    source,
+    target,
+    "--install-root",
+    installRoot,
+    "--codex-home",
+    codexHome,
+  ]);
+  const next = fs.readFileSync(target, "utf8");
+  const resources = path.join(installRoot, "codex-patched-app", "resources");
+
+  assert.match(next, new RegExp(`command = ${escapeRegExp(JSON.stringify(path.join(resources, "cua_node", "bin", "node_repl.exe")))}`));
+  assert.match(next, new RegExp(`NODE_REPL_NODE_PATH = ${escapeRegExp(JSON.stringify(path.join(resources, "cua_node", "bin", "node.exe")))}`));
+  assert.match(next, new RegExp(`NODE_REPL_NODE_MODULE_DIRS = ${escapeRegExp(JSON.stringify(path.join(resources, "cua_node", "bin", "node_modules")))}`));
+  assert.match(next, new RegExp(`NODE_REPL_TRUSTED_CODE_PATHS = ${escapeRegExp(JSON.stringify(codexHome))}`));
+  assert.match(next, new RegExp(`CODEX_HOME = ${escapeRegExp(JSON.stringify(codexHome))}`));
+  assert.match(next, new RegExp(`CODEX_CLI_PATH = ${escapeRegExp(JSON.stringify(path.join(resources, "codex.exe")))}`));
+  assert.match(next, /BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"/);
+  assert.doesNotMatch(next, /SKY_CUA_NATIVE_PIPE/);
+  assert.doesNotMatch(next, /C:\\\\Users\\\\XD\\\\\.codex|Coexconfig|OpenAI\\\\Codex\\\\runtimes/);
 });
 
 test("shared config sync excludes Anti-Codex development workers by default", () => {

@@ -138,8 +138,7 @@ function hasValidSkillFrontmatter(filePath) {
     const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
     if (closingIndex < 0) return false;
     const frontmatter = lines.slice(1, closingIndex);
-    return frontmatter.some((line) => /^name\s*:\s*\S/i.test(line))
-      && frontmatter.some((line) => /^description\s*:\s*\S/i.test(line));
+    return frontmatter.some((line) => /^description\s*:\s*\S/i.test(line));
   } catch {
     return false;
   }

@@ -1,6 +1,7 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
+    [string]$InstallRoot = $(if ($env:DEEPCODEX_INSTALL_ROOT) { $env:DEEPCODEX_INSTALL_ROOT } else { Join-Path $env:LOCALAPPDATA "Anti-Codex" }),
     [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
     [string]$CodexHome = $(if ($env:CODEX_HOME_DIR) { $env:CODEX_HOME_DIR } else { Join-Path $StateRoot "codex-home-deepseek-app" }),
     [string]$SharedCodexHome = $(if ($env:GLOBAL_CODEX_HOME) { $env:GLOBAL_CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
@@ -215,9 +216,8 @@ function Get-SanitizedSkillFileHash {
     }
     if ($closingIndex -lt 0) { return "" }
     $frontmatter = @($lines[1..($closingIndex - 1)])
-    $hasName = @($frontmatter | Where-Object { $_ -match '^name\s*:\s*\S' }).Count -gt 0
     $hasDescription = @($frontmatter | Where-Object { $_ -match '^description\s*:\s*\S' }).Count -gt 0
-    if (-not $hasName -or -not $hasDescription) { return "" }
+    if (-not $hasDescription) { return "" }
 
     $normalizedBytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -421,7 +421,7 @@ if ($VerifyOnly) {
         $sourceConfig = Join-Path $SharedCodexHome "config.toml"
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
-            $configSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig)
+            $configSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
         }
     } catch {
         Add-Failure "shared config refresh failed: $($_.Exception.Message)"
@@ -463,7 +463,7 @@ if ($VerifyOnly) {
         $sourceConfig = Join-Path $SharedCodexHome "config.toml"
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
-            $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig)
+            $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
             if ($finalConfigSyncSummary) {
                 if ($configSyncSummary) {
                     $configSyncSummary = "$configSyncSummary; final-resync: $finalConfigSyncSummary"

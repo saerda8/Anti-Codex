@@ -2,13 +2,20 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [, , sourcePath, targetPath] = process.argv;
+const [, , sourcePath, targetPath, ...optionArgs] = process.argv;
 
 if (!sourcePath || !targetPath) {
-  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config>");
+  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config> [--install-root <path>] [--codex-home <path>]");
   process.exit(2);
 }
 
+function optionValue(name) {
+  const index = optionArgs.indexOf(name);
+  return index >= 0 ? optionArgs[index + 1] || "" : "";
+}
+
+const installRoot = optionValue("--install-root");
+const codexHome = optionValue("--codex-home") || path.dirname(path.resolve(targetPath));
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
 const developmentWorkerServers = new Set([
   "deepseek-code-worker",
@@ -155,6 +162,36 @@ function normalizeMissingWindowsMcpCommand(block) {
   return next;
 }
 
+function setTomlString(lines, key, value) {
+  const next = [...lines];
+  const index = next.findIndex((line) => new RegExp(`^${key}\\s*=`).test(line));
+  const rendered = `${key} = ${JSON.stringify(value)}`;
+  if (index >= 0) next[index] = rendered;
+  else next.push(rendered);
+  return next;
+}
+
+function localizeNodeRepl(block) {
+  if (!installRoot || mcpServerName(block) !== "node_repl") return block;
+  const resources = path.join(installRoot, "codex-patched-app", "resources");
+  const bin = path.join(resources, "cua_node", "bin");
+  const next = { ...block, lines: [...block.lines] };
+
+  if (/^\[mcp_servers\.node_repl\]$/.test(block.header)) {
+    next.lines = setTomlString(next.lines, "command", path.join(bin, "node_repl.exe"));
+  } else if (/^\[mcp_servers\.node_repl\.env\]$/.test(block.header)) {
+    next.lines = next.lines.filter((line) => !/^SKY_CUA_NATIVE_PIPE(?:_DIRECTORY)?\s*=/.test(line));
+    for (const [key, value] of [
+      ["NODE_REPL_NODE_PATH", path.join(bin, "node.exe")],
+      ["NODE_REPL_NODE_MODULE_DIRS", path.join(bin, "node_modules")],
+      ["NODE_REPL_TRUSTED_CODE_PATHS", codexHome],
+      ["CODEX_HOME", codexHome],
+      ["CODEX_CLI_PATH", path.join(resources, "codex.exe")],
+    ]) next.lines = setTomlString(next.lines, key, value);
+  }
+  return next;
+}
+
 function render(blocks) {
   return blocks
     .map((block) => block.lines.join("\n").replace(/\n+$/g, ""))
@@ -169,7 +206,8 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
     .filter(isShared)
     .filter((block) => !isDevelopmentWorkerBlock(block))
     .map(normalizeWindowsMcpShim)
-    .map(normalizeMissingWindowsMcpCommand);
+    .map(normalizeMissingWindowsMcpCommand)
+    .map(localizeNodeRepl);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
   const keptTargetBlocks = targetBlocks.filter(

@@ -371,8 +371,10 @@ function Get-TomlFieldRaw {
 function Get-TomlQuotedFieldValue {
     param([string]$Section, [string]$Field)
     $raw = Get-TomlFieldRaw $Section $Field
-    $match = [regex]::Match($raw, "^\s*['""]([^'""]+)['""]\s*$")
-    if ($match.Success) { return $match.Groups[1].Value }
+    if ($raw.StartsWith("'") -and $raw.EndsWith("'")) { return $raw.Substring(1, $raw.Length - 2) }
+    if ($raw.StartsWith('"') -and $raw.EndsWith('"')) {
+        try { return ($raw | ConvertFrom-Json -ErrorAction Stop) } catch {}
+    }
     return $raw
 }
 
@@ -402,11 +404,19 @@ function Normalize-McpEnvForCompare {
         Where-Object { $_ -and -not $_.StartsWith("#") })
     if ($ServerName -eq "node_repl") {
         return [string]::Join("`n", @($lines |
-            ForEach-Object {
+            Where-Object {
                 $match = [regex]::Match($_, "^\s*([^=\s]+)\s*=")
-                if ($match.Success) { $match.Groups[1].Value } else { $_ }
+                -not $match.Success -or $match.Groups[1].Value -notin @(
+                    "NODE_REPL_NODE_PATH",
+                    "NODE_REPL_NODE_MODULE_DIRS",
+                    "NODE_REPL_TRUSTED_CODE_PATHS",
+                    "CODEX_HOME",
+                    "CODEX_CLI_PATH",
+                    "SKY_CUA_NATIVE_PIPE",
+                    "SKY_CUA_NATIVE_PIPE_DIRECTORY"
+                )
             } |
-            Sort-Object -Unique))
+            Sort-Object))
     }
     return [string]::Join("`n", @($lines | Sort-Object))
 }
@@ -454,9 +464,8 @@ function Get-SanitizedSkillFileHash {
     }
     if ($closingIndex -lt 0) { return "" }
     $frontmatter = @($lines[1..($closingIndex - 1)])
-    $hasName = @($frontmatter | Where-Object { $_ -match '^name\s*:\s*\S' }).Count -gt 0
     $hasDescription = @($frontmatter | Where-Object { $_ -match '^description\s*:\s*\S' }).Count -gt 0
-    if (-not $hasName -or -not $hasDescription) { return "" }
+    if (-not $hasDescription) { return "" }
 
     $normalizedBytes = [Text.UTF8Encoding]::new($false).GetBytes($text)
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -732,6 +741,30 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
         if ($configText -notmatch "\[mcp_servers\]") { Add-Failure "config.toml missing [mcp_servers]" }
         if ($configText -notmatch "\[mcp_servers\.node_repl\]") { Add-Failure "config.toml missing node_repl MCP server" }
         if ($configText -match "chatgpt\.com/(auth|login)") { Add-Failure "config.toml contains ChatGPT login route" }
+        if ($configText -match "\[mcp_servers\.node_repl\]") {
+            $resources = Join-Path $InstallRoot "codex-patched-app\resources"
+            $nodeReplBin = Join-Path $resources "cua_node\bin"
+            $nodeReplSection = Get-McpSectionText $configText "node_repl"
+            $nodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
+            $expectedNodeReplValues = [ordered]@{
+                command = (Join-Path $nodeReplBin "node_repl.exe")
+                NODE_REPL_NODE_PATH = (Join-Path $nodeReplBin "node.exe")
+                NODE_REPL_NODE_MODULE_DIRS = (Join-Path $nodeReplBin "node_modules")
+                NODE_REPL_TRUSTED_CODE_PATHS = $CodexHome
+                CODEX_HOME = $CodexHome
+                CODEX_CLI_PATH = (Join-Path $resources "codex.exe")
+            }
+            foreach ($entry in $expectedNodeReplValues.GetEnumerator()) {
+                $section = if ($entry.Key -eq "command") { $nodeReplSection } else { $nodeReplEnv }
+                $actual = Get-TomlQuotedFieldValue $section $entry.Key
+                if ($actual -ine $entry.Value) {
+                    Add-Failure "node_repl $($entry.Key) is not isolated to Anti-Codex"
+                }
+            }
+            if ($nodeReplEnv -match "(?m)^\s*SKY_CUA_NATIVE_PIPE(?:_DIRECTORY)?\s*=") {
+                Add-Failure "node_repl config must not inherit the native Codex computer-use pipe"
+            }
+        }
     } catch {
         Add-Failure "config.toml read failed: $($_.Exception.Message)"
     }
@@ -983,9 +1016,8 @@ if ($configText) {
     }
     foreach ($mcpName in $mcpNames) {
         $section = Get-McpSectionText $configText $mcpName
-        $commandMatch = [regex]::Match($section, "(?m)^\s*command\s*=\s*['""]([^'""]+)['""]")
         $argsMatch = [regex]::Match($section, "(?m)^\s*args\s*=\s*\[(.*?)\]")
-        $commandValue = if ($commandMatch.Success) { $commandMatch.Groups[1].Value } else { "" }
+        $commandValue = Get-TomlQuotedFieldValue $section "command"
         $firstArg = ""
         if ($argsMatch.Success) {
             $argMatch = [regex]::Match($argsMatch.Groups[1].Value, "['""]([^'""]+)['""]")

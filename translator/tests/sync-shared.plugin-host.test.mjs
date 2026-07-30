@@ -141,6 +141,7 @@ test("--skills-only omits malformed SKILL.md files while preserving valid descen
   const codexHome = resolve(tmp, "codex");
   const sharedHome = resolve(tmp, "shared");
   const validSkill = "---\nname: valid-child\ndescription: Use when testing filtered skill snapshots.\n---\n\n# Valid child\n";
+  const directoryNamedSkill = "---\ndescription: Use the containing directory as the skill name.\n---\n\n# Directory named\n";
 
   mkdirSync(resolve(codexHome, "skills", "local-invalid"), { recursive: true });
   writeFileSync(resolve(codexHome, "skills", "local-invalid", "SKILL.md"), "# Local invalid\n");
@@ -149,6 +150,8 @@ test("--skills-only omits malformed SKILL.md files while preserving valid descen
   writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "SKILL.md"), "# Missing frontmatter\n");
   writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "routing.md"), "keep routing\n");
   writeFileSync(resolve(sharedHome, "skills", "legacy-parent", "valid-child", "SKILL.md"), `\uFEFF${validSkill}`);
+  mkdirSync(resolve(sharedHome, "skills", "directory-named"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "skills", "directory-named", "SKILL.md"), directoryNamedSkill);
 
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--skills-only"], {
@@ -162,6 +165,7 @@ test("--skills-only omits malformed SKILL.md files while preserving valid descen
     assert.strictEqual(existsSync(resolve(skillsPath, "legacy-parent", "SKILL.md")), false);
     assert.strictEqual(readFileSync(resolve(skillsPath, "legacy-parent", "routing.md"), "utf8"), "keep routing\n");
     assert.strictEqual(readFileSync(resolve(skillsPath, "legacy-parent", "valid-child", "SKILL.md"), "utf8"), validSkill);
+    assert.strictEqual(readFileSync(resolve(skillsPath, "directory-named", "SKILL.md"), "utf8"), directoryNamedSkill);
 
     const summary = JSON.parse(result.stdout);
     assert.deepStrictEqual(summary.summary[0].skippedInvalidSkillFiles, [
