@@ -28,10 +28,12 @@ $expectedRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "Anti-Codex"
 $updateTaskName = "Anti-Codex Updater"
 $syncScript = Join-Path $scriptRoot "sync-anticodex.ps1"
 $updateTaskScript = Join-Path $scriptRoot "start-anticodex-update-task.mjs"
-$scheduledTaskBrokerScript = Join-Path $scriptRoot "start-anticodex-scheduled-node.ps1"
 $updateStatusModule = Join-Path $scriptRoot "anticodex-update-status.psm1"
-$powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
-$expectedTaskArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind updater"
+$nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
+$node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) } else { "" }
+$conhost = Join-Path ([Environment]::SystemDirectory) "conhost.exe"
+$expectedTaskArguments = "--headless `"$node`" `"$updateTaskScript`" --hide-console"
 $script:antiCodexScheduleService = $null
 $script:antiCodexScheduleRoot = $null
 
@@ -79,7 +81,7 @@ function Get-AntiCodexUpdateTaskEvidence {
         $actionCount -eq 1 -and
         $task.Enabled -and
         $action -and
-        [string]$action.Path -ieq $powershell -and
+        [string]$action.Path -ieq $conhost -and
         [string]$action.Arguments -ceq $expectedTaskArguments -and
         [string]$action.WorkingDirectory -ieq $installRoot
     )
@@ -145,8 +147,8 @@ try {
     if (-not (Test-Path -LiteralPath $updateTaskScript -PathType Leaf)) {
         throw "Anti-Codex updater task broker is missing: $updateTaskScript"
     }
-    if (-not (Test-Path -LiteralPath $scheduledTaskBrokerScript -PathType Leaf)) {
-        throw "Anti-Codex hidden scheduled-task broker is missing: $scheduledTaskBrokerScript"
+    if (-not (Test-Path -LiteralPath $conhost -PathType Leaf) -or -not $node) {
+        throw "Anti-Codex headless scheduled-task host is missing."
     }
     if (-not (Test-Path -LiteralPath $updateStatusModule -PathType Leaf)) {
         throw "Anti-Codex update status component is missing: $updateStatusModule"

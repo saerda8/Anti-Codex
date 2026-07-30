@@ -162,6 +162,9 @@ test("the built-in Manager sync delegates to an independent updater task", () =>
   assert.doesNotMatch(syncLauncher, /\.Run\(\$null\)/);
   assert.match(syncLauncher, /function Get-AntiCodexUpdateTaskEvidence/);
   assert.match(syncLauncher, /function Wait-AntiCodexUpdateTaskRunning/);
+  assert.match(syncLauncher, /\$expectedTaskArguments\s*=\s*"--headless `"\$node`" `"\$updateTaskScript`" --hide-console"/);
+  assert.match(syncLauncher, /action\.Path\s+-ieq\s+\$conhost/);
+  assert.match(syncLauncher, /action\.Arguments\s+-ceq\s+\$expectedTaskArguments/);
   assert.match(syncLauncher, /alreadyRunning\s*=\s*\$true[\s\S]*?ConvertTo-Json/);
   assert.match(syncLauncher, /alreadyRunning\s*=\s*\$false[\s\S]*?ConvertTo-Json/);
   assert.match(syncLauncher, /if \(\$FromUpdateTask\)[\s\S]*?Get-AntiCodexUpdateTaskEvidence[\s\S]*?stateCode -ne 4[\s\S]*?& \$syncScript -FromUpdateTask/);
@@ -289,8 +292,8 @@ test("host sync gracefully releases the old launch task before starting the new 
   const contractEnd = hostSync.indexOf("function Stop-AntiCodexLaunchTaskForMaintenance", contractStart);
   const contract = contractStart >= 0 && contractEnd > contractStart ? hostSync.slice(contractStart, contractEnd) : "";
   assert.match(restart, /Assert-AntiCodexLaunchTaskContract/);
-  assert.match(contract, /action\.Path[\s\S]*?\$powershell/);
-  assert.match(contract, /\$scheduledTaskBrokerScript[\s\S]*?-TaskKind launcher/);
+  assert.match(contract, /action\.Path[\s\S]*?\$conhost/);
+  assert.match(contract, /--headless[\s\S]*?\$node[\s\S]*?\$launchTaskScript[\s\S]*?--hide-console/);
   assert.match(contract, /Principal\.LogonType[\s\S]*?-ne 3/);
   assert.match(contract, /Settings\.MultipleInstances[\s\S]*?-ne 2/);
   assert.match(contract, /Triggers\.Count[\s\S]*?-ne 0/);
@@ -339,6 +342,9 @@ test("automatic rollback stops and restarts only through the isolated Launcher t
   assert.match(rollback, /\.Stop\(0\)/);
   assert.match(rollback, /Wait-AntiCodexLaunchTaskStopped/);
   assert.match(rollback, /Start-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.match(rollback, /\$expectedArguments\s*=\s*"--headless `"\$node`" `"\$launchTaskScript`" --hide-console"/);
+  assert.match(rollback, /action\.Path\s+-ieq\s+\$conhost/);
+  assert.match(rollback, /action\.Arguments\s+-ceq\s+\$expectedArguments/);
   assert.doesNotMatch(rollback, /\.Run\(\$null\)/);
   assert.doesNotMatch(rollback, /Start-Process[^\r\n]*\$startAntiCodex[^\r\n]*-InlineSupervisor/);
 });
@@ -706,7 +712,7 @@ test("standalone Manager recovery uses the formal fixed-route launcher", () => {
 test("installer requires fixed-route modules and removes legacy runtime files", () => {
   const requiredRuntimeList = installer.match(/foreach \(\$requiredRuntimePath in @\(([\s\S]*?)\n\s*\)\)/)?.[1] ?? "";
   assert.match(requiredRuntimeList, /scripts\\start-anticodex-update-task\.mjs/);
-  assert.match(requiredRuntimeList, /scripts\\start-anticodex-scheduled-node\.ps1/);
+  assert.doesNotMatch(requiredRuntimeList, /scripts\\start-anticodex-scheduled-node\.ps1/);
   assert.doesNotMatch(requiredRuntimeList, /scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(requiredRuntimeList, /scripts\\start-anticodex-shortcut-broker\.ps1/);
   for (const legacy of [
@@ -719,6 +725,7 @@ test("installer requires fixed-route modules and removes legacy runtime files", 
     assert.ok(!requiredRuntimeList.includes(legacy), `installer still requires ${legacy}`);
   }
   assert.match(installer, /\$legacyRuntimeFiles\s*=\s*@\(/);
+  assert.match(installer, /scripts\\start-anticodex-scheduled-node\.ps1/);
   assert.match(installer, /scripts\\start-anticodex-hidden-node\.vbs/);
   assert.match(installer, /scripts\\start-anticodex-task-hidden\.vbs/);
   assert.match(installer, /scripts\\start-anticodex-task-hidden\.ps1/);

@@ -215,10 +215,10 @@ $swapComponent = Join-Path $installRoot "rollback-swap-codexplusplus"
 $startAntiCodex = Join-Path $sourceRoot "scripts\start-anticodex.ps1"
 $launchTaskName = "Anti-Codex Launcher"
 $launchTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-task.mjs"
-$scheduledTaskBrokerScript = Join-Path $sourceRoot "scripts\start-anticodex-scheduled-node.ps1"
-$powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
+$node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
+$conhost = Join-Path ([Environment]::SystemDirectory) "conhost.exe"
 $baseUrlResolver = Join-Path $sourceRoot "scripts\resolve-anticodex-base-url.ps1"
-foreach ($requiredLaunchComponent in @($launchTaskScript, $scheduledTaskBrokerScript, $powershell)) {
+foreach ($requiredLaunchComponent in @($launchTaskScript, $node, $conhost)) {
     if (-not (Test-Path -LiteralPath $requiredLaunchComponent -PathType Leaf)) {
         throw "Anti-Codex launch component is missing: $requiredLaunchComponent"
     }
@@ -866,7 +866,7 @@ function Get-AntiCodexLaunchTaskEvidence {
     $definition = $task.Definition
     $actionCount = [int]$definition.Actions.Count
     $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
-    $expectedArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind launcher"
+    $expectedArguments = "--headless `"$node`" `"$launchTaskScript`" --hide-console"
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
     $taskUserName = [string]$definition.Principal.UserId
@@ -874,7 +874,7 @@ function Get-AntiCodexLaunchTaskEvidence {
         $actionCount -eq 1 -and
         $task.Enabled -and
         $action -and
-        [string]$action.Path -ieq $powershell -and
+        [string]$action.Path -ieq $conhost -and
         [string]$action.Arguments -ceq $expectedArguments -and
         [string]$action.WorkingDirectory -ieq $installRoot -and
         ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and

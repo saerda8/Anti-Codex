@@ -36,12 +36,12 @@ $launchTaskName = "Anti-Codex Launcher"
 $updateTaskName = "Anti-Codex Updater"
 $hideConsoleScript = Join-Path $runtimeRoot "scripts\hide-anticodex-console.ps1"
 $launchTaskScript = Join-Path $runtimeRoot "scripts\start-anticodex-task.mjs"
-$scheduledTaskBrokerScript = Join-Path $runtimeRoot "scripts\start-anticodex-scheduled-node.ps1"
 $shortcutBrokerScript = Join-Path $runtimeRoot "scripts\start-anticodex-shortcut-broker.ps1"
-$launchTaskActionArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind launcher"
 $updateTaskScript = Join-Path $runtimeRoot "scripts\start-anticodex-update-task.mjs"
+$conhost = Join-Path ([Environment]::SystemDirectory) "conhost.exe"
+$launchTaskActionArguments = "--headless `"$node`" `"$launchTaskScript`" --hide-console"
 $launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shortcutBrokerScript`" -InstallRoot `"$installRootFull`""
-$updateTaskActionArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind updater"
+$updateTaskActionArguments = "--headless `"$node`" `"$updateTaskScript`" --hide-console"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $programs = [Environment]::GetFolderPath("Programs")
 $startMenuDir = Join-Path $programs "Anti-Codex"
@@ -116,7 +116,7 @@ function Set-AntiCodexExistingTaskAction {
         [Parameter(Mandatory = $true)][string]$Arguments
     )
 
-    $action = New-ScheduledTaskAction -Execute $powershell -Argument $Arguments -WorkingDirectory $installRootFull
+    $action = New-ScheduledTaskAction -Execute $conhost -Argument $Arguments -WorkingDirectory $installRootFull
     Set-ScheduledTask -TaskPath "\" -TaskName $TaskName -Action $action -ErrorAction Stop | Out-Null
 }
 
@@ -139,7 +139,7 @@ function Get-AntiCodexLaunchTaskEvidence {
             ok = $false
             exists = $false
             taskName = $launchTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $launchTaskScript
             actualScript = ""
             error = $_.Exception.Message
         }
@@ -151,12 +151,17 @@ function Get-AntiCodexLaunchTaskEvidence {
     $actualExecute = if ($action) { [string]$action.Path } else { "" }
     $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
     $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
-    $actualScript = Get-AntiCodexShortcutLauncherTarget -Arguments $actualArguments
+    $argumentMatch = [regex]::Match($actualArguments, '^--headless "([^"]+)" "([^"]+)" --hide-console$')
+    $actualNode = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+    $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[2].Value } else { "" }
+    try { $actualNode = [IO.Path]::GetFullPath($actualNode) } catch {}
+    try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
     $actionMatches = (
-        $actualExecute -ieq $powershell -and
+        $actualExecute -ieq $conhost -and
         $actualArguments -ceq $launchTaskActionArguments -and
         $actualWorkingDirectory -ieq $installRootFull -and
-        $actualScript -ieq $scheduledTaskBrokerScript
+        $actualNode -ieq $node -and
+        $actualScript -ieq $launchTaskScript
     )
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
@@ -185,13 +190,15 @@ function Get-AntiCodexLaunchTaskEvidence {
         ok = ($actionMatches -and $principalMatches -and $settingsMatch)
         exists = $true
         taskName = $launchTaskName
-        expectedExecute = $powershell
+        expectedExecute = $conhost
         actualExecute = $actualExecute
         expectedArguments = $launchTaskActionArguments
         actualArguments = $actualArguments
         expectedWorkingDirectory = $installRootFull
         actualWorkingDirectory = $actualWorkingDirectory
-        expectedScript = $scheduledTaskBrokerScript
+        expectedNode = $node
+        actualNode = $actualNode
+        expectedScript = $launchTaskScript
         actualScript = $actualScript
         taskScript = $launchTaskScript
         actionMatches = $actionMatches
@@ -221,7 +228,7 @@ function Set-AntiCodexLaunchTask {
     $taskXmlPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-launch-task-" + [Guid]::NewGuid().ToString("N") + ".xml")
     try {
         $sidXml = [Security.SecurityElement]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-        $powershellXml = [Security.SecurityElement]::Escape($powershell)
+        $conhostXml = [Security.SecurityElement]::Escape($conhost)
         $argumentsXml = [Security.SecurityElement]::Escape($launchTaskActionArguments)
         $workingDirectoryXml = [Security.SecurityElement]::Escape($installRootFull)
         $taskXml = @"
@@ -250,7 +257,7 @@ function Set-AntiCodexLaunchTask {
   <Triggers />
   <Actions Context="Author">
     <Exec>
-      <Command>$powershellXml</Command>
+      <Command>$conhostXml</Command>
       <Arguments>$argumentsXml</Arguments>
       <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
     </Exec>
@@ -271,7 +278,7 @@ function Set-AntiCodexLaunchTask {
             ok = $false
             exists = $false
             taskName = $launchTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $launchTaskScript
             actualScript = ""
             error = $registrationError
         }
@@ -291,7 +298,7 @@ function Get-AntiCodexUpdateTaskEvidence {
             ok = $false
             exists = $false
             taskName = $updateTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $updateTaskScript
             error = $_.Exception.Message
         }
     }
@@ -302,16 +309,21 @@ function Get-AntiCodexUpdateTaskEvidence {
     $actualExecute = if ($action) { [string]$action.Path } else { "" }
     $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
     $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
-    $actualScript = Get-AntiCodexShortcutLauncherTarget -Arguments $actualArguments
+    $argumentMatch = [regex]::Match($actualArguments, '^--headless "([^"]+)" "([^"]+)" --hide-console$')
+    $actualNode = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+    $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[2].Value } else { "" }
+    try { $actualNode = [IO.Path]::GetFullPath($actualNode) } catch {}
+    try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
     $taskUserName = [string]$definition.Principal.UserId
     $actionMatches = (
         $actionCount -eq 1 -and
-        $actualExecute -ieq $powershell -and
+        $actualExecute -ieq $conhost -and
         $actualArguments -ceq $updateTaskActionArguments -and
         $actualWorkingDirectory -ieq $installRootFull -and
-        $actualScript -ieq $scheduledTaskBrokerScript
+        $actualNode -ieq $node -and
+        $actualScript -ieq $updateTaskScript
     )
     $principalMatches = (
         ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
@@ -336,13 +348,15 @@ function Get-AntiCodexUpdateTaskEvidence {
         ok = ($actionMatches -and $principalMatches -and $settingsMatch)
         exists = $true
         taskName = $updateTaskName
-        expectedExecute = $powershell
+        expectedExecute = $conhost
         actualExecute = $actualExecute
         expectedArguments = $updateTaskActionArguments
         actualArguments = $actualArguments
         expectedWorkingDirectory = $installRootFull
         actualWorkingDirectory = $actualWorkingDirectory
-        expectedScript = $scheduledTaskBrokerScript
+        expectedNode = $node
+        actualNode = $actualNode
+        expectedScript = $updateTaskScript
         actualScript = $actualScript
         taskScript = $updateTaskScript
         actionMatches = $actionMatches
@@ -372,7 +386,7 @@ function Set-AntiCodexUpdateTask {
     $taskXmlPath = Join-Path ([IO.Path]::GetTempPath()) ("anticodex-update-task-" + [Guid]::NewGuid().ToString("N") + ".xml")
     try {
         $sidXml = [Security.SecurityElement]::Escape([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-        $powershellXml = [Security.SecurityElement]::Escape($powershell)
+        $conhostXml = [Security.SecurityElement]::Escape($conhost)
         $argumentsXml = [Security.SecurityElement]::Escape($updateTaskActionArguments)
         $workingDirectoryXml = [Security.SecurityElement]::Escape($installRootFull)
         $taskXml = @"
@@ -400,7 +414,7 @@ function Set-AntiCodexUpdateTask {
   <Triggers />
   <Actions Context="Author">
     <Exec>
-      <Command>$powershellXml</Command>
+      <Command>$conhostXml</Command>
       <Arguments>$argumentsXml</Arguments>
       <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
     </Exec>
@@ -421,7 +435,7 @@ function Set-AntiCodexUpdateTask {
             ok = $false
             exists = $false
             taskName = $updateTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $updateTaskScript
             error = $registrationError
         }
     } finally {
@@ -582,7 +596,7 @@ function Repair-AntiCodexResidualShortcuts {
 $residualShortcutEvidence = @(Repair-AntiCodexResidualShortcuts)
 $residualShortcutFailures = @($residualShortcutEvidence | Where-Object { $_.action -ne "removed" -and $_.action -ne "preserved-native-codex" })
 $failures = New-Object System.Collections.Generic.List[string]
-foreach ($path in @($startScript, $hideConsoleScript, $launchTaskScript, $scheduledTaskBrokerScript, $shortcutBrokerScript, $updateTaskScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon, $node, $powershell, $schtasks)) {
+foreach ($path in @($startScript, $hideConsoleScript, $launchTaskScript, $shortcutBrokerScript, $updateTaskScript, $syncScript, $rollbackScript, $managerScript, $hostIcon, $desktopShortcutIcon, $node, $conhost, $powershell, $schtasks)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         $failures.Add("Required Anti-Codex shortcut target is missing: $path") | Out-Null
     }

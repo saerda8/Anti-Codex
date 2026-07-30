@@ -204,8 +204,7 @@ $postSyncVerifier = Join-Path $sourceRoot "scripts\test-anticodex-installed-over
 $updateChecker = Join-Path $sourceRoot "scripts\check-anticodex-update.ps1"
 $updateStatusModule = Join-Path $sourceRoot "scripts\anticodex-update-status.psm1"
 $updateTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-update-task.mjs"
-$scheduledTaskBrokerScript = Join-Path $sourceRoot "scripts\start-anticodex-scheduled-node.ps1"
-foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule, $updateTaskScript, $scheduledTaskBrokerScript)) {
+foreach ($requiredScript in @($installer, $componentInstaller, $sourcePreflight, $validator, $rollbackScript, $baseUrlResolver, $refreshLocalFeatures, $postSyncVerifier, $updateChecker, $updateStatusModule, $updateTaskScript)) {
     if (-not (Test-Path -LiteralPath $requiredScript)) {
         throw "Anti-Codex update component is missing: $requiredScript"
     }
@@ -235,8 +234,9 @@ $launchTaskName = "Anti-Codex Launcher"
 $launchTaskScript = Join-Path $sourceRoot "scripts\start-anticodex-task.mjs"
 $updateTaskName = "Anti-Codex Updater"
 $syncLauncherScript = Join-Path $sourceRoot "scripts\sync-anticodex-launcher.ps1"
-$powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
-$expectedUpdateTaskArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind updater"
+$node = [IO.Path]::GetFullPath([string](Get-Command node.exe -ErrorAction Stop).Source)
+$conhost = Join-Path ([Environment]::SystemDirectory) "conhost.exe"
+$expectedUpdateTaskArguments = "--headless `"$node`" `"$updateTaskScript`" --hide-console"
 $script:antiCodexScheduleService = $null
 $script:antiCodexScheduleRoot = $null
 
@@ -282,7 +282,7 @@ function Assert-AntiCodexUpdateTaskContext {
         [int]$task.State -ne 4 -or
         -not $task.Enabled -or
         -not $action -or
-        [string]$action.Path -ine $powershell -or
+        [string]$action.Path -ine $conhost -or
         [string]$action.Arguments -cne $expectedUpdateTaskArguments -or
         [string]$action.WorkingDirectory -ine $installRoot -or
         ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or
@@ -622,14 +622,14 @@ function Assert-AntiCodexLaunchTaskContract {
     $definition = $task.Definition
     $actionCount = [int]$definition.Actions.Count
     $action = if ($actionCount -eq 1) { $definition.Actions.Item(1) } else { $null }
-    $expectedArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind launcher"
+    $expectedArguments = "--headless `"$node`" `"$launchTaskScript`" --hide-console"
     $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $currentShortUserName = ($currentUserName -split "\\")[-1]
     $taskUserName = [string]$definition.Principal.UserId
     if ($actionCount -ne 1 -or
         -not $task.Enabled -or
         -not $action -or
-        [string]$action.Path -ine $powershell -or
+        [string]$action.Path -ine $conhost -or
         [string]$action.Arguments -cne $expectedArguments -or
         [string]$action.WorkingDirectory -ine $installRoot -or
         ($taskUserName -ine $currentUserName -and $taskUserName -ine $currentShortUserName) -or

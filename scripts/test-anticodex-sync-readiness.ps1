@@ -251,12 +251,12 @@ $node = if ($nodeCommand) { [IO.Path]::GetFullPath([string]$nodeCommand.Source) 
 $launchTaskName = "Anti-Codex Launcher"
 $updateTaskName = "Anti-Codex Updater"
 $launchTaskScript = Join-Path $scriptsRoot "start-anticodex-task.mjs"
-$scheduledTaskBrokerScript = Join-Path $scriptsRoot "start-anticodex-scheduled-node.ps1"
 $shortcutBrokerScript = Join-Path $scriptsRoot "start-anticodex-shortcut-broker.ps1"
-$launchTaskActionArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind launcher"
 $updateTaskScript = Join-Path $scriptsRoot "start-anticodex-update-task.mjs"
+$conhost = Join-Path ([Environment]::SystemDirectory) "conhost.exe"
+$launchTaskActionArguments = "--headless `"$node`" `"$launchTaskScript`" --hide-console"
 $launchTaskShortcutArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$shortcutBrokerScript`" -InstallRoot `"$installRoot`""
-$updateTaskActionArguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scheduledTaskBrokerScript`" -TaskKind updater"
+$updateTaskActionArguments = "--headless `"$node`" `"$updateTaskScript`" --hide-console"
 $programsPath = [Environment]::GetFolderPath("Programs")
 if (-not $programsPath) {
     $programsPath = if ($env:APPDATA) { Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs" } else { Join-Path $env:USERPROFILE "AppData\Roaming\Microsoft\Windows\Start Menu\Programs" }
@@ -301,7 +301,7 @@ $hostSyncMarker = if ($env:ANTICODEX_HOST_SYNC_MARKER) {
     Join-Path (Join-Path $env:APPDATA "anticodex") "host-sync.lock"
 }
 
-foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $launchTaskScript, $scheduledTaskBrokerScript, $shortcutBrokerScript, $node, $powershell, $schtasks, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
+foreach ($path in @($syncScript, $syncLauncherScript, $updateTaskScript, $rollbackScript, $rollbackLauncherScript, $managerScript, $managerInjectScript, $managerOpenInjectScript, $managerBridgeScript, $cdpInjectScript, $updateCheckScript, $installScript, $validatorScript, $syncFailureSafetyScript, $modelThinkingVerifier, $postSyncVerifier, $startScript, $fixedRouteSupervisorScript, $launchTaskScript, $shortcutBrokerScript, $node, $conhost, $powershell, $schtasks, $activeMarker, $activeExe, $activeAsar, $activeCodexCli, $activeHostIcon, $activeTrayIcon, $activeAppRootIcon, $desktopShortcutIcon)) {
     if (-not (Test-Path -LiteralPath $path)) {
         Add-Failure "sync readiness missing required path: $path"
     }
@@ -580,12 +580,17 @@ function Get-AntiCodexLaunchTaskEvidence {
         $actualExecute = if ($action) { [string]$action.Path } else { "" }
         $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
         $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
-        $actualScript = Get-AntiCodexShortcutLauncherTarget $actualArguments
+        $argumentMatch = [regex]::Match($actualArguments, '^--headless "([^"]+)" "([^"]+)" --hide-console$')
+        $actualNode = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+        $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[2].Value } else { "" }
+        try { $actualNode = [IO.Path]::GetFullPath($actualNode) } catch {}
+        try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
         $actionMatches = (
-            $actualExecute -ieq $powershell -and
+            $actualExecute -ieq $conhost -and
             $actualArguments -ceq $launchTaskActionArguments -and
             $actualWorkingDirectory -ieq $installRoot -and
-            $actualScript -ieq $scheduledTaskBrokerScript
+            $actualNode -ieq $node -and
+            $actualScript -ieq $launchTaskScript
         )
         $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         $currentShortUserName = ($currentUserName -split "\\")[-1]
@@ -617,9 +622,11 @@ function Get-AntiCodexLaunchTaskEvidence {
             actualExecute = $actualExecute
             actualArguments = $actualArguments
             actualWorkingDirectory = $actualWorkingDirectory
-            expectedExecute = $powershell
+            expectedExecute = $conhost
             expectedArguments = $launchTaskActionArguments
-            expectedScript = $scheduledTaskBrokerScript
+            expectedNode = $node
+            actualNode = $actualNode
+            expectedScript = $launchTaskScript
             actualScript = $actualScript
             taskScript = $launchTaskScript
             actionMatches = $actionMatches
@@ -634,7 +641,7 @@ function Get-AntiCodexLaunchTaskEvidence {
             ok = $false
             exists = $false
             taskName = $launchTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $launchTaskScript
             actualScript = ""
             error = $_.Exception.Message
         }
@@ -655,16 +662,21 @@ function Get-AntiCodexUpdateTaskEvidence {
         $actualExecute = if ($action) { [string]$action.Path } else { "" }
         $actualArguments = if ($action) { [string]$action.Arguments } else { "" }
         $actualWorkingDirectory = if ($action) { [string]$action.WorkingDirectory } else { "" }
-        $actualScript = Get-AntiCodexShortcutLauncherTarget $actualArguments
+        $argumentMatch = [regex]::Match($actualArguments, '^--headless "([^"]+)" "([^"]+)" --hide-console$')
+        $actualNode = if ($argumentMatch.Success) { $argumentMatch.Groups[1].Value } else { "" }
+        $actualScript = if ($argumentMatch.Success) { $argumentMatch.Groups[2].Value } else { "" }
+        try { $actualNode = [IO.Path]::GetFullPath($actualNode) } catch {}
+        try { $actualScript = [IO.Path]::GetFullPath($actualScript) } catch {}
         $currentUserName = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         $currentShortUserName = ($currentUserName -split "\\")[-1]
         $taskUserName = [string]$definition.Principal.UserId
         $actionMatches = (
             $actionCount -eq 1 -and
-            $actualExecute -ieq $powershell -and
+            $actualExecute -ieq $conhost -and
             $actualArguments -ceq $updateTaskActionArguments -and
             $actualWorkingDirectory -ieq $installRoot -and
-            $actualScript -ieq $scheduledTaskBrokerScript
+            $actualNode -ieq $node -and
+            $actualScript -ieq $updateTaskScript
         )
         $principalMatches = (
             ($taskUserName -ieq $currentUserName -or $taskUserName -ieq $currentShortUserName) -and
@@ -689,13 +701,15 @@ function Get-AntiCodexUpdateTaskEvidence {
             ok = ($actionMatches -and $principalMatches -and $settingsMatch)
             exists = $true
             taskName = $updateTaskName
-            expectedExecute = $powershell
+            expectedExecute = $conhost
             actualExecute = $actualExecute
             expectedArguments = $updateTaskActionArguments
             actualArguments = $actualArguments
             expectedWorkingDirectory = $installRoot
             actualWorkingDirectory = $actualWorkingDirectory
-            expectedScript = $scheduledTaskBrokerScript
+            expectedNode = $node
+            actualNode = $actualNode
+            expectedScript = $updateTaskScript
             actualScript = $actualScript
             taskScript = $updateTaskScript
             actionMatches = $actionMatches
@@ -710,7 +724,7 @@ function Get-AntiCodexUpdateTaskEvidence {
             ok = $false
             exists = $false
             taskName = $updateTaskName
-            expectedScript = $scheduledTaskBrokerScript
+            expectedScript = $updateTaskScript
             error = $_.Exception.Message
         }
     }

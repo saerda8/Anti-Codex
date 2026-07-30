@@ -324,6 +324,7 @@ $runtime = Join-Path $resolvedTarget "runtime"
 $copiedCodex = Join-Path $resolvedTarget "codex-patched-app"
 $copiedCodexStaging = Join-Path $resolvedTarget "codex-host-staging"
 $legacyRuntimeFiles = @(
+    "scripts\start-anticodex-scheduled-node.ps1",
     "scripts\start-anticodex-hidden-node.vbs",
     "scripts\start-anticodex-task-hidden.vbs",
     "scripts\start-anticodex-task-hidden.ps1",
@@ -441,7 +442,6 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\start-anticodex.ps1"),
         (Join-Path $runtime "scripts\hide-anticodex-console.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-task.mjs"),
-        (Join-Path $runtime "scripts\start-anticodex-scheduled-node.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-shortcut-broker.ps1"),
         (Join-Path $runtime "scripts\start-anticodex-update-task.mjs"),
         (Join-Path $runtime "scripts\start-anticodex-fixed-route.mjs"),
