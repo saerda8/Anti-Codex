@@ -771,9 +771,8 @@ function Invoke-AntiCodexPostSyncAcceptance {
         try {
             $marker = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
             $health = Invoke-RestMethod -Uri "$baseUrl/health" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
-            $models = Invoke-RestMethod -Uri "$baseUrl/models" -Proxy $null -TimeoutSec $ANTICODEX_POST_SYNC_HEALTH_TIMEOUT_SEC
             $sourceVersion = [string]$marker.source.packageVersion
-            $modelCount = @($models.data).Count
+            $modelCount = [int]$health.modelCount
             $provider = [string]$health.provider
             $expectedUpstream = if ($provider -eq "antigravity") {
                 "antigravity-desktop"

@@ -549,12 +549,11 @@ $previous = @($current | Where-Object { $_ -ne "config-write" })
   }
 });
 
-test("post-sync acceptance reads model availability from the models endpoint", () => {
+test("post-sync acceptance uses local health without probing a model provider", () => {
   const acceptance = extractFunction(readSyncScript(), "Invoke-AntiCodexPostSyncAcceptance");
 
-  assert.match(acceptance, /Invoke-RestMethod[^\r\n]*\$baseUrl\/models/);
-  assert.match(acceptance, /@\(\$models\.data\)\.Count/);
-  assert.doesNotMatch(acceptance, /\$health\.modelCount/);
+  assert.match(acceptance, /\$health\.modelCount/);
+  assert.doesNotMatch(acceptance, /\$baseUrl\/models|\$models\.data/);
 });
 
 test("maintenance process ownership uses exact directory containment, not path prefixes", () => {
