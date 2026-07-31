@@ -1267,8 +1267,12 @@ try {
     }
 
     $rollbackStage = "rollback_acceptance"
-    Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_acceptance" -Message "Checking Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
+    Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_acceptance" -Message "Checking Anti-Codex after rollback." -RollbackAvailable $activeComponentValid -StateRoot $stateRoot
     if (-not $postRollbackReady) {
+        if (-not $activeComponentValid) {
+            Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "The recovered Anti-Codex release did not become ready; the invalid newer release was discarded." -FailureCode "rollback_recovery_not_ready" -RollbackAvailable $false -StateRoot $stateRoot
+            throw "The recovered Anti-Codex release did not become ready; the invalid newer release was discarded."
+        }
         if ($RecoveryAttempt) {
             Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "Anti-Codex did not become ready after rollback recovery." -FailureCode "rollback_recovery_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
             throw "Anti-Codex did not become ready after rollback recovery."
@@ -1286,7 +1290,7 @@ try {
     if ($RecoveryAttempt) {
         Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_acceptance" -Message "The requested rollback was not ready; automatic recovery restored the original active version." -FailureCode "rollback_not_ready" -RollbackAvailable $true -StateRoot $stateRoot
     } else {
-        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component successfully." -RollbackAvailable $true -StateRoot $stateRoot
+        Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component successfully." -RollbackAvailable $activeComponentValid -StateRoot $stateRoot
     }
 } finally {
     if ($syncMutexAcquired) {

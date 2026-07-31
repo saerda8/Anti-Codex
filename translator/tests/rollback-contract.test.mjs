@@ -608,6 +608,7 @@ test("host sync validates the exact rollback contract and separates activation r
   );
   assert.match(rollback, /Test-AntiCodexComponent -ComponentRoot \$rollbackComponent[\s\S]*?try\s*\{[\s\S]*?Test-AntiCodexComponent -ComponentRoot \$activeComponent[\s\S]*?\$activeComponentValid = \$false/);
   assert.match(rollback, /if \(\$activeComponentValid\)\s*\{\s*Commit-AntiCodexRollbackCheckpoint\s*\}\s*else\s*\{\s*Remove-InvalidRollbackSwap\s*\}/);
+  assert.match(rollback, /-State "rolled_back" -Stage "complete"[\s\S]*?-RollbackAvailable \$activeComponentValid/);
   assert.doesNotMatch(sync, /Repair-RollbackHostBinaryManifest/);
   assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\([\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable[\s\S]*?\[IO\.File\]::Exists\(\$rollbackMarker\)/);
   assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);

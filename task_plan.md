@@ -3226,3 +3226,10 @@ Architecture remains locked: copied official Codex shell -> independently update
 - [ ] Perform one final whole-project diff/code review and smoke pass, then create a clean checkpoint. Only then may the release status be changed to 100%.
 
 Current baseline: branch `main`, HEAD `6f7dbbb6a05dc0f5fbdc8ccbcdf1e018e0a619a9`, clean worktree at plan reopen. CodexPlusPlus source/candidate is v1.2.44, while the active product component was last observed at v1.2.43; this mismatch is an open release blocker.
+
+### 2026-08-01 Built-in update failure and recovery
+
+- [x] Prove the Manager `同步 Codex 更新` control dispatches a fresh native action; operation `13d59d497f774e118a8560a6f1e35922` reached candidate build and activation.
+- [x] Recover the product after Windows refused the new v1.2.44 executable and left the active component incomplete. Commit `3b5b280d` lets a verified rollback recover an incomplete active component without preserving the broken generation. Active v1.2.43 hash is again `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`, local health is ready, one root window is present, and original Codex remains alive.
+- [ ] Keep v1.2.44 blocked from activation until its binary is present and Windows-launchable. The sync path must probe candidate process creation and revalidate its hash before stopping the active client; failure must leave v1.2.43 running and show a clear Manager result.
+- [ ] Correct the recovery result so a discarded invalid generation is not advertised as an available rollback, then re-run the built-in update failure path once without model traffic.

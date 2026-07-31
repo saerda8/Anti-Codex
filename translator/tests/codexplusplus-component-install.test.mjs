@@ -617,6 +617,8 @@ test("host sync stages, activates and recovers CodexPlusPlus with the copied Cod
   assert.ok(stopStage >= 0, "sync must enter maintenance only after staging succeeds");
   assert.ok(componentStage < stopStage, "component validation must finish before Anti-Codex is stopped");
   assert.match(sync, /-InstallRoot \$candidateRoot/);
+  assert.match(sync, /Test-AntiCodexComponentLaunchability -ComponentRoot \$candidateComponent/);
+  assert.ok(sync.indexOf("Test-AntiCodexComponentLaunchability -ComponentRoot $candidateComponent") < stopStage);
   assert.match(sync, /Wait-AntiCodexComponentRelease/);
   assert.match(sync, /Move-FixedUpdateDirectory -Source \$candidateComponent -Destination \$activeComponent/);
   assert.match(sync, /Move-FixedUpdateDirectory -Source \$rollbackComponent -Destination \$activeComponent/);

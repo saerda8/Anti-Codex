@@ -542,6 +542,33 @@ function Test-AntiCodexComponent {
     return $manifest
 }
 
+function Test-AntiCodexComponentLaunchability {
+    param([Parameter(Mandatory = $true)][string]$ComponentRoot)
+
+    $binaryPath = Join-Path ([IO.Path]::GetFullPath($ComponentRoot)) "codex-plus-plus.exe"
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $binaryPath
+    $startInfo.Arguments = "--helper-only --helper-port 0"
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    try {
+        $process = [Diagnostics.Process]::Start($startInfo)
+    } catch {
+        throw "Windows refused to start the CodexPlusPlus candidate before activation: $($_.Exception.Message)"
+    }
+    try {
+        Start-Sleep -Milliseconds 300
+    } finally {
+        if (-not $process.HasExited) {
+            $process.Kill()
+            [void]$process.WaitForExit(5000)
+        }
+        $process.Dispose()
+    }
+}
+
 function Get-AntiCodexLaunchers {
     $escapedStartScript = [regex]::Escape($startAntiCodex)
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -966,6 +993,8 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "CodexPlusPlus candidate staging failed. The active release was not changed."
         }
+        Test-AntiCodexComponent -ComponentRoot $candidateComponent | Out-Null
+        Test-AntiCodexComponentLaunchability -ComponentRoot $candidateComponent
         Test-AntiCodexComponent -ComponentRoot $candidateComponent | Out-Null
 
         $updateStage = "candidate_validation"
