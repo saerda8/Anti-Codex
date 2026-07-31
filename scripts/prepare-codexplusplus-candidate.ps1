@@ -153,6 +153,63 @@ function Test-ExactString {
     return $Value -is [string] -and $Value -ceq $Expected
 }
 
+function Assert-CandidateWindowsLaunchable {
+    param(
+        [Parameter(Mandatory = $true)][string]$BinaryPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedHash
+    )
+
+    if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
+        throw "The CodexPlusPlus candidate disappeared before its Windows launch probe; security software may have quarantined it."
+    }
+    $probeState = Join-Path (Split-Path -Parent $BinaryPath) ("launch-probe-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $probeState -Force | Out-Null
+    $process = $null
+    try {
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $BinaryPath
+        $startInfo.Arguments = "--helper-only --helper-port 0"
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.EnvironmentVariables["CODEX_PLUS_STATE_DIR"] = $probeState
+        try {
+            $process = [Diagnostics.Process]::Start($startInfo)
+        } catch {
+            $quarantineHint = if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
+                " The candidate disappeared during process creation; security software may have quarantined it."
+            } else {
+                ""
+            }
+            throw "Windows refused to start the CodexPlusPlus candidate before publication: $($_.Exception.Message)$quarantineHint"
+        }
+        Start-Sleep -Milliseconds 300
+    } finally {
+        if ($process) {
+            if (-not $process.HasExited) {
+                try {
+                    $process.Kill()
+                } catch {
+                    if (-not $process.HasExited) { throw }
+                }
+            }
+            [void]$process.WaitForExit(5000)
+            $process.Dispose()
+        }
+        if (Test-Path -LiteralPath $probeState) {
+            Remove-DirectoryTree -Path $probeState
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
+        throw "The CodexPlusPlus candidate disappeared during its Windows launch probe; security software may have quarantined it."
+    }
+    if ((Get-Sha256 -Path $BinaryPath) -cne $ExpectedHash) {
+        throw "The CodexPlusPlus candidate hash changed during its Windows launch probe."
+    }
+}
+
 function Get-ReusableCandidateReport {
     param(
         [Parameter(Mandatory = $true)][string]$CandidateRoot,
@@ -504,6 +561,10 @@ try {
                 -RunnerImage $runnerImage `
                 -BuildCommands @($commandDescriptions) `
                 -WorkingDirectory $stagingRoot
+            $stage = "candidate_launchability"
+            Assert-CandidateWindowsLaunchable `
+                -BinaryPath (Join-Path $candidateRoot "codex-plus-plus.exe") `
+                -ExpectedHash ([string]$existingReport.binary.sha256)
             $existingReport | ConvertTo-Json -Depth 20
             return
         }
@@ -575,6 +636,8 @@ try {
     if ($binaryHash -cne $builtBinaryHash -or $binaryLength -ne $builtBinaryLength) {
         throw "CodexPlusPlus binary changed during candidate staging."
     }
+    $stage = "candidate_launchability"
+    Assert-CandidateWindowsLaunchable -BinaryPath $stagedBinary -ExpectedHash $binaryHash
     $targetRoot = Join-Path $worktree "target"
     if (Test-Path -LiteralPath $targetRoot) {
         Remove-DirectoryTree -Path $targetRoot
@@ -678,6 +741,7 @@ try {
             "watcher",
             "manager_windows_check",
             "launcher_windows_build",
+            "windows_process_creation",
             "build_hygiene_preflight",
             "build_hygiene_postflight",
             "clean_source"

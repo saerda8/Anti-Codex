@@ -546,6 +546,15 @@ function Test-AntiCodexComponentLaunchability {
     param([Parameter(Mandatory = $true)][string]$ComponentRoot)
 
     $binaryPath = Join-Path ([IO.Path]::GetFullPath($ComponentRoot)) "codex-plus-plus.exe"
+    $resolvedCandidateRoot = [IO.Path]::GetFullPath($candidateRoot).TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    )
+    $probeState = [IO.Path]::GetFullPath((Join-Path $resolvedCandidateRoot ("codexplusplus-launch-probe-" + [Guid]::NewGuid().ToString("N"))))
+    if (-not $probeState.StartsWith("$resolvedCandidateRoot$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing an unsafe CodexPlusPlus launch-probe state path."
+    }
+    New-Item -ItemType Directory -Path $probeState -Force | Out-Null
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $binaryPath
     $startInfo.Arguments = "--helper-only --helper-port 0"
@@ -553,19 +562,36 @@ function Test-AntiCodexComponentLaunchability {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.EnvironmentVariables["CODEX_PLUS_STATE_DIR"] = $probeState
+    $process = $null
     try {
-        $process = [Diagnostics.Process]::Start($startInfo)
-    } catch {
-        throw "Windows refused to start the CodexPlusPlus candidate before activation: $($_.Exception.Message)"
-    }
-    try {
+        try {
+            $process = [Diagnostics.Process]::Start($startInfo)
+        } catch {
+            $quarantineHint = if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
+                " The candidate disappeared during process creation; security software may have quarantined it."
+            } else {
+                ""
+            }
+            throw "Windows refused to start the CodexPlusPlus candidate before activation: $($_.Exception.Message)$quarantineHint"
+        }
         Start-Sleep -Milliseconds 300
     } finally {
-        if (-not $process.HasExited) {
-            $process.Kill()
+        if ($process) {
+            if (-not $process.HasExited) {
+                try {
+                    $process.Kill()
+                } catch {
+                    if (-not $process.HasExited) { throw }
+                }
+            }
             [void]$process.WaitForExit(5000)
+            $process.Dispose()
         }
-        $process.Dispose()
+        $extendedProbeState = if ($probeState.StartsWith("\\?\")) { $probeState } else { "\\?\$probeState" }
+        if ([IO.Directory]::Exists($extendedProbeState)) {
+            [IO.Directory]::Delete($extendedProbeState, $true)
+        }
     }
 }
 

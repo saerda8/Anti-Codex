@@ -619,6 +619,8 @@ test("host sync stages, activates and recovers CodexPlusPlus with the copied Cod
   assert.match(sync, /-InstallRoot \$candidateRoot/);
   assert.match(sync, /Test-AntiCodexComponentLaunchability -ComponentRoot \$candidateComponent/);
   assert.ok(sync.indexOf("Test-AntiCodexComponentLaunchability -ComponentRoot $candidateComponent") < stopStage);
+  assert.match(sync, /EnvironmentVariables\["CODEX_PLUS_STATE_DIR"\]/);
+  assert.match(sync, /codexplusplus-launch-probe-/);
   assert.match(sync, /Wait-AntiCodexComponentRelease/);
   assert.match(sync, /Move-FixedUpdateDirectory -Source \$candidateComponent -Destination \$activeComponent/);
   assert.match(sync, /Move-FixedUpdateDirectory -Source \$rollbackComponent -Destination \$activeComponent/);

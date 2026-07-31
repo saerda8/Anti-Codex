@@ -119,7 +119,11 @@ if ($env:ANTICODEX_TEST_FAIL -and $CargoArguments -contains $env:ANTICODEX_TEST_
 if ($CargoArguments -contains "build") {
   $binary = Join-Path $Worktree "target\\x86_64-pc-windows-msvc\\release\\codex-plus-plus.exe"
   New-Item -ItemType Directory -Path (Split-Path -Parent $binary) -Force | Out-Null
-  [IO.File]::WriteAllText($binary, "candidate-binary", [Text.UTF8Encoding]::new($false))
+  if ($env:ANTICODEX_TEST_INVALID_BINARY) {
+    [IO.File]::WriteAllText($binary, "candidate-binary", [Text.UTF8Encoding]::new($false))
+  } else {
+    Copy-Item -LiteralPath (Join-Path $env:SystemRoot "System32\\where.exe") -Destination $binary
+  }
 }
 `,
   );
@@ -193,6 +197,9 @@ test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex"
   assert.match(script, /WaitOne/);
   assert.match(script, /ReleaseMutex/);
   assert.match(script, /\$stage\s*=\s*"candidate_binary_copy"/);
+  assert.match(script, /\$stage\s*=\s*"candidate_launchability"/);
+  assert.match(script, /--helper-only --helper-port 0/);
+  assert.match(script, /CODEX_PLUS_STATE_DIR/);
   assert.match(script, /function Remove-DirectoryTree/);
   assert.match(script, /for \(\$attempt = 1; \$attempt -le 30;/);
   assert.match(script, /\[IO\.Directory\]::Delete\(\$deletePath, \$true\)/);
@@ -248,6 +255,7 @@ test("CodexPlusPlus candidate preparation replays and verifies an exact local ta
   assert.ok(report.checks.includes("clean_source"));
   assert.ok(report.checks.includes("build_hygiene_preflight"));
   assert.ok(report.checks.includes("build_hygiene_postflight"));
+  assert.ok(report.checks.includes("windows_process_creation"));
   assert.equal(
     report.inputs.sourceMetadata.sha256,
     sha256(readFileSync(join(fixture.project, "third_party", "codexplusplus", "upstream.json"))),
@@ -510,5 +518,38 @@ test("candidate preparation rejects a binary changed after the build copy", (t) 
   const failure = JSON.parse(readFileSync(join(fixture.stateRoot, "failures", "latest.json"), "utf8"));
   assert.equal(failure.stage, "candidate_binary_copy");
   assert.match(failure.error, /changed during candidate staging/i);
+  assert.equal(existsSync(join(fixture.stateRoot, "candidates")), false);
+});
+
+test("candidate preparation rejects an executable Windows cannot start", (t) => {
+  const fixture = createSuccessFixture(t);
+
+  const result = runCandidate(fixture, { ANTICODEX_TEST_INVALID_BINARY: "1" });
+
+  assert.notEqual(result.status, 0, "unlaunchable candidate unexpectedly succeeded");
+  const failure = JSON.parse(readFileSync(join(fixture.stateRoot, "failures", "latest.json"), "utf8"));
+  assert.equal(failure.stage, "candidate_launchability");
+  assert.match(failure.error, /Windows refused to start|security software|quarantined/i);
+  assert.equal(existsSync(join(fixture.stateRoot, "candidates")), false);
+  assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+});
+
+test("candidate launchability reports a binary removed before process creation", (t) => {
+  const fixture = createSuccessFixture(t);
+  const candidateScript = join(fixture.project, "scripts", "prepare-codexplusplus-candidate.ps1");
+  const original = readFileSync(candidateScript, "utf8");
+  const injected = original.replace(
+    /(\$stage = "candidate_launchability"\r?\n\s+)(Assert-CandidateWindowsLaunchable -BinaryPath \$stagedBinary)/,
+    `$1Remove-Item -LiteralPath $stagedBinary -Force\n    $2`,
+  );
+  assert.notEqual(injected, original, "pre-launch removal injection was not installed");
+  write(candidateScript, injected);
+
+  const result = runCandidate(fixture);
+
+  assert.notEqual(result.status, 0, "missing candidate unexpectedly succeeded");
+  const failure = JSON.parse(readFileSync(join(fixture.stateRoot, "failures", "latest.json"), "utf8"));
+  assert.equal(failure.stage, "candidate_launchability");
+  assert.match(failure.error, /disappeared|security software|quarantined/i);
   assert.equal(existsSync(join(fixture.stateRoot, "candidates")), false);
 });
