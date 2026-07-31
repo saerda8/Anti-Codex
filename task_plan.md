@@ -3284,3 +3284,12 @@ Current evidence baseline: branch `main`, HEAD `bf308067603fcec874eb6fc32fbf4d4c
 - [ ] Synchronize and reaccept the official shell through the built-in guarded path. The machine now has official Codex `26.727.4816.0`, while the active Anti host manifest is still `26.721.11231.0`; the newer shell retains the same AGENTS/Memory setting backend, so an upstream update alone does not close prompt isolation.
 
 Errors recorded this pass: the first combined PowerShell parser command used `$file:` instead of `${file}:` and failed before parsing any project file. The corrected command parsed all three changed scripts and must be reused; the malformed form must not be repeated.
+
+### 2026-08-01 Complete source-preflight follow-up
+
+- [x] Run the complete clean, no-traffic source preflight against native custom-instruction commit `6ad19495`. It bound the intended clean HEAD and stopped before activation because `translatorRegression` was red; no runtime sync, restart, model request, Docker action or native-Codex change occurred.
+- [x] Preserve the production update guardrail. The only failures were two test fixtures that still modeled an old valid host without `sandboxHelper`, `nodeRepl` and `nodeRuntime`; weakening the current companion-file guardrail would have been incorrect.
+- [x] Repair only those fixtures and their manifest hashes. Focused coverage passes `2/2`, the complete update-status contract passes `25/25`, Node syntax passes and `git diff --check` is clean.
+- [ ] Commit this test-and-record checkpoint, return to a clean worktree, and rerun the same complete source preflight. Runtime activation remains prohibited until that full gate is green.
+
+Current status remains **reopened; not 100%**. The next irreversible boundary is still one guarded Anti-Codex-only activation followed by installed physical acceptance; it has not occurred in this follow-up.

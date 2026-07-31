@@ -369,10 +369,14 @@ test("update check clears stale running operation when active host is already sy
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
       appRootIcon: "fake-root-icon",
+      sandboxHelper: "fake-sandbox-helper",
+      nodeRepl: "fake-node-repl",
+      nodeRuntime: "fake-node-runtime",
       unpackedRuntime: "fake-unpacked-runtime",
     };
     fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
     fs.mkdirSync(resolve(activeRoot, "resources", "app.asar.unpacked"), { recursive: true });
+    fs.mkdirSync(resolve(activeRoot, "resources", "cua_node", "bin"), { recursive: true });
     fs.mkdirSync(stateRoot, { recursive: true });
     fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
     fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
@@ -380,6 +384,9 @@ test("update check clears stale running operation when active host is already sy
     fs.writeFileSync(resolve(activeRoot, "Anti-Codex.exe"), fileContents.antiCodexExe);
     fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
     fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex-windows-sandbox-setup.exe"), fileContents.sandboxHelper);
+    fs.writeFileSync(resolve(activeRoot, "resources", "cua_node", "bin", "node_repl.exe"), fileContents.nodeRepl);
+    fs.writeFileSync(resolve(activeRoot, "resources", "cua_node", "bin", "node.exe"), fileContents.nodeRuntime);
     fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
     fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
     fs.writeFileSync(resolve(activeRoot, "resources", "app.asar.unpacked", "runtime.js"), fileContents.unpackedRuntime);
@@ -397,6 +404,9 @@ test("update check clears stale running operation when active host is already sy
         antiCodexExe: sha256(fileContents.antiCodexExe),
         appAsar: sha256(fileContents.appAsar),
         codexCli: sha256(fileContents.codexCli),
+        sandboxHelper: sha256(fileContents.sandboxHelper),
+        nodeRepl: sha256(fileContents.nodeRepl),
+        nodeRuntime: sha256(fileContents.nodeRuntime),
         hostIcon: sha256(fileContents.hostIcon),
         trayIcon: sha256(fileContents.trayIcon),
         appRootIcon: sha256(fileContents.appRootIcon),
@@ -429,7 +439,7 @@ test("update check clears stale running operation when active host is already sy
 
     const parsed = JSON.parse(result.stdout.trim());
     const persisted = JSON.parse(fs.readFileSync(resolve(stateRoot, "update-status.json"), "utf8"));
-    assert.equal(parsed.updateNeeded, false);
+    assert.equal(parsed.updateNeeded, false, JSON.stringify(parsed));
     assert.equal(parsed.operation?.state, "succeeded");
     assert.equal(parsed.operation?.stage, "complete");
     assert.equal(persisted.operation?.state, "succeeded");
@@ -515,6 +525,9 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
       appRootIcon: "fake-root-icon",
+      sandboxHelper: "fake-sandbox-helper",
+      nodeRepl: "fake-node-repl",
+      nodeRuntime: "fake-node-runtime",
     };
     const unpackedContents = {
       "native.node": "native-module",
@@ -524,6 +537,7 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     };
     fs.mkdirSync(resolve(sourceRoot, "resources"), { recursive: true });
     fs.mkdirSync(unpackedRoot, { recursive: true });
+    fs.mkdirSync(resolve(activeRoot, "resources", "cua_node", "bin"), { recursive: true });
     fs.mkdirSync(stateRoot, { recursive: true });
     fs.writeFileSync(resolve(sourceRoot, "Codex.exe"), fileContents.antiCodexExe);
     fs.writeFileSync(resolve(sourceRoot, "resources", "codex.exe"), fileContents.codexCli);
@@ -531,6 +545,9 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     fs.writeFileSync(resolve(activeRoot, "Anti-Codex.exe"), fileContents.antiCodexExe);
     fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
     fs.writeFileSync(resolve(activeRoot, "resources", "codex.exe"), fileContents.codexCli);
+    fs.writeFileSync(resolve(activeRoot, "resources", "codex-windows-sandbox-setup.exe"), fileContents.sandboxHelper);
+    fs.writeFileSync(resolve(activeRoot, "resources", "cua_node", "bin", "node_repl.exe"), fileContents.nodeRepl);
+    fs.writeFileSync(resolve(activeRoot, "resources", "cua_node", "bin", "node.exe"), fileContents.nodeRuntime);
     fs.writeFileSync(resolve(activeRoot, "resources", "icon.ico"), fileContents.hostIcon);
     fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
     fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
@@ -549,6 +566,9 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
         antiCodexExe: sha256(fileContents.antiCodexExe),
         appAsar: sha256(fileContents.appAsar),
         codexCli: sha256(fileContents.codexCli),
+        sandboxHelper: sha256(fileContents.sandboxHelper),
+        nodeRepl: sha256(fileContents.nodeRepl),
+        nodeRuntime: sha256(fileContents.nodeRuntime),
         hostIcon: sha256(fileContents.hostIcon),
         trayIcon: sha256(fileContents.trayIcon),
         appRootIcon: sha256(fileContents.appRootIcon),
@@ -570,7 +590,8 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
       return JSON.parse(result.stdout.trim());
     };
 
-    assert.equal(runCheck().updateNeeded, false);
+    const initial = runCheck();
+    assert.equal(initial.updateNeeded, false, JSON.stringify(initial));
     for (const name of ["winpty.dll", "winpty-agent.exe", "runtime.js"]) {
       const path = resolve(unpackedRoot, name);
       fs.rmSync(path);

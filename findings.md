@@ -3510,3 +3510,10 @@
 - The previous UI's separate `Codex system` and `Codex developer` controls were not honest for the production chain. CodexPlusPlus intentionally converts developer to system and merges instructions, developer, and patch-tool guidance into one leading system message. Antigravity can control that merged layer; the direct third-party route bypasses the local prompt policy. `native-panel-v113` now exposes those limitations instead of promising independent controls.
 - Antigravity's provider-owned base remains opaque and read-only. The Manager does not guess, duplicate or claim to remove it. The remaining third-party purity question is an open release item and may require one narrow CodexPlusPlus policy patch; it is not solved by UI wording.
 - This phase is source-only. Focused suites pass `52/52`, `79/79`, and `43/43`; the earlier snapshot/config suite passed all its functional cases, and its sole combined failure was a stale static test expectation corrected afterward. No runtime synchronization, app restart, model traffic, Docker mutation or native Codex mutation occurred.
+
+## 2026-08-01 Complete Preflight Fixture Drift
+
+- The complete no-traffic source preflight for clean commit `6ad19495` failed only in `translatorRegression`; every other preflight group remained green and activation was not attempted.
+- Both failures came from valid-host test fixtures predating the required companion-file guardrail. They omitted the sandbox helper plus the CUA Node REPL/runtime files and hashes, so the production checker correctly returned `updateNeeded:true`.
+- The production guardrail was left unchanged. Adding those required files and manifest hashes to the two fixtures restores the intended baseline: the focused pair passes `2/2`, the full update-status contract passes `25/25`, and syntax/whitespace checks pass.
+- This is test evidence repair, not installed acceptance. Active v112/v1.2.43 and the newer source remain unsynchronized until the entire preflight is rerun green; the project is still not 100%.
