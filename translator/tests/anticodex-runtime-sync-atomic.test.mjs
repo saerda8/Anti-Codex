@@ -321,6 +321,24 @@ test("verified process termination binds identity and termination to one Windows
   assert.doesNotMatch(stop, /\bStop-Process\b/);
 });
 
+test("release process snapshots use native creation identity instead of lossy CIM timestamps", () => {
+  for (const file of [
+    "scripts/sync-anticodex.ps1",
+    "scripts/refresh-anticodex-models.ps1",
+    "scripts/rollback-anticodex.ps1",
+  ]) {
+    const source = readFileSync(resolve(repoRoot, file), "utf8");
+    const start = source.indexOf("function Get-AntiCodexProcessIdentity");
+    const end = source.indexOf("function Stop-AntiCodexVerifiedProcess", start);
+    const snapshot = source.slice(start, end);
+    assert.match(snapshot, /VerifiedProcessHandle\]::Open\(\$processId\)/);
+    assert.match(snapshot, /processHandle\.CreationFileTimeUtcTicks/);
+    assert.match(snapshot, /processHandle\.ExecutablePath/);
+    assert.match(snapshot, /processHandle\.Dispose\(\)/);
+    assert.doesNotMatch(snapshot, /CreationDate|ToFileTimeUtc/);
+  }
+});
+
 test("verified process handle terminates only a disposable process through the bound handle", async () => {
   const classMatch = syncSource.match(/Add-Type -TypeDefinition @'\r?\n([\s\S]*?)\r?\n'@/);
   assert.ok(classMatch, "missing VerifiedProcessHandle type source");

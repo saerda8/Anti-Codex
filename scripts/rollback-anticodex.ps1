@@ -622,19 +622,22 @@ function Test-AntiCodexNativeCodexPath {
 
 function Get-AntiCodexProcessIdentity {
     param([Parameter(Mandatory = $true)]$ProcessRow)
+    $processHandle = $null
     try {
         $processId = [int]$ProcessRow.ProcessId
-        $executablePath = [IO.Path]::GetFullPath([string]$ProcessRow.ExecutablePath)
-        $creationFileTimeUtcTicks = ([DateTimeOffset]$ProcessRow.CreationDate).UtcDateTime.ToFileTimeUtc()
-        if ($processId -le 0 -or $creationFileTimeUtcTicks -le 0) { return $null }
+        if ($processId -le 0 -or $processId -eq $PID) { return $null }
+        $processHandle = [AntiCodex.Native.VerifiedProcessHandle]::Open($processId)
+        $executablePath = [IO.Path]::GetFullPath([string]$processHandle.ExecutablePath)
         return [pscustomobject]@{
             ProcessId = $processId
-            CreationFileTimeUtcTicks = [long]$creationFileTimeUtcTicks
+            CreationFileTimeUtcTicks = [long]$processHandle.CreationFileTimeUtcTicks
             ExecutablePath = $executablePath
             CommandLine = [string]$ProcessRow.CommandLine
         }
     } catch {
         return $null
+    } finally {
+        if ($processHandle) { $processHandle.Dispose() }
     }
 }
 
