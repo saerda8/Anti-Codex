@@ -67,6 +67,46 @@ function Write-JsonAtomic {
     }
 }
 
+function Remove-DirectoryTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $deletePath = if ($fullPath.StartsWith("\\")) {
+        "\\?\UNC\" + $fullPath.TrimStart("\")
+    } else {
+        "\\?\$fullPath"
+    }
+    for ($attempt = 1; $attempt -le 30; $attempt += 1) {
+        if (-not (Test-Path -LiteralPath $fullPath)) {
+            return
+        }
+        try {
+            foreach ($file in [IO.Directory]::EnumerateFiles(
+                $deletePath,
+                "*",
+                [IO.SearchOption]::AllDirectories
+            )) {
+                $attributes = [IO.File]::GetAttributes($file)
+                if (($attributes -band [IO.FileAttributes]::ReadOnly) -ne 0) {
+                    [IO.File]::SetAttributes(
+                        $file,
+                        ($attributes -band (-bnot [IO.FileAttributes]::ReadOnly))
+                    )
+                }
+            }
+            [IO.Directory]::Delete($deletePath, $true)
+        } catch {
+            if (-not (Test-Path -LiteralPath $fullPath)) {
+                return
+            }
+            if ($attempt -eq 30) {
+                throw
+            }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -479,13 +519,21 @@ try {
     $verificationFailure = $null
     try {
         foreach ($command in $commands) {
-            [void](& $managedCargoRunner -Worktree $worktree @command)
+            try {
+                [void](& $managedCargoRunner -Worktree $worktree -CargoArguments $command)
+            } catch {
+                if ($_.Exception.Message -notmatch 'cargo-xwin container exited with code -1$') {
+                    throw
+                }
+                Start-Sleep -Seconds 1
+                [void](& $managedCargoRunner -Worktree $worktree -CargoArguments $command)
+            }
         }
     } catch {
         $verificationFailure = $_
     } finally {
         if ($createdManagerDist -and (Test-Path -LiteralPath $managerDist)) {
-            Remove-Item -LiteralPath $managerDist -Recurse -Force
+            Remove-DirectoryTree -Path $managerDist
         }
     }
     $stage = "build_hygiene_postflight"
@@ -521,7 +569,7 @@ try {
     }
     $targetRoot = Join-Path $worktree "target"
     if (Test-Path -LiteralPath $targetRoot) {
-        Remove-Item -LiteralPath $targetRoot -Recurse -Force
+        Remove-DirectoryTree -Path $targetRoot
     }
     $sourceStatus = Invoke-Checked -FilePath "git.exe" -Arguments @(
         "-C", $worktree, "status", "--porcelain", "--untracked-files=all"
@@ -649,7 +697,7 @@ try {
     throw
 } finally {
     if (-not $completed -and (Test-Path -LiteralPath $stagingRoot)) {
-        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
+        Remove-DirectoryTree -Path $stagingRoot
     }
     if ($mutexAcquired) {
         $candidateMutex.ReleaseMutex()

@@ -1,11 +1,14 @@
-From d434b59394e8a74a388065ab992583569f7e5ef1 Mon Sep 17 00:00:00 2001
+From ab515ecc9d14f79519a9cdcff87ab2c7b98c27f0 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
 Subject: [PATCH 04/10] fix: route Anti-Codex model slots
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs | 357 ++++++++++++++++++-
+ 1 file changed, 346 insertions(+), 11 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 3a89da5..0184adc 100644
+index dc70635..606bdea 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
@@ -31,8 +34,8 @@ index 3a89da5..0184adc 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -582,12 +589,325 @@ pub async fn open_responses_proxy_request_with_settings(
-     open_responses_proxy_request_with_settings_and_user_agent(body, settings, None).await
+@@ -616,13 +623,326 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+         .await
  }
  
 +fn relay_profile_by_id(settings: &BackendSettings, id: &str) -> Option<RelayProfile> {
@@ -349,6 +352,7 @@ index 3a89da5..0184adc 100644
      body: &str,
      settings: crate::settings::BackendSettings,
      original_user_agent: Option<&str>,
+     request_path: &str,
  ) -> anyhow::Result<UpstreamProxyResponse> {
 -    let request_json: Value = serde_json::from_str(body)?;
 +    let mut request_json: Value = serde_json::from_str(body)?;
@@ -358,7 +362,7 @@ index 3a89da5..0184adc 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -595,11 +915,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -630,11 +950,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
@@ -379,7 +383,7 @@ index 3a89da5..0184adc 100644
      let relay_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -617,6 +942,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -652,6 +977,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
@@ -387,16 +391,16 @@ index 3a89da5..0184adc 100644
                  "headerTimeoutSeconds": header_timeout.as_secs()
              }),
          );
-@@ -725,7 +1051,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
-     body: &str,
+@@ -761,7 +1087,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      original_user_agent: Option<&str>,
+     request_path: &str,
  ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
 -    let request_json: Value = serde_json::from_str(body)?;
 +    let mut request_json: Value = serde_json::from_str(body)?;
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -735,14 +1061,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -771,14 +1097,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
@@ -423,7 +427,7 @@ index 3a89da5..0184adc 100644
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -764,6 +1098,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -800,6 +1134,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,
@@ -431,6 +435,3 @@ index 3a89da5..0184adc 100644
                  "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
              }),
          );
--- 
-2.55.0.windows.3
-

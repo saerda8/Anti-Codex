@@ -24,8 +24,25 @@ if (-not (Test-Path -LiteralPath $resolvedWorktree -PathType Container)) {
     throw "Worktree is not a directory: $resolvedWorktree"
 }
 
-& docker container inspect $ContainerName *> $null
-if ($LASTEXITCODE -eq 0) {
+if ($CargoArguments[0] -ceq "fmt") {
+    Push-Location $resolvedWorktree
+    try {
+        & cargo @CargoArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo fmt exited with code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    return
+}
+
+$existingContainer = & docker container ls --all --quiet --filter "name=^/$ContainerName`$"
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to inspect Docker container state for $ContainerName"
+}
+if ($existingContainer) {
     throw "Refusing to reuse or remove an existing container: $ContainerName"
 }
 
@@ -51,8 +68,8 @@ try {
     }
 }
 finally {
-    & docker container inspect $ContainerName *> $null
-    if ($LASTEXITCODE -eq 0) {
+    $existingContainer = & docker container ls --all --quiet --filter "name=^/$ContainerName`$"
+    if ($LASTEXITCODE -eq 0 -and $existingContainer) {
         & docker rm -f $ContainerName | Out-Null
     }
 }

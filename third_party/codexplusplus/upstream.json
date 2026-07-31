@@ -1,72 +1,72 @@
 {
-  "component": "CodexPlusPlus",
-  "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
-  "license": "AGPL-3.0-only",
-  "version": "1.2.43",
-  "tag": "v1.2.43",
-  "upstreamCommit": "5036ff056b5c629f19356396b17d6eeb70da664c",
-  "isolationPatchCommit": "888aa241b9e4b2a2412c8fe976ff2ab5c2176aad",
-  "patchCommit": "7505a6d48ca05923139b8406811f72ab3e5247c4",
-  "patches": [
-    {
-      "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-      "sha256": "5adef85d8d0a021b2e754ebe5fbe86ab68e4ea40ff83e4fac3189d1ce6251b1f",
-      "scope": "state, ports, branded executable selection, process paths and global watcher isolation, including canonical exact copied-app root validation before any restart target can be stopped"
-    },
-    {
-      "file": "patches/0002-cancel-loopback-streams-without-resets.patch",
-      "sha256": "5c9673139a0a7fa075da846ef7e52f9153290f0362cf623005c6b08b59cd0507",
-      "scope": "one-shot cancel-aware loopback-only HTTP streams with bounded header-first parsing, fixed-route bearer authorization before any large body read, bounded body reads and concurrency, unauthenticated slow-body permit-release regression coverage, plus shared response-header timeouts for direct Chat requests"
-    },
-    {
-      "file": "patches/0003-native-codex-helper-requests-text-only.patch",
-      "sha256": "7841306a5c21d290b7e95c646d99f28743a0d8183a20fd92d1c66d479aa3cfea",
-      "scope": "strip project tool controls only from exact official Codex title and task-suggestion helper requests; ordinary user tasks and all other conversion behavior remain upstream"
-    },
-    {
-      "file": "patches/0004-route-anticodex-model-slots.patch",
-      "sha256": "496df46a12c02c5d9486394dafb07ebc11c3587854e474b9655ea7adc4769948",
-      "scope": "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction preserves an explicit routable request model and uses isolated config only when that model is missing or unknown, directed requests fail closed without fallback, and ordinary CodexPlusPlus relay selection remains unchanged"
-    },
-    {
-      "file": "patches/0005-preserve-image-tool-outputs-for-chat-relays.patch",
-      "sha256": "813b895e08f5605532fb9266dfe82372e9c6dd80e6cd21256808d777120bd2c8",
-      "scope": "convert image-bearing Responses tool outputs to standard multimodal Chat content instead of textual JSON/Base64; ordinary tool text, tool association, streaming, retries, history and task control remain unchanged"
-    },
-    {
-      "file": "patches/0006-guide-models-to-structured-patch-tools.patch",
-      "sha256": "be0bbe63611b5251b71f4929bae1d83095b1dff2837dfb1963656ef033f274b2",
-      "scope": "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, and reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged; command execution, routing, history, retries and task control remain unchanged"
-    },
-    {
-      "file": "patches/0007-ignore-late-reasoning-after-visible-text.patch",
-      "sha256": "17dfb39313fbbc54742c488613c0ea12f26cc864176fff82b4a73c2663f5d41c",
-      "scope": "map balanced leading think or thinking blocks to reasoning and ignore a separate reasoning delta only after visible text has already started; visible text, reasoning-first streams, tools, routing, retries, history and task control remain unchanged"
-    },
-    {
-      "file": "patches/0008-chore-audit-Codex-tool-conversion.patch",
-      "sha256": "da596aab812aaaa791fbdc5ddd15e5c839f642d0f75ba5de39e6900d7f55b615",
-      "scope": "record only native and converted tool counts, names and types for local relay diagnosis; request content, arguments, credentials, routing and model behavior remain unchanged"
-    },
-    {
-      "file": "patches/0009-fix-allow-long-multimodal-helper-requests.patch",
-      "sha256": "63b57b3a304856d98c8a2c69001ab0a2e12ed1887fb43ffe8425e931ade9a0cd",
-      "scope": "raise the bounded loopback helper request limit from 32 MiB to 128 MiB for long multimodal Codex turns while preserving explicit 413 rejection above the limit; routing, translation, retries, history and task control remain unchanged"
-    },
-    {
-      "file": "patches/0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
-      "sha256": "2a764accea2b6584916c509032eeae0bb46edbbf3972c8cf8654c0da886da52d",
-      "scope": "when Chat SSE omits usage, conservatively estimate Responses input, output and total usage from text and tool context for native Codex auto-compaction; real upstream usage remains authoritative and embedded image Base64 is excluded; routing, retries, history and task control remain unchanged"
-    }
-  ],
-  "verification": {
-    "patchReplay": "ten canonical 1/10 through 10/10 patches were replayed onto upstream v1.2.43; patch 0001 was manually rebased for the upstream manager-command and watcher changes, patches 0002 through 0010 retained stable patch identities, candidate head 7505a6d48ca05923139b8406811f72ab3e5247c4 and an independent project-patch replay produced the identical tree 42e6155185508512b9eb799832d3de994e047056",
-    "sourceIsolationAudit": "candidate diff remains limited to the documented ten-patch isolation, transport, helper, model-slot, multimodal, patch-tool, stream-order, audit, body-limit and usage-estimation boundaries",
-    "auditRegressionTests": "59/59 protocol proxy Rust tests and 11/11 watcher tests passed in the clean v1.2.43 candidate; project security boundaries passed 6/6, isolation audit passed 7/7 and Gate 8 binding passed 34/34; independent candidate preparation passed 13/13 and the component installer passed 33/33 without skips",
-    "cargoFmt": "cargo fmt --all -- --check passed in the clean v1.2.43 candidate; regenerated project patches pass git diff --check and independent replay",
-    "cargoCheck": "pinned messense/cargo-xwin:0.23.0 Windows x64 Manager cargo check passed with a temporary ignored build-only frontend stub that was removed afterward",
-    "windowsNativeTests": "Windows x64 release launcher built successfully; protocol proxy and watcher regressions ran in the pinned Linux container because the Windows host lacks link.exe/cl.exe",
-    "launcherReleaseBuild": "sha256:7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05",
-    "runtimeIsolation": "active v1.2.43 component metadata, manifest and launcher hash are verified; all ephemeral build containers were automatically deleted and no client process or model route was changed"
-  }
+    "component":  "CodexPlusPlus",
+    "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+    "license":  "AGPL-3.0-only",
+    "version":  "1.2.44",
+    "tag":  "v1.2.44",
+    "upstreamCommit":  "77091ccaee4423f35a1b2c51c4ecd703e6201092",
+    "isolationPatchCommit":  "66ff2ec29e30901c4adc05f8c8c8a197d6038649",
+    "patchCommit":  "b24197a34ce4ace6dc68d8e0dd6da9d8a6b28cf1",
+    "patches":  [
+                    {
+                        "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
+                        "sha256":  "7c9aa722976c2e5dc4ff99489e857415c8578b06ec2b28076275fc7b0a7e0161",
+                        "scope":  "state, ports, branded executable selection, process paths and global watcher isolation, including canonical exact copied-app root validation before any restart target can be stopped"
+                    },
+                    {
+                        "file":  "patches/0002-cancel-loopback-streams-without-resets.patch",
+                        "sha256":  "673f807a8a662da2c739aa7832b5b73a11c5b21b957cf1b5cb6685f174cab33b",
+                        "scope":  "one-shot cancel-aware loopback-only HTTP streams with bounded header-first parsing, fixed-route bearer authorization before any large body read, bounded body reads and concurrency, unauthenticated slow-body permit-release regression coverage, plus shared response-header timeouts for direct Chat requests"
+                    },
+                    {
+                        "file":  "patches/0003-native-codex-helper-requests-text-only.patch",
+                        "sha256":  "4be8db539929813a23163efc797335731262b5450ba7bc52b4011ebdd9b4ff75",
+                        "scope":  "strip project tool controls only from exact official Codex title and task-suggestion helper requests; ordinary user tasks and all other conversion behavior remain upstream"
+                    },
+                    {
+                        "file":  "patches/0004-route-anticodex-model-slots.patch",
+                        "sha256":  "0cff2d889f528f46aebc83259a20201d8263ab4b189c536efb50d537f812b17e",
+                        "scope":  "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction preserves an explicit routable request model and uses isolated config only when that model is missing or unknown, directed requests fail closed without fallback, and ordinary CodexPlusPlus relay selection remains unchanged"
+                    },
+                    {
+                        "file":  "patches/0005-preserve-image-tool-outputs-for-chat-relays.patch",
+                        "sha256":  "243ba29a81140a2773745625a27b54bf09226870c8ce1fc7039d40007c186f80",
+                        "scope":  "convert image-bearing Responses tool outputs to standard multimodal Chat content instead of textual JSON/Base64; ordinary tool text, tool association, streaming, retries, history and task control remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0006-guide-models-to-structured-patch-tools.patch",
+                        "sha256":  "18b7b248c510b379a54b7802593e243be65ba56ce72343c46e22da127da1514e",
+                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, and reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged; command execution, routing, history, retries and task control remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0007-ignore-late-reasoning-after-visible-text.patch",
+                        "sha256":  "498877ee9793e86e405ca0e8618142e4ff671970d45167eb2889d4b3c32ff4a7",
+                        "scope":  "map balanced leading think or thinking blocks to reasoning and ignore a separate reasoning delta only after visible text has already started; visible text, reasoning-first streams, tools, routing, retries, history and task control remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0008-chore-audit-Codex-tool-conversion.patch",
+                        "sha256":  "607ba8447d6c6a124ff1a56ce9a0cb3f6bf888036ffc0c39cf6b92ac3e2917d7",
+                        "scope":  "record only native and converted tool counts, names and types for local relay diagnosis; request content, arguments, credentials, routing and model behavior remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0009-fix-allow-long-multimodal-helper-requests.patch",
+                        "sha256":  "7cd1a20a59353a716a4fba428f6864809bfb4515ee0ea90cb2c6135addef15bb",
+                        "scope":  "raise the bounded loopback helper request limit from 32 MiB to 128 MiB for long multimodal Codex turns while preserving explicit 413 rejection above the limit; routing, translation, retries, history and task control remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
+                        "sha256":  "e612fdc95a21f46152ec1f5dcd49339066d60fdb19f3bff75d54ac3451397c3f",
+                        "scope":  "when Chat SSE omits usage, conservatively estimate Responses input, output and total usage from text and tool context for native Codex auto-compaction; real upstream usage remains authoritative and embedded image Base64 is excluded; routing, retries, history and task control remain unchanged"
+                    }
+                ],
+    "verification":  {
+                         "patchReplay":  "10 project patches replayed without automatic conflict resolution; head b24197a34ce4ace6dc68d8e0dd6da9d8a6b28cf1; tree cf942882c8747d8e5aab86c99ae5a0ea8873283a",
+                         "sourceIsolationAudit":  "passed",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
+                         "cargoFmt":  "passed",
+                         "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
+                         "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
+                         "launcherReleaseBuild":  "sha256:f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be",
+                         "runtimeIsolation":  "candidate only; not activated"
+                     }
 }

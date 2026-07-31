@@ -1,11 +1,15 @@
-From 6d977d45d7ca00b08181c98092cb534985cd901e Mon Sep 17 00:00:00 2001
+From 7fbbf6a87cd98adcf0d66aa6ab8999ccee4b4d01 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 08:09:32 +0800
 Subject: [PATCH 07/10] handle third-party thinking tags without interleaving
 
+---
+ crates/codex-plus-core/src/protocol_proxy.rs  | 47 +++++++++----
+ .../codex-plus-core/tests/protocol_proxy.rs   | 68 +++++++++++++++++++
+ 2 files changed, 101 insertions(+), 14 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 6b397fa..bb06088 100644
+index 6b6cc0c..d038508 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -7,7 +7,7 @@ use std::collections::BTreeSet;
@@ -39,7 +43,7 @@ index 6b397fa..bb06088 100644
  
      #[test]
      fn protocol_proxy_port_accepts_only_nonzero_u16_values() {
-@@ -745,9 +751,9 @@ fn select_anticodex_relay_for_model(
+@@ -779,9 +785,9 @@ fn select_anticodex_relay_for_model(
  #[cfg(test)]
  mod anticodex_model_routing_tests {
      use super::{
@@ -50,7 +54,7 @@ index 6b397fa..bb06088 100644
      };
      use crate::settings::{BackendSettings, RelayProfile};
      use serde_json::json;
-@@ -1946,6 +1952,10 @@ impl ChatSseState {
+@@ -1996,6 +2002,10 @@ impl ChatSseState {
      }
  
      fn push_reasoning_delta_into(&mut self, delta: &str, output: &mut String) {
@@ -61,7 +65,7 @@ index 6b397fa..bb06088 100644
          if !self.reasoning.added {
              let output_index = self.next_output_index();
              let item_id = format!("rs_{}", self.response_id);
-@@ -2431,10 +2441,16 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+@@ -2481,10 +2491,16 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
      if trimmed.is_empty() {
          return ThinkPrefixDecision::NeedMore;
      }
@@ -80,7 +84,7 @@ index 6b397fa..bb06088 100644
          return ThinkPrefixDecision::NeedMore;
      }
      ThinkPrefixDecision::Text
-@@ -3962,13 +3978,14 @@ fn response_tool_call_item(
+@@ -4012,13 +4028,14 @@ fn response_tool_call_item(
  fn split_leading_think_block(text: &str) -> Option<(String, String)> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -101,7 +105,7 @@ index 6b397fa..bb06088 100644
      Some((
          text[body_start..close_start].trim().to_string(),
          strip_think_answer_separator(&text[answer_start..]).to_string(),
-@@ -3978,9 +3995,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+@@ -4028,9 +4045,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
  fn strip_leading_think_open_tag(text: &str) -> Option<String> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -117,10 +121,10 @@ index 6b397fa..bb06088 100644
  
  fn strip_think_answer_separator(text: &str) -> &str {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 6682ebe..a0080f0 100644
+index 264279d..8428c80 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1428,6 +1428,33 @@ fn chat_completion_response_splits_inline_think_block() {
+@@ -1499,6 +1499,33 @@ fn chat_completion_response_splits_inline_think_block() {
      );
      assert_eq!(converted["output"][1]["type"], "message");
      assert_eq!(converted["output"][1]["content"][0]["text"], "pong");
@@ -154,7 +158,7 @@ index 6682ebe..a0080f0 100644
  }
  
  #[test]
-@@ -1451,6 +1478,33 @@ data: [DONE]
+@@ -1522,6 +1549,33 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  
@@ -188,7 +192,7 @@ index 6682ebe..a0080f0 100644
  #[test]
  fn chat_sse_converts_reasoning_inline_think_tools_and_errors_like_ccs() {
      let reasoning = chat_sse_to_responses_sse(
-@@ -1483,6 +1537,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
+@@ -1554,6 +1608,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
      assert!(!inline_think.contains("<think>"));
      assert!(!inline_think.contains("</think>"));
  
@@ -209,6 +213,3 @@ index 6682ebe..a0080f0 100644
      let tool = chat_sse_to_responses_sse(
          r#"data: {"id":"chatcmpl_tool","model":"gpt-5.4","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather"}}]}}]}
  
--- 
-2.55.0.windows.3
-

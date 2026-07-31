@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 const root = resolve(import.meta.dirname, "..", "..");
 const scriptPath = resolve(root, "scripts", "prepare-codexplusplus-candidate.ps1");
 const hygienePath = resolve(root, "scripts", "test-anticodex-docker-build-hygiene.ps1");
+const cargoRunnerPath = resolve(root, "scripts", "invoke-anticodex-cargo-xwin.ps1");
 
 function write(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -174,6 +175,7 @@ test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex"
   assert.match(script, /third_party\\codexplusplus\\upstream\.json/);
   assert.match(script, /test-codexplusplus-isolation-compatibility\.mjs/);
   assert.match(script, /invoke-anticodex-cargo-xwin\.ps1/);
+  assert.match(script, /-CargoArguments\s+\$command/);
   assert.match(script, /test-anticodex-docker-build-hygiene\.ps1/);
   assert.match(script, /-RequireRuntimeClean/);
   assert.match(script, /upstream\.proposed\.json/);
@@ -191,10 +193,24 @@ test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex"
   assert.match(script, /WaitOne/);
   assert.match(script, /ReleaseMutex/);
   assert.match(script, /\$stage\s*=\s*"candidate_binary_copy"/);
+  assert.match(script, /function Remove-DirectoryTree/);
+  assert.match(script, /for \(\$attempt = 1; \$attempt -le 30;/);
+  assert.match(script, /\[IO\.Directory\]::Delete\(\$deletePath, \$true\)/);
+  assert.match(script, /\[IO\.File\]::SetAttributes/);
+  assert.match(script, /cargo-xwin container exited with code -1\$/);
   assert.doesNotMatch(
     script,
     /\bdocker(?:\.exe)?\s+(?:run|ps|container|rm|create)\b|sync-anticodex|install-codexplusplus|Stop-Process|Restart-Computer|schtasks/i,
   );
+});
+
+test("managed Cargo runner treats an absent ephemeral container as clean", () => {
+  const script = readFileSync(cargoRunnerPath, "utf8");
+
+  assert.match(script, /\$CargoArguments\[0\]\s+-ceq\s+"fmt"/);
+  assert.match(script, /Push-Location\s+\$resolvedWorktree/);
+  assert.match(script, /docker container ls --all --quiet --filter/);
+  assert.doesNotMatch(script, /docker container inspect/);
 });
 
 test("Docker build hygiene can require zero labeled build containers", () => {
