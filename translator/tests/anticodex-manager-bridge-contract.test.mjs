@@ -1008,6 +1008,52 @@ test("Manager native mouse verifier recomputes live hit coordinates and proves d
   assert.match(idleBlock, /!latest\.running && queueStable/);
 });
 
+test("connector allowlist save receives its status and reload dependencies", async () => {
+  const classList = () => ({ add() {}, remove() {}, toggle() {} });
+  const elStub = (tag, attrs = {}, children = []) => ({
+    tag,
+    ...attrs,
+    children,
+    classList: classList(),
+  });
+  let postCalls = 0;
+  let reloadCalls = 0;
+  let exclusiveCalls = 0;
+  const context = {
+    Array,
+    Boolean,
+    String,
+    el: elStub,
+    managerPostJson: async (path, body) => {
+      postCalls += 1;
+      assert.equal(path, "/anticodex/local-connectors/allowlist");
+      assert.deepEqual(Array.from(body.connectorIds), ["alpha", "beta"]);
+      return { counts: { localAllowlisted: 2, appTools: 1 } };
+    },
+    window: {},
+  };
+  const editor = vm.runInNewContext(`(${extractNamedFunction(managerInject, "connectorAllowlistEditor")})`, context);
+  const result = { textContent: "", classList: classList() };
+  const reload = async (options) => {
+    reloadCalls += 1;
+    assert.equal(options.updateResult, false);
+  };
+  const runExclusive = async (operation) => {
+    exclusiveCalls += 1;
+    await operation();
+    return true;
+  };
+  const node = editor({ persisted: [], env: [], counts: {} }, result, reload, runExclusive);
+  node.children[1].value = "alpha\nbeta";
+
+  await node.children[2].onclick();
+
+  assert.equal(postCalls, 1);
+  assert.equal(reloadCalls, 1);
+  assert.equal(exclusiveCalls, 1);
+  assert.match(result.textContent, /allowlist.*已保存/);
+});
+
 test("Manager high-impact real-mouse helper requires dispatch evidence instead of disabled UI", () => {
   assert.match(managerRealMouseAction, /const inspectOnly =/);
   assert.match(managerRealMouseAction, /const dispatchBaseline = await evaluate/);
@@ -1394,6 +1440,17 @@ test("Manager exposes prompt layers without weakening required compatibility pro
       < refreshManagerStatusBlock.indexOf('safeJson("/health")'),
     "prompt editor must suspend the status request before it can occupy the Manager bridge",
   );
+  assert.match(refreshManagerStatusBlock, /data-anticodex-busy/);
+  assert.ok(
+    refreshManagerStatusBlock.indexOf("data-anticodex-busy")
+      < refreshManagerStatusBlock.indexOf('safeJson("/health")'),
+    "a Manager-wide busy state must stop status polling before it occupies the bridge",
+  );
+  const openManagerBlock = extractNamedFunction(managerInject, "openManager");
+  assert.match(openManagerBlock, /function runManagerExclusive/);
+  assert.match(openManagerBlock, /connectorAllowlistEditor\(allowlist, result, load, runManagerExclusive\)/);
+  assert.ok((openManagerBlock.match(/runManagerExclusive\(/g) || []).length >= 5);
+  assert.match(openManagerBlock, /action === "refreshStatus" && !managerOperationInFlight/);
   assert.match(managerInject, /Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42|Antigravity 提供方底层/);
   assert.match(managerInject, /Codex \u539f\u751f\u81ea\u5b9a\u4e49\u6307\u4ee4 \(AGENTS\.md\)|Codex 原生自定义指令 \(AGENTS\.md\)/);
   assert.match(managerInject, /\u7559\u7a7a\u5373\u5173\u95ed|留空即关闭/);

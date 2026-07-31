@@ -800,7 +800,7 @@
     }
   }
 
-  function connectorAllowlistEditor(allowlist) {
+  function connectorAllowlistEditor(allowlist, result, reload, runExclusive) {
     const persisted = Array.isArray(allowlist?.persisted) ? allowlist.persisted : [];
     const env = Array.isArray(allowlist?.env) ? allowlist.env : [];
     const counts = allowlist?.counts || {};
@@ -818,7 +818,7 @@
       "\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff0c\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002",
       "\u6bcf\u884c\u4e00\u4e2a connector id\uff1b\u4ec5\u672c\u5730 Anti-Codex \u751f\u6548\uff0c\u4e0d\u5199\u56de\u539f\u751f Codex\u3002",
     ].join("\n") });
-    saveButton.onclick = async () => {
+    saveButton.onclick = () => runExclusive(async () => {
       const connectorIds = textarea.value
         .split(/[\r\n,]+/)
         .map((item) => item.trim())
@@ -830,14 +830,14 @@
         const saved = await managerPostJson("/anticodex/local-connectors/allowlist", { connectorIds });
         window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
         result.textContent = `\u672c\u5730\u8fde\u63a5\u5668 allowlist \u5df2\u4fdd\u5b58\u3002\n\u672c\u5730\u7f13\u5b58\u9884\u89c8\uff1a${saved.counts?.localAllowlisted ?? saved.counts?.locallyAuthorized ?? connectorIds.length}\n\u771f\u5b9e\u53ef\u8c03\u7528\u5de5\u5177\uff1a${saved.counts?.appTools ?? 0}\n\u6ce8\u610f\uff1a\u4e0d\u6388\u6743\uff0c\u4e0d\u4ee3\u8868\u53ef\u8c03\u7528\u3002`;
-        await load({ updateResult: false });
+        await reload({ updateResult: false });
       } catch (error) {
         result.classList.add("anticodex-error");
         result.textContent = "\u4fdd\u5b58\u672c\u5730\u8fde\u63a5\u5668 allowlist \u5931\u8d25\uff1a" + error.message;
       } finally {
         saveButton.disabled = false;
       }
-    };
+    });
     return el("div", { style: "display:grid;gap:9px" }, [
       hint,
       textarea,
@@ -1049,12 +1049,14 @@
   async function refreshManagerStatus() {
     const manager = document.getElementById(MANAGER_ID);
     const promptEditorOpen = manager?.getAttribute("data-anticodex-manager-view") === "prompts";
+    const busy = manager?.getAttribute("data-anticodex-busy") === "true"
+      || manager?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
     if (promptEditorOpen) return;
+    if (busy) return;
     try {
       const healthResult = await safeJson("/health");
       const health = safeValue(healthResult, {});
       if (healthResult.ok) updateTrafficNotice(health);
-      const busy = manager?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
       if (manager && !busy) {
         if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
           await refreshManagerSnapshot();
@@ -1767,7 +1769,7 @@
       .anticodex-connector-allowlist-input:focus{outline:2px solid var(--ac-focus);outline-offset:2px}
       @media(max-width:820px){#${MANAGER_ID}{padding:12px}.anticodex-grid{grid-template-columns:1fr}.anticodex-panel{padding:15px}.anticodex-kv{grid-template-columns:1fr}.anticodex-action-section-head{display:block}.anticodex-action-section p{text-align:left;margin-top:3px}}
     ` });
-    const root = el("div", { id: MANAGER_ID, role: "dialog", "aria-label": MANAGER_LABEL, "data-anticodex-manager-version": VERSION, "data-anticodex-manager-view": "status" });
+    const root = el("div", { id: MANAGER_ID, role: "dialog", "aria-label": MANAGER_LABEL, "data-anticodex-manager-version": VERSION, "data-anticodex-manager-view": "status", "data-anticodex-busy": "false" });
     const panel = el("div", { className: "anticodex-panel" });
     const title = el("div", {}, [
       el("h1", { text: MANAGER_LABEL }),
@@ -1814,7 +1816,30 @@
     ]);
     let actionGeneration = 0;
     let actionInFlight = false;
+    let managerOperationInFlight = false;
     let managerView = "status";
+
+    function setManagerOperationBusy(busy) {
+      managerOperationInFlight = Boolean(busy);
+      root.setAttribute("data-anticodex-busy", managerOperationInFlight ? "true" : "false");
+    }
+
+    async function runManagerExclusive(operation) {
+      const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
+      const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
+      if (managerOperationInFlight || actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
+        result.classList.remove("anticodex-error");
+        result.textContent = "已有管理操作正在运行，请等待完成。";
+        return false;
+      }
+      setManagerOperationBusy(true);
+      try {
+        await operation();
+        return true;
+      } finally {
+        setManagerOperationBusy(false);
+      }
+    }
 
     panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", resultBody));
     root.append(panel);
@@ -1989,7 +2014,7 @@
             ["\u7ee7\u627f\u72b6\u6001", localFeatures.skills?.requiredPresent?.length ? `\u5df2\u7ee7\u627f ${localFeatures.skills.requiredPresent.join(", ")}` : "\u53ef\u901a\u8fc7\u6309\u94ae\u68c0\u67e5\u548c\u5237\u65b0"],
             optionalLoadErrors.length ? ["\u8865\u5145\u63d0\u793a", optionalLoadErrors.join("\n")] : null,
           ].filter(Boolean))),
-          card("\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177", connectorAllowlistEditor(allowlist)),
+          card("\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177", connectorAllowlistEditor(allowlist, result, load, runManagerExclusive)),
         ].filter(Boolean);
         grid.replaceChildren(...cards);
         result.classList.toggle("anticodex-error", loadErrors.length > 0);
@@ -2070,7 +2095,7 @@
       const saveButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "保存" });
       const restoreButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "恢复默认" });
       const backButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "返回状态" });
-      const save = async (nextPolicy) => {
+      const save = (nextPolicy) => runManagerExclusive(async () => {
         for (const button of [saveButton, restoreButton, backButton]) button.disabled = true;
         result.textContent = "正在保存提示词设置...";
         try {
@@ -2084,7 +2109,7 @@
         } finally {
           for (const button of [saveButton, restoreButton, backButton]) button.disabled = false;
         }
-      };
+      });
       saveButton.onclick = () => save({
         schema: payload.schema,
         codexSystem: system.value(),
@@ -2122,7 +2147,7 @@
       result.textContent = payload.snapshot ? "已读取最近一次实际提示词分层。" : "设置可用；当前尚无运行时提示词快照。";
     }
 
-    promptSettingsButton.onclick = () => { void showPromptSettings(); };
+    promptSettingsButton.onclick = () => { void runManagerExclusive(showPromptSettings); };
 
     async function showUpstreamConfig() {
       await ensureSnapshotForLoad();
@@ -2235,7 +2260,7 @@
         upstreamConnectionSummaryText(payload),
         (payload.stages || []).map((item) => String(item.stage || "") + "：" + String(item.status || "") + "\n" + String(item.detail || "")).join("\n\n"),
       ].filter(Boolean).join("\n\n") || "没有返回测试结果";
-      testButton.onclick = async () => {
+      testButton.onclick = () => runManagerExclusive(async () => {
         if (upstreamConfigOperationInFlight) return;
         const requestFingerprint = upstreamConfigFingerprint();
         setUpstreamConfigBusy(true);
@@ -2265,8 +2290,8 @@
         } finally {
           setUpstreamConfigBusy(false);
         }
-      };
-      saveButton.onclick = async () => {
+      });
+      saveButton.onclick = () => runManagerExclusive(async () => {
         if (upstreamConfigOperationInFlight || testedFingerprint !== upstreamConfigFingerprint()) {
           invalidateConnectionTest();
           return;
@@ -2287,7 +2312,7 @@
         } finally {
           setUpstreamConfigBusy(false);
         }
-      };
+      });
       refreshUpstreamConfigControls();
       result.classList.remove("anticodex-error");
       result.replaceChildren(el("div", { style: "display:grid;gap:10px" }, [
@@ -2344,9 +2369,9 @@
         button.addEventListener("click", async () => {
           const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
           const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
-          if (actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
+          if (managerOperationInFlight || actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
             resetHighImpactConfirmation();
-            if (action === "refreshStatus" && !actionInFlight && !window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__) {
+            if (action === "refreshStatus" && !managerOperationInFlight && !actionInFlight && !window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__) {
               result.classList.remove("anticodex-error");
               result.textContent = "\u6b63\u5728\u5237\u65b0\u540e\u53f0\u4efb\u52a1\u72b6\u6001\u2026";
               await refreshManagerSnapshot();
@@ -2378,6 +2403,7 @@
           window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ = actionToken;
           window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ = actionToken;
           actionInFlight = true;
+          setManagerOperationBusy(true);
           const actionStartedAt = Date.now();
           setActionButtonsDisabled(true);
           result.classList.remove("anticodex-error");
@@ -2508,6 +2534,7 @@
             const remainingBusyMs = 300 - (Date.now() - actionStartedAt);
             if (remainingBusyMs > 0) await wait(remainingBusyMs);
             actionInFlight = false;
+            setManagerOperationBusy(false);
             if (window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ === actionToken) {
               delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__;
             }
