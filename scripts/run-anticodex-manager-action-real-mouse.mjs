@@ -12,10 +12,13 @@ const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 1831
 const action = String(args.get("--action") || "syncHost");
 const confirmed = String(args.get("--confirm") || "false").toLowerCase() === "true";
 const inspectOnly = String(args.get("--inspect-only") || "false").toLowerCase() === "true";
+const promptSettingsSaveRestore = String(args.get("--prompt-settings-save-restore") || "false").toLowerCase() === "true";
+const promptSettingsUiOnly = promptSettingsSaveRestore
+  || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
 const timeoutMs = Number(args.get("--timeout-ms") || 15_000);
 
-if (action !== "syncHost") throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
-if (!confirmed && !inspectOnly) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
+if (action !== "syncHost" && !promptSettingsUiOnly) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
+if (!confirmed && !inspectOnly && !promptSettingsUiOnly) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -115,6 +118,17 @@ async function realMouseClick(point) {
   }
 }
 
+async function realMouseWheel(point, deltaY) {
+  await call("Input.dispatchMouseEvent", {
+    type: "mouseWheel",
+    x: point.x,
+    y: point.y,
+    deltaX: 0,
+    deltaY,
+    pointerType: "mouse",
+  }, 12_000);
+}
+
 async function waitFor(probe, predicate, waitMs = timeoutMs) {
   const deadline = Date.now() + waitMs;
   let value;
@@ -208,6 +222,159 @@ try {
     version: window.__ANTICODEX_MANAGER_VERSION__ || '',
   }))()`, (value) => value?.overlay === true);
 
+  if (promptSettingsUiOnly) {
+    const promptButtonPoint = await waitFor(
+      visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
+      (value) => value?.ok === true && value.text === "提示词",
+    );
+    await realMouseClick(promptButtonPoint);
+    const promptView = await waitFor(`(() => {
+      const overlay = document.querySelector('#anticodex-manager-overlay');
+      const text = String(overlay?.innerText || '').replace(/\\s+/g, ' ').trim();
+      const buttons = Array.from(overlay?.querySelectorAll('button') || []).map((node) => String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim());
+      return {
+        text,
+        buttons,
+        textareaCount: overlay?.querySelectorAll('textarea').length || 0,
+        version: window.__ANTICODEX_MANAGER_VERSION__ || '',
+      };
+    })()`, (value) => [
+      "Codex 系统提示词",
+      "Codex 开发者提示词",
+      "Anti-Codex 用户提示词",
+      "Antigravity 提供方底层",
+    ].every((label) => value?.text?.includes(label))
+      && ["保存", "恢复默认", "返回状态"].every((label) => value?.buttons?.includes(label)));
+
+    const panelPoint = await evaluate(`(() => {
+      const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+      const rect = panel?.getBoundingClientRect?.();
+      return rect && rect.width > 0 && rect.height > 0
+        ? { ok: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        : { ok: false };
+    })()`);
+    if (!panelPoint?.ok) throw new Error("Manager prompt panel is not visible for physical scrolling.");
+    const initialScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
+    await realMouseWheel(panelPoint, 900);
+    await sleep(150);
+    const middleScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
+    await realMouseWheel(panelPoint, 2400);
+    await sleep(150);
+    const bottomState = await evaluate(`(() => {
+      const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+      return { scrollTop: panel?.scrollTop || 0, scrollHeight: panel?.scrollHeight || 0, clientHeight: panel?.clientHeight || 0 };
+    })()`);
+
+    let saveRestore = null;
+    if (promptSettingsSaveRestore) {
+      const testValue = "Anti-Codex 提示词实体按钮测试；本次立即恢复默认。";
+      await realMouseWheel(panelPoint, -300);
+      await sleep(150);
+      const userCheckboxPoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('input[type="checkbox"]')`),
+        (value) => value?.ok === true,
+      );
+      const userWasEnabled = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('input[type="checkbox"]')?.checked === true`);
+      if (!userWasEnabled) await realMouseClick(userCheckboxPoint);
+      const userTextareaPoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('textarea')`),
+        (value) => value?.ok === true,
+      );
+      await realMouseClick(userTextareaPoint);
+      for (const type of ["keyDown", "keyUp"]) {
+        await call("Input.dispatchKeyEvent", { type, key: "a", code: "KeyA", modifiers: 2, windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 });
+      }
+      await call("Input.insertText", { text: testValue });
+      await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
+        (value) => value?.ok === true,
+      );
+      await sleep(200);
+      const savePoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
+        (value) => value?.ok === true,
+      );
+      const saveHitBeforeClick = await evaluate(`(() => {
+        const hit = document.elementFromPoint(${JSON.stringify(savePoint.x)}, ${JSON.stringify(savePoint.y)});
+        return String(hit?.closest?.('button')?.innerText || hit?.closest?.('button')?.textContent || '').trim();
+      })()`);
+      if (saveHitBeforeClick !== "保存") throw new Error(`Prompt save target moved before click: ${saveHitBeforeClick}`);
+      await realMouseClick(savePoint);
+      await sleep(3_000);
+      let savedMessage;
+      try {
+        savedMessage = await waitFor(
+          `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
+          (value) => String(value).includes("已保存"),
+        );
+      } catch {
+        const saveState = await evaluate(`(() => ({
+          result: document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || '',
+          headings: Array.from(document.querySelectorAll('#anticodex-manager-overlay section h2')).map((node) => node.textContent || ''),
+          promptButtonVisible: Boolean(document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')),
+        }))()`);
+        throw new Error(`Prompt save did not complete: ${JSON.stringify({ savePoint, saveHitBeforeClick, saveState })}`);
+      }
+
+      const backAfterSavePoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
+        (value) => value?.ok === true,
+      );
+      await realMouseClick(backAfterSavePoint);
+      await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
+      await realMouseClick(await waitFor(
+        visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
+        (value) => value?.ok === true,
+      ));
+      const reloadedValue = await waitFor(`(() => {
+        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词');
+        return { enabled: section?.querySelector('input[type="checkbox"]')?.checked === true, value: section?.querySelector('textarea')?.value || '' };
+      })()`, (value) => value?.enabled === true && value?.value === testValue);
+      await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
+      const restorePoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
+        (value) => value?.ok === true,
+      );
+      await realMouseClick(restorePoint);
+      await sleep(3_000);
+      const restoredMessage = await waitFor(
+        `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
+        (value) => String(value).includes("已保存"),
+      );
+      saveRestore = { testValue, savedMessage, reloadedValue, restoredMessage };
+    }
+
+    const backPoint = await waitFor(
+      visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
+      (value) => value?.ok === true,
+    );
+    await realMouseClick(backPoint);
+    await waitFor(
+      `(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`,
+      (value) => value === true,
+    );
+
+    const closePoint = await waitFor(
+      visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`),
+      (value) => value?.ok === true,
+    );
+    await realMouseClick(closePoint);
+    await waitFor(`(() => !document.querySelector('#anticodex-manager-overlay'))()`, (value) => value === true, 5_000);
+    result = {
+      ok: middleScrollTop > initialScrollTop
+        && bottomState.scrollTop >= middleScrollTop
+        && promptView.version === "native-panel-v112",
+      port,
+      target: { id: target.id, title: target.title, url: target.url },
+      profileEntry: managerEntryPoint.text,
+      promptButton: promptButtonPoint.text,
+      promptView,
+      scroll: { initialScrollTop, middleScrollTop, bottomState },
+      saveRestore,
+      returnedToStatus: true,
+      overlayClosed: true,
+    };
+  } else {
   await evaluate(`(() => {
     const button = document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]');
     button?.scrollIntoView({ block: 'center', inline: 'nearest' });
@@ -277,7 +444,14 @@ try {
     secondClickDispatched: true,
     accepted,
   };
+  }
 } finally {
+  if (!closed && promptSettingsUiOnly) {
+    try {
+      const cleanupPoint = await evaluate(visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`));
+      if (cleanupPoint?.ok) await realMouseClick(cleanupPoint);
+    } catch {}
+  }
   if (!closed) socket.close();
 }
 

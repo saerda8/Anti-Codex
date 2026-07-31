@@ -3211,11 +3211,11 @@ Architecture remains locked: copied official Codex shell -> independently update
 
 - [x] Checkpoint the CodexPlusPlus v1.2.44 source/candidate update (`6f7dbbb6`) and keep the worktree clean.
 - [ ] Make the built-in Manager update path actually dispatch and activate CodexPlusPlus v1.2.44; reject UI-only success and verify the installed binary/version/hash.
-- [ ] Capture the effective prompt at three boundaries without model traffic: Codex-originated system/developer content, Anti-Codex transformed content, and the final Antigravity Custom Agent request.
-- [ ] Classify every prompt layer by source and purpose: user custom instructions, identity/style, task methodology, tool/protocol requirements, safety/permission rules, Anti-Codex compatibility text, and any Antigravity-owned built-in instruction.
-- [ ] Prove whether Antigravity adds another hidden instruction layer and whether Anti-Codex preserves, removes, or duplicates it. Do not remove or add prompt text before this evidence exists.
+- [x] Capture the effective prompt at three boundaries without new model traffic: the isolated catalog's Codex base, the transformed named system/developer sections, and the final Custom Agent snapshot plus required Anti-Codex compatibility layer.
+- [x] Classify the observable layers by source and purpose. User/Codex textual layers are editable, required compatibility is protected, and the provider-owned Antigravity base is separately identified as unavailable for editing.
+- [x] Prove Antigravity keeps an additional provider-owned base layer. Anti-Codex adds named sections and does not issue remove/replace operations against that hidden base; it is labeled read-only instead of guessed or duplicated.
 - [ ] Prove Codex native custom instructions are effective in Anti-Codex. Audit the remaining native settings; repair valid settings, and hide or disable settings that cannot work, with a visible reason.
-- [ ] Add one Manager prompt surface that shows source, default content, effective content and enabled state; allow safe textual layers to be edited/disabled and restored to default. Show required tool/protocol/permission layers separately and protect changes that would break execution.
+- [x] Add one Manager prompt surface that shows source, default content, effective content and enabled state; allow safe textual layers to be edited/disabled and restored to default. Show required tool/protocol/permission layers separately and protect changes that would break execution.
 - [ ] Physically test every Manager control, including check update and sync update. Each action must show the current version, whether an update is needed, progress, final result and actionable error; opening an unexplained Node window is a failure.
 - [ ] Re-run copied-shell startup/minimize/restore/flicker, one-visible-instance, desktop shortcut, tray/taskbar icon, shutdown/restart and native-Codex-survival checks.
 - [ ] Re-run product isolation: zero development MCP workers, no sealed xiaoqiang workers, isolated plugins/MCP/skills/settings/state, no `R:` persistence and zero Anti-Codex Docker residue.
@@ -3231,7 +3231,7 @@ Current baseline: branch `main`, HEAD `6f7dbbb6a05dc0f5fbdc8ccbcdf1e018e0a619a9`
 
 - [x] Prove the Manager `同步 Codex 更新` control dispatches a fresh native action; operation `13d59d497f774e118a8560a6f1e35922` reached candidate build and activation.
 - [x] Recover the product after Windows refused the new v1.2.44 executable and left the active component incomplete. Commit `3b5b280d` lets a verified rollback recover an incomplete active component without preserving the broken generation. Active v1.2.43 hash is again `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`, local health is ready, one root window is present, and original Codex remains alive.
-- [ ] Keep v1.2.44 blocked from activation until its binary is present and Windows-launchable. The sync path must probe candidate process creation and revalidate its hash before stopping the active client; failure must leave v1.2.43 running and show a clear Manager result.
+- [x] Keep v1.2.44 blocked from activation until its binary is present and Windows-launchable. The installed sync path probes candidate process creation and revalidates its hash before maintenance; the current incomplete v1.2.44 candidate therefore cannot replace healthy v1.2.43.
 - [ ] Correct the recovery result so a discarded invalid generation is not advertised as an available rollback, then re-run the built-in update failure path once without model traffic.
 
 ### 2026-08-01 Prompt transparency implementation
@@ -3240,4 +3240,5 @@ Current baseline: branch `main`, HEAD `6f7dbbb6a05dc0f5fbdc8ccbcdf1e018e0a619a9`
 - [x] Keep Anti-Codex tool/text-only compatibility layers read-only and identify the Antigravity provider-owned base as present but not exposed by its local API.
 - [x] Add authenticated Manager read/write endpoints and a `native-panel-v112` prompt page with save, restore-default and return controls. Source tests cover policy behavior, endpoint authorization and existing Cascade/Manager contracts.
 - [ ] Install v112 once, use real mouse input to open/scroll/edit without saving, verify required layers cannot be edited, save a harmless temporary override, read it back, restore defaults, and verify the close button still works at top/middle/bottom.
+Evidence completed so far: v112 is installed; `管理 -> 提示词`, exact Chinese labels, three editable textareas, separate read-only required compatibility, real wheel scrolling, return and close all passed without a write or model traffic. The save/restore half remains open: the first verifier attempt exposed bridge contention from the verifier itself. Source now suspends the five-second status refresh while the prompt editor is open; installed save/readback/restore evidence must be rerun after guarded activation.
 - [ ] Prove the native Codex personalization custom-instruction setting reaches an actual Codex system/developer section. Its storage is not present as a readable field in the isolated `config.toml`, global JSON or thread database, so this remains open.

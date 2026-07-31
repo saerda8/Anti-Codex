@@ -1375,9 +1375,13 @@ test("current Manager UI exposes no legacy session-controller action", () => {
 test("Manager exposes prompt layers without weakening required compatibility prompts", () => {
   assert.match(managerService, /"\/anticodex\/prompt-policy"/);
   assert.match(managerInject, /data-anticodex-prompt-settings/);
+  assert.match(managerInject, /data-anticodex-manager-view/);
+  assert.match(managerInject, /!busy && !promptEditorOpen/);
   assert.match(managerInject, /Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42|Antigravity 提供方底层/);
   assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
   assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
+  assert.match(managerRealMouseAction, /promptSettingsSaveRestore/);
+  assert.match(managerRealMouseAction, /await sleep\(3_000\)/);
 });
 
 test("native compatibility style makes closed Radix menu wrappers mouse transparent", () => {

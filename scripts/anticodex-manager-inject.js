@@ -1053,7 +1053,8 @@
       if (healthResult.ok) updateTrafficNotice(health);
       const manager = document.getElementById(MANAGER_ID);
       const busy = manager?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
-      if (manager && !busy) {
+      const promptEditorOpen = manager?.getAttribute("data-anticodex-manager-view") === "prompts";
+      if (manager && !busy && !promptEditorOpen) {
         if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
           await refreshManagerSnapshot();
         }
@@ -1765,7 +1766,7 @@
       .anticodex-connector-allowlist-input:focus{outline:2px solid var(--ac-focus);outline-offset:2px}
       @media(max-width:820px){#${MANAGER_ID}{padding:12px}.anticodex-grid{grid-template-columns:1fr}.anticodex-panel{padding:15px}.anticodex-kv{grid-template-columns:1fr}.anticodex-action-section-head{display:block}.anticodex-action-section p{text-align:left;margin-top:3px}}
     ` });
-    const root = el("div", { id: MANAGER_ID, role: "dialog", "aria-label": MANAGER_LABEL, "data-anticodex-manager-version": VERSION });
+    const root = el("div", { id: MANAGER_ID, role: "dialog", "aria-label": MANAGER_LABEL, "data-anticodex-manager-version": VERSION, "data-anticodex-manager-view": "status" });
     const panel = el("div", { className: "anticodex-panel" });
     const title = el("div", {}, [
       el("h1", { text: MANAGER_LABEL }),
@@ -2008,6 +2009,7 @@
 
     async function showPromptSettings() {
       managerView = "prompts";
+      root.setAttribute("data-anticodex-manager-view", "prompts");
       actions.style.display = "none";
       result.classList.remove("anticodex-error");
       result.textContent = "正在读取提示词设置...";
@@ -2081,6 +2083,7 @@
       restoreButton.onclick = () => save(defaults);
       backButton.onclick = async () => {
         managerView = "status";
+        root.setAttribute("data-anticodex-manager-view", "status");
         actions.style.display = "";
         await load();
       };
