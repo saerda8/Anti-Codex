@@ -44,6 +44,21 @@ function writeFixture(path, text = "") {
   writeFileSync(path, text, "utf8");
 }
 
+function initializeGitFixture(fixture) {
+  for (const args of [
+    ["init", "-q", fixture.sourceRoot],
+    ["-C", fixture.sourceRoot, "add", "-A"],
+    ["-C", fixture.sourceRoot, "-c", "user.name=Anti-Codex Test", "-c", "user.email=test@localhost", "commit", "-qm", "fixture"],
+  ]) {
+    const result = spawnSync("git", args, { encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  }
+  return spawnSync("git", ["-C", fixture.sourceRoot, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+    windowsHide: true,
+  }).stdout.trim().toLowerCase();
+}
+
 function snapshotTree(root) {
   const entries = [];
   function visit(directory, parent = "") {
@@ -171,7 +186,7 @@ function createFixture({ repairOk = true } = {}) {
   );
   mkdirSync(appData, { recursive: true });
 
-  return {
+  const fixture = {
     root,
     localAppData,
     appData,
@@ -189,6 +204,8 @@ function createFixture({ repairOk = true } = {}) {
       ].join(";"),
     },
   };
+  fixture.sourceGitHead = initializeGitFixture(fixture);
+  return fixture;
 }
 
 function runSync(fixture, options = {}) {
@@ -389,6 +406,20 @@ test("runtime sync rejects a concurrent legacy local host sync before touching a
     assert.equal(existsSync(join(fixture.installRoot, "runtime-versions")), false);
   } finally {
     stopChild(holder);
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("runtime sync rejects an unverified non-Git source before staging", () => {
+  const fixture = createFixture();
+  const activeBefore = snapshotTree(fixture.activeRuntime);
+  try {
+    rmSync(join(fixture.sourceRoot, ".git"), { recursive: true, force: true });
+    const result = runSync(fixture);
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(`${result.stderr}\n${result.stdout}`, /clean Git revision/i);
+    assert.deepEqual(snapshotTree(fixture.activeRuntime), activeBefore);
+  } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
 });
@@ -594,6 +625,10 @@ test("idle NoRestart sync atomically activates one complete staged directory", (
     assert.equal(existsSync(join(fixture.activeRuntime, "old-active-sentinel.txt")), false);
     assert.equal(existsSync(join(fixture.activeRuntime, "scripts", "start-anticodex.ps1")), true);
     assert.equal(existsSync(join(fixture.activeRuntime, ".anticodex-runtime-manifest.json")), true);
+    const manifest = JSON.parse(readFileSync(join(fixture.activeRuntime, ".anticodex-runtime-manifest.json"), "utf8"));
+    assert.equal(manifest.sourceGitHead, fixture.sourceGitHead);
+    assert.equal(manifest.sourceGitClean, true);
+    assert.equal(manifest.sourceRevisionProvenance, "git");
     assert.equal(existsSync(receipt.rollbackRuntime), true);
     assert.equal(
       readFileSync(join(receipt.rollbackRuntime, "old-active-sentinel.txt"), "utf8"),

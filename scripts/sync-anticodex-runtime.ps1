@@ -206,6 +206,46 @@ function Get-AntiCodexSha256 {
     }
 }
 
+function Get-AntiCodexSourceGitRevision {
+    $gitCommand = Get-Command "git" -ErrorAction SilentlyContinue
+    if (-not $gitCommand) {
+        return [pscustomobject]@{ head = ""; clean = $false; provenance = "unverified" }
+    }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        $global:LASTEXITCODE = 0
+        $rootOutput = @(& $gitCommand.Source -C $sourceRootFull rev-parse --show-toplevel 2>$null)
+        $rootExitCode = $LASTEXITCODE
+        $gitRoot = @($rootOutput | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1)
+        $gitRoot = if ($gitRoot.Count -gt 0) { [string]$gitRoot[0] } else { "" }
+        try { $gitRoot = [IO.Path]::GetFullPath($gitRoot).TrimEnd("\") } catch { $gitRoot = "" }
+        if ($rootExitCode -ne 0 -or
+            -not $gitRoot.Equals($sourceRootFull.TrimEnd("\"), [StringComparison]::OrdinalIgnoreCase)) {
+            return [pscustomobject]@{ head = ""; clean = $false; provenance = "unverified" }
+        }
+        $global:LASTEXITCODE = 0
+        $headOutput = @(& $gitCommand.Source -C $sourceRootFull rev-parse HEAD 2>$null)
+        $headExitCode = $LASTEXITCODE
+        $head = @($headOutput | Where-Object { [string]$_ -match "^[a-fA-F0-9]{40}$" } | Select-Object -First 1)
+        $head = if ($head.Count -gt 0) { [string]$head[0] } else { "" }
+        if ($headExitCode -ne 0 -or $head -notmatch "^[a-fA-F0-9]{40}$") {
+            return [pscustomobject]@{ head = ""; clean = $false; provenance = "unverified" }
+        }
+        $global:LASTEXITCODE = 0
+        $statusOutput = @(& $gitCommand.Source -C $sourceRootFull status --porcelain=v1 --untracked-files=normal 2>$null)
+        $statusExitCode = $LASTEXITCODE
+        $clean = $statusExitCode -eq 0 -and @($statusOutput | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -eq 0
+        return [pscustomobject]@{
+            head = $head.ToLowerInvariant()
+            clean = $clean
+            provenance = if ($clean) { "git" } else { "unverified" }
+        }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function Test-AntiCodexRuntimeSyncFixture {
     if ([string]::IsNullOrWhiteSpace([string]$env:ANTICODEX_RUNTIME_SYNC_TEST_ROOT)) {
         return $false
@@ -353,6 +393,12 @@ foreach ($relative in $requiredSourceFiles) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Anti-Codex source runtime component missing: $relative"
     }
+}
+$sourceRevisionBefore = Get-AntiCodexSourceGitRevision
+if ([string]$sourceRevisionBefore.provenance -cne "git" -or
+    -not [bool]$sourceRevisionBefore.clean -or
+    [string]$sourceRevisionBefore.head -notmatch "^[a-fA-F0-9]{40}$") {
+    throw "Anti-Codex runtime sync requires a clean Git revision rooted exactly at the source directory."
 }
 
 function Copy-AntiCodexRuntimeTree {
@@ -760,6 +806,12 @@ function Test-AntiCodexActiveRuntimeOwned {
 
 function Write-AntiCodexStagedRuntimeManifest {
     $inventory = Get-AntiCodexRuntimeInventory -Directory $stagedRuntimeFull
+    $sourceRevisionAfter = Get-AntiCodexSourceGitRevision
+    if ([string]$sourceRevisionAfter.provenance -cne "git" -or
+        -not [bool]$sourceRevisionAfter.clean -or
+        -not ([string]$sourceRevisionAfter.head).Equals([string]$sourceRevisionBefore.head, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Anti-Codex source revision changed or became dirty while the runtime was staged."
+    }
     $fileHashes = [ordered]@{}
     foreach ($relative in $requiredSourceFiles) {
         $fileHashes[$relative] = (Get-AntiCodexSha256 -Path (Join-Path $stagedRuntimeFull $relative)).ToLowerInvariant()
@@ -771,6 +823,9 @@ function Write-AntiCodexStagedRuntimeManifest {
         sourceRoot = $sourceRootFull
         activeRuntime = $targetRuntimeFull
         stagedRuntime = $stagedRuntimeFull
+        sourceGitHead = [string]$sourceRevisionBefore.head
+        sourceGitClean = [bool]$sourceRevisionBefore.clean
+        sourceRevisionProvenance = [string]$sourceRevisionBefore.provenance
         verifiedFileCount = $requiredSourceFiles.Count
         entryCount = $inventory.Count
         createdAt = [DateTime]::UtcNow.ToString("o")

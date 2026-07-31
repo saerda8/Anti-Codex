@@ -22,3 +22,21 @@ test("source preflight leaves patch-format whitespace to hash and replay verific
 
   assert.match(source, /diff", "--check", "--", "\.", ":\(exclude\)third_party\/codexplusplus\/patches\/\*\.patch"/);
 });
+
+test("installed runtime preflight requires a complete manifest bound to a clean Git revision", async () => {
+  const [preflight, runtimeSync] = await Promise.all([
+    readFile(new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../../scripts/sync-anticodex-runtime.ps1", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(runtimeSync, /sourceGitHead\s*=/);
+  assert.match(runtimeSync, /sourceGitClean\s*=/);
+  assert.match(runtimeSync, /sourceRevisionProvenance\s*=/);
+  assert.match(runtimeSync, /rev-parse --show-toplevel/);
+  assert.match(runtimeSync, /source revision changed or became dirty/);
+  assert.match(preflight, /anticodex-runtime-manifest-v2/);
+  assert.match(preflight, /sourceRevisionProvenance/);
+  assert.match(preflight, /git rev-parse --show-toplevel/);
+  assert.match(preflight, /Get-SourceRuntimeInventory/);
+  assert.match(preflight, /verifiedEntryCount/);
+});

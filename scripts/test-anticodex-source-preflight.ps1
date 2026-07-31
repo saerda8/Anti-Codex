@@ -56,6 +56,182 @@ function Normalize-Path {
     return [IO.Path]::GetFullPath($Path)
 }
 
+function Test-SourcePathInsideRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+    try {
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd("\") + "\"
+        return $fullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
+}
+
+function Get-SourceSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Get-SourceRuntimeInventory {
+    param([Parameter(Mandatory = $true)][string]$Directory)
+
+    $directoryFull = [IO.Path]::GetFullPath($Directory).TrimEnd("\")
+    $directoryItem = Get-Item -LiteralPath $directoryFull -Force -ErrorAction Stop
+    if (-not $directoryItem.PSIsContainer -or
+        (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw "runtime root is not a real directory"
+    }
+    $directoryPrefix = $directoryFull + "\"
+    $entries = [ordered]@{}
+    foreach ($item in @(Get-ChildItem -LiteralPath $directoryFull -Recurse -Force -ErrorAction Stop | Sort-Object FullName)) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "runtime contains a reparse point"
+        }
+        $itemFull = [IO.Path]::GetFullPath($item.FullName)
+        if (-not $itemFull.StartsWith($directoryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "runtime inventory escaped its root"
+        }
+        $relative = $itemFull.Substring($directoryPrefix.Length)
+        if ($relative.Equals(".anticodex-runtime-manifest.json", [StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+        if ($item.PSIsContainer) {
+            $entries[$relative] = [ordered]@{ type = "directory" }
+        } elseif ($item -is [IO.FileInfo]) {
+            $entries[$relative] = [ordered]@{
+                type = "file"
+                length = [long]$item.Length
+                sha256 = Get-SourceSha256 -Path $itemFull
+            }
+        } else {
+            throw "runtime contains an unsupported filesystem entry"
+        }
+    }
+    return $entries
+}
+
+function Get-SourceRuntimeManifestRevision {
+    $manifestPath = Join-Path $SourceRoot ".anticodex-runtime-manifest.json"
+    try {
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw "trusted runtime manifest is missing"
+        }
+        $manifestItem = Get-Item -LiteralPath $manifestPath -Force -ErrorAction Stop
+        if (($manifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "runtime manifest is a reparse point"
+        }
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $sourceGitClean = $manifest.sourceGitClean -is [bool] -and [bool]$manifest.sourceGitClean
+        if ([string]$manifest.schema -cne "anticodex-runtime-manifest-v2" -or
+            [string]$manifest.state -cne "validated" -or
+            [string]$manifest.sourceRevisionProvenance -cne "git" -or
+            [string]$manifest.sourceGitHead -notmatch "^[a-fA-F0-9]{40}$" -or
+            -not $sourceGitClean -or
+            [string]::IsNullOrWhiteSpace([string]$manifest.transactionId)) {
+            throw "runtime manifest provenance is invalid"
+        }
+        $manifestActiveRuntime = [IO.Path]::GetFullPath([string]$manifest.activeRuntime).TrimEnd("\")
+        $sourceRootFull = [IO.Path]::GetFullPath($SourceRoot).TrimEnd("\")
+        if (-not $manifestActiveRuntime.Equals($sourceRootFull, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "runtime manifest does not bind the active source root"
+        }
+        $createdAt = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParse([string]$manifest.createdAt, [ref]$createdAt)) {
+            throw "runtime manifest timestamp is invalid"
+        }
+        if ($null -eq $manifest.entries -or $null -eq $manifest.files) {
+            throw "runtime manifest inventory is missing"
+        }
+        $actualEntries = Get-SourceRuntimeInventory -Directory $SourceRoot
+        $manifestEntries = @($manifest.entries.PSObject.Properties)
+        if ([int]$manifest.entryCount -le 0 -or
+            [int]$manifest.entryCount -ne $actualEntries.Count -or
+            $manifestEntries.Count -ne $actualEntries.Count) {
+            throw "runtime manifest entry count does not match"
+        }
+        $declaredEntries = @{}
+        foreach ($property in $manifestEntries) {
+            $relative = [string]$property.Name
+            if ([string]::IsNullOrWhiteSpace($relative) -or
+                [IO.Path]::IsPathRooted($relative) -or
+                $relative.Equals(".anticodex-runtime-manifest.json", [StringComparison]::OrdinalIgnoreCase) -or
+                $declaredEntries.ContainsKey($relative)) {
+                throw "runtime manifest contains an invalid entry path"
+            }
+            $entryPath = [IO.Path]::GetFullPath((Join-Path $sourceRootFull $relative))
+            if (-not (Test-SourcePathInsideRoot -Path $entryPath -Root $sourceRootFull)) {
+                throw "runtime manifest entry escaped its root"
+            }
+            $declaredEntries[$relative] = $property.Value
+        }
+        foreach ($relative in $actualEntries.Keys) {
+            if (-not $declaredEntries.ContainsKey($relative)) {
+                throw "runtime contains an undeclared entry"
+            }
+            $actual = $actualEntries[$relative]
+            $declared = $declaredEntries[$relative]
+            if ([string]$declared.type -cne [string]$actual.type) {
+                throw "runtime entry type does not match"
+            }
+            if ([string]$actual.type -ceq "file" -and (
+                [long]$declared.length -ne [long]$actual.length -or
+                [string]$declared.sha256 -notmatch "^[a-fA-F0-9]{64}$" -or
+                -not ([string]$declared.sha256).Equals([string]$actual.sha256, [StringComparison]::OrdinalIgnoreCase)
+            )) {
+                throw "runtime file hash does not match"
+            }
+        }
+        $manifestFiles = @($manifest.files.PSObject.Properties)
+        if ([int]$manifest.verifiedFileCount -le 0 -or
+            [int]$manifest.verifiedFileCount -ne $manifestFiles.Count) {
+            throw "runtime verified file count does not match"
+        }
+        foreach ($property in $manifestFiles) {
+            $relative = [string]$property.Name
+            $expectedHash = [string]$property.Value
+            if (-not $declaredEntries.ContainsKey($relative) -or
+                [string]$declaredEntries[$relative].type -cne "file" -or
+                $expectedHash -notmatch "^[a-fA-F0-9]{64}$") {
+                throw "runtime verified file declaration is invalid"
+            }
+            $filePath = [IO.Path]::GetFullPath((Join-Path $sourceRootFull $relative))
+            if (-not (Test-SourcePathInsideRoot -Path $filePath -Root $sourceRootFull) -or
+                -not (Test-Path -LiteralPath $filePath -PathType Leaf) -or
+                -not (Get-SourceSha256 -Path $filePath).Equals($expectedHash, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "runtime verified file hash does not match"
+            }
+        }
+        return [pscustomobject]@{
+            ok = $true
+            head = ([string]$manifest.sourceGitHead).ToLowerInvariant()
+            clean = $true
+            provenance = "runtime-manifest"
+            manifest = $manifestPath
+            verifiedEntryCount = $actualEntries.Count
+        }
+    } catch {
+        return [pscustomobject]@{
+            ok = $false
+            head = ""
+            clean = $false
+            provenance = "runtime-manifest"
+            manifest = $manifestPath
+            reason = [string]$_.Exception.Message
+            verifiedEntryCount = 0
+        }
+    }
+}
+
 function Get-RelativeSourcePath {
     param([string]$Path)
     $root = Normalize-Path $SourceRoot
@@ -669,9 +845,21 @@ function Test-GitDiffCheck {
 
 function Test-SourceGitRevision {
     $gitCommand = Get-Command "git" -ErrorAction SilentlyContinue
-    if (-not $gitCommand) {
-        Add-Failure "git not found; source revision cannot be bound"
-        return [pscustomobject]@{ ok = $false; head = ""; reason = "git not found" }
+    $sourceIsGitRoot = $false
+    if ($gitCommand) {
+        $gitRootResult = Invoke-SourceProcess -Name "git rev-parse --show-toplevel" -FilePath $gitCommand.Source -Arguments @("-C", $SourceRoot, "rev-parse", "--show-toplevel") -TimeoutSec 10
+        $gitRoot = @($gitRootResult.stdoutTail | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1)
+        $gitRoot = if ($gitRoot.Count -gt 0) { [string]$gitRoot[0] } else { "" }
+        try { $gitRoot = [IO.Path]::GetFullPath($gitRoot).TrimEnd("\") } catch { $gitRoot = "" }
+        $sourceIsGitRoot = $gitRootResult.ok -and
+            $gitRoot.Equals(([IO.Path]::GetFullPath($SourceRoot)).TrimEnd("\"), [StringComparison]::OrdinalIgnoreCase)
+    }
+    if (-not $sourceIsGitRoot) {
+        $runtimeRevision = Get-SourceRuntimeManifestRevision
+        if (-not $runtimeRevision.ok) {
+            Add-Failure "source revision could not be verified: $([string]$runtimeRevision.reason)"
+        }
+        return $runtimeRevision
     }
     $result = Invoke-SourceProcess -Name "git rev-parse HEAD" -FilePath $gitCommand.Source -Arguments @("-C", $SourceRoot, "rev-parse", "HEAD") -TimeoutSec 10
     $head = @($result.stdoutTail | Where-Object { [string]$_ -match '^[0-9a-fA-F]{40}$' } | Select-Object -First 1)
@@ -687,7 +875,13 @@ function Test-SourceGitRevision {
     } elseif (-not $clean) {
         Add-Failure "source git worktree is dirty"
     }
-    return [pscustomobject]@{ ok = $clean; head = $head.ToLowerInvariant(); clean = $clean; exitCode = $statusResult.exitCode }
+    return [pscustomobject]@{
+        ok = $clean
+        head = $head.ToLowerInvariant()
+        clean = $clean
+        exitCode = $statusResult.exitCode
+        provenance = "git"
+    }
 }
 
 function New-ReportPaths {
@@ -746,6 +940,7 @@ $report = [ordered]@{
     sourceRoot = Normalize-Path $SourceRoot
     sourceGitHead = [string]$checks["sourceGitRevision"].head
     sourceGitClean = [bool]$checks["sourceGitRevision"].clean
+    sourceRevisionProvenance = [string]$checks["sourceGitRevision"].provenance
     startedAt = $startedAt.ToString("o")
     elapsedMs = $elapsedMs
     skipFullRegression = [bool]$SkipFullRegression
