@@ -1381,6 +1381,8 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
   assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
   assert.match(managerRealMouseAction, /promptSettingsSaveRestore/);
+  assert.match(managerRealMouseAction, /promptClosePosition/);
+  assert.match(managerRealMouseAction, /\["top", "middle", "bottom"\]/);
   assert.match(managerRealMouseAction, /await sleep\(3_000\)/);
 });
 

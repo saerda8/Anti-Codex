@@ -13,10 +13,12 @@ const action = String(args.get("--action") || "syncHost");
 const confirmed = String(args.get("--confirm") || "false").toLowerCase() === "true";
 const inspectOnly = String(args.get("--inspect-only") || "false").toLowerCase() === "true";
 const promptSettingsSaveRestore = String(args.get("--prompt-settings-save-restore") || "false").toLowerCase() === "true";
-const promptSettingsUiOnly = promptSettingsSaveRestore
+const promptClosePosition = String(args.get("--prompt-close-position") || "").toLowerCase();
+const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore
   || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
 const timeoutMs = Number(args.get("--timeout-ms") || 15_000);
 
+if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
 if (action !== "syncHost" && !promptSettingsUiOnly) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
 if (!confirmed && !inspectOnly && !promptSettingsUiOnly) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
@@ -152,6 +154,7 @@ const visiblePoint = (selectorExpression) => `(() => {
     x,
     y,
     text: String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim(),
+    ariaLabel: String(node.getAttribute?.('aria-label') || ''),
     tag: node.tagName || '',
   };
 })()`;
@@ -254,6 +257,42 @@ try {
         : { ok: false };
     })()`);
     if (!panelPoint?.ok) throw new Error("Manager prompt panel is not visible for physical scrolling.");
+    if (promptClosePosition) {
+      await evaluate(`(() => {
+        const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+        const maxScroll = Math.max(0, (panel?.scrollHeight || 0) - (panel?.clientHeight || 0));
+        if (panel) panel.scrollTop = ${JSON.stringify(promptClosePosition)} === 'middle' ? Math.floor(maxScroll / 2) : (${JSON.stringify(promptClosePosition)} === 'bottom' ? maxScroll : 0);
+        return panel?.scrollTop || 0;
+      })()`);
+      await sleep(150);
+      const closeScroll = await evaluate(`(() => {
+        const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+        return { scrollTop: panel?.scrollTop || 0, scrollHeight: panel?.scrollHeight || 0, clientHeight: panel?.clientHeight || 0 };
+      })()`);
+      const closePoint = await waitFor(
+        visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`),
+        (value) => value?.ok === true,
+      );
+      await realMouseClick(closePoint);
+      await waitFor(`(() => !document.querySelector('#anticodex-manager-overlay'))()`, (value) => value === true, 5_000);
+      const maxScroll = Math.max(0, closeScroll.scrollHeight - closeScroll.clientHeight);
+      const positionOk = promptClosePosition === "top"
+        ? closeScroll.scrollTop === 0
+        : promptClosePosition === "middle"
+          ? closeScroll.scrollTop > 0 && closeScroll.scrollTop < maxScroll
+          : closeScroll.scrollTop >= maxScroll;
+      result = {
+        ok: positionOk && promptView.version === "native-panel-v112",
+        port,
+        target: { id: target.id, title: target.title, url: target.url },
+        profileEntry: managerEntryPoint.text,
+        promptButton: promptButtonPoint.text,
+        promptClosePosition,
+        closeScroll,
+        closeLabel: closePoint.ariaLabel,
+        overlayClosed: true,
+      };
+    } else {
     const initialScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
     await realMouseWheel(panelPoint, 900);
     await sleep(150);
@@ -374,6 +413,7 @@ try {
       returnedToStatus: true,
       overlayClosed: true,
     };
+    }
   } else {
   await evaluate(`(() => {
     const button = document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]');
