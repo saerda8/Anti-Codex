@@ -1357,8 +1357,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v111"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v111"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v112"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v112"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
@@ -1370,6 +1370,14 @@ test("current Manager UI exposes no legacy session-controller action", () => {
   })) {
     assert.doesNotMatch(text, /resetAntigravitySessionLock/, `${name} still exposes the removed session reset`);
   }
+});
+
+test("Manager exposes prompt layers without weakening required compatibility prompts", () => {
+  assert.match(managerService, /"\/anticodex\/prompt-policy"/);
+  assert.match(managerInject, /data-anticodex-prompt-settings/);
+  assert.match(managerInject, /Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42|Antigravity 提供方底层/);
+  assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
+  assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
 });
 
 test("native compatibility style makes closed Radix menu wrappers mouse transparent", () => {

@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 import { testCodexPlusPlusUpstreamConnection } from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
 import {
+    promptPolicyPayload,
+    savePromptPolicy,
+} from "../translator/provider/anticodex-prompt-policy.mjs";
+import {
     THIRD_PARTY_MODEL_SLOT,
     THIRD_PARTY_RELAY_ID,
     thirdPartyNativeModel,
@@ -1865,6 +1869,22 @@ export function createAntiCodexManagerService(options = {}) {
           background: Boolean(value.background),
         }])),
       }, req);
+    }
+
+    if (req.method === "GET" && pathname === "/anticodex/prompt-policy") {
+      if (!validateManagerSourceRequest(req, res, "prompt policy")) return;
+      return jsonResponse(res, 200, promptPolicyPayload(stateRoot), req);
+    }
+
+    if (req.method === "POST" && pathname === "/anticodex/prompt-policy") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      try {
+        const raw = await readRequestBody(req);
+        const policy = savePromptPolicy(stateRoot, JSON.parse(raw.toString("utf8") || "{}"));
+        return jsonResponse(res, 200, { ok: true, policy, message: "提示词设置已保存；从下一次模型请求开始生效。" }, req);
+      } catch (error) {
+        return jsonResponse(res, 400, { ok: false, message: error.message }, req);
+      }
     }
 
     if (req.method === "POST" && pathname === "/anticodex/manager/action") {

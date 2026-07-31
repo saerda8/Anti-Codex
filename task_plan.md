@@ -3233,3 +3233,11 @@ Current baseline: branch `main`, HEAD `6f7dbbb6a05dc0f5fbdc8ccbcdf1e018e0a619a9`
 - [x] Recover the product after Windows refused the new v1.2.44 executable and left the active component incomplete. Commit `3b5b280d` lets a verified rollback recover an incomplete active component without preserving the broken generation. Active v1.2.43 hash is again `7470bf12e31265b5ea807c3bcc003bfe3a2b5eac8dbd58ade3991b75940eff05`, local health is ready, one root window is present, and original Codex remains alive.
 - [ ] Keep v1.2.44 blocked from activation until its binary is present and Windows-launchable. The sync path must probe candidate process creation and revalidate its hash before stopping the active client; failure must leave v1.2.43 running and show a clear Manager result.
 - [ ] Correct the recovery result so a discarded invalid generation is not advertised as an available rollback, then re-run the built-in update failure path once without model traffic.
+
+### 2026-08-01 Prompt transparency implementation
+
+- [x] Add isolated prompt-policy storage and final-boundary application for the Antigravity route. Codex system/developer layers can be enabled, overridden or restored; a separate Anti-Codex user layer can be enabled; chat history is never treated as editable instructions.
+- [x] Keep Anti-Codex tool/text-only compatibility layers read-only and identify the Antigravity provider-owned base as present but not exposed by its local API.
+- [x] Add authenticated Manager read/write endpoints and a `native-panel-v112` prompt page with save, restore-default and return controls. Source tests cover policy behavior, endpoint authorization and existing Cascade/Manager contracts.
+- [ ] Install v112 once, use real mouse input to open/scroll/edit without saving, verify required layers cannot be edited, save a harmless temporary override, read it back, restore defaults, and verify the close button still works at top/middle/bottom.
+- [ ] Prove the native Codex personalization custom-instruction setting reaches an actual Codex system/developer section. Its storage is not present as a readable field in the isolated `config.toml`, global JSON or thread database, so this remains open.

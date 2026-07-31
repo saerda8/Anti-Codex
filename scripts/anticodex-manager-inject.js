@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v111";
+  const VERSION = "native-panel-v112";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1743,7 +1743,8 @@
       #${MANAGER_ID} *{box-sizing:border-box}
       .anticodex-panel{width:min(1080px,96vw);height:min(840px,92vh);overflow:auto;border-radius:14px;background:var(--ac-bg);border:1px solid var(--ac-line-strong);box-shadow:0 28px 90px var(--ac-shadow);padding:20px}
       .anticodex-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:2px 2px 0;position:sticky;top:0;z-index:3;background:var(--ac-bg)}
-      .anticodex-head h1{font-size:20px;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;font-weight:650}.anticodex-head p{margin:0;color:var(--ac-muted);font-size:12px}
+      .anticodex-head h1{font-size:20px;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;font-weight:650}.anticodex-head p{margin:0;color:var(--ac-muted);font-size:12px}.anticodex-head-tools{display:flex;gap:8px;align-items:center}
+      .anticodex-prompt-settings{border:1px solid var(--ac-line);border-radius:9px;min-height:44px;padding:0 14px;background:var(--ac-raised);color:var(--ac-text);cursor:pointer;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif}.anticodex-prompt-settings:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}
       .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:transparent;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden;-webkit-app-region:no-drag}
       .anticodex-close::after{content:attr(aria-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ac-text);pointer-events:none}
       .anticodex-close:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}.anticodex-close:active{background:var(--ac-close-active)}.anticodex-close:focus-visible{outline:2px solid var(--ac-focus);outline-offset:2px}
@@ -1777,7 +1778,8 @@
       removeManager();
     };
     close.onclick = closeManagerFromEvent;
-    const head = el("div", { className: "anticodex-head" }, [title, close]);
+    const promptSettingsButton = el("button", { className: "anticodex-prompt-settings", type: "button", "data-anticodex-prompt-settings": "true", text: "提示词" });
+    const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [promptSettingsButton, close])]);
     const actions = el("div", { className: "anticodex-actions" });
     const grid = el("div", { className: "anticodex-grid" });
     grid.replaceChildren(card("\u6b63\u5728\u8bfb\u53d6", el("div", { className: "anticodex-result anticodex-loading", text: "\u6b63\u5728\u8bfb\u53d6\u672c\u5730\u72b6\u6001\uff0c\u9762\u677f\u4e0d\u4f1a\u6253\u5f00 ChatGPT \u767b\u5f55\u3002" })));
@@ -1810,6 +1812,7 @@
     ]);
     let actionGeneration = 0;
     let actionInFlight = false;
+    let managerView = "status";
 
     panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", resultBody));
     root.append(panel);
@@ -1837,6 +1840,7 @@
     }
 
     async function load(options = {}) {
+      if (managerView !== "status") return;
       const updateResult = options.updateResult !== false;
       const loadGeneration = actionGeneration;
       try {
@@ -2001,6 +2005,101 @@
     }
 
     window.__ANTICODEX_REFRESH_MANAGER_PANEL__ = () => load({ updateResult: false });
+
+    async function showPromptSettings() {
+      managerView = "prompts";
+      actions.style.display = "none";
+      result.classList.remove("anticodex-error");
+      result.textContent = "正在读取提示词设置...";
+      let promptResult = await safeJson("/anticodex/prompt-policy", { preferSnapshot: true });
+      if (!promptResult.ok) {
+        const snapshot = snapshotResponse("/anticodex/prompt-policy")
+          || (await refreshManagerSnapshot())?.responses?.["/anticodex/prompt-policy"];
+        if (snapshot) promptResult = { ok: true, value: snapshot };
+      }
+      if (!promptResult.ok) {
+        result.classList.add("anticodex-error");
+        result.textContent = "读取提示词设置失败：" + (promptResult.error?.message || "本地管理通道不可用");
+        return;
+      }
+
+      const payload = promptResult.value || {};
+      const policy = structuredClone(payload.policy || payload.defaults || {});
+      const defaults = structuredClone(payload.defaults || {});
+      const snapshotLayers = Array.isArray(payload.snapshot?.layers) ? payload.snapshot.layers : [];
+      const layerById = new Map(snapshotLayers.map((layer) => [String(layer.id || ""), layer]));
+      const fieldStyle = "width:100%;min-height:150px;resize:vertical;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-input-bg);color:var(--ac-text);padding:10px 11px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace";
+      const editor = (id, title) => {
+        const current = policy[id] || defaults[id];
+        const observed = layerById.get(id);
+        const enabled = el("input", { type: "checkbox" });
+        enabled.checked = current?.enabled !== false;
+        const useDefault = el("input", { type: "checkbox" });
+        useDefault.checked = current?.content === null;
+        const textarea = el("textarea", { style: fieldStyle, value: current?.content ?? observed?.defaultContent ?? "", placeholder: "当前运行时尚未观察到这一层。" });
+        const refresh = () => { textarea.disabled = !enabled.checked || useDefault.checked; };
+        enabled.onchange = refresh;
+        useDefault.onchange = refresh;
+        refresh();
+        return {
+          node: card(title, el("div", { style: "display:grid;gap:9px" }, [
+            el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [enabled, el("span", { text: "启用" })]),
+            el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [useDefault, el("span", { text: "沿用 Codex 当前默认内容" })]),
+            textarea,
+            el("div", { className: "anticodex-result", text: observed ? `最近观察：${observed.sha256?.slice(0, 12) || "无哈希"}` : "当前运行时尚未捕获该层；首次 Antigravity 请求后会显示。" }),
+          ])),
+          value: () => ({ enabled: enabled.checked, content: useDefault.checked ? null : textarea.value }),
+        };
+      };
+      const system = editor("codexSystem", "Codex 系统提示词");
+      const developer = editor("codexDeveloper", "Codex 开发者提示词");
+      const userEnabled = el("input", { type: "checkbox" });
+      userEnabled.checked = policy.user?.enabled === true;
+      const userText = el("textarea", { style: fieldStyle, value: policy.user?.content || "", placeholder: "这里的内容只注入 Anti-Codex，不修改原生 Codex。" });
+      const refreshUser = () => { userText.disabled = !userEnabled.checked; };
+      userEnabled.onchange = refreshUser;
+      refreshUser();
+      const saveButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "保存" });
+      const restoreButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "恢复默认" });
+      const backButton = el("button", { type: "button", className: "anticodex-prompt-settings", text: "返回状态" });
+      const save = async (nextPolicy) => {
+        for (const button of [saveButton, restoreButton, backButton]) button.disabled = true;
+        result.textContent = "正在保存提示词设置...";
+        try {
+          const saved = await managerPostJson("/anticodex/prompt-policy", nextPolicy, { retryCandidates: false });
+          result.classList.remove("anticodex-error");
+          result.textContent = saved.message || "提示词设置已保存。";
+          window.__ANTICODEX_MANAGER_SNAPSHOT__ = null;
+        } catch (error) {
+          result.classList.add("anticodex-error");
+          result.textContent = "保存失败：" + error.message;
+        } finally {
+          for (const button of [saveButton, restoreButton, backButton]) button.disabled = false;
+        }
+      };
+      saveButton.onclick = () => save({ schema: payload.schema, codexSystem: system.value(), codexDeveloper: developer.value(), user: { enabled: userEnabled.checked, content: userText.value } });
+      restoreButton.onclick = () => save(defaults);
+      backButton.onclick = async () => {
+        managerView = "status";
+        actions.style.display = "";
+        await load();
+      };
+      const required = snapshotLayers.filter((layer) => layer.required).map((layer) => card(layer.title || "必需兼容层", el("pre", { className: "anticodex-result", text: layer.effectiveContent || "" })));
+      grid.replaceChildren(
+        system.node,
+        developer.node,
+        card("Anti-Codex 用户提示词", el("div", { style: "display:grid;gap:9px" }, [
+          el("label", { style: "display:flex;gap:7px;align-items:center" }, [userEnabled, el("span", { text: "启用" })]),
+          userText,
+        ])),
+        card("Antigravity 提供方底层", el("div", { className: "anticodex-result anticodex-warn", text: payload.providerBase?.message || "提供方未暴露。" })),
+        ...required,
+        card("操作", el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveButton, restoreButton, backButton])),
+      );
+      result.textContent = payload.snapshot ? "已读取最近一次实际提示词分层。" : "设置可用；当前尚无运行时提示词快照。";
+    }
+
+    promptSettingsButton.onclick = () => { void showPromptSettings(); };
 
     async function showUpstreamConfig() {
       await ensureSnapshotForLoad();

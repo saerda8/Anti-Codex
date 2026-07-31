@@ -369,6 +369,7 @@ async function injectOnce() {
           "/models",
           "/anticodex/diagnostics",
           "/anticodex/upstream-profile",
+          "/anticodex/prompt-policy",
           "/anticodex/model-routes",
           "/anticodex/local-connectors/allowlist",
           "/backend-api/ps/plugins/installed",

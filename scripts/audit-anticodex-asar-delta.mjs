@@ -131,7 +131,7 @@ function markerDelta(left, right) {
     "AntiCodex",
     "__ANTICODEX_OPEN_MANAGER__",
     "anticodex-manager",
-    "native-panel-v111",
+    "native-panel-v112",
     "Manager",
     "\\u7ba1\\u7406",
     "管理",

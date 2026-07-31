@@ -15,6 +15,10 @@ import {
 } from "../antigravity-native-mcp-bridge.mjs";
 import { DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS } from "../antigravity-contract.mjs";
 import { extractAvailableAgentModels } from "../antigravity-model-catalog.mjs";
+import {
+  applyPromptPolicy,
+  recordPromptSnapshot,
+} from "./anticodex-prompt-policy.mjs";
 
 const SERVICE_PREFIX = "/exa.language_server_pb.LanguageServerService";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -48,6 +52,7 @@ export function createAntigravityCascadeClient(options = {}) {
   const createToolBridge = options.createToolBridge ?? createAntigravityNativeMcpBridge;
   const defaultTimeoutMs = positiveInteger(options.timeoutMs, DEFAULT_TIMEOUT_MS);
   const pollIntervalMs = positiveInteger(options.pollIntervalMs, 500);
+  const promptStateRoot = resolvePromptStateRoot(options.env ?? process.env);
   let cachedConnection = explicitConnection;
 
   const connection = () => {
@@ -102,10 +107,12 @@ export function createAntigravityCascadeClient(options = {}) {
     const modelEntries = await listModels({ signal, timeoutMs: request.modelTimeoutMs });
     const model = resolveModel(modelEntries, request.model);
     const activeConnection = connection();
+    const originalPromptSections = renderSystemPromptSections(request.systemSections);
     const systemPromptSections = withToolCompatibilitySection(
-      renderSystemPromptSections(request.systemSections),
+      applyPromptPolicy(originalPromptSections, promptStateRoot),
       request.tools,
     );
+    recordPromptSnapshot(promptStateRoot, originalPromptSections, systemPromptSections);
     let bridge = null;
     let continuation = null;
 
@@ -231,6 +238,11 @@ export function createAntigravityCascadeClient(options = {}) {
   }
 
   return { listModels, getReadiness, start, resume, cancel };
+}
+
+function resolvePromptStateRoot(env) {
+  const appData = String(env.APPDATA || process.env.APPDATA || "").trim();
+  return String(env.DEEPCODEX_STATE_ROOT || join(appData, "anticodex")).trim();
 }
 
 async function* observeCascade(continuation, options) {

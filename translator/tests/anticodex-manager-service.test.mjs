@@ -576,6 +576,44 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     token = body.token;
   });
 
+  await t.test("prompt policy is isolated, authenticated, and restorable", async () => {
+    const denied = await fetch(`${baseUrl}/anticodex/prompt-policy`);
+    assert.equal(denied.status, 403);
+
+    const initialResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, { headers: { origin: baseUrl } });
+    assert.equal(initialResponse.status, 200);
+    const initial = await initialResponse.json();
+    assert.equal(initial.policy.codexSystem.enabled, true);
+    assert.equal(initial.providerBase.exposed, false);
+
+    const invalidToken = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseUrl, "x-anticodex-manager-token": "bad" },
+      body: JSON.stringify(initial.defaults),
+    });
+    assert.equal(invalidToken.status, 403);
+
+    const changed = {
+      ...initial.defaults,
+      codexDeveloper: { enabled: true, content: "local override" },
+    };
+    const saveResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseUrl, "x-anticodex-manager-token": token },
+      body: JSON.stringify(changed),
+    });
+    assert.equal(saveResponse.status, 200);
+    assert.equal((await saveResponse.json()).policy.codexDeveloper.content, "local override");
+
+    const restoreResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseUrl, "x-anticodex-manager-token": token },
+      body: JSON.stringify(initial.defaults),
+    });
+    assert.equal(restoreResponse.status, 200);
+    assert.equal((await restoreResponse.json()).policy.codexDeveloper.content, null);
+  });
+
   await t.test("upstream test falls back from an undersized caller timeout without aborting the local probe", async () => {
     const providerServer = createServer((_req, res) => {
       setTimeout(() => {
