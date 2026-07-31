@@ -3203,3 +3203,26 @@ Status: completed_for_current_release_acceptance; later entries record the same-
 - Real Manager `检查更新` reports no update: official/active Codex `26.721.4979.0`, CLI `0.146.0-alpha.3.1`, and project/installed/remote CodexPlusPlus `1.2.43`. Real Manager `检查安装/同步` passes with matching host/CLI hashes and exactly one non-stale Manager bridge.
 - Fresh source preflight passes `855/855`; installed overall, sync-readiness, and source/installed legacy-zero-hit reports all pass without model traffic. Source/installed hashes match for the fixed-route supervisor and Manager injector. Exactly one Anti-Codex root is present, original Codex PID `24324` remains alive, no Anti-Codex Docker entries exist, and `R:` is not substituted.
 - The defined release acceptance is now **100%**. This is a current verified milestone, not a promise that future Codex or CodexPlusPlus releases require no validation; each upstream change must continue through the same check, candidate, guarded sync, and rollback gates.
+## 2026-08-01 Final 100% Reopen And Evidence Plan
+
+Status: **reopened; not 100%**. The earlier 100% statement covered narrower gates and is superseded by this checklist. No later status may say 100% until every item below has current, independently checked evidence.
+
+Architecture remains locked: copied official Codex shell -> independently updated CodexPlusPlus -> thin Antigravity adapter. Do not add a task controller, rewrite the translator, or modify native Codex.
+
+- [x] Checkpoint the CodexPlusPlus v1.2.44 source/candidate update (`6f7dbbb6`) and keep the worktree clean.
+- [ ] Make the built-in Manager update path actually dispatch and activate CodexPlusPlus v1.2.44; reject UI-only success and verify the installed binary/version/hash.
+- [ ] Capture the effective prompt at three boundaries without model traffic: Codex-originated system/developer content, Anti-Codex transformed content, and the final Antigravity Custom Agent request.
+- [ ] Classify every prompt layer by source and purpose: user custom instructions, identity/style, task methodology, tool/protocol requirements, safety/permission rules, Anti-Codex compatibility text, and any Antigravity-owned built-in instruction.
+- [ ] Prove whether Antigravity adds another hidden instruction layer and whether Anti-Codex preserves, removes, or duplicates it. Do not remove or add prompt text before this evidence exists.
+- [ ] Prove Codex native custom instructions are effective in Anti-Codex. Audit the remaining native settings; repair valid settings, and hide or disable settings that cannot work, with a visible reason.
+- [ ] Add one Manager prompt surface that shows source, default content, effective content and enabled state; allow safe textual layers to be edited/disabled and restored to default. Show required tool/protocol/permission layers separately and protect changes that would break execution.
+- [ ] Physically test every Manager control, including check update and sync update. Each action must show the current version, whether an update is needed, progress, final result and actionable error; opening an unexplained Node window is a failure.
+- [ ] Re-run copied-shell startup/minimize/restore/flicker, one-visible-instance, desktop shortcut, tray/taskbar icon, shutdown/restart and native-Codex-survival checks.
+- [ ] Re-run product isolation: zero development MCP workers, no sealed xiaoqiang workers, isolated plugins/MCP/skills/settings/state, no `R:` persistence and zero Anti-Codex Docker residue.
+- [ ] Exercise Gemini, Claude and saved third-party routing through the composer model menu. Priority remains Gemini -> Claude -> third-party, with no paid traffic used for routine checks.
+- [ ] Re-run source, installed, legacy-zero-hit and release gates against the active official Codex and CodexPlusPlus versions; record exact versions and hashes.
+- [ ] Remove only verified obsolete rebase/build/cache artifacts after installed acceptance; preserve user outputs and unrelated containers/processes.
+- [ ] Continue the existing autonomous Anti-Codex long task without host micro-planning. Independently accept only the actual media, raw ASR, lip-sync evidence, media QA, hashes, package and same-task tool evidence.
+- [ ] Perform one final whole-project diff/code review and smoke pass, then create a clean checkpoint. Only then may the release status be changed to 100%.
+
+Current baseline: branch `main`, HEAD `6f7dbbb6a05dc0f5fbdc8ccbcdf1e018e0a619a9`, clean worktree at plan reopen. CodexPlusPlus source/candidate is v1.2.44, while the active product component was last observed at v1.2.43; this mismatch is an open release blocker.
