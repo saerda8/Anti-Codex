@@ -3319,7 +3319,7 @@ Open work, in fixed order:
 - [ ] Physically exercise every embedded and fallback Manager control. Update checks and sync actions must show exact versions, update-needed state, progress, terminal result and actionable errors; no unexplained console window, silent click or duplicate paid probe is acceptable.
 - [x] Repair the confirmed connector-editor `ReferenceError`: the helper now receives its result/reload/serialization dependencies explicitly, and a real-handler regression proves one save, one reload and one visible result.
 - [x] Use one Manager-wide busy state for actions, prompt reads/writes, connector changes and third-party test/save; periodic status requests now stop before occupying the serial bridge while any form/view is busy. The complete Manager bridge contract passes `56/56`.
-- [ ] Make third-party testing explicitly disclose one real minimal request and reuse one fresh key/model/base-URL fingerprint during save. Never spend a second identical provider request for the same confirmed configuration.
+- [x] Make third-party testing explicitly disclose one real minimal request and reuse one fresh protocol/final-URL/model/context/key fingerprint during save. The two-minute success evidence is salted, memory-only and one-shot; direct/repeated/changed saves fail closed without secretly probing again. Service coverage passes `26/26` and Manager/provider contracts pass `65/65` against loopback fakes only.
 - [ ] Make fallback `刷新状态` fetch and render real health/diagnostic state rather than accepting the service's virtual no-op result, and give fallback/background actions the same terminal-result behavior as the embedded panel.
 - [ ] Expand pending-action report reconciliation to every action that already emits a latest report. A missing report is `unknown`, not an invented failure.
 - [ ] Reaccept official Codex and CodexPlusPlus independent update lanes, source/active versions and hashes, fail-closed rollback state, and the built-in guarded update workflow. Future upstream releases remain subject to the same gates.
@@ -3351,3 +3351,10 @@ Candidate recovery update: the existing content-addressed `1.2.44` candidate had
 - [ ] Add a service-side shared real-traffic mutex for stability and full-verification actions. UI locking alone must not permit two paid provider jobs to overlap.
 
 The candidate quarantine is now a formal release blocker, not a request to disable or bypass endpoint protection. The project remains **not 100%**.
+
+### 2026-08-01 Current clean source gate and single-probe Manager save
+
+- [x] Bind the candidate launch gate and Manager connector/serialization repairs to clean commits `3679599` and `0d3ec2a`.
+- [x] Run one complete clean no-traffic source preflight on `0d3ec2a`: `890/890`, `noTraffic:true`, `usedRealTraffic:false`, zero failures and zero warnings.
+- [x] Replace the duplicate third-party save probe with one short-lived, one-shot in-memory success proof. Saving never switches the active model and never writes the proof or API key to reports/logs.
+- [ ] Checkpoint the single-probe repair, rerun the clean source gate once after the remaining Manager truth fixes are grouped, and keep installed activation deferred until those source changes are complete.

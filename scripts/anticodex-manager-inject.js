@@ -2201,7 +2201,7 @@
       updateProviderModelList(saved.capabilities?.providerModels || []);
       const contextWindow = el("input", { style: fieldStyle, type: "number", min: "16000", max: "4000000", step: "1000", value: String(saved.contextWindow || 272000), placeholder: "272000" });
       const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
-      const stageBox = el("pre", { className: "anticodex-result", text: "先点“测试连通”。测试不会保存配置，也不会切换当前会话。" });
+      const stageBox = el("pre", { className: "anticodex-result", text: "“测试连通”会发送一次最小真实请求；测试成功后，“保存配置”复用这次结果，不会再次请求，也不会切换当前会话。" });
       const testButton = el("button", { type: "button", text: "测试连通" });
       const saveButton = el("button", { type: "button", text: "保存配置" });
       saveButton.disabled = true;
@@ -2233,7 +2233,7 @@
         lastStages = [];
         testedFingerprint = "";
         stageBox.classList.remove("anticodex-error");
-        stageBox.textContent = "配置已修改，请重新测试。";
+        stageBox.textContent = "配置已修改，请重新测试；测试会发送一次最小真实请求。";
         refreshUpstreamConfigControls();
       };
       protocol.onchange = () => {

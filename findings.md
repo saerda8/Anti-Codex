@@ -3573,3 +3573,11 @@
 - Account, Security, Usage and Profile still lead to OpenAI/ChatGPT account surfaces rather than the active Gemini/Claude/third-party route and quota. They must be hidden or explicitly labeled as external official-account settings.
 - Language storage is real, but “automatic” is not: the branded shell and launch arguments force `zh-CN`. Personality and Memory have real native storage paths, yet their effect across all three provider lanes remains unproved.
 - Notifications, theme, font, reduced motion, MCP, Hooks, shortcuts, Git, Worktree, local environment and data controls have real code paths but still need physical per-control smoke tests. Plugins/Skills and conditional cloud, voice, browser and connection surfaces should remain hidden until supported and accepted.
+
+## 2026-08-01 Clean source gate and one-request third-party setup
+
+- Clean commit `0d3ec2a` passes the complete source preflight `890/890` with `noTraffic:true`, `usedRealTraffic:false`, zero failures and zero warnings. The report binds the committed candidate launch and Manager connector/serialization repairs rather than a dirty tree.
+- The duplicate provider call was server-side, not a model-menu problem: `/anticodex/upstream-test` performed one probe and `/anticodex/upstream-profile` unconditionally performed the same probe again.
+- Manager service now retains only one successful proof for two minutes. Its HMAC fingerprint binds normalized protocol/final request URL/model plus context window and the resolved key; the random salt and proof stay in process memory, and sanitized stages are the only reusable result.
+- Saving atomically consumes the proof. Untested, repeated, changed, expired or post-restart saves require another explicit test and never silently issue a provider request. The UI now discloses that testing sends one minimal real request and saving reuses it.
+- RED first proved an untested save still returned 200. GREEN proves direct/repeated/changed saves return 400 without a provider call, while each test/save cycle uses exactly one loopback request. Service coverage passes `26/26`; Manager/provider contracts pass `65/65`; no real provider traffic was used.

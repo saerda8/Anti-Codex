@@ -35,6 +35,13 @@ test("Manager labels third-party routes as Chat Completions or Responses", () =>
   assert.doesNotMatch(managerUi, /value:\s*"anthropic"/);
 });
 
+test("Manager discloses one real probe and reuses it during save", () => {
+  assert.match(managerUi, /发送一次最小真实请求/);
+  assert.match(managerUi, /保存配置.*复用这次结果.*不会再次请求/);
+  assert.match(controlApi, /UPSTREAM_TEST_EVIDENCE_TTL_MS/);
+  assert.match(controlApi, /createHmac\("sha256", upstreamTestEvidenceSalt\)/);
+});
+
 test("third-party profiles carry an explicit context window", () => {
   assert.match(profile, /\[int\]\$ContextWindow\s*=\s*272000/);
   assert.match(profile, /contextWindow\s*=\s*\$ContextWindow/);

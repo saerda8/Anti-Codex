@@ -686,7 +686,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     }
   });
 
-  await t.test("profile save persists only discovered capabilities and bounds its caller timeout", async () => {
+  await t.test("profile save reuses one fresh successful probe and never sends a duplicate provider request", async () => {
     const fixture = createSaveOnlyFixture();
     const settingsPath = path.join(tempDir, "codexplusplus", "settings.json");
     const catalogPath = path.join(tempDir, "codex-home-deepseek-app", "anticodex-model-catalog.json");
@@ -695,7 +695,9 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     fs.copyFileSync(fixture.settingsPath, settingsPath);
     fs.copyFileSync(fixture.catalogPath, catalogPath);
 
+    let providerRequests = 0;
     const providerServer = createServer((_req, res) => {
+      providerRequests += 1;
       setTimeout(() => {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
@@ -720,10 +722,32 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       },
       body: JSON.stringify(body),
     });
+    const testProfile = (body) => fetch(`${baseUrl}/anticodex/upstream-test`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: baseUrl,
+        "x-anticodex-manager-token": token,
+      },
+      body: JSON.stringify(body),
+    });
     try {
+      const untested = await saveProfile(profileBody);
+      assert.equal(untested.status, 400);
+      assert.equal(providerRequests, 0);
+
+      const tested = await testProfile(profileBody);
+      assert.equal(tested.status, 200);
+      assert.equal((await tested.json()).ok, true);
+      assert.equal(providerRequests, 1);
+
       const response = await saveProfile(profileBody);
       assert.equal(response.status, 200);
+      assert.equal(providerRequests, 1);
       assert.doesNotMatch(await response.text(), /secretNote|must-not-persist/);
+      const repeatedSave = await saveProfile(profileBody);
+      assert.equal(repeatedSave.status, 400);
+      assert.equal(providerRequests, 1);
 
       const persisted = JSON.parse(fs.readFileSync(path.join(tempDir, "upstream-profile.json"), "utf8"));
       assert.deepEqual(Object.keys(persisted.capabilities).sort(), ["connectionStages", "providerModels"]);
@@ -733,8 +757,16 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.equal(publicResponse.status, 200);
       assert.doesNotMatch(await publicResponse.text(), /secretNote|must-not-persist/);
 
+      const boundedTest = await testProfile({ ...profileBody, capabilities: {}, timeoutMs: 1 });
+      assert.equal((await boundedTest.json()).ok, true);
+      const changedAfterTest = await saveProfile({ ...profileBody, contextWindow: 256_000 });
+      assert.equal(changedAfterTest.status, 400);
+      assert.equal(providerRequests, 2);
+      const retested = await testProfile({ ...profileBody, capabilities: {}, timeoutMs: 1 });
+      assert.equal((await retested.json()).ok, true);
       const boundedResponse = await saveProfile({ ...profileBody, capabilities: {}, timeoutMs: 1 });
       assert.equal(boundedResponse.status, 200);
+      assert.equal(providerRequests, 3);
     } finally {
       await closeServer(providerServer);
       fs.rmSync(fixture.tempDir, { recursive: true, force: true });

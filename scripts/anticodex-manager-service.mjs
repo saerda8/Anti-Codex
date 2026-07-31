@@ -6,7 +6,10 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { testCodexPlusPlusUpstreamConnection } from "../translator/provider/codexplusplus-upstream-probe.mjs";
+import {
+    buildCodexPlusPlusProbeRequest,
+    testCodexPlusPlusUpstreamConnection,
+} from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
 import {
     promptPolicyPayload,
@@ -34,6 +37,7 @@ const STARTUP_SNAPSHOT_SCHEMA = "anticodex-startup-snapshots-ready-v1";
 const SNAPSHOT_SOURCE_CHECK_CACHE = new Map();
 const SNAPSHOT_SOURCE_CHECK_MAX_AGE_MS = 5 * 60 * 1000;
 const SNAPSHOT_SOURCE_CHECK_FAILURE_MAX_AGE_MS = 15 * 1000;
+const UPSTREAM_TEST_EVIDENCE_TTL_MS = 2 * 60 * 1000;
 
 const MANAGER_ACTIONS = Object.freeze({
     refreshStatus: {
@@ -1790,6 +1794,19 @@ export function createAntiCodexManagerService(options = {}) {
     throw new Error("Anti-Codex Manager must listen on an explicit loopback address.");
   }
   const managerActionToken = crypto.randomBytes(32).toString("base64url");
+  const upstreamTestEvidenceSalt = crypto.randomBytes(32);
+  let upstreamTestEvidence = null;
+  let upstreamTestGeneration = 0;
+  const upstreamTestFingerprint = (profile, contextWindow) => {
+    const request = buildCodexPlusPlusProbeRequest(profile);
+    return crypto.createHmac("sha256", upstreamTestEvidenceSalt).update(JSON.stringify([
+      request.protocol,
+      request.url,
+      request.body.model,
+      String(contextWindow ?? "").trim(),
+      request.apiKey,
+    ])).digest("hex");
+  };
   let resolvedPort = listenPort;
   const stateRoot = options.stateRoot ? path.resolve(options.stateRoot) : (process.env.DEEPCODEX_STATE_ROOT || path.join(process.env.APPDATA || "", "anticodex"));
   const codexHome = options.codexHome ? path.resolve(options.codexHome) : path.join(stateRoot, "codex-home-deepseek-app");
@@ -2034,6 +2051,8 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "POST" && pathname === "/anticodex/upstream-test") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      const testGeneration = ++upstreamTestGeneration;
+      upstreamTestEvidence = null;
       try {
         const raw = await readRequestBody(req);
         const body = JSON.parse(raw.toString("utf8") || "{}");
@@ -2051,6 +2070,13 @@ export function createAntiCodexManagerService(options = {}) {
         const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs) });
         const ok = stages.length > 0 && stages.every((stage) => stage.status !== "fail");
         const sanitizedStages = sanitizedConnectionStages(stages);
+        if (ok && testGeneration === upstreamTestGeneration) {
+          upstreamTestEvidence = {
+            fingerprint: upstreamTestFingerprint(profile, body.contextWindow),
+            stages: sanitizedStages,
+            expiresAt: Date.now() + UPSTREAM_TEST_EVIDENCE_TTL_MS,
+          };
+        }
         return jsonResponse(res, 200, { ok, stages: sanitizedStages, summary: upstreamConnectionSummary(sanitizedStages) }, req);
       } catch (error) {
         return jsonResponse(res, 200, {
@@ -2063,6 +2089,9 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "POST" && pathname === "/anticodex/upstream-profile") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      upstreamTestGeneration += 1;
+      const testEvidence = upstreamTestEvidence;
+      upstreamTestEvidence = null;
       let saveSnapshots = null;
       try {
         const raw = await readRequestBody(req);
@@ -2084,11 +2113,14 @@ export function createAntiCodexManagerService(options = {}) {
           apiKey,
           model: body.model,
         };
-        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs) });
-        const testStatus = stages.length && stages.every((stage) => stage.status !== "fail") ? "success" : "pending";
-        if (testStatus !== "success") {
+        const testEvidenceFresh = testEvidence && testEvidence.expiresAt >= Date.now();
+        const testEvidenceMatches = testEvidenceFresh
+          && testEvidence.fingerprint === upstreamTestFingerprint(profile, body.contextWindow);
+        if (!testEvidenceMatches) {
           return jsonResponse(res, 400, { ok: false, message: "请先完成“测试连通”，确认接口可用后再保存。" }, req);
         }
+        const stages = testEvidence.stages;
+        const testStatus = "success";
         const capabilities = {
           connectionStages: sanitizedConnectionStages(stages),
           providerModels: providerModelIdsFromConnectionStages(stages, body.model),
