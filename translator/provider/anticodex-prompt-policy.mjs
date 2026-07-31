@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const SCHEMA = "anticodex-prompt-policy-v1";
@@ -36,6 +36,37 @@ export function savePromptPolicy(stateRoot, value) {
   writeFileSync(temporary, `${JSON.stringify(policy, null, 2)}\n`, "utf8");
   renameSync(temporary, target);
   return policy;
+}
+
+export function readNativeCustomInstructions(codexHome) {
+  const target = nativeCustomInstructionsPath(codexHome);
+  try {
+    if (!lstatSync(target).isFile()) throw new Error("隔离 AGENTS.md 必须是普通文件。");
+    return readFileSync(target, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return "";
+    throw error;
+  }
+}
+
+export function saveNativeCustomInstructions(codexHome, value) {
+  if (typeof value !== "string") throw new Error("原生自定义指令必须是文本。");
+  if (value.length > MAX_CONTENT_LENGTH) throw new Error("原生自定义指令不能超过 100000 个字符。");
+  const target = nativeCustomInstructionsPath(codexHome);
+  if (existsSync(target) && !lstatSync(target).isFile()) throw new Error("隔离 AGENTS.md 必须是普通文件。");
+  if (!value) {
+    rmSync(target, { force: true });
+    return "";
+  }
+  mkdirSync(resolve(codexHome), { recursive: true });
+  const temporary = `${target}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, value, "utf8");
+    renameSync(temporary, target);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+  return value;
 }
 
 export function applyPromptPolicy(sections, stateRoot) {
@@ -83,15 +114,33 @@ export function recordPromptSnapshot(stateRoot, originalSections, effectiveSecti
   return value;
 }
 
-export function promptPolicyPayload(stateRoot) {
+export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoot), "codex-home-deepseek-app")) {
   let snapshot = null;
   try { snapshot = JSON.parse(readFileSync(snapshotPath(stateRoot), "utf8")); } catch {}
+  const nativeContent = readNativeCustomInstructions(codexHome);
   return {
     ok: true,
     schema: SCHEMA,
     policy: readPromptPolicy(stateRoot),
     defaults: defaultPromptPolicy(),
     snapshot,
+    nativeCustomInstructions: {
+      source: "AGENTS.md",
+      enabled: Boolean(nativeContent.trim()),
+      content: nativeContent,
+      defaultContent: "",
+    },
+    capabilities: {
+      nativeCustomInstructions: {
+        routes: ["antigravity", "third-party"],
+        effectiveFrom: "next_native_request",
+      },
+      mergedPromptPolicy: {
+        routes: ["antigravity"],
+        independentDeveloper: false,
+        effectiveFrom: "next_new_cascade",
+      },
+    },
     providerBase: {
       id: "antigravityProviderBase",
       source: "Antigravity",
@@ -146,3 +195,4 @@ function snapshotLayers(originalSections, effectiveSections) {
 
 function policyPath(stateRoot) { return join(resolve(stateRoot), "prompt-policy.json"); }
 function snapshotPath(stateRoot) { return join(resolve(stateRoot), "prompt-snapshot.json"); }
+function nativeCustomInstructionsPath(codexHome) { return join(resolve(codexHome), "AGENTS.md"); }

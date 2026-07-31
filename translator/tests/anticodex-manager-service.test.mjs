@@ -236,6 +236,26 @@ test("local connector verifier recognizes the deliberate offline Manager health 
   assert.doesNotMatch(code, /response\.ok\s*\|\|\s*response\.status\s*===\s*503/);
 });
 
+test("Manager accepts dot-prefixed isolated homes but rejects custom instructions outside its state root", () => {
+  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-manager-home-boundary-"));
+  try {
+    assert.doesNotThrow(() => createAntiCodexManagerService({
+      host: "127.0.0.1",
+      port: 0,
+      stateRoot,
+      codexHome: path.join(stateRoot, "..custom-home"),
+    }));
+    assert.throws(() => createAntiCodexManagerService({
+      host: "127.0.0.1",
+      port: 0,
+      stateRoot,
+      codexHome: path.resolve(stateRoot, "..", "outside-home"),
+    }), /inside the isolated state root/i);
+  } finally {
+    fs.rmSync(stateRoot, { recursive: true, force: true });
+  }
+});
+
 test("snapshot freshness is fail-closed until an explicit source check proves the marker", async () => {
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-snapshot-status-"));
   const codexHome = path.join(stateRoot, "codex-home-deepseek-app");
@@ -577,6 +597,10 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
   });
 
   await t.test("prompt policy is isolated, authenticated, and restorable", async () => {
+    const codexHome = path.join(tempDir, "codex-home-deepseek-app");
+    const agentsPath = path.join(codexHome, "AGENTS.md");
+    fs.mkdirSync(codexHome, { recursive: true });
+    fs.writeFileSync(agentsPath, "initial local instructions", "utf8");
     const denied = await fetch(`${baseUrl}/anticodex/prompt-policy`);
     assert.equal(denied.status, 403);
 
@@ -585,6 +609,8 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const initial = await initialResponse.json();
     assert.equal(initial.policy.codexSystem.enabled, true);
     assert.equal(initial.providerBase.exposed, false);
+    assert.equal(initial.nativeCustomInstructions.content, "initial local instructions");
+    assert.equal(initial.nativeCustomInstructions.enabled, true);
 
     const invalidToken = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
       method: "POST",
@@ -596,6 +622,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const changed = {
       ...initial.defaults,
       codexDeveloper: { enabled: true, content: "local override" },
+      nativeCustomInstructions: { content: "edited local instructions" },
     };
     const saveResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
       method: "POST",
@@ -603,15 +630,29 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       body: JSON.stringify(changed),
     });
     assert.equal(saveResponse.status, 200);
-    assert.equal((await saveResponse.json()).policy.codexDeveloper.content, "local override");
+    const saved = await saveResponse.json();
+    assert.equal(saved.policy.codexDeveloper.content, "local override");
+    assert.equal(saved.nativeCustomInstructions.content, "edited local instructions");
+    assert.equal(fs.readFileSync(agentsPath, "utf8"), "edited local instructions");
+
+    const legacySaveResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: baseUrl, "x-anticodex-manager-token": token },
+      body: JSON.stringify({ ...initial.defaults, codexSystem: { enabled: false, content: null } }),
+    });
+    assert.equal(legacySaveResponse.status, 200);
+    assert.equal(fs.readFileSync(agentsPath, "utf8"), "edited local instructions");
 
     const restoreResponse = await fetch(`${baseUrl}/anticodex/prompt-policy`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: baseUrl, "x-anticodex-manager-token": token },
-      body: JSON.stringify(initial.defaults),
+      body: JSON.stringify({ ...initial.defaults, nativeCustomInstructions: { content: "" } }),
     });
     assert.equal(restoreResponse.status, 200);
-    assert.equal((await restoreResponse.json()).policy.codexDeveloper.content, null);
+    const restored = await restoreResponse.json();
+    assert.equal(restored.policy.codexDeveloper.content, null);
+    assert.equal(restored.nativeCustomInstructions.enabled, false);
+    assert.equal(fs.existsSync(agentsPath), false);
   });
 
   await t.test("upstream test falls back from an undersized caller timeout without aborting the local probe", async () => {

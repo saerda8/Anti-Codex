@@ -35,6 +35,8 @@ const managerBridgePath = resolve(root, "scripts", "anticodex-manager-bridge.mjs
 test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns the copied client", () => {
   const source = readFileSync(supervisorPath, "utf8");
   assert.match(source, /startAntigravityChatProvider/);
+  assert.match(source, /nativeCustomInstructions/);
+  assert.match(source, /readNativeCustomInstructions\(plan\.paths\.codexHome\)/);
   assert.match(source, /createAntiCodexManagerService/);
   assert.match(source, /await managerService\.listen\(\)/);
   assert.match(source, /refreshModels:\s*\(\)\s*=>\s*refreshModelsCallback\(\)/);

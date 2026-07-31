@@ -282,7 +282,7 @@ try {
           ? closeScroll.scrollTop > 0 && closeScroll.scrollTop < maxScroll
           : closeScroll.scrollTop >= maxScroll;
       result = {
-        ok: positionOk && promptView.version === "native-panel-v112",
+        ok: positionOk && promptView.version === "native-panel-v113",
         port,
         target: { id: target.id, title: target.title, url: target.url },
         profileEntry: managerEntryPoint.text,
@@ -402,7 +402,7 @@ try {
     result = {
       ok: middleScrollTop > initialScrollTop
         && bottomState.scrollTop >= middleScrollTop
-        && promptView.version === "native-panel-v112",
+        && promptView.version === "native-panel-v113",
       port,
       target: { id: target.id, title: target.title, url: target.url },
       profileEntry: managerEntryPoint.text,

@@ -20,6 +20,7 @@ import { pathToFileURL } from "node:url";
 
 import { buildAntigravityModelCatalog } from "../translator/antigravity-model-catalog.mjs";
 import { createAntigravityCascadeClient } from "../translator/provider/antigravity-cascade-client.mjs";
+import { readNativeCustomInstructions } from "../translator/provider/anticodex-prompt-policy.mjs";
 import { startAntigravityChatProvider } from "../translator/provider/start-antigravity-chat-provider.mjs";
 import { createAntiCodexManagerService } from "./anticodex-manager-service.mjs";
 import { ownerProcessIsAlive } from "./lib/anticodex-owner-process.mjs";
@@ -642,6 +643,7 @@ async function runSupervisor(plan) {
       host: managerUrl.hostname,
       port: Number(managerUrl.port || 80),
       stateRoot: plan.paths.stateRoot,
+      codexHome: plan.paths.codexHome,
       fixedHealthUrl: `http://127.0.0.1:${plan.ports.health}/anticodex/fixed-route/health`,
       adapterAuthToken: plan.route.localProxyKey,
       refreshModels: () => refreshModelsCallback(),
@@ -683,6 +685,9 @@ async function runSupervisor(plan) {
       host: "127.0.0.1",
       port: plan.ports.adapter,
       authToken: plan.route.localProxyKey,
+      adapterOptions: {
+        nativeCustomInstructions: () => readNativeCustomInstructions(plan.paths.codexHome),
+      },
     });
 
     const thirdPartyRoute = plan.relayRoutes.find((entry) => entry.profileId === THIRD_PARTY_RELAY_ID) ?? null;

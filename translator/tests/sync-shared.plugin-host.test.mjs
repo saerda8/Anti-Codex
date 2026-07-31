@@ -8,6 +8,9 @@ import { createHash } from "node:crypto";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const syncScript = resolve(root, "scripts", "sync-shared-codex-plugin-host.mjs");
+const sourceSnapshotScript = resolve(root, "scripts", "anticodex-source-snapshot.ps1");
+const refreshFeaturesScript = resolve(root, "scripts", "refresh-anticodex-local-features.ps1");
+const mcpSkillsVerifier = resolve(root, "scripts", "test-anticodex-mcp-skills.ps1");
 
 function tmpDir() {
   return mkdtempSync(resolve(tmpdir(), "anticodex-skills-test-"));
@@ -254,6 +257,8 @@ test("full sync imports all runtime snapshots as local copies", () => {
   for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
     writeFileSync(resolve(sharedHome, name), `${name} shared`);
   }
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(resolve(codexHome, "AGENTS.md"), "user custom instructions");
 
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome], {
@@ -304,28 +309,23 @@ test("full sync imports all runtime snapshots as local copies", () => {
     assert.ok(!lstatSync(resolve(codexHome, ".tmp", "plugins")).isSymbolicLink());
     assert.ok(!lstatSync(resolve(codexHome, "computer-use")).isSymbolicLink());
     assert.throws(() => statSync(resolve(skillsPath, "legacy", ".git")), /ENOENT/);
-    for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
-      assert.strictEqual(readFileSync(resolve(codexHome, name), "utf8"), `${name} shared`);
-      assert.ok(!lstatSync(resolve(codexHome, name)).isSymbolicLink());
+    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "user custom instructions");
+    for (const name of ["DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      assert.strictEqual(existsSync(resolve(codexHome, name)), false);
     }
 
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
     assert.deepStrictEqual(summary.summary.map((item) => item.relPath), [
       "skills",
-      "AGENTS.md",
-      "DEFAULT_SKILL_ALLOWLIST.md",
-      "RTK.md",
-      "MCP_WORKER_USAGE_GUIDE.md",
       "cache\\codex_app_directory",
       "plugins",
       ".tmp\\plugins",
       "cache\\codex_apps_tools",
       "computer-use",
     ]);
-    assert.strictEqual(summary.summary[0].mode, "copied");
-    assert.ok(summary.summary.slice(1, 5).every((item) => item.mode === "copied-file"));
-    assert.ok(summary.summary.slice(5).every((item) => item.mode === "copied"));
+    assert.ok(summary.summary.every((item) => item.mode === "copied"));
+    assert.strictEqual(summary.guidanceIsolation.find((item) => item.relPath === "AGENTS.md")?.mode, "preserved-user-file");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -351,6 +351,8 @@ test("--local-snapshots imports every required local runtime directory", () => {
   for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
     writeFileSync(resolve(sharedHome, name), `${name} snapshot`);
   }
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(resolve(codexHome, "AGENTS.md"), "local personalization");
 
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--local-snapshots"], {
@@ -369,18 +371,68 @@ test("--local-snapshots imports every required local runtime directory", () => {
     assert.ok(!lstatSync(resolve(codexHome, "plugins")).isSymbolicLink());
     assert.ok(!lstatSync(resolve(codexHome, ".tmp", "plugins")).isSymbolicLink());
     assert.ok(!lstatSync(resolve(codexHome, "computer-use")).isSymbolicLink());
-    for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
-      assert.strictEqual(readFileSync(resolve(codexHome, name), "utf8"), `${name} snapshot`);
+    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "local personalization");
+    for (const name of ["DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      assert.strictEqual(existsSync(resolve(codexHome, name)), false);
     }
 
     const summary = JSON.parse(result.stdout);
     assert.ok(summary.ok);
-    assert.strictEqual(summary.summary.length, 10);
-    assert.ok(summary.summary.filter((item) => item.mode === "copied-file").length === 4);
+    assert.strictEqual(summary.summary.length, 6);
     assert.ok(summary.summary.filter((item) => item.mode === "copied").length === 6);
+    assert.strictEqual(summary.guidanceIsolation.find((item) => item.relPath === "AGENTS.md")?.mode, "preserved-user-file");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("snapshot refresh removes only legacy shared guidance copies", () => {
+  const tmp = tmpDir();
+  const codexHome = resolve(tmp, "codex");
+  const sharedHome = resolve(tmp, "shared");
+  mkdirSync(resolve(sharedHome, "skills", "alpha"), { recursive: true });
+  writeFileSync(resolve(sharedHome, "skills", "alpha", "value.txt"), "shared");
+  mkdirSync(codexHome, { recursive: true });
+  for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+    writeFileSync(resolve(sharedHome, name), `${name} legacy shared`);
+    writeFileSync(resolve(codexHome, name), `${name} legacy shared`);
+  }
+
+  try {
+    const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--local-snapshots"], {
+      encoding: "utf8",
+      env: { ...process.env, ANTICODEX_EXTRA_SKILLS_ROOTS: resolve(tmp, "missing-agents-skills") },
+    });
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+    const summary = JSON.parse(result.stdout);
+    assert.ok(summary.ok);
+    assert.deepStrictEqual(
+      summary.guidanceIsolation.map((item) => [item.relPath, item.mode]),
+      [
+        ["AGENTS.md", "removed-legacy-shared-copy"],
+        ["DEFAULT_SKILL_ALLOWLIST.md", "removed-legacy-shared-copy"],
+        ["RTK.md", "removed-legacy-shared-copy"],
+        ["MCP_WORKER_USAGE_GUIDE.md", "removed-legacy-shared-copy"],
+      ],
+    );
+    for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
+      assert.strictEqual(existsSync(resolve(codexHome, name)), false);
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("snapshot verification treats custom instructions as isolated user content", () => {
+  const sourceSnapshot = readFileSync(sourceSnapshotScript, "utf8");
+  const refreshFeatures = readFileSync(refreshFeaturesScript, "utf8");
+  const mcpSkills = readFileSync(mcpSkillsVerifier, "utf8");
+
+  assert.doesNotMatch(sourceSnapshot, /shared-guidance-/);
+  assert.match(refreshFeatures, /must not mirror outer development guidance/);
+  assert.match(mcpSkills, /must not mirror outer development guidance/);
+  assert.match(refreshFeatures, /ownership.*isolated-user/s);
+  assert.match(mcpSkills, /ownership\s*=\s*"isolated-user"/);
 });
 
 test("--startup-snapshots keeps existing required directories and skips plugin sidecars", () => {
@@ -399,6 +451,7 @@ test("--startup-snapshots keeps existing required directories and skips plugin s
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_apps_tools", "tools.json"), "{}");
   writeFileSync(resolve(sharedHome, "AGENTS.md"), "startup guidance");
+  writeFileSync(resolve(codexHome, "AGENTS.md"), "user startup instructions");
 
   try {
     const result = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {
@@ -409,7 +462,7 @@ test("--startup-snapshots keeps existing required directories and skips plugin s
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "existing", "value.txt"), "utf8"), "local");
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "new-shared", "value.txt"), "utf8"), "shared");
     assert.throws(() => statSync(resolve(codexHome, "plugins")), /ENOENT/);
-    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "startup guidance");
+    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "user startup instructions");
     assert.ok(statSync(resolve(codexHome, "cache", "codex_app_directory", "directory.json")).isFile());
     assert.ok(statSync(resolve(codexHome, "cache", "codex_apps_tools", "tools.json")).isFile());
 
@@ -425,10 +478,6 @@ test("--startup-snapshots keeps existing required directories and skips plugin s
     assert.strictEqual(marker.agentsSkillsPath, resolve(tmp, "missing-agents-skills"));
     assert.deepStrictEqual(marker.relPaths, [
       "skills",
-      "AGENTS.md",
-      "DEFAULT_SKILL_ALLOWLIST.md",
-      "RTK.md",
-      "MCP_WORKER_USAGE_GUIDE.md",
       "cache\\codex_app_directory",
       "cache\\codex_apps_tools",
     ]);
@@ -457,6 +506,8 @@ test("--startup-snapshots marker supports a second lightweight launch without re
   for (const name of ["AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md"]) {
     writeFileSync(resolve(sharedHome, name), name);
   }
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(resolve(codexHome, "AGENTS.md"), "user custom instructions");
 
   try {
     const first = spawnSync(process.execPath, [syncScript, codexHome, sharedHome, "--startup-snapshots"], {
@@ -607,12 +658,12 @@ test("no temporary or backup artifact directories remain after sync", () => {
   }
 });
 
-test("transactional file copy uses temp file and leaves no residue", () => {
+test("full sync preserves user-owned instructions and leaves no legacy file-copy residue", () => {
   const tmp = tmpDir();
   const codexHome = resolve(tmp, "codex");
   const sharedHome = resolve(tmp, "shared");
 
-  // Set up shared source with one copy directory and one copied file.
+  // Set up shared source with one copy directory and a distinct outer guidance file.
   mkdirSync(codexHome, { recursive: true });
   writeFileSync(resolve(codexHome, "AGENTS.md"), "old agents content");
   mkdirSync(resolve(sharedHome, "skills", "y"), { recursive: true });
@@ -625,10 +676,10 @@ test("transactional file copy uses temp file and leaves no residue", () => {
     });
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
 
-    // Verify file contents
+    // User-owned native personalization must not be overwritten.
     assert.strictEqual(
       readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"),
-      "agents content"
+      "old agents content"
     );
     assert.ok(statSync(resolve(codexHome, "skills", "y", "z.txt")).isFile());
 
@@ -757,7 +808,7 @@ test("stale transaction artifacts are cleaned before sync", () => {
     assert.ok(!existsSync(resolve(codexHome, "AGENTS.md.tmp-deadbeef")));
     assert.ok(!existsSync(resolve(codexHome, "AGENTS.md.old-deadbeef")));
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "fresh", "value.txt"), "utf8"), "fresh");
-    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "fresh agents");
+    assert.strictEqual(existsSync(resolve(codexHome, "AGENTS.md")), false);
     const summary = JSON.parse(result.stdout);
     assert.deepStrictEqual(summary.cleanup.sort(), [
       "AGENTS.md.old-deadbeef",
@@ -888,6 +939,8 @@ test("full sync deletes previously-synced directories removed from shared source
   writeFileSync(resolve(sharedHome, "cache", "codex_app_directory", "dir.json"), "{}");
   mkdirSync(resolve(sharedHome, "cache", "codex_apps_tools"), { recursive: true });
   writeFileSync(resolve(sharedHome, "cache", "codex_apps_tools", "tools.json"), "{}");
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(resolve(codexHome, "AGENTS.md"), "user custom instructions");
 
   try {
     // First full sync
@@ -898,8 +951,8 @@ test("full sync deletes previously-synced directories removed from shared source
     assert.ok(JSON.parse(result1.stdout).ok);
     assert.ok(statSync(resolve(codexHome, "skills", "alpha", "run.js")).isFile());
     assert.ok(statSync(resolve(codexHome, "skills", "beta", "run.js")).isFile());
-    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "AGENTS.md");
-    assert.strictEqual(readFileSync(resolve(codexHome, "RTK.md"), "utf8"), "RTK.md");
+    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "user custom instructions");
+    assert.strictEqual(existsSync(resolve(codexHome, "RTK.md")), false);
 
     // Remove skill alpha (directory with manifest tracking) from shared source;
     // keep beta and all guidance files.
@@ -916,9 +969,9 @@ test("full sync deletes previously-synced directories removed from shared source
     // Beta skill must survive (still in source)
     assert.ok(statSync(resolve(codexHome, "skills", "beta")).isDirectory());
     assert.strictEqual(readFileSync(resolve(codexHome, "skills", "beta", "run.js"), "utf8"), "// beta");
-    // Guidance files (copy-file mode) must survive (not removed by manifest pruning)
-    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "AGENTS.md");
-    assert.strictEqual(readFileSync(resolve(codexHome, "RTK.md"), "utf8"), "RTK.md");
+    // User-owned personalization survives while outer development guidance stays absent.
+    assert.strictEqual(readFileSync(resolve(codexHome, "AGENTS.md"), "utf8"), "user custom instructions");
+    assert.strictEqual(existsSync(resolve(codexHome, "RTK.md")), false);
 
     // Source manifest must be written for directory-mode targets
     assert.ok(existsSync(resolve(codexHome, "skills", ".anticodex-source-manifest.json")));
@@ -1101,10 +1154,6 @@ test("--local-snapshots marker uses the startup freshness fingerprint", () => {
 
     assert.strictEqual(marker.sourceFingerprint, printedSummary.sourceFingerprint);
     assert.deepStrictEqual(marker.relPaths.sort(), [
-      "AGENTS.md",
-      "DEFAULT_SKILL_ALLOWLIST.md",
-      "MCP_WORKER_USAGE_GUIDE.md",
-      "RTK.md",
       join("cache", "codex_app_directory"),
       join("cache", "codex_apps_tools"),
       "skills",

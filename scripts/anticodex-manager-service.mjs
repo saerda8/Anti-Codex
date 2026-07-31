@@ -10,6 +10,8 @@ import { testCodexPlusPlusUpstreamConnection } from "../translator/provider/code
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
 import {
     promptPolicyPayload,
+    readNativeCustomInstructions,
+    saveNativeCustomInstructions,
     savePromptPolicy,
 } from "../translator/provider/anticodex-prompt-policy.mjs";
 import {
@@ -1790,6 +1792,11 @@ export function createAntiCodexManagerService(options = {}) {
   const managerActionToken = crypto.randomBytes(32).toString("base64url");
   let resolvedPort = listenPort;
   const stateRoot = options.stateRoot ? path.resolve(options.stateRoot) : (process.env.DEEPCODEX_STATE_ROOT || path.join(process.env.APPDATA || "", "anticodex"));
+  const codexHome = options.codexHome ? path.resolve(options.codexHome) : path.join(stateRoot, "codex-home-deepseek-app");
+  const codexHomeRelative = path.relative(stateRoot, codexHome);
+  if (codexHomeRelative === ".." || codexHomeRelative.startsWith(`..${path.sep}`) || path.isAbsolute(codexHomeRelative)) {
+    throw new Error("Anti-Codex custom instructions must stay inside the isolated state root.");
+  }
   const fixedHealthUrl = options.fixedHealthUrl || process.env.ANTICODEX_FIXED_ROUTE_HEALTH_URL || "http://127.0.0.1:18487/anticodex/fixed-route/health";
   const scriptsRoot = __dirname;
   const adapterAuthToken = String(options.adapterAuthToken || "");
@@ -1873,16 +1880,34 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/anticodex/prompt-policy") {
       if (!validateManagerSourceRequest(req, res, "prompt policy")) return;
-      return jsonResponse(res, 200, promptPolicyPayload(stateRoot), req);
+      return jsonResponse(res, 200, promptPolicyPayload(stateRoot, codexHome), req);
     }
 
     if (req.method === "POST" && pathname === "/anticodex/prompt-policy") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      let snapshots = [];
       try {
         const raw = await readRequestBody(req);
-        const policy = savePromptPolicy(stateRoot, JSON.parse(raw.toString("utf8") || "{}"));
-        return jsonResponse(res, 200, { ok: true, policy, message: "提示词设置已保存；从下一次模型请求开始生效。" }, req);
+        const value = JSON.parse(raw.toString("utf8") || "{}");
+        const hasNativeContent = Object.hasOwn(value, "nativeCustomInstructions");
+        if (hasNativeContent) readNativeCustomInstructions(codexHome);
+        snapshots = captureFileSnapshots([
+          path.join(stateRoot, "prompt-policy.json"),
+          ...(hasNativeContent ? [path.join(codexHome, "AGENTS.md")] : []),
+        ]);
+        const policy = savePromptPolicy(stateRoot, value);
+        if (hasNativeContent) saveNativeCustomInstructions(codexHome, value.nativeCustomInstructions?.content);
+        const payload = promptPolicyPayload(stateRoot, codexHome);
+        return jsonResponse(res, 200, {
+          ok: true,
+          policy,
+          nativeCustomInstructions: payload.nativeCustomInstructions,
+          message: "提示词设置已保存；从下一次新模型请求开始生效。",
+        }, req);
       } catch (error) {
+        try { restoreFileSnapshots(snapshots); } catch (restoreError) {
+          error.message += `；回滚失败：${restoreError.message}`;
+        }
         return jsonResponse(res, 400, { ok: false, message: error.message }, req);
       }
     }

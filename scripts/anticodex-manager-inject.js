@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v112";
+  const VERSION = "native-panel-v113";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -2046,15 +2046,20 @@
         return {
           node: card(title, el("div", { style: "display:grid;gap:9px" }, [
             el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [enabled, el("span", { text: "启用" })]),
-            el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [useDefault, el("span", { text: "沿用 Codex 当前默认内容" })]),
+            el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [useDefault, el("span", { text: "沿用当前运行时内容" })]),
             textarea,
             el("div", { className: "anticodex-result", text: observed ? `最近观察：${observed.sha256?.slice(0, 12) || "无哈希"}` : "当前运行时尚未捕获该层；首次 Antigravity 请求后会显示。" }),
           ])),
           value: () => ({ enabled: enabled.checked, content: useDefault.checked ? null : textarea.value }),
         };
       };
-      const system = editor("codexSystem", "Codex 系统提示词");
-      const developer = editor("codexDeveloper", "Codex 开发者提示词");
+      const system = editor("codexSystem", "CodexPlusPlus 合并提示词（仅 Antigravity）");
+      const nativeInstructions = payload.nativeCustomInstructions || { content: "", defaultContent: "" };
+      const nativeInstructionsText = el("textarea", {
+        style: fieldStyle,
+        value: nativeInstructions.content || "",
+        placeholder: "留空即关闭；内容只保存在 Anti-Codex 隔离目录。",
+      });
       const userEnabled = el("input", { type: "checkbox" });
       userEnabled.checked = policy.user?.enabled === true;
       const userText = el("textarea", { style: fieldStyle, value: policy.user?.content || "", placeholder: "这里的内容只注入 Anti-Codex，不修改原生 Codex。" });
@@ -2079,8 +2084,17 @@
           for (const button of [saveButton, restoreButton, backButton]) button.disabled = false;
         }
       };
-      saveButton.onclick = () => save({ schema: payload.schema, codexSystem: system.value(), codexDeveloper: developer.value(), user: { enabled: userEnabled.checked, content: userText.value } });
-      restoreButton.onclick = () => save(defaults);
+      saveButton.onclick = () => save({
+        schema: payload.schema,
+        codexSystem: system.value(),
+        codexDeveloper: policy.codexDeveloper || defaults.codexDeveloper,
+        user: { enabled: userEnabled.checked, content: userText.value },
+        nativeCustomInstructions: { content: nativeInstructionsText.value },
+      });
+      restoreButton.onclick = () => save({
+        ...defaults,
+        nativeCustomInstructions: { content: nativeInstructions.defaultContent || "" },
+      });
       backButton.onclick = async () => {
         managerView = "status";
         root.setAttribute("data-anticodex-manager-view", "status");
@@ -2090,11 +2104,16 @@
       const required = snapshotLayers.filter((layer) => layer.required).map((layer) => card(layer.title || "必需兼容层", el("pre", { className: "anticodex-result", text: layer.effectiveContent || "" })));
       grid.replaceChildren(
         system.node,
-        developer.node,
-        card("Anti-Codex 用户提示词", el("div", { style: "display:grid;gap:9px" }, [
+        card("Codex 开发者提示词", el("div", { className: "anticodex-result anticodex-warn", text: "真实产品链路已把开发者提示词、系统提示词和 CodexPlusPlus 工具指导合并，不能单独控制；请编辑上方合并提示词。" })),
+        card("Codex 原生自定义指令 (AGENTS.md)", el("div", { style: "display:grid;gap:9px" }, [
+          nativeInstructionsText,
+          el("div", { className: "anticodex-result", text: "Gemini、Claude 和第三方模型都沿用这一份隔离配置；留空即关闭。" }),
+        ])),
+        card("Anti-Codex 附加提示词（仅 Antigravity）", el("div", { style: "display:grid;gap:9px" }, [
           el("label", { style: "display:flex;gap:7px;align-items:center" }, [userEnabled, el("span", { text: "启用" })]),
           userText,
         ])),
+        card("适用范围", el("div", { className: "anticodex-result anticodex-warn", text: "第三方线路不经过本页的合并提示词和 Anti-Codex 附加提示词；上方原生 AGENTS.md 仍会生效。新的合并设置从下一次新模型回合开始生效，同一 Cascade 续传不会中途重写。" })),
         card("Antigravity 提供方底层", el("div", { className: "anticodex-result anticodex-warn", text: payload.providerBase?.message || "提供方未暴露。" })),
         ...required,
         card("操作", el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveButton, restoreButton, backButton])),

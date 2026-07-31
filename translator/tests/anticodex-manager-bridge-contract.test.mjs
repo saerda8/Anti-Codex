@@ -1357,8 +1357,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v112"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v112"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v113"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v113"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
@@ -1378,6 +1378,12 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(managerInject, /data-anticodex-manager-view/);
   assert.match(managerInject, /!busy && !promptEditorOpen/);
   assert.match(managerInject, /Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42|Antigravity 提供方底层/);
+  assert.match(managerInject, /Codex \u539f\u751f\u81ea\u5b9a\u4e49\u6307\u4ee4 \(AGENTS\.md\)|Codex 原生自定义指令 \(AGENTS\.md\)/);
+  assert.match(managerInject, /\u7559\u7a7a\u5373\u5173\u95ed|留空即关闭/);
+  assert.match(managerInject, /CodexPlusPlus \u5408\u5e76\u63d0\u793a\u8bcd\uff08\u4ec5 Antigravity\uff09|CodexPlusPlus 合并提示词（仅 Antigravity）/);
+  assert.match(managerInject, /\u4e0d\u80fd\u5355\u72ec\u63a7\u5236|不能单独控制/);
+  assert.match(managerInject, /\u7b2c\u4e09\u65b9.*\u4e0d\u7ecf\u8fc7.*\u5408\u5e76\u63d0\u793a\u8bcd|第三方.*不经过.*合并提示词/);
+  assert.doesNotMatch(managerInject, /const developer = editor\("codexDeveloper"/);
   assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
   assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
   assert.match(managerRealMouseAction, /promptSettingsSaveRestore/);

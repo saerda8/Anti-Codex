@@ -18,13 +18,15 @@ const extraSkillsRoots = (process.env.ANTICODEX_EXTRA_SKILLS_ROOTS || path.join(
   .split(path.delimiter)
   .map((item) => item.trim())
   .filter(Boolean);
+const legacySharedGuidanceNames = [
+  'AGENTS.md',
+  'DEFAULT_SKILL_ALLOWLIST.md',
+  'RTK.md',
+  'MCP_WORKER_USAGE_GUIDE.md',
+];
 
 const sharedMappings = [
   { relPath: 'skills', sharedPath: path.join(sharedCodexHome, 'skills'), extraSharedPaths: extraSkillsRoots, mode: 'copy' },
-  { relPath: 'AGENTS.md', sharedPath: path.join(sharedCodexHome, 'AGENTS.md'), mode: 'copy-file' },
-  { relPath: 'DEFAULT_SKILL_ALLOWLIST.md', sharedPath: path.join(sharedCodexHome, 'DEFAULT_SKILL_ALLOWLIST.md'), mode: 'copy-file' },
-  { relPath: 'RTK.md', sharedPath: path.join(sharedCodexHome, 'RTK.md'), mode: 'copy-file' },
-  { relPath: 'MCP_WORKER_USAGE_GUIDE.md', sharedPath: path.join(sharedCodexHome, 'MCP_WORKER_USAGE_GUIDE.md'), mode: 'copy-file' },
   { relPath: path.join('cache', 'codex_app_directory'), sharedPath: path.join(sharedCodexHome, 'cache', 'codex_app_directory'), mode: 'copy' },
   { relPath: 'plugins', sharedPath: path.join(sharedCodexHome, 'plugins'), mode: 'copy' },
   { relPath: path.join('.tmp', 'plugins'), sharedPath: path.join(sharedCodexHome, '.tmp', 'plugins'), mode: 'copy' },
@@ -33,7 +35,6 @@ const sharedMappings = [
 ];
 const startupSnapshotMappings = sharedMappings.filter(item => (
   item.relPath === 'skills'
-  || item.mode === 'copy-file'
   || item.relPath === path.join('cache', 'codex_app_directory')
   || item.relPath === path.join('cache', 'codex_apps_tools')
 ));
@@ -414,7 +415,33 @@ function cleanupStaleSwapArtifactsForTarget(targetPath) {
 }
 
 function cleanupStaleSwapArtifacts() {
-  return mappings.flatMap(({ relPath }) => cleanupStaleSwapArtifactsForTarget(path.join(codexHome, relPath)));
+  return [
+    ...mappings.map(({ relPath }) => relPath),
+    ...legacySharedGuidanceNames,
+  ].flatMap((relPath) => cleanupStaleSwapArtifactsForTarget(path.join(codexHome, relPath)));
+}
+
+function isolateLegacySharedGuidance() {
+  return legacySharedGuidanceNames.map((relPath) => {
+    const target = path.join(codexHome, relPath);
+    const sharedPath = path.join(sharedCodexHome, relPath);
+    if (!existsOrSymlink(target)) return { relPath, mode: 'absent', target, sharedPath };
+
+    const targetStat = fs.lstatSync(target);
+    if (!targetStat.isFile() || targetStat.isSymbolicLink() || !fs.existsSync(sharedPath)) {
+      return { relPath, mode: 'preserved-user-file', target, sharedPath };
+    }
+
+    const sharedStat = fs.lstatSync(sharedPath);
+    const isLegacySharedCopy = sharedStat.isFile()
+      && !sharedStat.isSymbolicLink()
+      && targetStat.size === sharedStat.size
+      && fs.readFileSync(target).equals(fs.readFileSync(sharedPath));
+    if (!isLegacySharedCopy) return { relPath, mode: 'preserved-user-file', target, sharedPath };
+
+    fs.rmSync(target, { force: true });
+    return { relPath, mode: 'removed-legacy-shared-copy', target, sharedPath };
+  });
 }
 
 /**
@@ -514,42 +541,7 @@ function syncDirectoryTransactional(sharedPath, targetPath, trackManifest = fals
   }
 }
 
-/**
- * Transactionally refresh a single file at targetPath:
- * 1. Write to a sibling temp file.
- * 2. Atomic rename into place.
- * 3. On failure, clean up temp file.
- */
-function syncFileTransactional(sharedPath, targetPath) {
-  const id = tempId();
-  const tmpFile = targetPath + '.tmp-' + id;
-  const oldFile = targetPath + '.old-' + id;
-
-  try {
-    fs.copyFileSync(sharedPath, tmpFile);
-    if (existsOrSymlink(targetPath)) {
-      fs.renameSync(targetPath, oldFile);
-    }
-    try {
-      fs.renameSync(tmpFile, targetPath);
-    } catch (error) {
-      if (existsOrSymlink(oldFile) && !existsOrSymlink(targetPath)) {
-        try { fs.renameSync(oldFile, targetPath); } catch {}
-      }
-      throw error;
-    }
-    if (existsOrSymlink(oldFile)) {
-      fs.rmSync(oldFile, { recursive: true, force: true });
-    }
-  } catch (error) {
-    if (existsOrSymlink(tmpFile)) {
-      try { fs.rmSync(tmpFile, { recursive: true, force: true }); } catch {}
-    }
-    throw error;
-  }
-}
-
-function writeStartupSnapshotMarker(summary) {
+function writeStartupSnapshotMarker(summary, guidanceIsolation) {
   ensureDir(path.dirname(startupSnapshotMarkerPath));
 
   // Compute a content fingerprint from the shared source to detect
@@ -570,6 +562,7 @@ function writeStartupSnapshotMarker(summary) {
     extraSkillsRoots,
     agentsSkillsPath: extraSkillsRoots[0] || null,
     relPaths: startupSnapshotMappings.map(item => item.relPath),
+    guidanceIsolation,
     summary,
     sourceFingerprint,
     sourceMtimeMax,
@@ -591,35 +584,11 @@ if (printStartupSourceFingerprint) {
 const releaseSyncLock = acquireSyncLock();
 process.once('exit', releaseSyncLock);
 
+const guidanceIsolation = skillsOnly ? [] : isolateLegacySharedGuidance();
 const summary = [];
 const cleanup = cleanupStaleSwapArtifacts();
 for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
   const targetPath = path.join(codexHome, relPath);
-  if (mode === 'copy-file') {
-    if (!fs.existsSync(sharedPath)) {
-      summary.push({ relPath, mode: 'missing-shared-target', target: targetPath, sharedPath });
-      continue;
-    }
-    ensureDir(path.dirname(targetPath));
-    try {
-      syncFileTransactional(sharedPath, targetPath);
-      summary.push({
-        relPath,
-        mode: 'copied-file',
-        target: targetPath,
-        sharedPath,
-      });
-    } catch (error) {
-      summary.push({
-        relPath,
-        mode: 'copy-failed',
-        target: targetPath,
-        sharedPath,
-        error: error?.message || String(error),
-      });
-    }
-    continue;
-  }
   if (mode === 'copy') {
     const filterInvalidSkillFiles = relPath === 'skills';
     const snapshotOptions = { filterInvalidSkillFiles };
@@ -692,7 +661,7 @@ for (const { relPath, sharedPath, extraSharedPaths = [], mode } of mappings) {
 
 if ((startupSnapshotsOnly || localSnapshotsOnly) && !summary.some(item => item.mode === 'copy-failed')) {
   try {
-    writeStartupSnapshotMarker(summary);
+    writeStartupSnapshotMarker(summary, guidanceIsolation);
   } catch (error) {
     summary.push({
       relPath: path.basename(startupSnapshotMarkerPath),
@@ -707,6 +676,7 @@ console.log(JSON.stringify({
   codexHome,
   sharedCodexHome,
   cleanup,
+  guidanceIsolation,
   summary,
 }, null, 2));
 releaseSyncLock();

@@ -618,18 +618,19 @@ foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WO
     $sharedHash = Get-FileSha256Hex $sharedPath
     $localHash = Get-FileSha256Hex $localPath
     $contentMatches = ($sharedExists -and $info.exists -and $sharedHash -eq $localHash)
+    $isolatedFromShared = -not $contentMatches
     $info | Add-Member -NotePropertyName localExists -NotePropertyValue $info.exists
     $info | Add-Member -NotePropertyName sharedExists -NotePropertyValue $sharedExists
     $info | Add-Member -NotePropertyName sharedHash -NotePropertyValue $sharedHash
     $info | Add-Member -NotePropertyName localHash -NotePropertyValue $localHash
     $info | Add-Member -NotePropertyName contentMatches -NotePropertyValue $contentMatches
+    $info | Add-Member -NotePropertyName isolatedFromShared -NotePropertyValue $isolatedFromShared
+    $info | Add-Member -NotePropertyName ownership -NotePropertyValue "isolated-user"
     $guidance[$name] = $info
-    if ((Test-Path -LiteralPath $sharedPath -PathType Leaf) -and -not $info.exists) {
-        Add-Failure "shared guidance '$name' exists but Anti-Codex local copy is missing"
-    } elseif ($info.linkType) {
-        Add-Failure "Anti-Codex guidance '$name' is a link, expected local copy"
-    } elseif ($sharedExists -and $info.exists -and -not $contentMatches) {
-        Add-Failure "shared guidance '$name' content differs from Anti-Codex local copy"
+    if ($info.linkType) {
+        Add-Failure "Anti-Codex user guidance '$name' is a link, expected isolated local content"
+    } elseif ($contentMatches) {
+        Add-Failure "Anti-Codex user guidance '$name' must not mirror outer development guidance"
     }
 }
 if (-not $skills.exists -or $skills.count -lt 1) { Add-Failure "skills local copy is empty or missing" }

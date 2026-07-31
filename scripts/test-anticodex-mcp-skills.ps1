@@ -877,6 +877,7 @@ foreach ($guidanceName in $guidanceNames) {
     $sharedHash = if ($sharedExists) { Get-FileSha256Hex $sharedGuidance } else { "" }
     $localHash = if ($localExists) { Get-FileSha256Hex $localGuidance } else { "" }
     $contentMatches = ($sharedExists -and $localExists -and $sharedHash -eq $localHash)
+    $isolatedFromShared = -not $contentMatches
     $guidanceChecks += [pscustomobject]@{
         name = $guidanceName
         sharedExists = $sharedExists
@@ -885,13 +886,13 @@ foreach ($guidanceName in $guidanceNames) {
         sharedHash = $sharedHash
         localHash = $localHash
         contentMatches = $contentMatches
+        isolatedFromShared = $isolatedFromShared
+        ownership = "isolated-user"
     }
-    if ($sharedExists -and -not $localExists) {
-        Add-Failure "shared guidance '$guidanceName' exists but Anti-Codex local copy is missing it"
-    } elseif ($localItem -and $localItem.LinkType) {
-        Add-Failure "Anti-Codex guidance '$guidanceName' should be a local copy, found link type: $($localItem.LinkType)"
-    } elseif ($sharedExists -and $localExists -and -not $contentMatches) {
-        Add-Failure "Anti-Codex guidance '$guidanceName' content differs from shared copy"
+    if ($localItem -and $localItem.LinkType) {
+        Add-Failure "Anti-Codex user guidance '$guidanceName' must be isolated local content, found link type: $($localItem.LinkType)"
+    } elseif ($contentMatches) {
+        Add-Failure "Anti-Codex user guidance '$guidanceName' must not mirror outer development guidance"
     }
 }
 Save-McpSkillFileHashCache

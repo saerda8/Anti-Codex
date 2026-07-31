@@ -25,6 +25,9 @@ export function createAntigravityChatAdapter(options = {}) {
 
   const now = options.now ?? Date.now;
   const idFactory = options.idFactory ?? (() => `chatcmpl_${randomUUID().replaceAll("-", "")}`);
+  const readNativeCustomInstructions = typeof options.nativeCustomInstructions === "function"
+    ? options.nativeCustomInstructions
+    : () => options.nativeCustomInstructions;
   const sessions = createSessionStore({
     client,
     maxSessions: positiveInteger(options.maxSessions, DEFAULT_MAX_SESSIONS),
@@ -77,7 +80,7 @@ export function createAntigravityChatAdapter(options = {}) {
   }
 
   async function* stream(body, requestOptions = {}) {
-    const prepared = prepareChatRequest(body, sessions);
+    const prepared = prepareChatRequest(body, sessions, readNativeCustomInstructions());
     const id = idFactory();
     const created = Math.floor(now() / 1000);
     const model = prepared.model;
@@ -248,7 +251,7 @@ export function createAntigravityChatAdapter(options = {}) {
   };
 }
 
-function prepareChatRequest(body, sessions) {
+function prepareChatRequest(body, sessions, nativeCustomInstructions) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw invalidRequest("Chat Completions body must be an object.");
   }
@@ -286,7 +289,7 @@ function prepareChatRequest(body, sessions) {
         code: "incomplete_tool_results",
       });
     }
-    return prepareRestartContinuation(body, messages, model, requestedTools);
+    return prepareRestartContinuation(body, messages, model, requestedTools, nativeCustomInstructions);
   }
 
   let currentUserIndex = -1;
@@ -303,6 +306,11 @@ function prepareChatRequest(body, sessions) {
   const nativeTitleHelper = isNativeCodexTitleRequest(userText, suppliedStructuredOutput);
   const nativeTaskSuggestionsHelper = isNativeCodexTaskSuggestionsRequest(userText, suppliedStructuredOutput);
   const nativeTextOnlyHelper = nativeTitleHelper || nativeTaskSuggestionsHelper;
+  const trustedNativeInstructions = addNativeCustomInstructions(
+    systemSections,
+    nativeCustomInstructions,
+    !nativeTextOnlyHelper,
+  );
   const structuredOutput = suppliedStructuredOutput
     ?? (body.response_format === undefined || body.response_format === null
       ? nativeTitleHelper
@@ -327,7 +335,8 @@ function prepareChatRequest(body, sessions) {
       });
       continue;
     }
-    history.push(normalizeHistoryMessage(message));
+    const historyMessage = stripExactNativeCustomInstructions(message, trustedNativeInstructions);
+    if (historyMessage) history.push(normalizeHistoryMessage(historyMessage));
   }
   if (history.length) {
     systemSections.push({
@@ -554,8 +563,9 @@ function isNativeCodexTaskSuggestionsRequest(userText, structuredOutput) {
     && ["title", "description", "prompt", "appId"].every((name) => Object.hasOwn(itemProperties, name));
 }
 
-function prepareRestartContinuation(body, messages, model, tools) {
+function prepareRestartContinuation(body, messages, model, tools, nativeCustomInstructions) {
   const systemSections = [];
+  const trustedNativeInstructions = addNativeCustomInstructions(systemSections, nativeCustomInstructions);
   const history = [];
   for (const message of messages) {
     const role = String(message?.role ?? "").toLowerCase();
@@ -569,7 +579,8 @@ function prepareRestartContinuation(body, messages, model, tools) {
       });
       continue;
     }
-    history.push(normalizeHistoryMessage(message));
+    const historyMessage = stripExactNativeCustomInstructions(message, trustedNativeInstructions);
+    if (historyMessage) history.push(normalizeHistoryMessage(historyMessage));
   }
   systemSections.push({
     kind: "tool_restart_continuation",
@@ -594,6 +605,26 @@ function prepareRestartContinuation(body, messages, model, tools) {
     parallelToolCalls: body.parallel_tool_calls !== false,
     reasoningEffort: String(body.reasoning_effort ?? body.reasoning?.effort ?? "").trim(),
   };
+}
+
+function addNativeCustomInstructions(systemSections, value, include = true) {
+  const content = String(value ?? "").replace(/\r\n?/g, "\n").trim();
+  if (content && include) systemSections.push({
+    kind: "native_custom_instructions",
+    role: "user",
+    title: "Codex native custom instructions (AGENTS.md)",
+    content,
+  });
+  return content;
+}
+
+function stripExactNativeCustomInstructions(message, content) {
+  if (!content || String(message?.role ?? "").toLowerCase() !== "user") return message;
+  const text = messageText(message?.content, { allowEmpty: true }).replace(/\r\n?/g, "\n");
+  const wrapper = `# AGENTS.md instructions\n\n<INSTRUCTIONS>\n${content}\n</INSTRUCTIONS>`;
+  if (text === wrapper) return null;
+  const joinedPrefix = `${wrapper}\n`;
+  return text.startsWith(joinedPrefix) ? { ...message, content: text.slice(joinedPrefix.length) } : message;
 }
 
 function completeToolResultSet(callIds, results) {

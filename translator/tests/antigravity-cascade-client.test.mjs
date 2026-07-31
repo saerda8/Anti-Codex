@@ -8,6 +8,7 @@ import {
   createAntigravityCascadeClient,
   extractAvailableModelEntries,
 } from "../provider/antigravity-cascade-client.mjs";
+import { createAntigravityChatAdapter } from "../provider/antigravity-chat-adapter.mjs";
 import * as cascadeClientModule from "../provider/antigravity-cascade-client.mjs";
 
 test("extracts only loopback listening ports owned by the Antigravity process", () => {
@@ -283,6 +284,47 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.equal(send.body.cascadeConfig.plannerConfig.planModel, "MODEL_PRO");
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.runCommand.forceDisable, true);
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
+});
+
+test("native custom instructions reach final Cascade once while joined environment context stays untrusted", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_native_custom" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: () => jsonResponse({}),
+    GetCascadeTrajectory: () => jsonResponse(completedTrajectory("done")),
+  });
+  const customInstructions = "Use concise Chinese replies.";
+  const wrapper = `# AGENTS.md instructions\n\n<INSTRUCTIONS>\n${customInstructions}\n</INSTRUCTIONS>`;
+  const environmentContext = "<environment_context>\n  <cwd>G:\\project</cwd>\n</environment_context>";
+  const resumedEnvironmentContext = "<environment_context>\n  <cwd>G:\\project-resumed</cwd>\n</environment_context>";
+  const adapter = createAntigravityChatAdapter({
+    client: clientFor(service.fetch),
+    nativeCustomInstructions: () => customInstructions,
+  });
+
+  await adapter.complete({
+    model: "gemini-pro-agent",
+    messages: [
+      { role: "user", content: `${wrapper}\n${environmentContext}` },
+      { role: "user", content: `${wrapper}\n${resumedEnvironmentContext}` },
+      { role: "user", content: "current user text" },
+    ],
+  });
+
+  const start = service.calls.find((call) => call.method === "StartCascade");
+  const sections = start.body.customAgentSpec.customAgent.systemPromptSections;
+  const native = sections.filter((section) => section.title === "Codex native custom instructions (AGENTS.md)");
+  assert.equal(native.length, 1);
+  assert.equal(native[0].content, customInstructions);
+  assert.equal(native[0].metadata.contentTrust, undefined);
+  const history = sections.find((section) => section.title === "Prior Chat Completions messages");
+  assert.equal(history.metadata.contentTrust, "untrusted_transcript");
+  assert.equal(history.content, [environmentContext, resumedEnvironmentContext]
+    .map((content) => JSON.stringify({ role: "user", content }))
+    .join("\n"));
+  assert.equal(history.content.includes("# AGENTS.md instructions"), false);
+  await adapter.close();
 });
 
 test("omits data-image payloads from text-rendered chat history", async () => {

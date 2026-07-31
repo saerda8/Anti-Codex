@@ -119,10 +119,6 @@ function Get-AntiCodexSourceSnapshot {
     Add-SourcePath -Label "agents-skills" -Path $AgentsSkillsPath -Kind "directory" -HashContent $true
     Add-SourcePath -Label "shared-connectors" -Path (Join-Path $SharedCodexHome "cache\codex_app_directory") -Kind "directory" -HashContent $true
     Add-SourcePath -Label "shared-app-tools" -Path (Join-Path $SharedCodexHome "cache\codex_apps_tools") -Kind "directory" -HashContent $true
-    foreach ($name in @("AGENTS.md", "DEFAULT_SKILL_ALLOWLIST.md", "RTK.md", "MCP_WORKER_USAGE_GUIDE.md")) {
-        Add-SourcePath -Label "shared-guidance-$name" -Path (Join-Path $SharedCodexHome $name) -Kind "file" -HashContent $true
-    }
-
     $sortedRows = @($rows.ToArray() | Sort-Object)
     $joined = [string]::Join("`n", $sortedRows)
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
