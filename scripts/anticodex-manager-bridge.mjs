@@ -967,6 +967,7 @@ async function main() {
     const action = String(request.action || "");
     const actionToken = String(request.actionToken || "");
     const isManagerRequest = request.kind === "manager-request";
+    const silent = request.silent === true;
     console.log(JSON.stringify({
       event: isManagerRequest ? "manager-request-received" : "manager-action-received",
       ...(isManagerRequest ? { path: String(request.path || "") } : { action }),
@@ -1007,7 +1008,7 @@ async function main() {
         && globalThis.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
       if (!isManagerRequest) payload.action = deliveredAction;
       if (payload.snapshot && (isManagerRequest || isCurrentAction)) globalThis.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
-      const suppressRefreshStatusResult = deliveredAction === "refreshStatus" && globalThis.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
+      const suppressRefreshStatusResult = deliveredAction === "refreshStatus" && ${JSON.stringify(silent)};
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) globalThis.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload;
       let result = document.querySelector('[data-anticodex-result="action"]');
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult && !result && typeof globalThis.__ANTICODEX_OPEN_MANAGER__ === "function") {

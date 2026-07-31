@@ -1047,14 +1047,15 @@
   }
 
   async function refreshManagerStatus() {
+    const manager = document.getElementById(MANAGER_ID);
+    const promptEditorOpen = manager?.getAttribute("data-anticodex-manager-view") === "prompts";
+    if (promptEditorOpen) return;
     try {
       const healthResult = await safeJson("/health");
       const health = safeValue(healthResult, {});
       if (healthResult.ok) updateTrafficNotice(health);
-      const manager = document.getElementById(MANAGER_ID);
       const busy = manager?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
-      const promptEditorOpen = manager?.getAttribute("data-anticodex-manager-view") === "prompts";
-      if (manager && !busy && !promptEditorOpen) {
+      if (manager && !busy) {
         if (Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).some(actionStillPending)) {
           await refreshManagerSnapshot();
         }

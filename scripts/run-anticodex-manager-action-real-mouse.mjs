@@ -242,9 +242,10 @@ try {
         version: window.__ANTICODEX_MANAGER_VERSION__ || '',
       };
     })()`, (value) => [
-      "Codex 系统提示词",
+      "CodexPlusPlus 合并提示词（仅 Antigravity）",
       "Codex 开发者提示词",
-      "Anti-Codex 用户提示词",
+      "Codex 原生自定义指令 (AGENTS.md)",
+      "Anti-Codex 附加提示词（仅 Antigravity）",
       "Antigravity 提供方底层",
     ].every((label) => value?.text?.includes(label))
       && ["保存", "恢复默认", "返回状态"].every((label) => value?.buttons?.includes(label)));
@@ -306,20 +307,16 @@ try {
 
     let saveRestore = null;
     if (promptSettingsSaveRestore) {
-      const testValue = "Anti-Codex 提示词实体按钮测试；本次立即恢复默认。";
-      await realMouseWheel(panelPoint, -300);
+      const testValue = "Anti-Codex 原生自定义指令实体按钮测试；本次立即恢复默认。";
+      const nativeBefore = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')?.value || ''`);
+      if (nativeBefore !== "") throw new Error("Refusing to overwrite non-empty native custom instructions during physical acceptance.");
+      await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.scrollIntoView({ block: 'center' })`);
       await sleep(150);
-      const userCheckboxPoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('input[type="checkbox"]')`),
+      const nativeTextareaPoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')`),
         (value) => value?.ok === true,
       );
-      const userWasEnabled = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('input[type="checkbox"]')?.checked === true`);
-      if (!userWasEnabled) await realMouseClick(userCheckboxPoint);
-      const userTextareaPoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词')?.querySelector('textarea')`),
-        (value) => value?.ok === true,
-      );
-      await realMouseClick(userTextareaPoint);
+      await realMouseClick(nativeTextareaPoint);
       for (const type of ["keyDown", "keyUp"]) {
         await call("Input.dispatchKeyEvent", { type, key: "a", code: "KeyA", modifiers: 2, windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 });
       }
@@ -366,9 +363,9 @@ try {
         (value) => value?.ok === true,
       ));
       const reloadedValue = await waitFor(`(() => {
-        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Anti-Codex 用户提示词');
-        return { enabled: section?.querySelector('input[type="checkbox"]')?.checked === true, value: section?.querySelector('textarea')?.value || '' };
-      })()`, (value) => value?.enabled === true && value?.value === testValue);
+        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
+        return { value: section?.querySelector('textarea')?.value || '' };
+      })()`, (value) => value?.value === testValue);
       await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
       const restorePoint = await waitFor(
         visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
@@ -380,7 +377,21 @@ try {
         `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
         (value) => String(value).includes("已保存"),
       );
-      saveRestore = { testValue, savedMessage, reloadedValue, restoredMessage };
+      const backAfterRestorePoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
+        (value) => value?.ok === true,
+      );
+      await realMouseClick(backAfterRestorePoint);
+      await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
+      await realMouseClick(await waitFor(
+        visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
+        (value) => value?.ok === true,
+      ));
+      const restoredValue = await waitFor(`(() => {
+        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
+        return { value: section?.querySelector('textarea')?.value || '' };
+      })()`, (value) => value?.value === "");
+      saveRestore = { testValue, nativeBefore, savedMessage, reloadedValue, restoredMessage, restoredValue };
     }
 
     const backPoint = await waitFor(

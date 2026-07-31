@@ -571,6 +571,17 @@ test("silent Manager snapshot refresh never reopens a panel the user closed", ()
   );
 });
 
+test("a queued silent refresh stays silent when its late result is delivered", () => {
+  const deliverStart = source.indexOf("async function deliver(request, session)");
+  const deliverEnd = source.indexOf("controller = new ManagerBridgeRecoveryController", deliverStart);
+  const deliverBlock = source.slice(deliverStart, deliverEnd);
+  const deliveryExpressionBlock = deliverBlock.slice(deliverBlock.indexOf("const deliveryExpression"));
+
+  assert.match(deliverBlock, /const silent = request\.silent === true/);
+  assert.match(deliveryExpressionBlock, /JSON\.stringify\(silent\)/);
+  assert.doesNotMatch(deliveryExpressionBlock, /__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__/);
+});
+
 test("installed readiness requires lease and acknowledgement instead of destructive dequeue", () => {
   assert.match(syncReadiness, /manager bridge missing explicit action acknowledgement/);
   assert.match(syncReadiness, /manager bridge missing action queue leasing/);
@@ -1373,10 +1384,16 @@ test("current Manager UI exposes no legacy session-controller action", () => {
 });
 
 test("Manager exposes prompt layers without weakening required compatibility prompts", () => {
+  const refreshManagerStatusBlock = extractNamedFunction(managerInject, "refreshManagerStatus");
   assert.match(managerService, /"\/anticodex\/prompt-policy"/);
   assert.match(managerInject, /data-anticodex-prompt-settings/);
   assert.match(managerInject, /data-anticodex-manager-view/);
-  assert.match(managerInject, /!busy && !promptEditorOpen/);
+  assert.match(refreshManagerStatusBlock, /if \(promptEditorOpen\) return;/);
+  assert.ok(
+    refreshManagerStatusBlock.indexOf("if (promptEditorOpen) return;")
+      < refreshManagerStatusBlock.indexOf('safeJson("/health")'),
+    "prompt editor must suspend the status request before it can occupy the Manager bridge",
+  );
   assert.match(managerInject, /Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42|Antigravity 提供方底层/);
   assert.match(managerInject, /Codex \u539f\u751f\u81ea\u5b9a\u4e49\u6307\u4ee4 \(AGENTS\.md\)|Codex 原生自定义指令 \(AGENTS\.md\)/);
   assert.match(managerInject, /\u7559\u7a7a\u5373\u5173\u95ed|留空即关闭/);

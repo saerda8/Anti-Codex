@@ -3297,3 +3297,31 @@ Errors recorded this pass: the first combined PowerShell parser command used `$f
 - [ ] Commit this second test-isolation checkpoint, rerun the entire source preflight, and keep runtime activation prohibited until the whole gate is green.
 
 Current status remains **reopened; not 100%**. The next irreversible boundary is still one guarded Anti-Codex-only activation followed by installed physical acceptance; it has not occurred in this follow-up.
+
+## 2026-08-01 Authoritative Recheck And Closure Plan
+
+Status: **in progress; not 100%**. This section supersedes stale unchecked wording above where later evidence is listed here. The three-layer architecture remains locked and native Codex must not be modified or stopped.
+
+Current verified baseline:
+
+- [x] Commit the live-state-isolated preflight repair as `c5b3a957` and pass the complete no-traffic source preflight `885/885` on that clean commit.
+- [x] Activate the verified runtime once through transaction `20260731T213622919Z-aed46a783ede4f80b6f31b363f18c299`, start one Anti-Codex, preserve native Codex PID `25336`, and match source/installed Manager, service and adapter hashes.
+- [x] Physically open installed `native-panel-v113` through exact Chinese `管理 -> 提示词`, and retain the previously green real-mouse top/middle/bottom close receipts.
+- [x] Run `刷新本地功能` once. The operation completed successfully in `latest-refresh-features.json`, migrated the byte-identical leaked outer `AGENTS.md`, and left the isolated native custom-instruction file absent.
+
+Open work, in fixed order:
+
+- [x] Fix the two Manager feedback races exposed by physical acceptance: prompt POST starvation while the prompt editor is open, and a late silent `refreshStatus` overwriting the completed `refreshFeatures` result. Both root fixes are source-green with the intended RED/GREEN regressions; the complete Manager group passes `86/86` without product traffic.
+- [ ] Checkpoint the Manager fixes, rerun the complete clean no-traffic source preflight, and perform one follow-up Anti-Codex-only activation because the first installed physical round exposed these Manager defects.
+- [ ] Physically save, reopen, read back and restore-empty the native `AGENTS.md` through Manager. Verify no test marker remains, the file is absent after restore, source/installed hashes match, exactly one Anti-Codex remains, native Codex survives, and no model traffic is sent.
+- [ ] Audit every native Codex setting and classify it as effective, intentionally unavailable, or visibly disabled with a reason. Keep user personalization and useful working-method guidance; expose editable textual prompt layers with restore-default; keep required tool/protocol/permission compatibility protected; label Antigravity's provider-owned base opaque/read-only.
+- [ ] Resolve the direct third-party prompt-purity boundary truthfully. Do not claim the Antigravity-only merged/add-on controls affect the direct third-party route unless a narrow CodexPlusPlus boundary proves it.
+- [ ] Physically exercise every embedded and fallback Manager control. Update checks and sync actions must show exact versions, update-needed state, progress, terminal result and actionable errors; no unexplained console window, silent click or duplicate paid probe is acceptable.
+- [ ] Reaccept official Codex and CodexPlusPlus independent update lanes, source/active versions and hashes, fail-closed rollback state, and the built-in guarded update workflow. Future upstream releases remain subject to the same gates.
+- [ ] Re-run shell startup, desktop shortcut, minimize/restore flicker, one-visible-instance, tray/taskbar icon, graceful shutdown/restart and native-Codex-survival checks.
+- [ ] Re-run isolation for plugins/MCP/Skills/settings/state, confirm zero development or sealed workers, zero Anti-Codex Docker residue, no `R:` substitution/persistence, then remove only proven obsolete runtime/build/cache generations.
+- [ ] Exercise composer routing in provider priority order Gemini -> Claude -> saved third-party. Routine checks remain no-traffic; third-party is fallback only.
+- [ ] Keep the completed autonomous media task frozen unless independent acceptance reveals a concrete result defect. Any further model work stays in one visible native task and receives outcome-only feedback or exact `继续`, never host micro-planning.
+- [ ] Perform one final whole-project code review, current source/installed/Gate 1/Gate 7/legacy-zero-hit release pass, clean checkpoint and requirement-by-requirement evidence audit. Only then may status return to 100%.
+
+Failure log for this round: `刷新本地功能` took about 170 seconds and succeeded, but a queued silent status refresh later replaced its visible result. The first native-instruction save clicked the correct button but showed `Failed to fetch`; no prompt POST reached the bridge and no file/test marker was written. A read-only PowerShell command also produced an empty-pipe parser error when piping directly from an `if` block; the corrected form assigns the value before piping.
