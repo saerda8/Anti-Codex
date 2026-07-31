@@ -478,27 +478,35 @@ try {
         "candidates\$version\$upstreamCommit\$patchCommit"
     )
     if (Test-Path -LiteralPath $candidateRoot -PathType Container) {
-        $stage = "candidate_reuse"
-        $existingReport = Get-ReusableCandidateReport `
-            -CandidateRoot $candidateRoot `
-            -Version $version `
-            -Tag $Tag `
-            -Repository $repository `
-            -UpstreamCommit $upstreamCommit `
-            -IsolationPatchCommit $firstPatchCommit `
-            -PatchCommit $patchCommit `
-            -PatchTree $patchTree `
-            -Patches $patches `
-            -SourceMetadataHash $metadataInputHash `
-            -PrepareScriptHash $prepareScriptHash `
-            -IsolationAuditHash $isolationAuditHash `
-            -ManagedCargoRunnerHash $managedCargoRunnerHash `
-            -HygieneVerifierHash $hygieneVerifierHash `
-            -RunnerImage $runnerImage `
-            -BuildCommands @($commandDescriptions) `
-            -WorkingDirectory $stagingRoot
-        $existingReport | ConvertTo-Json -Depth 20
-        return
+        $candidateComplete = (Test-Path -LiteralPath (Join-Path $candidateRoot "candidate.json") -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $candidateRoot "upstream.proposed.json") -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $candidateRoot "codex-plus-plus.exe") -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $candidateRoot "source") -PathType Container)
+        if (-not $candidateComplete) {
+            Remove-DirectoryTree -Path $candidateRoot
+        } else {
+            $stage = "candidate_reuse"
+            $existingReport = Get-ReusableCandidateReport `
+                -CandidateRoot $candidateRoot `
+                -Version $version `
+                -Tag $Tag `
+                -Repository $repository `
+                -UpstreamCommit $upstreamCommit `
+                -IsolationPatchCommit $firstPatchCommit `
+                -PatchCommit $patchCommit `
+                -PatchTree $patchTree `
+                -Patches $patches `
+                -SourceMetadataHash $metadataInputHash `
+                -PrepareScriptHash $prepareScriptHash `
+                -IsolationAuditHash $isolationAuditHash `
+                -ManagedCargoRunnerHash $managedCargoRunnerHash `
+                -HygieneVerifierHash $hygieneVerifierHash `
+                -RunnerImage $runnerImage `
+                -BuildCommands @($commandDescriptions) `
+                -WorkingDirectory $stagingRoot
+            $existingReport | ConvertTo-Json -Depth 20
+            return
+        }
     }
 
     $stage = "isolation_audit"

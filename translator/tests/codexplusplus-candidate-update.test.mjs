@@ -324,6 +324,30 @@ test("preparing the same accepted candidate twice reuses it without rebuilding",
   assert.equal(existsSync(join(fixture.stateRoot, "failures", "latest.json")), false);
 });
 
+test("an incomplete accepted candidate is rebuilt instead of blocking the update lane", (t) => {
+  const fixture = createSuccessFixture(t);
+  const first = runCandidate(fixture);
+  assert.equal(first.status, 0, `${first.stdout}\n${first.stderr}`);
+  const firstOutput = JSON.parse(first.stdout);
+  const candidateRoot = join(
+    fixture.stateRoot,
+    "candidates",
+    "1.2.44",
+    fixture.upstreamCommit,
+    firstOutput.patchCommit,
+  );
+  const binaryPath = join(candidateRoot, "codex-plus-plus.exe");
+  const callsBefore = readFileSync(fixture.logPath, "utf8");
+  rmSync(binaryPath);
+
+  const second = runCandidate(fixture);
+
+  assert.equal(second.status, 0, `${second.stdout}\n${second.stderr}`);
+  assert.equal(existsSync(binaryPath), true);
+  assert.deepEqual(JSON.parse(second.stdout).binary, firstOutput.binary);
+  assert.notEqual(readFileSync(fixture.logPath, "utf8"), callsBefore);
+});
+
 test("changed verification inputs reject an existing candidate instead of reusing it", (t) => {
   const fixture = createSuccessFixture(t);
   const first = runCandidate(fixture);
