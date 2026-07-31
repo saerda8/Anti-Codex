@@ -3290,6 +3290,10 @@ Errors recorded this pass: the first combined PowerShell parser command used `$f
 - [x] Run the complete clean, no-traffic source preflight against native custom-instruction commit `6ad19495`. It bound the intended clean HEAD and stopped before activation because `translatorRegression` was red; no runtime sync, restart, model request, Docker action or native-Codex change occurred.
 - [x] Preserve the production update guardrail. The only failures were two test fixtures that still modeled an old valid host without `sandboxHelper`, `nodeRepl` and `nodeRuntime`; weakening the current companion-file guardrail would have been incorrect.
 - [x] Repair only those fixtures and their manifest hashes. Focused coverage passes `2/2`, the complete update-status contract passes `25/25`, Node syntax passes and `git diff --check` is clean.
-- [ ] Commit this test-and-record checkpoint, return to a clean worktree, and rerun the same complete source preflight. Runtime activation remains prohibited until that full gate is green.
+- [x] Commit the first fixture repair as `0f5015b`, return to a clean worktree, and rerun the same complete source preflight. It again stopped before activation, this time on two deterministic tests coupled to mutable installed state.
+- [x] Isolate seamless model-switching coverage from the live composer selection. The test now owns a temporary `config.toml` selecting Gemini instead of reading the user's current third-party selection.
+- [x] Isolate formal Gate 6 coverage from stale installed sync evidence. The test now owns a signed temporary release report derived from the pinned source metadata instead of reading `%APPDATA%`.
+- [x] Reproduce both failures alone before the repair, then pass the focused pair `2/2`, both complete files `10/10`, the same pair with concurrency four `10/10`, both Node syntax checks and `git diff --check`.
+- [ ] Commit this second test-isolation checkpoint, rerun the entire source preflight, and keep runtime activation prohibited until the whole gate is green.
 
 Current status remains **reopened; not 100%**. The next irreversible boundary is still one guarded Anti-Codex-only activation followed by installed physical acceptance; it has not occurred in this follow-up.

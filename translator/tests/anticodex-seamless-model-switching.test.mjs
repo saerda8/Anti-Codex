@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -208,31 +208,40 @@ model_context_window = 1000000
 });
 
 test("Antigravity startup keeps the saved third-party route available for a later frontend switch", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-antigravity-startup-"));
+  const appData = join(fixture, "Roaming");
+  const codexHome = join(appData, "anticodex", "codex-home-deepseek-app");
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, "config.toml"), 'model = "gemini-3.1-pro-low"\n');
   const env = {
-    LOCALAPPDATA: "C:\\Users\\XD\\AppData\\Local",
-    APPDATA: "C:\\Users\\XD\\AppData\\Roaming",
-    USERPROFILE: "C:\\Users\\XD",
+    LOCALAPPDATA: join(fixture, "Local"),
+    APPDATA: appData,
+    USERPROFILE: join(fixture, "User"),
   };
-  const plan = buildTaskLaunchPlan({
-    env,
-    profile: {
-      mode: "antigravity",
-      antigravityModel: "gemini-3.1-pro-low",
-      protocol: "openai-compatible",
-      baseUrl: "http://127.0.0.1:8080",
-      model: "gpt-5.6-terra",
-      contextWindow: 1_000_000,
-    },
-  });
-  const child = buildTaskLauncherEnvironment(plan, env, {
-    ...plan.profile,
-    apiKey: "saved-third-party-key",
-  });
+  try {
+    const plan = buildTaskLaunchPlan({
+      env,
+      profile: {
+        mode: "antigravity",
+        antigravityModel: "gemini-3.1-pro-low",
+        protocol: "openai-compatible",
+        baseUrl: "http://127.0.0.1:8080",
+        model: "gpt-5.6-terra",
+        contextWindow: 1_000_000,
+      },
+    });
+    const child = buildTaskLauncherEnvironment(plan, env, {
+      ...plan.profile,
+      apiKey: "saved-third-party-key",
+    });
 
-  assert.equal(child.ANTICODEX_PROVIDER, "antigravity");
-  assert.equal(child.UPSTREAM_URL, "http://127.0.0.1:8080");
-  assert.equal(child.UPSTREAM_MODEL, "gpt-5.6-terra");
-  assert.equal(child.UPSTREAM_API_KEY, "saved-third-party-key");
+    assert.equal(child.ANTICODEX_PROVIDER, "antigravity");
+    assert.equal(child.UPSTREAM_URL, "http://127.0.0.1:8080");
+    assert.equal(child.UPSTREAM_MODEL, "gpt-5.6-terra");
+    assert.equal(child.UPSTREAM_API_KEY, "saved-third-party-key");
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test("formal PowerShell launcher restores the native model selection and keeps third-party credentials resident", () => {

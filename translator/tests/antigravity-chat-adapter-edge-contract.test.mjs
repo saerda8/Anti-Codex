@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -12,14 +12,50 @@ const execFileAsync = promisify(execFile);
 const root = resolve(import.meta.dirname, "..", "..");
 const { NODE_TEST_CONTEXT: _nodeTestContext, ...childEnv } = process.env;
 
+function writeCurrentReleaseFixture(reportRoot) {
+  const metadata = JSON.parse(readFileSync(join(root, "third_party", "codexplusplus", "upstream.json"), "utf8"));
+  const binarySha256 = String(metadata.verification.launcherReleaseBuild)
+    .replace(/^sha256:/i, "")
+    .toLowerCase();
+  const shellVersion = "26.fixture.1.0";
+  const body = `${JSON.stringify({
+    ok: true,
+    noTraffic: true,
+    usedRealTraffic: false,
+    clientSyncContract: {
+      sourcePackageVersion: shellVersion,
+      activeSourcePackageVersion: shellVersion,
+      activeSourcePackageVersionFromMarker: shellVersion,
+    },
+    sync: {
+      updateStatus: {
+        components: {
+          sourceVersion: metadata.version,
+          activeVersion: metadata.version,
+          sourceHash: binarySha256,
+          activeHash: binarySha256,
+          manifestHash: binarySha256,
+          expectedPatchCount: metadata.patches.length,
+          patchCount: metadata.patches.length,
+        },
+      },
+    },
+  }, null, 2)}\n`;
+  mkdirSync(reportRoot, { recursive: true });
+  const path = join(reportRoot, "latest-sync-readiness.json");
+  writeFileSync(path, body, "utf8");
+  writeFileSync(`${path}.sha256`, `sha256:${createHash("sha256").update(body).digest("hex")}\n`, "ascii");
+}
+
 test("formal Gate 6 matrix advances only with signed visible Gate 5 evidence", async () => {
   const scriptPath = resolve(root, "scripts", "test-antigravity-chat-adapter-edge-contract.mjs");
   const temporaryRoot = mkdtempSync(join(tmpdir(), "anticodex-gate6-contract-"));
   const reportPath = join(temporaryRoot, "gate6.json");
   const gate5Path = join(temporaryRoot, "gate5.json");
   const outputRoot = join(temporaryRoot, "reports");
-  const releaseReportRoot = resolve(process.env.APPDATA || tmpdir(), "anticodex", "reports");
+  const releaseReportRoot = join(temporaryRoot, "release-reports");
   try {
+    writeCurrentReleaseFixture(releaseReportRoot);
     const releaseBinding = createCurrentReleaseBinding({ sourceRoot: root, reportRoot: releaseReportRoot });
     assert.equal(releaseBinding.valid, true);
     const gate5Body = `${JSON.stringify({

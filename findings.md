@@ -3517,3 +3517,10 @@
 - Both failures came from valid-host test fixtures predating the required companion-file guardrail. They omitted the sandbox helper plus the CUA Node REPL/runtime files and hashes, so the production checker correctly returned `updateNeeded:true`.
 - The production guardrail was left unchanged. Adding those required files and manifest hashes to the two fixtures restores the intended baseline: the focused pair passes `2/2`, the full update-status contract passes `25/25`, and syntax/whitespace checks pass.
 - This is test evidence repair, not installed acceptance. Active v112/v1.2.43 and the newer source remain unsynchronized until the entire preflight is rerun green; the project is still not 100%.
+
+## 2026-08-01 Complete Preflight Live-State Coupling
+
+- The next clean full preflight bound commit `0f5015b` and again failed only `translatorRegression`. The two failures reproduce individually, so they are deterministic live-state coupling rather than Node test concurrency.
+- `anticodex-seamless-model-switching.test.mjs` used the real user `APPDATA`. The production launcher correctly read the current native selection `anticodex/third-party/gpt-5.6-terra`, while the test incorrectly expected Antigravity. A temporary isolated Gemini `config.toml` now makes the intended premise explicit.
+- `antigravity-chat-adapter-edge-contract.test.mjs` used the real installed `latest-sync-readiness.json`. That report cannot be a valid current binding while source CodexPlusPlus is v1.2.44 and installed evidence remains older. The test now creates its own signed, source-derived release fixture.
+- No production guard, route, model setting or installed report was changed. The repaired focused pair passes `2/2`; complete affected files and their concurrency-four run pass `10/10`; syntax and whitespace checks pass. Runtime activation remains blocked pending another fully green source preflight.
