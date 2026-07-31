@@ -11,10 +11,11 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 18318);
 const action = String(args.get("--action") || "syncHost");
 const confirmed = String(args.get("--confirm") || "false").toLowerCase() === "true";
+const inspectOnly = String(args.get("--inspect-only") || "false").toLowerCase() === "true";
 const timeoutMs = Number(args.get("--timeout-ms") || 15_000);
 
 if (action !== "syncHost") throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
-if (!confirmed) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
+if (!confirmed && !inspectOnly) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -144,6 +145,20 @@ const visiblePoint = (selectorExpression) => `(() => {
 let result;
 try {
   await call("Runtime.enable");
+  if (inspectOnly) {
+    result = await evaluate(`(() => ({
+      ok: true,
+      version: window.__ANTICODEX_MANAGER_VERSION__ || '',
+      overlayOpen: Boolean(document.querySelector('#anticodex-manager-overlay')),
+      currentActionToken: window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ || '',
+      inFlightToken: window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || '',
+      pendingActions: window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {},
+      queuedActions: (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).map((entry) => entry?.action || ''),
+      lastAction: window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ || null,
+    }))()`);
+    console.log(JSON.stringify({ ...result, port, target: { id: target.id, title: target.title, url: target.url } }));
+    process.exit(0);
+  }
   await call("Page.enable");
   await call("Page.bringToFront");
   await evaluate(`(() => { window.focus(); return { focused: document.hasFocus(), visibility: document.visibilityState }; })()`);
@@ -219,6 +234,11 @@ try {
     (value) => value?.ok === true,
     5_000,
   );
+  const dispatchBaseline = await evaluate(`(() => ({
+    currentActionToken: window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ || '',
+    lastAction: window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__?.action || '',
+    queueLength: (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).length,
+  }))()`);
   await realMouseClick(secondActionPoint);
 
   let accepted = { accepted: false };
@@ -226,15 +246,16 @@ try {
     accepted = await waitFor(`(() => {
       const overlay = document.querySelector('#anticodex-manager-overlay');
       const resultNode = overlay?.querySelector('[data-anticodex-result="action"]');
-      const button = overlay?.querySelector('button[data-action="syncHost"]');
       const last = window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ || null;
+      const currentActionToken = window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ || '';
+      const queued = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).some((entry) => entry?.action === 'syncHost');
+      const running = resultNode?.getAttribute('data-anticodex-running') || '';
+      const tokenChanged = Boolean(currentActionToken) && currentActionToken !== ${JSON.stringify(dispatchBaseline.currentActionToken)};
       return {
-        accepted: overlay?.querySelector('.anticodex-actions')?.getAttribute('data-anticodex-busy') === 'true'
-          || resultNode?.getAttribute('data-anticodex-running') === 'syncHost'
-          || button?.disabled === true
-          || last?.action === 'syncHost',
-        running: resultNode?.getAttribute('data-anticodex-running') || '',
-        disabled: button?.disabled === true,
+        accepted: tokenChanged && (queued || running === 'syncHost' || last?.action === 'syncHost'),
+        tokenChanged,
+        queued,
+        running,
         lastAction: last?.action || '',
         text: String(resultNode?.textContent || last?.managerSummary || '').replace(/\\s+/g, ' ').trim(),
       };
@@ -252,6 +273,7 @@ try {
     action,
     actionLabel: firstActionPoint.text,
     confirmation,
+    dispatchBaseline,
     secondClickDispatched: true,
     accepted,
   };

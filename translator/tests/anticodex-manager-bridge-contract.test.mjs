@@ -19,6 +19,7 @@ const uiStateTest = readFileSync(resolve(root, "scripts", "test-anticodex-ui-sta
 const managerButtonTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-button.mjs"), "utf8");
 const managerRealButtonsTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-real-buttons.ps1"), "utf8");
 const managerActionTest = readFileSync(resolve(root, "scripts", "test-anticodex-manager-action.ps1"), "utf8");
+const managerRealMouseAction = readFileSync(resolve(root, "scripts", "run-anticodex-manager-action-real-mouse.mjs"), "utf8");
 const uiChatSmokeTest = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
 const realSmallProjectTest = readFileSync(resolve(root, "scripts", "test-anticodex-real-small-project.ps1"), "utf8");
 const accountProxyTest = readFileSync(resolve(root, "scripts", "test-anticodex-account-proxy-readiness.ps1"), "utf8");
@@ -994,6 +995,14 @@ test("Manager native mouse verifier recomputes live hit coordinates and proves d
   assert.match(idleBlock, /const queueStable =/);
   assert.doesNotMatch(idleBlock, /if \(latest\.overlayPresent &&/);
   assert.match(idleBlock, /!latest\.running && queueStable/);
+});
+
+test("Manager high-impact real-mouse helper requires dispatch evidence instead of disabled UI", () => {
+  assert.match(managerRealMouseAction, /const inspectOnly =/);
+  assert.match(managerRealMouseAction, /const dispatchBaseline = await evaluate/);
+  assert.match(managerRealMouseAction, /tokenChanged && \(queued \|\| running === 'syncHost' \|\| last\?\.action === 'syncHost'\)/);
+  assert.doesNotMatch(managerRealMouseAction, /accepted:[^\n]*button\?\.disabled/);
+  assert.doesNotMatch(managerRealMouseAction, /accepted:[^\n]*data-anticodex-busy/);
 });
 
 test("Manager ui-only matrix shortens account observation without editing product constants", () => {

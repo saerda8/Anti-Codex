@@ -606,6 +606,8 @@ test("host sync validates the exact rollback contract and separates activation r
       rollback.indexOf("Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker", normalValidation),
     "normal rollback must migrate the legacy host pair before strict rollback-host validation",
   );
+  assert.match(rollback, /Test-AntiCodexComponent -ComponentRoot \$rollbackComponent[\s\S]*?try\s*\{[\s\S]*?Test-AntiCodexComponent -ComponentRoot \$activeComponent[\s\S]*?\$activeComponentValid = \$false/);
+  assert.match(rollback, /if \(\$activeComponentValid\)\s*\{\s*Commit-AntiCodexRollbackCheckpoint\s*\}\s*else\s*\{\s*Remove-InvalidRollbackSwap\s*\}/);
   assert.doesNotMatch(sync, /Repair-RollbackHostBinaryManifest/);
   assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\([\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable[\s\S]*?\[IO\.File\]::Exists\(\$rollbackMarker\)/);
   assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);

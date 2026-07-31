@@ -641,6 +641,16 @@ function Get-AntiCodexProcessIdentity {
     }
 }
 
+function Remove-InvalidRollbackSwap {
+    foreach ($path in @($swapHost, $swapComponent)) {
+        $fullPath = [IO.Path]::GetFullPath($path)
+        $allowed = @([IO.Path]::GetFullPath($swapHost), [IO.Path]::GetFullPath($swapComponent))
+        if ($fullPath -notin $allowed) { throw "Refusing to remove an unexpected rollback swap path: $fullPath" }
+        if ([IO.Directory]::Exists("\\?\$fullPath")) { [IO.Directory]::Delete("\\?\$fullPath", $true) }
+    }
+    if ([IO.File]::Exists($swapMarker)) { [IO.File]::Delete($swapMarker) }
+}
+
 function Stop-AntiCodexVerifiedProcess {
     param(
         [Parameter(Mandatory = $true)]$Snapshot,
@@ -1143,6 +1153,7 @@ $rollbackError = $null
 $restartAfterRollback = $false
 $activatedMarkerSha256 = ""
 $supersededByAnotherSync = $false
+$activeComponentValid = $true
 $rollbackStage = "rollback_validation"
 try {
     try {
@@ -1165,8 +1176,13 @@ try {
         Repair-LegacyRollbackHostBinaryManifest
         Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
         Test-AntiCodexHost -HostRoot $rollbackHost -MarkerPath $rollbackMarker
-        Test-AntiCodexComponent -ComponentRoot $activeComponent
         Test-AntiCodexComponent -ComponentRoot $rollbackComponent
+        try {
+            Test-AntiCodexComponent -ComponentRoot $activeComponent
+        } catch {
+            if (-not [IO.Directory]::Exists("\\?\$activeComponent")) { throw }
+            $activeComponentValid = $false
+        }
 
         $rollbackStage = "rollback_stopping_host"
         Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_stopping_host" -Message "Stopping Anti-Codex before rollback." -RollbackAvailable $true -StateRoot $stateRoot
@@ -1191,7 +1207,11 @@ try {
             Move-FixedComponentDirectory -Source $rollbackComponent -Destination $activeComponent
             Test-AntiCodexHost -HostRoot $activeHost -MarkerPath $activeMarker
             Test-AntiCodexComponent -ComponentRoot $activeComponent
-            Commit-AntiCodexRollbackCheckpoint
+            if ($activeComponentValid) {
+                Commit-AntiCodexRollbackCheckpoint
+            } else {
+                Remove-InvalidRollbackSwap
+            }
             $activatedMarkerSha256 = Get-AntiCodexSha256 -Path $activeMarker
             $rollbackStage = "rollback_restart"
             Set-AntiCodexUpdateOperation -State "running" -Stage "rollback_restart" -Message "Restarting Anti-Codex after rollback." -RollbackAvailable $true -StateRoot $stateRoot
