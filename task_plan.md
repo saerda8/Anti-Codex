@@ -3348,7 +3348,7 @@ Candidate recovery update: the existing content-addressed `1.2.44` candidate had
 - [ ] Correct the language control: either implement true system detection or label automatic mode as Anti-Codex default Chinese.
 - [ ] Prove Personality and Memory behavior separately across Gemini, Claude and third-party only when a real route acceptance round is authorized; storage alone is not a cross-provider pass.
 - [ ] Physically smoke-test notifications, theme, font, reduced motion, MCP, Hooks, shortcuts, Git, Worktree, local environment and data controls. Keep Plugins/Skills and conditional cloud/voice/browser/connection pages hidden until they have real product support.
-- [ ] Add a service-side shared real-traffic mutex for stability and full-verification actions. UI locking alone must not permit two paid provider jobs to overlap.
+- [x] Add a service-side shared real-traffic mutex for stability and full-verification actions. Same-process requests share one lock, a restarted service detects either external PowerShell action, scan failure closes with HTTP 503 instead of spending traffic, and unrelated background work remains independent.
 
 The candidate quarantine is now a formal release blocker, not a request to disable or bypass endpoint protection. The project remains **not 100%**.
 
@@ -3369,3 +3369,20 @@ The candidate quarantine is now a formal release blocker, not a request to disab
 - [x] Independently verify service `26/26`, bridge `57/57`, JavaScript syntax for all four changed files and `git diff --check`. No runtime sync, client restart, model/provider request or Docker action occurred.
 
 The project remains **not 100%**. Next source work is the shared real-traffic mutex plus the update-control truth audit, followed by the native-settings classification; one clean full preflight will be run only after that grouped Manager work is complete.
+
+### 2026-08-01 Update-control and prompt/settings closure queue
+
+- [x] Separate current update drift from historical operation outcome. A previous `rolled_back` result no longer hides a current `updateNeeded:true`; the operation state/message remain separate rows.
+- [ ] Preserve the original activation failure when rollback succeeds; do not replace it with only “restored old version”.
+- [x] Unwrap the Manager update action's nested result consistently. The UI now distinguishes newly started, already running and failed handoff, and shows operation id, stage and actionable detail when returned.
+- [ ] Make update-check completion persistent and recoverable after the panel closes or its renderer timeout expires. Do not turn timeout into `ok:true`; align the UI budget with the actual checker and expose the latest real result through diagnostics/status.
+- [x] Reject an incomplete CodexPlusPlus candidate before building the copied Codex shell or stopping any process. The existing component `VerifyOnly` boundary runs at `component_preflight`; only a pass advances to `candidate_build`.
+- [ ] Extend CodexPlusPlus drift identity only where existing metadata already supports it: upstream commit, patch commit, isolation commit and exact patch identities/hashes. Do not add a second updater or controller.
+- [ ] Keep all native textual prompt layers auditable in the Manager: source, default, effective value, enabled state and restore-default. User custom instructions and useful style/method guidance remain editable; tool/protocol/permission compatibility stays protected; Antigravity's provider-owned base remains explicitly opaque/read-only.
+- [ ] Close direct third-party prompt transparency without claiming a false pure route. The current direct route still receives the unified catalog's Codex `base_instructions`; either expose that existing all-route base through the same edit/disable/restore contract, or visibly label it uncontrollable until a narrow boundary is proven.
+- [ ] Classify every native setting as effective, intentionally unavailable or visibly disabled with a reason. In particular, approval/sandbox/network are Anti-Codex-managed, OpenAI account/quota pages are external, and automatic language cannot be advertised while the shell forces Chinese.
+- [ ] After these source fixes and their focused offline tests, run one clean full no-traffic preflight. Only then cross the guarded installed/runtime boundary and perform physical native-settings, Manager, update, shell and isolation acceptance.
+
+These grouped repairs remain source-only. Independent focused acceptance passes Manager service `27/27`, Manager bridge `59/59`, CodexPlusPlus/component sync `34/34`, JavaScript syntax, PowerShell parsing and whitespace checks. No model/provider request, runtime sync, client restart, Docker action or native-Codex mutation occurred.
+
+Failure log addition: a read-only `rg` call again passed a Windows wildcard path (`scripts/*.ps1`) and failed before reading project files. Another read-only search included a nonexistent legacy `scripts/anticodex-manager.html` path. The corrected forms target `scripts` with `-g "*.ps1"` and only existing Manager sources. One bridge test was also started during another agent's intentional RED window and failed only because its new helper had not been written yet; the completed file then passed `58/58`, and the integrated component-stage case passes `59/59`. None of these operator/test-timing failures changed files, runtime or processes.

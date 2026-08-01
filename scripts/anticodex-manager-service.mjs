@@ -120,6 +120,7 @@ const MANAGER_ACTIONS = Object.freeze({
         args: [],
         timeoutMs: 10000,
         background: true,
+        backgroundMutex: "real-provider-traffic",
         singletonProcessPattern: "test-anticodex-stability-soak\\.ps1",
         backgroundLockMaxMs: 20 * 60000,
     },
@@ -163,6 +164,7 @@ const MANAGER_ACTIONS = Object.freeze({
         args: ["-OpenAntigravityOnVerification"],
         timeoutMs: 10000,
         background: true,
+        backgroundMutex: "real-provider-traffic",
         singletonProcessPattern: "test-anticodex-post-verification\\.ps1",
         backgroundLockMaxMs: 20 * 60000,
     },
@@ -388,7 +390,7 @@ async function managerActionRunningProcesses(action, scriptsRoot) {
         "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)",
         "$OutputEncoding = [Console]::OutputEncoding",
         `$pattern = ${psSingleQuoted(action.singletonProcessPattern)}`,
-        "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" -ErrorAction SilentlyContinue",
+        "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" -ErrorAction Stop",
         "| Where-Object { $_.ProcessId -ne $PID -and [string]$_.CommandLine -match $pattern }",
         "| Select-Object -First 5 @{Name='pid';Expression={$_.ProcessId}}, @{Name='commandLine';Expression={$_.CommandLine}}",
         "| ConvertTo-Json -Compress",
@@ -405,13 +407,13 @@ async function managerActionRunningProcesses(action, scriptsRoot) {
         let parsed = JSON.parse(trimmed);
         if (!parsed) return [];
         return Array.isArray(parsed) ? parsed : [parsed];
-    } catch {
-        return [];
+    } catch (error) {
+        throw error;
     }
 }
 
 // Run action
-async function runManagerAction(actionName, stateRoot, scriptsRoot) {
+async function runManagerAction(actionName, stateRoot, scriptsRoot, runtime = {}) {
     const action = MANAGER_ACTIONS[actionName];
     if (!action) {
         throw { statusCode: 404, message: `Unknown Anti-Codex manager action: ${actionName}` };
@@ -441,50 +443,75 @@ async function runManagerAction(actionName, stateRoot, scriptsRoot) {
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command];
 
     if (action.background) {
-        const lockKey = action.singletonProcessPattern || actionName;
-        if (ACTIVE_BACKGROUND_ACTION_LOCKS.has(lockKey)) {
-            const task = ACTIVE_BACKGROUND_ACTIONS.get(lockKey) || {};
+        const lockKey = action.backgroundMutex || action.singletonProcessPattern || actionName;
+        const conflictPayload = (task = {}, running = []) => {
+            const conflictingAction = task.actionName || actionName;
+            const conflictingLabel = task.label || MANAGER_ACTIONS[conflictingAction]?.label || conflictingAction;
             return {
                 ok: true,
                 action: actionName,
                 label,
                 background: true,
                 alreadyRunning: true,
-                runningPids: Number.isFinite(Number(task.pid)) ? [Number(task.pid)] : [],
+                conflictingAction,
+                conflictingLabel,
+                runningPids: running.length > 0
+                  ? running.map((item) => Number(item?.pid)).filter(Number.isFinite)
+                  : (Number.isFinite(Number(task.pid)) ? [Number(task.pid)] : []),
                 backgroundStartedAt: task.backgroundStartedAt || "",
-                message: `${label} 已经在后台运行。`,
+                message: conflictingAction === actionName
+                  ? `${conflictingLabel} 已经在后台运行。`
+                  : `${conflictingLabel} 正在后台运行，不能同时启动${label}。`,
             };
+        };
+        if (ACTIVE_BACKGROUND_ACTION_LOCKS.has(lockKey)) {
+            return conflictPayload(ACTIVE_BACKGROUND_ACTIONS.get(lockKey));
         }
         ACTIVE_BACKGROUND_ACTION_LOCKS.add(lockKey);
+        const lockTask = { actionName, label, pid: null, backgroundStartedAt: "" };
+        ACTIVE_BACKGROUND_ACTIONS.set(lockKey, lockTask);
         try {
-            const running = await managerActionRunningProcesses(action, scriptsRoot);
-            if (running.length > 0) {
-                ACTIVE_BACKGROUND_ACTION_LOCKS.delete(lockKey);
-                return {
-                    ok: true,
-                    action: actionName,
-                    label,
-                    background: true,
-                    alreadyRunning: true,
-                    runningPids: running.map((item) => Number(item?.pid)).filter(Number.isFinite),
-                    message: `${label} 已经在后台运行。`,
+            const conflictCandidates = action.backgroundMutex
+              ? Object.entries(MANAGER_ACTIONS).filter(([, candidate]) => candidate.backgroundMutex === action.backgroundMutex)
+              : [[actionName, action]];
+            for (const [candidateName, candidate] of conflictCandidates) {
+              let running;
+              try {
+                running = await (runtime.findRunningProcesses || managerActionRunningProcesses)(candidate, scriptsRoot);
+              } catch {
+                if (!action.backgroundMutex) continue;
+                throw {
+                  statusCode: 503,
+                  message: `无法确认是否已有耗真实流量的后台任务，暂不启动${label}。请稍后重试。`,
                 };
+              }
+              if (running.length === 0) continue;
+              if (ACTIVE_BACKGROUND_ACTIONS.get(lockKey) === lockTask) ACTIVE_BACKGROUND_ACTIONS.delete(lockKey);
+              ACTIVE_BACKGROUND_ACTION_LOCKS.delete(lockKey);
+              return conflictPayload({ actionName: candidateName, label: candidate.label }, running);
             }
-            const child = spawn(powershellPath(), args, {
+            const child = (runtime.spawn || spawn)(powershellPath(), args, {
                 cwd: scriptsRoot,
                 detached: true,
                 stdio: "ignore",
                 windowsHide: true,
             });
             const backgroundStartedAt = new Date().toISOString();
-            ACTIVE_BACKGROUND_ACTIONS.set(lockKey, { actionName, label, pid: child.pid, backgroundStartedAt });
+            Object.assign(lockTask, { pid: child.pid, backgroundStartedAt });
+            let lockTimer = null;
             const clearLock = () => {
+                if (ACTIVE_BACKGROUND_ACTIONS.get(lockKey) !== lockTask) return;
                 ACTIVE_BACKGROUND_ACTION_LOCKS.delete(lockKey);
                 ACTIVE_BACKGROUND_ACTIONS.delete(lockKey);
+                if (lockTimer) (runtime.clearTimeout || clearTimeout)(lockTimer);
+                lockTimer = null;
             };
             child.once("exit", clearLock);
             child.once("error", clearLock);
-            const lockTimer = setTimeout(clearLock, action.backgroundLockMaxMs || 30 * 60000);
+            lockTimer = (runtime.setTimeout || setTimeout)(() => {
+                lockTimer = null;
+                clearLock();
+            }, action.backgroundLockMaxMs || 30 * 60000);
             lockTimer.unref?.();
             child.unref();
             return {
@@ -498,7 +525,7 @@ async function runManagerAction(actionName, stateRoot, scriptsRoot) {
             };
         } catch (error) {
             ACTIVE_BACKGROUND_ACTION_LOCKS.delete(lockKey);
-            ACTIVE_BACKGROUND_ACTIONS.delete(lockKey);
+            if (ACTIVE_BACKGROUND_ACTIONS.get(lockKey) === lockTask) ACTIVE_BACKGROUND_ACTIONS.delete(lockKey);
             throw error;
         }
     }
@@ -594,7 +621,7 @@ async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot, callba
             result,
         };
     }
-    return runManagerAction(actionName, stateRoot, scriptsRoot);
+    return runManagerAction(actionName, stateRoot, scriptsRoot, callbacks.managerActionRuntime);
 }
 
 // Reports helpers
@@ -1900,6 +1927,7 @@ export function createAntiCodexManagerService(options = {}) {
   const fixedHealthUrl = options.fixedHealthUrl || process.env.ANTICODEX_FIXED_ROUTE_HEALTH_URL || "http://127.0.0.1:18487/anticodex/fixed-route/health";
   const scriptsRoot = __dirname;
   const adapterAuthToken = String(options.adapterAuthToken || "");
+  const managerActionRuntime = options.managerActionRuntime;
   const refreshModels = options.refreshModels;
   const refreshStatus = async () => ({
     diagnostics: await diagnosticsPayload(stateRoot, false, fixedHealthUrl, adapterAuthToken),
@@ -2027,7 +2055,7 @@ export function createAntiCodexManagerService(options = {}) {
       }
       try {
         const action = String(body.action || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus });
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus, managerActionRuntime });
         return jsonResponse(res, 200, payload, req);
       } catch (err) {
         return jsonResponse(res, err.statusCode || 500, { ok: false, message: err.message }, req);
@@ -2045,7 +2073,7 @@ export function createAntiCodexManagerService(options = {}) {
       if (!validateManagerSourceRequest(req, res, "manager action")) return;
       try {
         const action = String(url.searchParams.get("action") || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus });
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus, managerActionRuntime });
         return javascriptResponse(res, 200, managerActionScriptResponse(callbackName, payload));
       } catch (err) {
         const payload = {

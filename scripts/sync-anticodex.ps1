@@ -994,10 +994,10 @@ $rollbackAvailable = $false
 $rollbackRestoreAvailable = $false
 $activationRestored = $false
 $originalCodexBeforeSync = @()
-$updateStage = "candidate_build"
+$updateStage = "component_preflight"
 try {
     try {
-        Set-AntiCodexUpdateOperation -State "running" -Stage "candidate_build" -Message "Building a candidate from the installed Codex version." -StateRoot $stateRoot
+        Set-AntiCodexUpdateOperation -State "running" -Stage "component_preflight" -Message "Verifying the pinned CodexPlusPlus component before building the copied host." -StateRoot $stateRoot
         Remove-FixedUpdateDirectory -Path $candidateRoot
 
         $sourceSelection = & $updateChecker -InstallRoot $installRoot -StateRoot $stateRoot -NoPersist | ConvertFrom-Json
@@ -1006,6 +1006,14 @@ try {
         }
         $selectedSourceRoot = [IO.Path]::GetFullPath([string]$sourceSelection.source.root)
 
+        $global:LASTEXITCODE = 0
+        & $componentInstaller -InstallRoot $candidateRoot -VerifyOnly | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "CodexPlusPlus candidate preflight failed. The copied host was not built and the active release was not changed."
+        }
+
+        $updateStage = "candidate_build"
+        Set-AntiCodexUpdateOperation -State "running" -Stage "candidate_build" -Message "Building a candidate from the installed Codex version." -StateRoot $stateRoot
         $global:LASTEXITCODE = 0
         & $installer -InstallTarget $candidateRoot -SourceRoot $selectedSourceRoot -HostOnly
         if ($LASTEXITCODE -ne 0) {

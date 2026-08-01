@@ -499,7 +499,7 @@ test("prepared candidate report cannot hide changed binary bytes", (t) => {
   assert.equal(existsSync(fixture.candidateManifest), false);
 });
 
-test("automatic selection fails when every candidate hash is wrong and leaves destination untouched", (t) => {
+test("VerifyOnly preflight fails when every candidate hash is wrong and leaves destination untouched", (t) => {
   const fixture = createInstallerSandbox(t);
   const expectedHash = sha256(trustedBinary);
   const destinationBefore = Buffer.from("wrong candidate binary that must remain\n", "utf8");
@@ -514,7 +514,7 @@ test("automatic selection fails when every candidate hash is wrong and leaves de
     createMetadata(expectedHash),
   );
 
-  const result = runInstaller(fixture);
+  const result = runInstaller(fixture, ["-VerifyOnly"]);
 
   assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
   assert.deepEqual(readFileSync(fixture.candidateBinary), destinationBefore);
@@ -633,6 +633,24 @@ test("host sync stages, activates and recovers CodexPlusPlus with the copied Cod
   assert.match(sync, /\$health\.routeReady -eq \$true/);
   assert.match(sync, /\$acceptedPatches\.Count -eq 0/);
   assert.match(sync, /\$installedPatches\.Count -ne \$acceptedPatches\.Count/);
+});
+
+test("host sync rejects a missing CodexPlusPlus source before building or stopping the host", () => {
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+  const execution = sync.slice(sync.indexOf('$syncMutex = New-Object Threading.Mutex'));
+  const candidateCleanup = execution.indexOf("Remove-FixedUpdateDirectory -Path $candidateRoot");
+  const preflightStatus = execution.indexOf('-Stage "component_preflight" -Message "Verifying the pinned CodexPlusPlus component before building the copied host."');
+  const componentPreflight = execution.indexOf("& $componentInstaller -InstallRoot $candidateRoot -VerifyOnly");
+  const buildStatus = execution.indexOf('-Stage "candidate_build" -Message "Building a candidate from the installed Codex version."');
+  const hostBuild = execution.indexOf("& $installer -InstallTarget $candidateRoot -SourceRoot $selectedSourceRoot -HostOnly");
+  const hostStop = execution.indexOf("Stop-AntiCodexLaunchTaskForMaintenance");
+
+  assert.ok(candidateCleanup >= 0, "sync must clear the stale candidate before verifying reusable component input");
+  assert.ok(preflightStatus >= 0 && preflightStatus < componentPreflight, "sync status must describe component preflight before it starts");
+  assert.ok(componentPreflight > candidateCleanup, "component preflight must not trust the stale candidate being replaced");
+  assert.ok(buildStatus > componentPreflight && buildStatus < hostBuild, "host build status must begin only after component preflight succeeds");
+  assert.ok(componentPreflight < hostBuild, "missing component input must fail before the copied host is built");
+  assert.ok(componentPreflight < hostStop, "missing component input must fail before Anti-Codex maintenance begins");
 });
 
 test("manual rollback swaps CodexPlusPlus and host as one release", () => {

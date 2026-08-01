@@ -1259,9 +1259,15 @@
     return "\u57fa\u7840\u804a\u5929\u3001\u6d41\u5f0f\u548c\u5de5\u5177\u8c03\u7528\u5df2\u9a8c\u8bc1";
   }
 
+  function managerActionResult(payload) {
+    let result = payload && typeof payload === "object" ? payload : {};
+    while (result?.result && typeof result.result === "object" && result.result !== result) result = result.result;
+    return result;
+  }
+
   function summaryText(action, payload) {
     const r = payload?.result || payload || {};
-    const unwrapped = r?.result && typeof r.result === "object" ? r.result : r;
+    const unwrapped = managerActionResult(payload);
     if (action === "refreshStatus") return `\u72b6\u6001\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`;
     if (action === "refreshModels") return `\u6a21\u578b\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u5931\u8d25"}\n\u6a21\u578b\u6570\uff1a${r.modelCount ?? r.models?.length ?? "\u672a\u77e5"}`;
     if (action === "accountSwitch") return [
@@ -1343,7 +1349,7 @@
         failureSummaryLine(r),
       ].filter(Boolean).join("\n");
     }
-    if (action === "refreshFeatures" && payload?.background) return payload?.alreadyRunning ? "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u8bf7\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u6216 MCP/Skill\u3001\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002" : "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5f00\u59cb\u540e\u53f0\u6267\u884c\u3002\n\u754c\u9762\u4e0d\u4f1a\u7b49\u5f85\u957f\u65f6\u590d\u5236\uff1b\u5b8c\u6210\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002";
+    if (action === "refreshFeatures" && unwrapped?.background) return unwrapped?.alreadyRunning ? "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u8bf7\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u6216 MCP/Skill\u3001\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002" : "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u5f00\u59cb\u540e\u53f0\u6267\u884c\u3002\n\u754c\u9762\u4e0d\u4f1a\u7b49\u5f85\u957f\u65f6\u590d\u5236\uff1b\u5b8c\u6210\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838\u3002";
     const recoveryActionIds = Array.isArray(r.recoveryActions) ? r.recoveryActions.map((action) => action?.id).filter(Boolean).slice(0, 3) : [];
     if (action === "refreshFeatures") return [
       `\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a${r.ok ? "\u5b8c\u6210" : "\u9700\u8981\u5904\u7406"}`,
@@ -1353,14 +1359,23 @@
       "\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u4ecd\u9700\u5355\u72ec smoke \u9a8c\u8bc1",
     ].filter(Boolean).join("\n");
     if (action === "stabilitySoak") {
-      if (payload.alreadyRunning) return "\u7a33\u5b9a\u6027\u5de1\u68c0\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
-      return `${payload.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u7a33\u5b9a\u6027\u5de1\u68c0\u3002" : "\u542f\u52a8\u7a33\u5b9a\u6027\u5de1\u68c0\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-stability-soak.json\u3002`;
+      if (unwrapped.alreadyRunning) return "\u7a33\u5b9a\u6027\u5de1\u68c0\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
+      return `${unwrapped.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u7a33\u5b9a\u6027\u5de1\u68c0\u3002" : "\u542f\u52a8\u7a33\u5b9a\u6027\u5de1\u68c0\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-stability-soak.json\u3002`;
     }
     if (action === "coldRelaunch") {
-      if (payload.alreadyRunning) return "\u51b7\u542f\u52a8\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u91cd\u542f Anti-Codex\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
-      return `${payload.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u51b7\u542f\u52a8\u9a8c\u8bc1\u3002" : "\u542f\u52a8\u51b7\u542f\u52a8\u9a8c\u8bc1\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u91cd\u542f Anti-Codex\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-cold-relaunch.json\u3002`;
+      if (unwrapped.alreadyRunning) return "\u51b7\u542f\u52a8\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u91cd\u542f Anti-Codex\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
+      return `${unwrapped.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u51b7\u542f\u52a8\u9a8c\u8bc1\u3002" : "\u542f\u52a8\u51b7\u542f\u52a8\u9a8c\u8bc1\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u91cd\u542f Anti-Codex\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-cold-relaunch.json\u3002`;
     }
-    if (action === "syncHost") return payload?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0";
+    if (action === "syncHost") {
+      const failed = payload?.ok === false || r?.ok === false || unwrapped?.ok === false;
+      const detail = unwrapped?.error || unwrapped?.message || r?.error || r?.message || payload?.error || payload?.message || "";
+      return [
+        failed ? "\u540c\u6b65\u542f\u52a8\u5931\u8d25" : (unwrapped?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0"),
+        unwrapped?.operationId ? `\u4efb\u52a1\uff1a${unwrapped.operationId}` : "",
+        unwrapped?.stage ? `\u9636\u6bb5\uff1a${unwrapped.stage}` : "",
+        detail ? `\u8bf4\u660e\uff1a${detail}` : "",
+      ].filter(Boolean).join("\n");
+    }
     if (action === "diagnosticsBundle") {
       const longTasks = unwrapped.diagnosticsSummary?.longTasks;
       const otherRunningCount = longTasks?.otherRunningItems?.length;
@@ -1386,7 +1401,7 @@
       ...reportSummaryLines(r),
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
-    if (action === "postVerificationFull") return payload?.alreadyRunning
+    if (action === "postVerificationFull") return unwrapped?.alreadyRunning
       ? "\u5b8c\u6574\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c"
       : "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
     return JSON.stringify(r, null, 2);
@@ -1531,8 +1546,9 @@
   }
 
   function managerActionContinuesInBackground(action, payload) {
+    const result = managerActionResult(payload);
     return MANAGER_BACKGROUND_START_ACTION_IDS.has(action)
-      && (action === "syncHost" || payload?.background === true);
+      && result?.background === true;
   }
 
   function wait(ms) {
@@ -1558,7 +1574,7 @@
       return "\u9636\u6bb5\uff1a\u540c\u6b65\u5c31\u7eea\u68c0\u67e5\u6536\u5c3e";
     }
     if (action === "syncHost") {
-      if (seconds < 8) return "\u9636\u6bb5\uff1a\u6784\u5efa Codex \u5019\u9009\u7248";
+      if (seconds < 8) return "\u9636\u6bb5\uff1a\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6";
       if (seconds < 25) return "\u9636\u6bb5\uff1a\u6821\u9a8c\u54c1\u724c\u3001\u56fe\u6807\u548c\u5b89\u5168\u6807\u8bb0";
       return "\u9636\u6bb5\uff1a\u7b49\u5f85\u540e\u53f0\u540c\u6b65\u7ed3\u679c\uff0c\u8bf7\u4e0d\u8981\u91cd\u590d\u70b9\u51fb";
     }
@@ -1590,7 +1606,7 @@
     if (action === "accountSwitch") return `${prefix}\n${progress}\n\u53ea\u4f1a\u6253\u5f00\u6216\u805a\u7126 Antigravity \u684c\u9762\u7aef\uff0c\u4e0d\u4f1a\u8fdb\u5165 ChatGPT \u767b\u5f55\u3002`;
     if (action === "fastOverallNoTraffic") return `${prefix}\n${progress}\n\u9884\u8ba1 40-90 \u79d2\uff0c\u4e0d\u6d88\u8017 Antigravity \u6d41\u91cf\uff0c\u7528\u4e8e\u65e5\u5e38\u5feb\u901f\u6392\u67e5\u3002`;
     if (action === "overallNoTraffic") return `${prefix}\n${progress}\n\u9884\u8ba1 1 \u5206\u949f\u5de6\u53f3\uff0c\u4e0d\u6d88\u8017 Antigravity \u6d41\u91cf\u3002\u8fd0\u884c\u671f\u95f4\u4f1a\u6682\u65f6\u7981\u7528\u5176\u4ed6\u6309\u94ae\uff0c\u9632\u6b62\u91cd\u590d\u542f\u52a8\u3002`;
-    if (action === "syncHost") return `${prefix}\n${progress}\n\u8fd9\u662f\u540e\u53f0\u540c\u6b65\u4efb\u52a1\uff1a\u5148\u6784\u5efa\u5019\u9009\u7248\uff0c\u9a8c\u8bc1\u901a\u8fc7\u624d\u66ff\u6362\u5f53\u524d Anti-Codex\u3002`;
+    if (action === "syncHost") return `${prefix}\n${progress}\n\u8fd9\u662f\u540e\u53f0\u540c\u6b65\u4efb\u52a1\uff1a\u5148\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6\uff0c\u901a\u8fc7\u540e\u624d\u6784\u5efa\u5ba2\u6237\u7aef\u5019\u9009\u7248\uff0c\u9a8c\u8bc1\u901a\u8fc7\u624d\u66ff\u6362\u5f53\u524d Anti-Codex\u3002`;
     if (action === "postVerificationFull") return `${prefix}\n${progress}\n\u8fd9\u4e2a\u4efb\u52a1\u4f1a\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u8bf7\u4e0d\u8981\u91cd\u590d\u70b9\u51fb\u3002`;
     if (action === "stabilitySoak") return `${prefix}\n${progress}\n\u8fd9\u4e2a\u4efb\u52a1\u4f1a\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u5b8c\u6210\u540e\u8bf7\u67e5\u770b\u6700\u65b0\u62a5\u544a\u3002`;
     if (action === "coldRelaunch") return `${prefix}\n${progress}\n\u8fd9\u4e2a\u4efb\u52a1\u4f1a\u91cd\u542f Anti-Codex\uff0c\u5b8c\u6210\u540e\u8bf7\u67e5\u770b latest-cold-relaunch.json\u3002`;
@@ -1662,6 +1678,7 @@
       updater_queued: "\u5df2\u6392\u961f\uff0c\u7b49\u5f85\u66f4\u65b0\u4efb\u52a1",
       updater_handoff: "\u66f4\u65b0\u4efb\u52a1\u5df2\u63a5\u7ba1",
       updater_handoff_failed: "\u66f4\u65b0\u4efb\u52a1\u4ea4\u63a5\u5931\u8d25",
+      component_preflight: "\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6",
       component_candidate: "\u51c6\u5907 CodexPlusPlus \u5019\u9009\u7ec4\u4ef6",
       candidate_build: "\u6784\u5efa\u5019\u9009\u7248",
       candidate_validation: "\u6821\u9a8c\u5019\u9009\u7248",
@@ -1682,9 +1699,6 @@
   function updateStatusText(updateStatus) {
     const operation = updateStatus?.operation;
     if (operation?.state === "running") return `\u6b63\u5728${updateOperationStageText(operation)}`;
-    if (operation?.state === "succeeded") return "\u540c\u6b65\u6210\u529f";
-    if (operation?.state === "failed") return "\u540c\u6b65\u5931\u8d25";
-    if (operation?.state === "rolled_back") return "\u5df2\u56de\u6eda\u5230\u53ef\u7528\u7248\u672c";
     if (updateStatus?.ok !== true) return "\u66f4\u65b0\u68c0\u67e5\u4e0d\u53ef\u7528";
     return updateStatus?.updateNeeded === true ? "\u9700\u8981\u540c\u6b65" : "\u5df2\u662f\u6700\u65b0";
   }

@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -106,6 +107,146 @@ function saveThirdPartyOptions(fixture, model = "gpt-5.6-terra") {
     },
   };
 }
+
+test("Manager serializes real-traffic background actions and releases the shared lock", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "anticodex-manager-traffic-lock-"));
+  const originalWindir = process.env.WINDIR;
+  const children = [];
+  const timers = [];
+  let nextPid = 41000;
+  let externalAction = "";
+  let scanFailure = false;
+  const runtime = {
+    findRunningProcesses(action) {
+      if (scanFailure) throw new Error("synthetic process scan failure");
+      return externalAction && new RegExp(action.singletonProcessPattern).test(externalAction)
+        ? [{ pid: 49999, commandLine: externalAction }]
+        : [];
+    },
+    spawn() {
+      const child = new EventEmitter();
+      child.pid = nextPid++;
+      child.unref = () => {};
+      children.push(child);
+      return child;
+    },
+    setTimeout(callback) {
+      const timer = { callback, cleared: false, unref() {} };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimeout(timer) {
+      timer.cleared = true;
+    },
+  };
+  const openService = async () => {
+    const service = createAntiCodexManagerService({
+      port: 0,
+      host: "127.0.0.1",
+      stateRoot: tempDir,
+      fixedHealthUrl: "http://127.0.0.1:1/anticodex/fixed-route/health",
+      managerActionRuntime: runtime,
+    });
+    const server = await service.listen();
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const bootstrap = await fetch(`${baseUrl}/anticodex/manager/bootstrap`, { headers: { origin: baseUrl } });
+    const token = (await bootstrap.json()).token;
+    const run = async (action) => {
+      const response = await fetch(`${baseUrl}/anticodex/manager/action`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: baseUrl,
+          "x-anticodex-manager-token": token,
+        },
+        body: JSON.stringify({ action }),
+      });
+      return { ...(await response.json()), httpStatus: response.status };
+    };
+    return { service, run };
+  };
+
+  process.env.WINDIR = tempDir; // Safety net: a broken runtime seam cannot launch real PowerShell.
+  let first;
+  let second;
+  try {
+    first = await openService();
+    const started = await first.run("stabilitySoak");
+    assert.equal(started.background, true);
+    assert.equal(started.alreadyRunning, undefined);
+    assert.equal(children.length, 1);
+
+    const duplicate = await first.run("stabilitySoak");
+    assert.equal(duplicate.alreadyRunning, true);
+    assert.equal(duplicate.conflictingAction, "stabilitySoak");
+    assert.equal(children.length, 1);
+
+    const crossConflict = await first.run("postVerificationFull");
+    assert.equal(crossConflict.alreadyRunning, true);
+    assert.equal(crossConflict.conflictingAction, "stabilitySoak");
+    assert.match(crossConflict.message, /不能同时|正在后台运行/);
+    assert.equal(children.length, 1);
+
+    const unrelated = await first.run("coldRelaunch");
+    assert.equal(unrelated.alreadyRunning, undefined);
+    assert.equal(children.length, 2);
+    children[1].emit("exit", 0);
+
+    children[0].emit("exit", 0);
+    assert.equal(timers[0].cleared, true);
+    const afterExit = await first.run("postVerificationFull");
+    assert.equal(afterExit.alreadyRunning, undefined);
+    assert.equal(children.length, 3);
+
+    children[2].emit("error", new Error("synthetic spawn failure"));
+    assert.equal(timers[2].cleared, true);
+    const afterError = await first.run("stabilitySoak");
+    assert.equal(afterError.alreadyRunning, undefined);
+    assert.equal(children.length, 4);
+
+    timers[3].callback();
+    const afterTimeout = await first.run("postVerificationFull");
+    assert.equal(afterTimeout.alreadyRunning, undefined);
+    assert.equal(children.length, 5);
+    children[4].emit("exit", 0);
+    await first.service.close();
+    first = null;
+
+    externalAction = "test-anticodex-stability-soak.ps1";
+    second = await openService();
+    const restartConflict = await second.run("postVerificationFull");
+    assert.equal(restartConflict.alreadyRunning, true);
+    assert.equal(restartConflict.conflictingAction, "stabilitySoak");
+    assert.deepEqual(restartConflict.runningPids, [49999]);
+    assert.equal(children.length, 5);
+
+    externalAction = "";
+    scanFailure = true;
+    const unavailable = await second.run("stabilitySoak");
+    assert.equal(unavailable.httpStatus, 503);
+    assert.equal(unavailable.ok, false);
+    assert.match(unavailable.message, /无法确认.*后台任务|暂不启动/);
+    assert.equal(children.length, 5);
+
+    const tolerated = await second.run("coldRelaunch");
+    assert.equal(tolerated.httpStatus, 200);
+    assert.equal(children.length, 6);
+    children[5].emit("exit", 0);
+
+    scanFailure = false;
+    const recovered = await second.run("postVerificationFull");
+    assert.equal(recovered.httpStatus, 200);
+    assert.equal(recovered.alreadyRunning, undefined);
+    assert.equal(children.length, 7);
+    children[6].emit("exit", 0);
+  } finally {
+    if (first) await first.service.close();
+    if (second) await second.service.close();
+    if (originalWindir === undefined) delete process.env.WINDIR;
+    else process.env.WINDIR = originalWindir;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("saving third-party settings updates the unified catalog without switching the active model", () => {
   const fixture = createSaveOnlyFixture();

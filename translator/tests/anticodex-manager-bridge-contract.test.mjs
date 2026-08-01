@@ -102,12 +102,13 @@ function quotedStrings(sourceText) {
 }
 
 test("Manager update summaries unwrap results and show advisory CodexPlusPlus releases", () => {
+  const managerActionResult = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionResult")})`);
   for (const [sourceText, functionName] of [
     [source, "managerSummary"],
     [managerInject, "summaryText"],
     [managerButtonTest, "managerSummaryFromActionPayload"],
   ]) {
-    const summarize = vm.runInNewContext(`(${extractNamedFunction(sourceText, functionName)})`);
+    const summarize = vm.runInNewContext(`(${extractNamedFunction(sourceText, functionName)})`, { managerActionResult });
     for (const scenario of [
       { resultOk: true, updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
       { resultOk: false, updateNeeded: true, components: { remoteState: "not_checked" }, status: /\u9700\u8981\u540c\u6b65/, remote: /\u8fdc\u7aef\u4e0a\u6e38\uff1a\u672a\u68c0\u67e5/ },
@@ -135,6 +136,71 @@ test("Manager update summaries unwrap results and show advisory CodexPlusPlus re
       if (scenario.components.remoteState === "newer_available") assert.doesNotMatch(summary, /\u9700\u8981\u540c\u6b65/);
     }
   }
+});
+
+test("Manager keeps current update drift separate from update history and unwraps sync receipts", () => {
+  const unwrap = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionResult")})`);
+  const updateStatus = vm.runInNewContext(`(${extractNamedFunction(managerInject, "updateStatusText")})`, {
+    updateOperationStageText: () => "stage",
+  });
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`, {
+    managerActionResult: unwrap,
+  });
+  const continuesInBackground = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionContinuesInBackground")})`, {
+    MANAGER_BACKGROUND_START_ACTION_IDS: new Set(["syncHost"]),
+    managerActionResult: unwrap,
+  });
+
+  assert.equal(updateStatus({
+    ok: true,
+    updateNeeded: true,
+    operation: { state: "rolled_back", stage: "complete" },
+  }), "\u9700\u8981\u540c\u6b65");
+
+  const running = {
+    ok: true,
+    result: {
+      ok: true,
+      result: {
+        ok: true,
+        background: true,
+        alreadyRunning: true,
+        operationId: "op-existing",
+        stage: "updater_handoff",
+        message: "existing updater owns the operation",
+      },
+    },
+  };
+  assert.equal(continuesInBackground("syncHost", running), true);
+  assert.match(summarize("syncHost", running), /\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c/);
+  assert.match(summarize("syncHost", running), /op-existing/);
+  assert.match(summarize("syncHost", running), /updater_handoff/);
+
+  const failed = {
+    ok: false,
+    result: {
+      ok: false,
+      background: false,
+      stage: "updater_handoff_failed",
+      error: "updater handoff failed",
+    },
+  };
+  assert.equal(continuesInBackground("syncHost", failed), false);
+  assert.match(summarize("syncHost", failed), /\u540c\u6b65\u542f\u52a8\u5931\u8d25/);
+  assert.match(summarize("syncHost", failed), /updater handoff failed/);
+});
+
+test("Manager names the CodexPlusPlus preflight before update construction", () => {
+  const stageText = vm.runInNewContext(`(${extractNamedFunction(managerInject, "updateOperationStageText")})`);
+  const progressStage = vm.runInNewContext(`(${extractNamedFunction(managerInject, "actionProgressStage")})`);
+  const runningText = vm.runInNewContext(`(${extractNamedFunction(managerInject, "runningText")})`, {
+    actionProgressStage: progressStage,
+  });
+
+  assert.equal(stageText({ stage: "component_preflight" }), "\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6");
+  assert.match(progressStage("syncHost", 0), /\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6/);
+  assert.doesNotMatch(progressStage("syncHost", 0), /\u6784\u5efa/);
+  assert.match(runningText("syncHost", "\u4e00\u952e\u66f4\u65b0", 0), /\u5148\u6821\u9a8c CodexPlusPlus \u5019\u9009\u7ec4\u4ef6\uff0c\u901a\u8fc7\u540e\u624d\u6784\u5efa/);
 });
 
 function parseNamedStringList(sourceText, name) {
@@ -207,7 +273,8 @@ test("Manager account and proxy check is no-traffic and returns a readable resul
   assert.match(accountProxyTest, /\[switch\]\$NoRealRequest/);
   assert.match(accountProxyTest, /if \(-not \$NoRealRequest[\s\S]*?Invoke-LocalJsonSafe "real-response"/);
 
-  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`);
+  const managerActionResult = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionResult")})`);
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`, { managerActionResult });
   const summary = summarize("accountProxy", {
     ok: true,
     result: {
@@ -1321,10 +1388,9 @@ test("Manager repeated full verification and quota retry failures have truthful 
   const noticeEnd = managerInject.indexOf("notice.addEventListener", noticeStart);
   const noticeBlock = managerInject.slice(noticeStart, noticeEnd);
 
-  for (const summary of [injectSummary, bridgeSummary]) {
-    assert.match(summary, /action === "postVerificationFull"[\s\S]*?payload\?\.alreadyRunning/);
-    assert.match(summary, /\\u5b8c\\u6574\\u9a8c\\u8bc1\\u5df2\\u5728\\u540e\\u53f0\\u8fd0\\u884c/);
-  }
+  assert.match(injectSummary, /action === "postVerificationFull"[\s\S]*?unwrapped\?\.alreadyRunning/);
+  assert.match(bridgeSummary, /action === "postVerificationFull"[\s\S]*?payload\?\.alreadyRunning/);
+  for (const summary of [injectSummary, bridgeSummary]) assert.match(summary, /\\u5b8c\\u6574\\u9a8c\\u8bc1\\u5df2\\u5728\\u540e\\u53f0\\u8fd0\\u884c/);
   assert.match(noticeBlock, /catch \(error\)/);
   assert.match(noticeBlock, /\\u91cd\\u65b0\\u68c0\\u67e5\\u5931\\u8d25/);
   assert.match(noticeBlock, /runActionViaBridge\("accountProxy", actionToken\)/);
@@ -1370,8 +1436,8 @@ test("Manager blocks every new action while any prior action is still running or
   assert.match(refreshSnapshotBlock, /reconcileManagerPendingActions\(payload\.snapshot\)/);
   assert.match(reconcileBlock, /managerSnapshotRunningActionIds\(snapshot\)/);
   assert.match(backgroundBlock, /MANAGER_BACKGROUND_START_ACTION_IDS\.has\(action\)/);
-  assert.match(backgroundBlock, /action === "syncHost"/);
-  assert.match(backgroundBlock, /payload\?\.background === true/);
+  assert.match(backgroundBlock, /managerActionResult\(payload\)/);
+  assert.match(backgroundBlock, /result\?\.background === true/);
   const scriptFallbackBlock = extractNamedFunction(managerInject, "runActionViaScript");
   assert.match(scriptFallbackBlock, /actionToken/);
   assert.match(scriptFallbackBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
