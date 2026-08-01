@@ -67,7 +67,7 @@
     "verification":  {
                          "patchReplay":  "11 project patches replayed without automatic conflict resolution; head 762340c825c64d2e6fffb4f41067fcf117dcd372; tree 0c00227e79930b7d7a917f0867594f6569bb6673",
                          "sourceIsolationAudit":  "passed",
-                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; clean project source preflight passed 908/908 at commit 8c8af908baf6c3c803f6fa3ccfa8e2bcf18b907f with no traffic, failures, skips or warnings.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
