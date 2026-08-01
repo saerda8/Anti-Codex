@@ -239,6 +239,44 @@ test("Manager injected UI owns third-party setup while the fallback page omits t
   assertExactActionGroups(injectedGroups, "injected Manager");
   assertExactActionGroups(fallbackGroups, "fallback Manager", fallbackExpectedGroups);
   assert.doesNotMatch(managerService, /if \(actionName === "upstreamConfig"\)/);
+  assert.match(managerService, /第三方 API 配置仅在客户端内的“管理”页面提供/);
+  assert.doesNotMatch(managerService, /<input[^>]+(?:apiKey|type="password")/i);
+});
+
+test("fallback Manager waits for the same background action's fresh report and survives a short service restart", () => {
+  const reportBlock = extractNamedFunction(managerService, "fallbackBackgroundReport");
+  const reportFor = vm.runInNewContext(`(${reportBlock})`);
+  const startedAt = Date.parse("2026-08-01T01:00:00.000Z");
+  const snapshot = (reportedAt, ok = true) => ({
+    result: {
+      diagnostics: {
+        managerActionResults: {
+          stabilitySoak: {
+            exists: true,
+            ok,
+            effectiveOk: ok,
+            reportedAt,
+            latestPath: "C:\\reports\\latest-stability-soak.json",
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(reportFor(snapshot("2026-08-01T00:59:59.000Z"), "stabilitySoak", startedAt), null);
+  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z"), "postVerificationFull", startedAt), null);
+  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z"), "stabilitySoak", startedAt).ok, true);
+  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z", false), "stabilitySoak", startedAt).ok, false);
+
+  const waitBlock = extractNamedFunction(managerService, "waitForFallbackBackgroundAction");
+  const runBlock = extractNamedFunction(managerService, "runFallbackManagerAction");
+  assert.match(waitBlock, /postFallbackManagerAction\("refreshStatus"\)/);
+  assert.doesNotMatch(waitBlock, /postFallbackManagerAction\(action\)/);
+  assert.match(waitBlock, /catch \(error\)[\s\S]*?managerActionToken = ""[\s\S]*?bootstrap\(\)/);
+  assert.match(waitBlock, /FALLBACK_BACKGROUND_POLL_TIMEOUT_MS/);
+  assert.match(runBlock, /const actionStartedAt = Date\.now\(\)/);
+  assert.match(runBlock, /payload\.background === true \|\| managerActions\[action\]\?\.background === true/);
+  assert.match(runBlock, /waitForFallbackBackgroundAction\(action, actionStartedAt, result\)/);
 });
 
 test("Manager advanced diagnostics are collapsed details with a visible label", () => {
@@ -1386,6 +1424,29 @@ test("Manager correlates fresh background reports and keeps their final result v
   assert.match(reconcileBlock, /managerActionResultSummary\(action,\s*actionResult\)/);
   assert.match(reconcileBlock, /__ANTICODEX_MANAGER_LAST_ACTION_RESULT__/);
   assert.match(reconcileBlock, /liveResult\.textContent = managerSummary/);
+
+  const pendingActions = { postVerificationFull: 1 };
+  const classToggles = [];
+  const liveResult = {
+    classList: { toggle: (...args) => classToggles.push(args) },
+    removeAttribute() {},
+    textContent: "",
+  };
+  const context = {
+    managerPendingActions: () => pendingActions,
+    managerSnapshotRunningActionIds: () => new Set(),
+    MANAGER_PENDING_REPORT_GRACE_MS: 0,
+    managerSnapshotActionResult: () => null,
+    managerActionResultSummary: () => "结果未知：没有发现本次新报告。",
+    window: {},
+    document: { querySelector: () => liveResult },
+    MANAGER_ID: "anticodex-manager",
+    persistManagerPendingActions() {},
+  };
+  vm.runInNewContext(`(${reconcileBlock})`, context)({});
+  assert.equal(context.window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__.ok, null);
+  assert.deepEqual(classToggles, [["anticodex-error", false]]);
+  assert.equal(liveResult.textContent, "结果未知：没有发现本次新报告。");
 
   const openManagerBlock = extractNamedFunction(managerInject, "openManager");
   const preserveBlock = openManagerBlock.slice(

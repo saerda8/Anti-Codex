@@ -3581,3 +3581,11 @@
 - Manager service now retains only one successful proof for two minutes. Its HMAC fingerprint binds normalized protocol/final request URL/model plus context window and the resolved key; the random salt and proof stay in process memory, and sanitized stages are the only reusable result.
 - Saving atomically consumes the proof. Untested, repeated, changed, expired or post-restart saves require another explicit test and never silently issue a provider request. The UI now discloses that testing sends one minimal real request and saving reuses it.
 - RED first proved an untested save still returned 200. GREEN proves direct/repeated/changed saves return 400 without a provider call, while each test/save cycle uses exactly one loopback request. Service coverage passes `26/26`; Manager/provider contracts pass `65/65`; no real provider traffic was used.
+
+## 2026-08-01 Fallback Manager truth and terminal-result repair
+
+- The fallback page's `刷新状态` was a deterministic false-success path: it returned `{ok:true}` without reading route health, diagnostics or reports. It now reuses the same authenticated diagnostics and latest-report helpers as the embedded Manager.
+- Eight existing report producers were missing from `managerActionResults`. They are now bound to their actual latest-report files, and an absent report is represented as unknown (`ok:null`, `effectiveOk:null`) rather than failure.
+- Detached fallback actions no longer stop at “已开始”. The page polls only the real status action, accepts only a same-action report newer than the click, renews its Manager token across a short service restart, and never repeats the original potentially destructive or paid action.
+- The fallback page deliberately does not duplicate the sensitive third-party form; it explains that configuration is available only in the in-client `管理` view and contains no password/key input.
+- Independent offline verification passes Manager service `26/26`, bridge `57/57`, four JavaScript syntax checks and whitespace validation. No Anti-Codex/runtime process, provider traffic, Docker state or native Codex process was changed.

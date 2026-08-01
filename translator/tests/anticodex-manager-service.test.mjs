@@ -906,6 +906,12 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.match(html, /<details(?![^>]*\sopen(?:\s|=|>))[^>]*data-action-group="advanced"[^>]*>\s*<summary>高级诊断<\/summary>/);
     assert.match(html, /confirmHighImpactAction/);
     assert.doesNotMatch(html, /data-manager-action="upstreamConfig"/);
+    assert.match(html, /第三方 API 配置仅在客户端内的“管理”页面提供/);
+    assert.doesNotMatch(html, /<input[^>]+(?:apiKey|type="password")/i);
+    assert.match(html, /waitForFallbackBackgroundAction/);
+    assert.match(html, /连接暂时中断，正在等待管理服务恢复/);
+    const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1] || "";
+    assert.doesNotThrow(() => new Function(inlineScript));
     assert.doesNotMatch(html, /Gate 7|Anti-Codex Manager/);
     assert.doesNotMatch(html, /resetAntigravitySessionLock|secondAccountLoginStatus/);
   });
@@ -945,7 +951,10 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const body3 = await res3.json();
     assert.equal(body3.ok, true);
     assert.equal(body3.action, "refreshStatus");
-    assert.deepEqual(body3.result, { ok: true });
+    assert.equal(body3.result.diagnostics.object, "anticodex.diagnostics");
+    assert.equal(body3.result.diagnostics.paths.stateRoot, tempDir);
+    assert.equal(body3.result.reports.reportRoot, path.join(tempDir, "reports"));
+    assert.ok(Array.isArray(body3.result.reports.reports));
 
     const refreshResponse = await fetch(`${baseUrl}/anticodex/manager/action`, {
       method: "POST",
@@ -967,6 +976,16 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
   await t.test("viewLatestReports returns a summarized report payload", async () => {
     const reportsDir = path.join(tempDir, "reports");
     const completedAt = new Date().toISOString();
+    const mappedReportFiles = {
+      accountProxy: "latest-account-proxy-readiness.json",
+      syncReadiness: "latest-sync-readiness.json",
+      repairShortcuts: "latest-shortcut-repair.json",
+      sourcePreflight: "latest-source-preflight.json",
+      mcpSkills: "latest-mcp-skills.json",
+      pluginCapabilities: "latest-plugin-capabilities.json",
+      fastOverallNoTraffic: "latest-installed-overall-fast.json",
+      overallNoTraffic: "latest-installed-overall.json",
+    };
     fs.mkdirSync(reportsDir, { recursive: true });
     fs.writeFileSync(path.join(reportsDir, "latest-source-preflight.json"), JSON.stringify({
       ok: true,
@@ -974,6 +993,13 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       generatedAt: completedAt,
       apiKey: "must-not-leak",
     }), "utf8");
+    for (const fileName of Object.values(mappedReportFiles).filter((fileName) => fileName !== "latest-source-preflight.json")) {
+      fs.writeFileSync(path.join(reportsDir, fileName), JSON.stringify({
+        ok: true,
+        state: "completed",
+        completedAt,
+      }), "utf8");
+    }
     fs.writeFileSync(path.join(reportsDir, "latest-post-verification.json"), JSON.stringify({
       ok: false,
       state: "completed",
@@ -1004,7 +1030,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body.action, "viewLatestReports");
     assert.equal(body.result.reportRoot, reportsDir);
     assert.ok(Array.isArray(body.result.reports));
-    assert.equal(body.result.existingCount, 2);
+    assert.equal(body.result.existingCount, 9);
 
     const report = body.result.reports.find((item) => item.fileName === "latest-source-preflight.json");
     assert.equal(report.exists, true);
@@ -1023,6 +1049,11 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(postVerification.firstFailure, "visible acceptance failed");
     assert.equal(postVerification.reportedAt, completedAt);
 
+    const missing = body.result.reports.find((item) => item.fileName === "latest-stability-soak.json");
+    assert.equal(missing.exists, false);
+    assert.equal(missing.ok, null);
+    assert.equal(missing.effectiveOk, null);
+
     const diagnosticsResponse = await fetch(`${baseUrl}/anticodex/diagnostics`);
     assert.equal(diagnosticsResponse.status, 200);
     const diagnostics = await diagnosticsResponse.json();
@@ -1032,6 +1063,13 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(diagnostics.managerActionResults.syncHost.ok, true);
     assert.equal(diagnostics.managerActionResults.syncHost.state, "succeeded");
     assert.equal(diagnostics.managerActionResults.syncHost.reportedAt, completedAt);
+    for (const [action, fileName] of Object.entries(mappedReportFiles)) {
+      const actionResult = diagnostics.managerActionResults[action];
+      assert.equal(actionResult.fileName, fileName, `${action} must map to its existing report`);
+      assert.equal(actionResult.exists, true);
+      assert.equal(actionResult.ok, true);
+      assert.equal(actionResult.reportedAt, completedAt);
+    }
   });
 
   await t.test("GET /anticodex/manager/action-script JSONP compatibility", async () => {

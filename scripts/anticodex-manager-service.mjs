@@ -574,7 +574,11 @@ async function runManagerAction(actionName, stateRoot, scriptsRoot) {
 
 async function runManagerBridgeAction(actionName, stateRoot, scriptsRoot, callbacks = {}) {
     if (actionName === "refreshStatus") {
-        return { ok: true, action: actionName, result: { ok: true } };
+        if (typeof callbacks.refreshStatus !== "function") {
+            throw { statusCode: 503, message: "Anti-Codex status refresh is not ready." };
+        }
+        const result = await callbacks.refreshStatus();
+        return { ok: result?.ok !== false, action: actionName, result };
     }
     if (actionName === "viewLatestReports") {
         return { ok: true, action: actionName, result: latestManagerReportsPayload(stateRoot) };
@@ -756,9 +760,11 @@ function latestManagerReportItem(stateRoot, label, fileName, options = {}) {
   const failures = Array.isArray(value?.failures) ? value.failures.filter(Boolean) : [];
   const timestampMs = parseable ? reportTimestampMs(value, fullPath) : null;
   const ageMs = Number.isFinite(timestampMs) ? Math.max(0, Date.now() - timestampMs) : null;
-  const rawOk = !invalid && value?.ok === true;
+  const rawOk = !exists ? null : (!invalid && value?.ok === true);
   const releaseGateReport = fileName === "latest-release-gates.json";
-  const effectiveOk = releaseGateReport
+  const effectiveOk = !exists
+    ? null
+    : releaseGateReport
     ? rawOk && value?.releaseReady === true && (!Array.isArray(value?.damagedReports) || value.damagedReports.length === 0)
     : rawOk;
   const publicDocumentationOk = typeof value?.publicDocumentationOk === "boolean"
@@ -797,8 +803,11 @@ function latestManagerReportsPayload(stateRoot) {
     ["可见客户端集成", "latest-gate5-visible-integration.json"],
     ["边缘与恢复", "latest-gate6-edge-matrix.json"],
     ["旧架构清理", "latest-legacy-zero-hit.json"],
+    ["账号与代理", "latest-account-proxy-readiness.json", true],
+    ["快捷方式修复", "latest-shortcut-repair.json", true],
     ["源码预检", "latest-source-preflight.json"],
     ["安装与同步", "latest-sync-readiness.json"],
+    ["快速安装态检查", "latest-installed-overall-fast.json", true],
     ["安装态检查", "latest-installed-overall.json"],
     ["最终长任务", "latest-gate8-final-long-task.json"],
     ["诊断", "latest-diagnostics.json"],
@@ -1527,7 +1536,15 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     const operationState = String(operation.state || "").toLowerCase();
     const operationReportedAt = String(operation.completedAt || operation.updatedAt || operation.startedAt || "");
     const managerActionResults = {
+        accountProxy: latestManagerReportItem(stateRoot, "Account and proxy readiness", "latest-account-proxy-readiness.json", { deferred: true }),
+        syncReadiness,
+        repairShortcuts: latestManagerReportItem(stateRoot, "Shortcut repair", "latest-shortcut-repair.json", { deferred: true }),
+        sourcePreflight,
+        mcpSkills: latestManagerReportItem(stateRoot, "MCP and skills", "latest-mcp-skills.json", { deferred: true }),
+        pluginCapabilities: latestManagerReportItem(stateRoot, "Plugin capabilities", "latest-plugin-capabilities.json", { deferred: true }),
         refreshFeatures: latestManagerReportItem(stateRoot, "Local feature refresh", "latest-refresh-features.json", { deferred: true }),
+        fastOverallNoTraffic: installedFast,
+        overallNoTraffic: installedFull,
         stabilitySoak: latestManagerReportItem(stateRoot, "Stability soak", "latest-stability-soak.json", { deferred: true }),
         coldRelaunch: latestManagerReportItem(stateRoot, "Cold relaunch", "latest-cold-relaunch.json", { deferred: true }),
         postVerificationFull: latestManagerReportItem(stateRoot, "Post verification", "latest-post-verification.json", { deferred: true }),
@@ -1700,6 +1717,7 @@ const managerHtml = `<!doctype html>
   header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding-bottom:16px; border-bottom:1px solid var(--border); }
   h1 { margin:0; font-size:22px; font-weight:650; }
   .notice { margin:0; color:var(--muted); text-align:right; }
+  .hint { margin:8px 0 0; color:var(--muted); }
   section, details { padding:20px 0; border-bottom:1px solid var(--border); }
   h2, summary { margin:0 0 12px; font-size:15px; font-weight:600; }
   summary { cursor:pointer; }
@@ -1725,6 +1743,7 @@ const managerHtml = `<!doctype html>
   <section data-action-group="modelSources">
     <h2>账号与模型来源</h2>
     <div class="grid">${MANAGER_ACTION_GROUPS.modelSources.map((id) => managerActionButtonHtml(id)).join("")}</div>
+    <p class="hint">第三方 API 配置仅在客户端内的“管理”页面提供；此备用页面不读取或显示密钥。</p>
   </section>
   <section data-action-group="updates">
     <h2>Codex 更新</h2>
@@ -1745,33 +1764,97 @@ const managerHtml = `<!doctype html>
 </main>
 <script>
 let managerActionToken = "";
+let managerActions = {};
 const highImpactActions = new Set(${JSON.stringify(HIGH_IMPACT_MANAGER_ACTION_IDS)});
+const FALLBACK_BACKGROUND_POLL_INTERVAL_MS = 2000;
+const FALLBACK_BACKGROUND_POLL_TIMEOUT_MS = 32 * 60 * 1000;
 function confirmHighImpactAction(action, label) {
   return !highImpactActions.has(action) || window.confirm("确认执行“" + label + "”？此操作可能写入配置、消耗真实流量或重启 Anti-Codex。");
+}
+function fallbackDelay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+function fallbackBackgroundReport(payload, action, startedAt) {
+  const report = payload?.result?.diagnostics?.managerActionResults?.[action];
+  const reportedAt = Date.parse(String(report?.reportedAt || ""));
+  if (!report || report.exists === false || !Number.isFinite(reportedAt) || reportedAt < Number(startedAt || 0)) return null;
+  const ok = report.effectiveOk === true || report.ok === true
+    ? true
+    : (report.effectiveOk === false || report.ok === false ? false : null);
+  return { ...report, ok };
 }
 async function bootstrap() {
   const response = await fetch("/anticodex/manager/bootstrap", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok || !payload.token) throw new Error(payload.message || payload.error || "无法取得管理令牌");
   managerActionToken = payload.token;
+  managerActions = payload.actions || {};
 }
-async function runManagerAction(button) {
+async function postFallbackManagerAction(action) {
+  if (!managerActionToken) await bootstrap();
+  const response = await fetch("/anticodex/manager/action", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-anticodex-manager-token": managerActionToken },
+    body: JSON.stringify({ action })
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch {}
+  if (response.status === 403) managerActionToken = "";
+  if (!response.ok || payload?.ok === false) throw new Error(payload?.message || payload?.error || "操作失败");
+  return payload;
+}
+async function waitForFallbackBackgroundAction(action, startedAt, result) {
+  const deadline = Date.now() + FALLBACK_BACKGROUND_POLL_TIMEOUT_MS;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      const payload = await postFallbackManagerAction("refreshStatus");
+      const report = fallbackBackgroundReport(payload, action, startedAt);
+      if (report) return { state: "reported", report };
+      const items = payload?.result?.diagnostics?.longTasks?.items || [];
+      const running = items.some((item) => String(item?.id || "") === action && String(item?.state || "").toLowerCase() === "running");
+      result.textContent = running
+        ? "后台任务仍在运行，正在等待真实报告……"
+        : "后台进程已结束，正在等待真实报告……";
+      lastError = null;
+    } catch (error) {
+      lastError = error;
+      managerActionToken = "";
+      result.textContent = "连接暂时中断，正在等待管理服务恢复……";
+      try { await bootstrap(); } catch {}
+    }
+    await fallbackDelay(FALLBACK_BACKGROUND_POLL_INTERVAL_MS);
+  }
+  return {
+    state: "unknown",
+    message: "结果未知：等待超时，仍未发现本次新报告。后台任务可能仍在运行。",
+    connectionError: lastError ? String(lastError.message || lastError) : "",
+  };
+}
+async function runFallbackManagerAction(button) {
   const action = button.dataset.managerAction;
   if (!confirmHighImpactAction(action, button.textContent.trim())) return;
+  const actionStartedAt = Date.now();
   const result = document.getElementById("actionResult");
   const buttons = [...document.querySelectorAll("button[data-manager-action]")];
   buttons.forEach((item) => { item.disabled = true; });
   result.textContent = "正在执行：" + button.textContent.trim();
   try {
-    if (!managerActionToken) await bootstrap();
-    const response = await fetch("/anticodex/manager/action", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-anticodex-manager-token": managerActionToken },
-      body: JSON.stringify({ action })
-    });
-    const payload = await response.json();
-    if (!response.ok || payload.ok === false) throw new Error(payload.message || payload.error || "操作失败");
-    result.textContent = JSON.stringify(payload, null, 2);
+    const payload = await postFallbackManagerAction(action);
+    if (payload.background === true || managerActions[action]?.background === true) {
+      result.textContent = payload.message || "后台任务已启动，正在等待真实报告……";
+      const outcome = await waitForFallbackBackgroundAction(action, actionStartedAt, result);
+      if (outcome.state === "reported") {
+        const status = outcome.report.ok === true
+          ? "后台任务已完成并通过"
+          : (outcome.report.ok === false ? "后台任务已完成但未通过" : "后台任务已结束，结果未知");
+        result.textContent = status + "\\n" + JSON.stringify(outcome.report, null, 2);
+      } else {
+        result.textContent = outcome.message;
+      }
+    } else {
+      result.textContent = JSON.stringify(payload, null, 2);
+    }
   } catch (error) {
     result.textContent = "执行失败：" + error.message;
   } finally {
@@ -1779,7 +1862,7 @@ async function runManagerAction(button) {
   }
 }
 document.querySelectorAll("button[data-manager-action]").forEach((button) => {
-  button.addEventListener("click", () => { void runManagerAction(button); });
+  button.addEventListener("click", () => { void runFallbackManagerAction(button); });
 });
 bootstrap().catch((error) => { document.getElementById("actionResult").textContent = "初始化失败：" + error.message; });
 </script>
@@ -1818,6 +1901,10 @@ export function createAntiCodexManagerService(options = {}) {
   const scriptsRoot = __dirname;
   const adapterAuthToken = String(options.adapterAuthToken || "");
   const refreshModels = options.refreshModels;
+  const refreshStatus = async () => ({
+    diagnostics: await diagnosticsPayload(stateRoot, false, fixedHealthUrl, adapterAuthToken),
+    reports: latestManagerReportsPayload(stateRoot),
+  });
   const thirdPartySavePaths = [
     path.join(stateRoot, "upstream-profile.json"),
     path.join(stateRoot, "upstream-profile.key"),
@@ -1940,7 +2027,7 @@ export function createAntiCodexManagerService(options = {}) {
       }
       try {
         const action = String(body.action || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels });
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus });
         return jsonResponse(res, 200, payload, req);
       } catch (err) {
         return jsonResponse(res, err.statusCode || 500, { ok: false, message: err.message }, req);
@@ -1958,7 +2045,7 @@ export function createAntiCodexManagerService(options = {}) {
       if (!validateManagerSourceRequest(req, res, "manager action")) return;
       try {
         const action = String(url.searchParams.get("action") || "");
-        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels });
+        const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus });
         return javascriptResponse(res, 200, managerActionScriptResponse(callbackName, payload));
       } catch (err) {
         const payload = {

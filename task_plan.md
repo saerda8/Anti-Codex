@@ -3320,8 +3320,8 @@ Open work, in fixed order:
 - [x] Repair the confirmed connector-editor `ReferenceError`: the helper now receives its result/reload/serialization dependencies explicitly, and a real-handler regression proves one save, one reload and one visible result.
 - [x] Use one Manager-wide busy state for actions, prompt reads/writes, connector changes and third-party test/save; periodic status requests now stop before occupying the serial bridge while any form/view is busy. The complete Manager bridge contract passes `56/56`.
 - [x] Make third-party testing explicitly disclose one real minimal request and reuse one fresh protocol/final-URL/model/context/key fingerprint during save. The two-minute success evidence is salted, memory-only and one-shot; direct/repeated/changed saves fail closed without secretly probing again. Service coverage passes `26/26` and Manager/provider contracts pass `65/65` against loopback fakes only.
-- [ ] Make fallback `刷新状态` fetch and render real health/diagnostic state rather than accepting the service's virtual no-op result, and give fallback/background actions the same terminal-result behavior as the embedded panel.
-- [ ] Expand pending-action report reconciliation to every action that already emits a latest report. A missing report is `unknown`, not an invented failure.
+- [x] Make fallback `刷新状态` fetch real diagnostics and reports instead of accepting a virtual no-op. Background actions now poll only `refreshStatus`, correlate the same action's fresh report, survive a short Manager-service restart by renewing the token, and never resend the original action.
+- [x] Expand pending-action report reconciliation to every action that already emits a latest report. Missing reports now use `ok:null` / `effectiveOk:null` and render as neutral `unknown`, never an invented success or failure.
 - [ ] Reaccept official Codex and CodexPlusPlus independent update lanes, source/active versions and hashes, fail-closed rollback state, and the built-in guarded update workflow. Future upstream releases remain subject to the same gates.
 - [ ] Re-run shell startup, desktop shortcut, minimize/restore flicker, one-visible-instance, tray/taskbar icon, graceful shutdown/restart and native-Codex-survival checks.
 - [ ] Re-run isolation for plugins/MCP/Skills/settings/state, confirm zero development or sealed workers, zero Anti-Codex Docker residue, no `R:` substitution/persistence, then remove only proven obsolete runtime/build/cache generations.
@@ -3357,4 +3357,15 @@ The candidate quarantine is now a formal release blocker, not a request to disab
 - [x] Bind the candidate launch gate and Manager connector/serialization repairs to clean commits `3679599` and `0d3ec2a`.
 - [x] Run one complete clean no-traffic source preflight on `0d3ec2a`: `890/890`, `noTraffic:true`, `usedRealTraffic:false`, zero failures and zero warnings.
 - [x] Replace the duplicate third-party save probe with one short-lived, one-shot in-memory success proof. Saving never switches the active model and never writes the proof or API key to reports/logs.
-- [ ] Checkpoint the single-probe repair, rerun the clean source gate once after the remaining Manager truth fixes are grouped, and keep installed activation deferred until those source changes are complete.
+- [x] Checkpoint the single-probe repair at `0d18fd7` and the subsequent fallback-Manager truth repair in its own clean commit. Keep installed activation deferred and rerun the clean source gate once only after the remaining Manager truth fixes are grouped.
+
+### 2026-08-01 Fallback Manager truth repair
+
+- [x] Replace fallback `刷新状态`'s fixed success shell with the existing authenticated diagnostics/report producers. Both POST and JSONP action paths now return the same live snapshot contract.
+- [x] Add the eight missing action-to-report bindings for account/proxy, sync readiness, shortcut repair, source preflight, MCP/Skill, plugin/app, fast installed and full installed checks.
+- [x] Keep absent reports neutral in both the service payload and injected UI. Red styling is applied only to an exact false result.
+- [x] Keep third-party credentials out of the fallback page and explain that sensitive configuration is available only in the in-client `管理` view.
+- [x] For the three detached background actions, poll only real status until a same-action report newer than the click appears; temporary Manager restart renews the token and continues polling without replaying the action.
+- [x] Independently verify service `26/26`, bridge `57/57`, JavaScript syntax for all four changed files and `git diff --check`. No runtime sync, client restart, model/provider request or Docker action occurred.
+
+The project remains **not 100%**. Next source work is the shared real-traffic mutex plus the update-control truth audit, followed by the native-settings classification; one clean full preflight will be run only after that grouped Manager work is complete.

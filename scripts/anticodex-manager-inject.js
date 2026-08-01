@@ -1468,7 +1468,7 @@
 
   function managerActionResultSummary(action, actionResult) {
     const label = ACTIONS.find(([id]) => id === action)?.[1] || action;
-    if (!actionResult) return `${label}\uff1a\u540e\u53f0\u8fdb\u7a0b\u5df2\u7ed3\u675f\uff0c\u4f46\u6ca1\u6709\u53d1\u73b0\u672c\u6b21\u65b0\u62a5\u544a\u3002`;
+    if (!actionResult) return `${label}\uff1a\u7ed3\u679c\u672a\u77e5\uff1b\u540e\u53f0\u8fdb\u7a0b\u5df2\u7ed3\u675f\uff0c\u4f46\u6ca1\u6709\u53d1\u73b0\u672c\u6b21\u65b0\u62a5\u544a\u3002`;
     const ok = actionResult.effectiveOk === true || actionResult.ok === true;
     const detail = actionResult.firstFailure || actionResult.reason || "";
     return [
@@ -1508,7 +1508,9 @@
       if (running.has(action) || (startedAt && now - startedAt <= MANAGER_PENDING_REPORT_GRACE_MS)) continue;
       const actionResult = managerSnapshotActionResult(snapshot, action, startedAt);
       const managerSummary = managerActionResultSummary(action, actionResult);
-      const ok = actionResult?.effectiveOk === true || actionResult?.ok === true;
+      const ok = !actionResult || (actionResult.effectiveOk == null && actionResult.ok == null)
+        ? null
+        : actionResult.effectiveOk === true || actionResult.ok === true;
       window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
         ...(actionResult || {}),
         ok,
@@ -1518,7 +1520,7 @@
       };
       const liveResult = document.querySelector(`#${MANAGER_ID} [data-anticodex-result="action"]`);
       if (liveResult) {
-        liveResult.classList.toggle("anticodex-error", !ok);
+        liveResult.classList.toggle("anticodex-error", ok === false);
         liveResult.removeAttribute("data-anticodex-running");
         liveResult.textContent = managerSummary;
       }
