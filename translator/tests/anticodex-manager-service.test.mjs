@@ -1213,6 +1213,48 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     }
   });
 
+  await t.test("diagnostics restores the persisted update check result and distinguishes missing from unknown", async () => {
+    const updateStatusPath = path.join(tempDir, "update-status.json");
+    fs.rmSync(updateStatusPath, { force: true });
+
+    const readUpdateCheck = async () => {
+      const response = await fetch(`${baseUrl}/anticodex/diagnostics`);
+      assert.equal(response.status, 200);
+      return (await response.json()).managerActionResults.updateCheck;
+    };
+
+    const missing = await readUpdateCheck();
+    assert.equal(missing.exists, false);
+    assert.equal(missing.state, "missing");
+    assert.equal(missing.ok, null);
+    assert.equal(missing.reportedAt, "");
+
+    fs.writeFileSync(updateStatusPath, "{", "utf8");
+    const unknown = await readUpdateCheck();
+    assert.equal(unknown.exists, true);
+    assert.equal(unknown.parseable, false);
+    assert.equal(unknown.state, "unknown");
+    assert.equal(unknown.ok, null);
+
+    const checkedAt = new Date().toISOString();
+    fs.writeFileSync(updateStatusPath, JSON.stringify({
+      ok: false,
+      checkedAt,
+      updateNeeded: true,
+      reason: "codexplusplus_component_changed",
+      operation: { state: "idle", stage: "none" },
+    }), "utf8");
+    const completed = await readUpdateCheck();
+    assert.equal(completed.exists, true);
+    assert.equal(completed.parseable, true);
+    assert.equal(completed.state, "completed");
+    assert.equal(completed.ok, false);
+    assert.equal(completed.effectiveOk, false);
+    assert.equal(completed.reason, "codexplusplus_component_changed");
+    assert.equal(completed.reportedAt, checkedAt);
+    assert.equal(completed.latestPath, updateStatusPath);
+  });
+
   await t.test("GET /anticodex/manager/action-script JSONP compatibility", async () => {
     // Missing/invalid token
     const res1 = await fetch(`${baseUrl}/anticodex/manager/action-script?callback=onSuccess&action=refreshStatus&token=bad`);

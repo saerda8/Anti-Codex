@@ -225,6 +225,49 @@ $handoff = Set-AntiCodexUpdateOperation -State 'running' -Stage 'updater_handoff
   }
 });
 
+test("rollback keeps the failed update identity and original failure truth", () => {
+  const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-rollback-truth-"));
+  try {
+    const psScript = resolve(tempDir, "run-test.ps1");
+    fs.writeFileSync(
+      psScript,
+      `$ErrorActionPreference = "Stop"
+$env:DEEPCODEX_STATE_ROOT = '${tempDir.replace(/\\/g, '\\\\')}'
+Import-Module '${targetModule.replace(/\\/g, '\\\\')}'
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'activation' -NewOperationId 'sync-1'
+Set-AntiCodexUpdateOperation -State 'failed' -Stage 'activation' -Message 'activation failed' -FailureCode 'sync_failed' -RollbackAvailable $true
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'rollback_validation' -Message 'validating rollback' -RollbackAvailable $true
+Set-AntiCodexUpdateOperation -State 'rolled_back' -Stage 'complete' -Message 'previous release restored' -RollbackAvailable $true
+$rolledBack = Get-AntiCodexUpdateStatus
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'acceptance' -NewOperationId 'sync-2'
+Set-AntiCodexUpdateOperation -State 'failed' -Stage 'acceptance' -Message 'acceptance failed' -FailureCode 'sync_failed' -RollbackAvailable $true
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'rollback_validation' -RollbackAvailable $true
+Set-AntiCodexUpdateOperation -State 'failed' -Stage 'rollback_acceptance' -Message 'rollback failed' -FailureCode 'rollback_failed' -RollbackAvailable $true
+[pscustomobject]@{ rolledBack = $rolledBack.operation; rollbackFailed = (Get-AntiCodexUpdateStatus).operation } | ConvertTo-Json -Depth 8 -Compress`,
+    );
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScript,
+    ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const parsed = JSON.parse(result.stdout.trim());
+    assert.equal(parsed.rolledBack.operationId, "sync-1");
+    assert.equal(parsed.rolledBack.state, "rolled_back");
+    assert.equal(parsed.rolledBack.originalFailure.stage, "activation");
+    assert.equal(parsed.rolledBack.originalFailure.message, "activation failed");
+    assert.equal(parsed.rolledBack.originalFailure.error, "sync_failed");
+    assert.ok(parsed.rolledBack.originalFailure.at);
+    assert.equal(parsed.rollbackFailed.operationId, "sync-2");
+    assert.equal(parsed.rollbackFailed.state, "failed");
+    assert.equal(parsed.rollbackFailed.stage, "rollback_acceptance");
+    assert.equal(parsed.rollbackFailed.failureCode, "rollback_failed");
+    assert.equal(parsed.rollbackFailed.originalFailure.stage, "acceptance");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("a Ready-task retry starts a new update operation identity", () => {
   const tempDir = fs.mkdtempSync(resolve(os.tmpdir(), "update-status-new-operation-"));
   try {

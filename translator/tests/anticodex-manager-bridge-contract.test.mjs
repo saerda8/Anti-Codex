@@ -138,6 +138,18 @@ test("Manager update summaries unwrap results and show advisory CodexPlusPlus re
   }
 });
 
+test("Manager keeps the original update failure visible after rollback", () => {
+  const format = vm.runInNewContext(`(${extractNamedFunction(managerInject, "updateOriginalFailureText")})`, {
+    updateOperationStageText: ({ stage }) => stage,
+  });
+  assert.equal(
+    format({ originalFailure: { stage: "activation", message: "candidate failed", error: "sync_failed", at: "2026-08-01T00:00:00.000Z" } }),
+    "activation / candidate failed / \u9519\u8bef\uff1async_failed / 2026-08-01T00:00:00.000Z",
+  );
+  assert.match(managerInject, /\\u539f\\u59cb\\u5931\\u8d25|原始失败/);
+  assert.match(managerService, /originalFailure\.message \|\| originalFailure\.error/);
+});
+
 test("Manager keeps current update drift separate from update history and unwraps sync receipts", () => {
   const unwrap = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionResult")})`);
   const updateStatus = vm.runInNewContext(`(${extractNamedFunction(managerInject, "updateStatusText")})`, {
@@ -1316,6 +1328,35 @@ test("Manager long actions enter pending UI without losing their late bridge res
   assert.ok(bridgeTransportMs > longestForegroundMs);
   assert.ok(bridgeTransportMs > refreshFeaturesMs);
   assert.ok(uiTransportMs > bridgeTransportMs);
+});
+
+test("Manager update checks wait past the service budget and never fabricate background success", () => {
+  const timeoutBlock = extractNamedFunction(managerInject, "timeoutText");
+  const timeoutMsBlock = extractNamedFunction(managerInject, "actionUiTimeoutMs");
+  const installActionsStart = managerInject.indexOf("function installActions()");
+  const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
+  const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
+  const timeoutBranch = installActionsBlock.slice(
+    installActionsBlock.indexOf('} else if (outcome.type === "timeout")'),
+    installActionsBlock.indexOf("} else {", installActionsBlock.indexOf('} else if (outcome.type === "timeout")')),
+  );
+  const serviceBudgetMs = Number(
+    managerService.match(/updateCheck:\s*\{[\s\S]*?timeoutMs:\s*(\d+),/)?.[1],
+  );
+  const uiBudgetMs = Number(
+    managerInject.match(/const UPDATE_CHECK_ACTION_UI_TIMEOUT_MS = (\d+);/)?.[1],
+  );
+
+  assert.equal(serviceBudgetMs, 30000);
+  assert.ok(uiBudgetMs >= serviceBudgetMs + 10000, "the UI must leave transport margin after the local check budget");
+  assert.match(timeoutMsBlock, /action === "updateCheck"[\s\S]*?UPDATE_CHECK_ACTION_UI_TIMEOUT_MS/);
+  assert.match(timeoutBlock, /action === "updateCheck"[\s\S]*?\\u7ed3\\u679c\\u672a\\u77e5/);
+  assert.match(timeoutBlock, /action === "updateCheck"[\s\S]*?\\u4ecd\\u7b49\\u5f85\\u672c\\u5730\\u68c0\\u67e5/);
+  assert.doesNotMatch(timeoutBlock, /action === "updateCheck"[^\n]*\\u540e\\u53f0/);
+  assert.match(timeoutBranch, /const pendingStartedAt = actionStartedAt/);
+  assert.match(timeoutBranch, /ok:\s*null/);
+  assert.doesNotMatch(timeoutBranch, /ok:\s*true/);
+  assert.match(timeoutBranch, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
 });
 
 test("Manager keeps structured verifier failures available for readable UI summaries", () => {

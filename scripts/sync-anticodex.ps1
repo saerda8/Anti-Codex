@@ -1175,7 +1175,8 @@ if ($syncError) {
             }
         }
         if ($activationRestored) {
-            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "activation" -Message $syncError.Exception.Message -RollbackAvailable $false -StateRoot $stateRoot
+            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $false -StateRoot $stateRoot
+            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component after activation failed." -RollbackAvailable $false -StateRoot $stateRoot
         } else {
             Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
         }
@@ -1262,6 +1263,7 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
     }
     $rollbackFailure = $null
     $failureReason = [string]$postSyncAcceptance.message
+    Set-AntiCodexUpdateOperation -State "failed" -Stage "acceptance" -Message $failureReason -FailureCode "sync_failed" -RollbackAvailable $true -StateRoot $stateRoot
     try {
         $syncMutex.ReleaseMutex()
         $syncMutexAcquired = $false
@@ -1290,6 +1292,13 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
             if ($currentActiveMarkerSha256 -ine $activatedMarkerSha256) {
                 $supersededByAnotherSync = $true
             }
+        }
+        if (-not $supersededByAnotherSync) {
+            $rollbackOperation = (Get-AntiCodexUpdateStatus -StateRoot $stateRoot).operation
+            if ([string]$rollbackOperation.state -ne "failed" -or [string]$rollbackOperation.stage -notlike "rollback_*") {
+                Set-AntiCodexUpdateOperation -State "failed" -Stage "rollback_validation" -Message $rollbackFailure -FailureCode "rollback_failed" -RollbackAvailable $true -StateRoot $stateRoot
+            }
+            $terminalStatusOwnedByRollback = $true
         }
         throw "$failureReason Automatic rollback also failed: $rollbackFailure"
     }

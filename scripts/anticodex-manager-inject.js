@@ -100,6 +100,7 @@
   const MANAGER_PENDING_STORAGE_KEY = "anticodex.manager.pending-actions.v1";
   const ACTION_UI_TIMEOUT_MS = 5000;
   const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
+  const UPDATE_CHECK_ACTION_UI_TIMEOUT_MS = 45000;
   const SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS = 50000;
   const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
   const MCP_SKILLS_ACTION_UI_TIMEOUT_MS = 440000;
@@ -1409,7 +1410,7 @@
 
   function timeoutText(action, label) {
     if (action === "accountSwitch") return "\u6253\u5f00 Antigravity \u8d85\u65f6\u3002\n\u8bf7\u624b\u52a8\u6253\u5f00 Antigravity\uff0c\u5207\u6362\u8d26\u53f7\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002";
-    if (action === "updateCheck") return "Codex \u66f4\u65b0\u68c0\u67e5\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002";
+    if (action === "updateCheck") return "\u68c0\u67e5\u5168\u90e8\u66f4\u65b0\uff1a\u7ed3\u679c\u672a\u77e5\uff0c\u4ecd\u7b49\u5f85\u672c\u5730\u68c0\u67e5\u8fd4\u56de\uff1b\u8bf7\u52ff\u91cd\u590d\u70b9\u51fb\uff0c\u5b8c\u6210\u540e\u9762\u677f\u4f1a\u81ea\u52a8\u66f4\u65b0\u3002";
     if (action === "refreshModels") return "\u6a21\u578b\u5237\u65b0\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002";
     if (action === "refreshFeatures") return "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002\n\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838";
     if (action === "syncHost" || action === "postVerificationFull" || action === "stabilitySoak" || action === "coldRelaunch") return `${label}\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002\n\u8bf7\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u67e5\u770b\u6700\u65b0\u8fdb\u5ea6\uff0c\u4e0d\u8981\u91cd\u590d\u542f\u52a8\u540c\u4e00\u4e2a\u957f\u4efb\u52a1\u3002`;
@@ -1422,7 +1423,8 @@
     if (action === "fastOverallNoTraffic") return 90000;
     if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
     if (action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
-    if (action === "updateCheck" || action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
+    if (action === "updateCheck") return UPDATE_CHECK_ACTION_UI_TIMEOUT_MS;
+    if (action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
     return ACTION_UI_TIMEOUT_MS;
   }
 
@@ -1705,6 +1707,17 @@
 
   function updateOperationMessage(updateStatus) {
     return updateStatus?.operation?.message || (updateStatus?.ok === true ? "\u6682\u65e0" : (updateStatus?.reason || "\u672a\u68c0\u67e5"));
+  }
+
+  function updateOriginalFailureText(operation) {
+    const failure = operation?.originalFailure;
+    if (!failure || typeof failure !== "object") return "";
+    return [
+      updateOperationStageText({ stage: failure.stage }),
+      failure.message,
+      failure.error ? `\u9519\u8bef\uff1a${failure.error}` : "",
+      failure.at,
+    ].filter(Boolean).join(" / ");
   }
 
   function longTaskStatusText(item) {
@@ -2004,6 +2017,7 @@
             ["\u5f53\u524d\u9636\u6bb5", updateOperationStageText(updateOperation)],
             ["\u6700\u8fd1\u53d8\u5316", updateOperation.updatedAt || updateOperation.completedAt || updateStatus.checkedAt || "\u672a\u77e5"],
             ["\u7ed3\u679c\u8bf4\u660e", updateOperationMessage(updateStatus)],
+            ...(updateOriginalFailureText(updateOperation) ? [["\u539f\u59cb\u5931\u8d25", updateOriginalFailureText(updateOperation)]] : []),
             ["\u56de\u6eda", updateOperation.rollbackAvailable === true ? "\u5df2\u4fdd\u7559\u53ef\u7528\u7248\u672c" : "\u672a\u786e\u8ba4"],
           ])),
           card("\u540e\u53f0\u4efb\u52a1", kv(longTaskRows(diagnostics?.longTasks))),
@@ -2482,12 +2496,12 @@
             } else if (outcome.type === "timeout") {
               progressActive = false;
               const managerSummary = timeoutText(action, label);
-              const pendingStartedAt = Date.now();
+              const pendingStartedAt = actionStartedAt;
               const pendingActions = managerPendingActions();
               pendingActions[action] = pendingStartedAt;
               persistManagerPendingActions();
               window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
-                ok: true,
+                ok: null,
                 action,
                 managerSummary,
                 pending: true,

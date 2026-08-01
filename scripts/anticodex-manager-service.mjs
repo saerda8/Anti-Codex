@@ -1511,7 +1511,11 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
     const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
     const fixedStatus = readJsonIfPresent(stateRoot ? path.join(stateRoot, "fixed-route-status.json") : "");
-    const updateStatus = readJsonIfPresent(stateRoot ? path.join(stateRoot, "update-status.json") : "") || {
+    const updateStatusPath = stateRoot ? path.join(stateRoot, "update-status.json") : "";
+    const updateStatusExists = Boolean(updateStatusPath && fs.existsSync(updateStatusPath));
+    const persistedUpdateStatus = readJsonIfPresent(updateStatusPath);
+    const updateStatusParseable = Boolean(persistedUpdateStatus && typeof persistedUpdateStatus === "object" && !Array.isArray(persistedUpdateStatus));
+    const updateStatus = updateStatusParseable ? persistedUpdateStatus : {
         ok: false,
         updateNeeded: null,
         reason: "not_checked",
@@ -1560,9 +1564,27 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
     const installedFast = latestManagerReportItem(stateRoot, "Installed overall fast", "latest-installed-overall-fast.json", { deferred: true });
     const releaseGates = latestManagerReportItem(stateRoot, "Release gates", "latest-release-gates.json");
     const operation = updateStatus?.operation || {};
+    const originalFailure = operation?.originalFailure || {};
     const operationState = String(operation.state || "").toLowerCase();
     const operationReportedAt = String(operation.completedAt || operation.updatedAt || operation.startedAt || "");
+    const updateCheckReportedAt = String(updateStatus?.checkedAt || "");
+    const updateCheckTerminal = updateStatusParseable
+      && Number.isFinite(Date.parse(updateCheckReportedAt))
+      && typeof updateStatus.ok === "boolean";
+    const updateCheckOk = updateCheckTerminal ? updateStatus.ok === true : null;
     const managerActionResults = {
+        updateCheck: {
+            latestPath: updateStatusPath,
+            exists: updateStatusExists,
+            parseable: updateStatusParseable,
+            invalid: updateStatusExists && !updateStatusParseable,
+            ok: updateCheckOk,
+            effectiveOk: updateCheckOk,
+            state: updateCheckTerminal ? "completed" : (updateStatusExists ? "unknown" : "missing"),
+            reason: updateCheckTerminal ? String(updateStatus.reason || "") : (updateStatusExists ? "update_status_unavailable" : "not_checked"),
+            firstFailure: updateCheckTerminal && !updateCheckOk ? String(updateStatus.reason || "") : "",
+            reportedAt: updateCheckTerminal ? new Date(updateCheckReportedAt).toISOString() : "",
+        },
         accountProxy: latestManagerReportItem(stateRoot, "Account and proxy readiness", "latest-account-proxy-readiness.json", { deferred: true }),
         syncReadiness,
         repairShortcuts: latestManagerReportItem(stateRoot, "Shortcut repair", "latest-shortcut-repair.json", { deferred: true }),
@@ -1584,7 +1606,7 @@ async function diagnosticsPayload(stateRoot, fast, fixedHealthUrl, adapterAuthTo
             state: operationState,
             reason: String(operation.message || "").slice(0, 500),
             firstFailure: ["failed", "failure", "rolled_back"].includes(operationState)
-              ? String(operation.failureCode || operation.message || "").slice(0, 500)
+              ? String(originalFailure.message || originalFailure.error || operation.failureCode || operation.message || "").slice(0, 500)
               : "",
             reportedAt: Number.isFinite(Date.parse(operationReportedAt)) ? new Date(operationReportedAt).toISOString() : "",
         },
