@@ -56,6 +56,7 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.match(source, /CODEX_PLUS_STATE_DIR/);
   assert.match(source, /CODEX_PLUS_APP_EXECUTABLE/);
   assert.match(source, /CODEX_PLUS_PROTOCOL_PROXY_PORT/);
+  assert.match(source, /ANTICODEX_PROMPT_POLICY_PATH/);
   assert.match(source, /codexplusplus-component-manifest-v1/);
   assert.match(source, /assertNoExistingClient/);
   assert.match(source, /Fixed-route Manager support is incomplete/);
@@ -1117,6 +1118,10 @@ test("copied client environment removes original Codex pointers and provider sec
     Path: "C:\\Windows\\System32",
   });
   assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
+  assert.equal(
+    supervisorChild.ANTICODEX_PROMPT_POLICY_PATH,
+    join(plan.paths.stateRoot, "prompt-policy.json"),
+  );
   const child = buildCopiedClientEnvironment(plan, supervisorChild);
   assert.equal(child.CODEX_HOME, plan.paths.codexHome);
   assert.equal(child.CODEX_PLUS_FIXED_MODEL, undefined);
@@ -1136,6 +1141,7 @@ test("copied client environment removes original Codex pointers and provider sec
     "CODEX_PLUS_PROTOCOL_PROXY_PORT",
     "CODEX_PLUS_LAUNCHER_GUARD_PORT",
     "CODEX_PLUS_MANAGER_GUARD_PORT",
+    "ANTICODEX_PROMPT_POLICY_PATH",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "UPSTREAM_API_KEY",

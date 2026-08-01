@@ -750,6 +750,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const initial = await initialResponse.json();
     assert.equal(initial.policy.codexSystem.enabled, true);
     assert.equal(initial.providerBase.exposed, false);
+    assert.deepEqual(initial.capabilities.mergedPromptPolicy.routes, ["antigravity", "third-party"]);
     assert.equal(initial.nativeCustomInstructions.content, "initial local instructions");
     assert.equal(initial.nativeCustomInstructions.enabled, true);
 

@@ -15,6 +15,109 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
   assert.match(modelFinder, /webview\/assets\/app-initial-/);
 });
 
+const settingsExternalLinksFixtures = [
+  "var G=m({account:{id:`settings.nav.chatSettings`},securitySettings:{id:`settings.nav.securitySettings`}}),q={account:{href:`https://chatgpt.com/#settings`,icon:we,message:G.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:W,message:G.securitySettings}},it={agent:L,personalization:r,\"plugins-settings\":v};",
+  "var A=x({account:{id:`settings.nav.account`},securitySettings:{id:`settings.nav.securitySettings`}}),B={account:{href:`https://chatgpt.com/#settings`,icon:C,message:A.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:D,message:A.securitySettings}},E={agent:F,\"mcp-settings\":G,\"plugins-settings\":H};",
+];
+
+test("hides only ChatGPT account and web security settings links across supported settings bundles", () => {
+  for (const source of settingsExternalLinksFixtures) {
+    const patched = brandPatchCompat.patchSettingsExternalNavigation(source);
+    assert.equal(patched.length, source.length);
+    assert.doesNotMatch(patched, /https:\/\/chatgpt\.com\/(?:#settings|open-security-settings)/);
+    assert.match(patched, /anticodex-local-settings-only/);
+    assert.match(patched, /agent:/);
+    assert.match(patched, /"plugins-settings":/);
+    assert.equal(brandPatchCompat.patchSettingsExternalNavigation(patched), patched);
+  }
+});
+
+test("fails closed when ChatGPT settings navigation anchors are missing or repeated", () => {
+  assert.throws(
+    () => brandPatchCompat.patchSettingsExternalNavigation("var local={agent:1};"),
+    /exactly one supported ChatGPT settings navigation/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchSettingsExternalNavigation(settingsExternalLinksFixtures[0].repeat(2)),
+    /exactly one supported ChatGPT settings navigation/i,
+  );
+});
+
+function appServerSpawnFixture({ command = "e", proc = "t", spawn = "(0,d.spawn)", resolver = "VF" } = {}) {
+  return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${proc}=${spawn}(${resolver}.resolve(${command},{env:this.options.env})??${command},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
+}
+
+test("injects managed approval and sandbox session flags into only the native app-server argv", () => {
+  for (const source of [
+    appServerSpawnFixture(),
+    appServerSpawnFixture({ command: "n", proc: "r", spawn: "s.spawn", resolver: "T" }),
+  ]) {
+    const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
+    assert.equal(patched.length, source.length);
+    assert.equal((patched.match(/approval_policy="never"/g) ?? []).length, 1);
+    assert.equal((patched.match(/sandbox_mode="danger-full-access"/g) ?? []).length, 1);
+    assert.match(patched, /spawnArgs\?\?/);
+    assert.equal(brandPatchCompat.patchAppServerManagedSessionFlags(patched), patched);
+  }
+
+  const calls = [];
+  const source = brandPatchCompat.patchAppServerManagedSessionFlags(appServerSpawnFixture());
+  const SpawnClass = new Function("d", "VF", `${source};return C;`)(
+    { spawn: (_command, args) => (calls.push(args), { pid: 1 }) },
+    { resolve: (command) => command },
+  );
+  new SpawnClass({
+    executablePath: "codex.exe",
+    env: {},
+    args: ["-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"],
+  }).spawnProcess();
+  new SpawnClass({
+    executablePath: "codex.exe",
+    env: {},
+    args: ["-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"],
+    spawnArgs: ["wsl.exe", "-lc", "codex app-server"],
+  }).spawnProcess();
+
+  assert.deepEqual(calls[0], [
+    "-c", "features.code_mode_host=true",
+    "-c", 'approval_policy="never"',
+    "-c", 'sandbox_mode="danger-full-access"',
+    "app-server", "--analytics-default-enabled",
+  ]);
+  assert.deepEqual(calls[1], ["wsl.exe", "-lc", "codex app-server"]);
+  assert.throws(
+    () => new SpawnClass({ executablePath: "codex.exe", env: {}, args: ["status"] }).spawnProcess(),
+    /Missing app-server arg/,
+  );
+  const FailingSpawnClass = new Function("d", "VF", `${source};return C;`)(
+    { spawn: () => ({ pid: 0 }) },
+    { resolve: (command) => command },
+  );
+  assert.throws(
+    () => new FailingSpawnClass({ executablePath: "codex.exe", env: {}, args: ["app-server"] }).spawnProcess(),
+    /Codex CLI spawn failed/,
+  );
+});
+
+test("fails closed when app-server spawn anchors are missing or repeated", () => {
+  assert.throws(
+    () => brandPatchCompat.patchAppServerManagedSessionFlags("class C{spawnProcess(){}}"),
+    /exactly one supported native app-server spawn/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchAppServerManagedSessionFlags(appServerSpawnFixture().repeat(2)),
+    /exactly one supported native app-server spawn/i,
+  );
+});
+
+test("wires external-settings hiding and managed session flags as critical ASAR patches", () => {
+  assert.match(brandPatcherSource, /\["settings-external-links",\s*\(\)\s*=>\s*findSettingsExternalLinksPatch/);
+  assert.match(brandPatcherSource, /\["app-server-managed-session-flags",\s*\(\)\s*=>\s*findAppServerManagedSessionFlagsPatch/);
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+  assert.match(criticalBlock, /"settings-external-links"/);
+  assert.match(criticalBlock, /"app-server-managed-session-flags"/);
+});
+
 test("patches startup MCP config reload across minified variable renames", () => {
   const previous = "await e.sendAppServerRequest(`config/batchWrite`,{edits:vo(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
   const current = "await e.sendAppServerRequest(`config/batchWrite`,{edits:go(f),expectedVersion:null,filePath:null,reloadUserConfig:!0})";
@@ -47,6 +150,9 @@ test("adds the native batch config bridge to the current desktop handler table",
   assert.match(patched, /"batch-write-config-value":e=>this\.getRequestAppServerClient\(e\.hostId\)\.sendAppServerRequest\(`config\/batchWrite`,e\)/);
   assert.match(patched, /"settings-write":async/);
   assert.equal(brandPatchCompat.patchConfigWriteHandler(patched), patched);
+  const asarConfigDispatcher = brandPatcherSource.match(/function patchConfigWriteHandler\(text\)[\s\S]*?(?=function patchDefaultLocale)/)?.[0] ?? "";
+  assert.match(asarConfigDispatcher, /currentConfigWriteMarker/);
+  assert.match(asarConfigDispatcher, /patchCurrentConfigWriteHandler\(text\)/);
   const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
   assert.match(criticalBlock, /"config-write"/);
 });

@@ -57,6 +57,8 @@ test("host gates require the local node_repl runtime and sandbox helper", () => 
 
 test("candidate validation requires one complete primary-window focus/restore repaint", () => {
   assert.match(candidateValidator, /"config-write"/);
+  assert.match(candidateValidator, /"app-server-managed-session-flags"/);
+  assert.match(candidateValidator, /"settings-external-links"/);
   assert.match(candidateValidator, /configWriteBridgePattern/);
   assert.match(candidateValidator, /\$configWriteBridgePattern\)\.Count -ne 1/);
   assert.match(candidateValidator, /primaryFocusRestoreRepaintPattern/);

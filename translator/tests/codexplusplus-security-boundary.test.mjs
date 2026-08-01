@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -8,6 +8,8 @@ const root = join(import.meta.dirname, "..", "..");
 const patch1 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0001-isolation-scope-Anti-Codex-companion-runtime.patch"), "utf8");
 const patch2 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0002-cancel-loopback-streams-without-resets.patch"), "utf8");
 const patch10 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0010-fix-estimate-missing-chat-usage-for-native-compaction.patch"), "utf8");
+const patch11Path = join(root, "third_party", "codexplusplus", "patches", "0011-apply-anticodex-prompt-policy-at-common-request-entry.patch");
+const patch11 = existsSync(patch11Path) ? readFileSync(patch11Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -21,7 +23,7 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 10);
+  assert.equal(metadata.patches.length, 11);
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
       .update(readFileSync(join(componentRoot, patch.file)))
@@ -31,6 +33,30 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("Anti-Codex prompt policy is confined to both reserved relays at the common request entry", () => {
+  assert.match(patch11, /ANTICODEX_PROMPT_POLICY_PATH/);
+  assert.match(patch11, /apply_anticodex_prompt_policy/);
+  assert.match(patch11, /upstream_request_parts/);
+  assert.match(patch11, /ANTICODEX_ANTIGRAVITY_RELAY_ID/);
+  assert.match(patch11, /ANTICODEX_THIRD_PARTY_RELAY_ID/);
+  assert.match(patch11, /prompt_policy_default_is_a_byte_for_byte_passthrough/);
+  assert.match(patch11, /prompt_policy_disabled_preserves_user_and_agents_messages/);
+  assert.match(patch11, /prompt_policy_customizes_responses_and_chat_once/);
+  assert.match(patch11, /prompt_policy_user_add_on_applies_to_both_reserved_relays/);
+  assert.match(patch11, /prompt_policy_ignores_other_relays_and_invalid_paths/);
+  assert.match(patch11, /native-prompt-snapshot\.json/);
+  assert.match(patch11, /"defaultContent"/);
+  assert.match(patch11, /"effectiveContent"/);
+  assert.match(patch11, /"policyMode"/);
+  assert.match(patch11, /crate::settings::atomic_write/);
+  assert.match(patch11, /prompt_policy_snapshot_records_only_original_instruction_carriers_even_without_policy/);
+  assert.match(patch11, /ANTICODEX_PROMPT_SNAPSHOT_IDENTITY/);
+  assert.match(patch11, /last_identity\.as_ref\(\) == Some\(&identity\)/);
+  assert.match(patch11, /identical_prompt_policy_snapshot_is_not_rewritten/);
+  assert.match(patch11, /RelayProtocol::ChatCompletions => "chatCompletions"/);
+  assert.doesNotMatch(patch11, /retry|task control|session reset/i);
 });
 
 test("missing Chat usage is estimated only as a completed-response fallback", () => {

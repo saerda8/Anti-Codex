@@ -22,11 +22,42 @@ test("Manager update runner uses only real CDP mouse clicks and requires explici
   assert.doesNotMatch(source, /targets\.find\(\(item\).*Anti-Codex\|app:/);
   assert.match(source, /existingManagerClosePoint/);
   assert.match(source, /button\.anticodex-close\[aria-label="\u5173\u95ed"\]/);
-  assert.match(source, /CodexPlusPlus \u5408\u5e76\u63d0\u793a\u8bcd\uff08\u4ec5 Antigravity\uff09/);
+  assert.match(source, /Codex \u5b8c\u6574\u5408\u5e76\u63d0\u793a\u8bcd\uff08Gemini \/ Claude \/ \u7b2c\u4e09\u65b9\uff09/);
   assert.match(source, /Codex \u539f\u751f\u81ea\u5b9a\u4e49\u6307\u4ee4 \(AGENTS\.md\)/);
-  assert.match(source, /Anti-Codex \u9644\u52a0\u63d0\u793a\u8bcd\uff08\u4ec5 Antigravity\uff09/);
+  assert.match(source, /Anti-Codex \u9644\u52a0\u63d0\u793a\u8bcd\uff08Gemini \/ Claude \/ \u7b2c\u4e09\u65b9\uff09/);
+  assert.match(source, /\u6a21\u578b\u63d0\u4f9b\u65b9\u9690\u85cf\u63d0\u793a\u8bcd/);
+  assert.doesNotMatch(source, /\u4ec5 Antigravity|Antigravity \u63d0\u4f9b\u65b9\u5e95\u5c42/);
   assert.doesNotMatch(source, /Codex \u7cfb\u7edf\u63d0\u793a\u8bcd/);
   assert.doesNotMatch(source, /Anti-Codex \u7528\u6237\u63d0\u793a\u8bcd/);
   assert.match(source, /--confirm/);
   assert.doesNotMatch(source, /\.click\s*\(|dispatchEvent\s*\(\s*new MouseEvent/);
+});
+
+test("real-mouse runner can audit native Settings without starting clients or leaking custom instructions", () => {
+  const source = readFileSync(scriptUrl, "utf8");
+
+  assert.match(source, /nativeSettingsAcceptance/);
+  assert.match(source, /--native-settings/);
+  assert.match(source, /pickUniquePrimaryAppTarget/);
+  assert.match(source, /Expected exactly one visible Anti-Codex page target/);
+  assert.match(source, /data-settings-panel-slug/);
+  assert.match(source, /nav\[aria-label="Settings"\], nav\[aria-label="\u8bbe\u7f6e"\]/);
+  assert.match(source, /chatgpt\.com\/#settings/);
+  assert.match(source, /chatgpt\.com\/open-security-settings/);
+  assert.match(source, /localSecurityLabels/);
+  assert.match(source, /Approval policy|\u6279\u51c6\u7b56\u7565/);
+  assert.match(source, /Sandbox settings|\u6c99\u76d2\u8bbe\u7f6e/);
+  assert.match(source, /managed by admin policy|\u7ba1\u7406\u5458\u7b56\u7565/);
+  assert.match(source, /Allow network access|\u5141\u8bb8\u7f51\u7edc\u8bbf\u95ee/);
+  assert.match(source, /Full access|\u5b8c\u5168\u8bbf\u95ee/);
+  assert.match(source, /Custom instructions|\u81ea\u5b9a\u4e49\u6307\u4ee4/);
+  assert.match(source, /AGENTS\.md/);
+  assert.match(source, /randomUUID\(\)/);
+  assert.match(source, /Input\.insertText/);
+  assert.match(source, /restoreNativeInstructions/);
+  assert.match(source, /finally/);
+  assert.match(source, /inspectOnly/);
+  assert.match(source, /Network\.setBlockedURLs/);
+  assert.match(source, /Network\.disable/);
+  assert.doesNotMatch(source, /node:child_process|spawnSync|execFileSync/);
 });

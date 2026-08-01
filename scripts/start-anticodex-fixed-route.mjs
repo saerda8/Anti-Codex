@@ -1276,6 +1276,7 @@ function publicChildEnvironment(plan) {
     CODEX_PLUS_STATE_DIR: plan.paths.codexPlusPlusState,
     CODEX_PLUS_APP_EXECUTABLE: plan.paths.appExecutable,
     CODEX_PLUS_PROTOCOL_PROXY_PORT: String(plan.ports.proxy),
+    ANTICODEX_PROMPT_POLICY_PATH: join(plan.paths.stateRoot, "prompt-policy.json"),
     CODEX_PLUS_LAUNCHER_GUARD_PORT: String(plan.ports.launcherGuard),
     CODEX_PLUS_MANAGER_GUARD_PORT: String(plan.ports.managerGuard),
     CODEX_HOME: plan.paths.codexHome,
@@ -1304,6 +1305,7 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
     CODEX_PLUS_STATE_DIR: plan.paths.codexPlusPlusState,
     CODEX_PLUS_APP_EXECUTABLE: plan.paths.appExecutable,
     CODEX_PLUS_PROTOCOL_PROXY_PORT: String(plan.ports.proxy),
+    ANTICODEX_PROMPT_POLICY_PATH: join(plan.paths.stateRoot, "prompt-policy.json"),
     CODEX_PLUS_LAUNCHER_GUARD_PORT: String(plan.ports.launcherGuard),
     CODEX_PLUS_MANAGER_GUARD_PORT: String(plan.ports.managerGuard),
     CODEX_HOME: plan.paths.codexHome,
@@ -1350,6 +1352,7 @@ export function buildCopiedClientEnvironment(plan, baseEnvironment = process.env
     "CODEX_PLUS_PROTOCOL_PROXY_PORT",
     "CODEX_PLUS_LAUNCHER_GUARD_PORT",
     "CODEX_PLUS_MANAGER_GUARD_PORT",
+    "ANTICODEX_PROMPT_POLICY_PATH",
   ]) delete environment[name];
   return environment;
 }

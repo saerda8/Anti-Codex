@@ -2086,10 +2086,11 @@
       const defaults = structuredClone(payload.defaults || {});
       const snapshotLayers = Array.isArray(payload.snapshot?.layers) ? payload.snapshot.layers : [];
       const layerById = new Map(snapshotLayers.map((layer) => [String(layer.id || ""), layer]));
+      const nativePromptSnapshot = payload.nativePromptSnapshot || null;
       const fieldStyle = "width:100%;min-height:150px;resize:vertical;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-input-bg);color:var(--ac-text);padding:10px 11px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace";
-      const editor = (id, title) => {
+      const editor = (id, title, observedOverride = null) => {
         const current = policy[id] || defaults[id];
-        const observed = layerById.get(id);
+        const observed = observedOverride || layerById.get(id);
         const enabled = el("input", { type: "checkbox" });
         enabled.checked = current?.enabled !== false;
         const useDefault = el("input", { type: "checkbox" });
@@ -2104,12 +2105,18 @@
             el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [enabled, el("span", { text: "启用" })]),
             el("label", { style: "display:flex;gap:7px;align-items:center", text: "" }, [useDefault, el("span", { text: "沿用当前运行时内容" })]),
             textarea,
-            el("div", { className: "anticodex-result", text: observed ? `最近观察：${observed.sha256?.slice(0, 12) || "无哈希"}` : "当前运行时尚未捕获该层；首次 Antigravity 请求后会显示。" }),
+            el("div", { className: "anticodex-result", text: observed
+              ? `最近观察：默认 ${(observed.defaultSha256 || observed.sha256 || "").slice(0, 12) || "无哈希"} / 生效 ${(observed.effectiveSha256 || observed.sha256 || "").slice(0, 12) || "无哈希"}${observed.relayId ? ` / ${observed.relayId}` : ""}`
+              : "当前运行时尚未捕获该层；首次模型请求后会显示。" }),
           ])),
           value: () => ({ enabled: enabled.checked, content: useDefault.checked ? null : textarea.value }),
         };
       };
-      const system = editor("codexSystem", "CodexPlusPlus 合并提示词（仅 Antigravity）");
+      const system = editor("codexSystem", "Codex 完整合并提示词（Gemini / Claude / 第三方）", nativePromptSnapshot ? {
+        ...nativePromptSnapshot,
+        defaultContent: nativePromptSnapshot.defaultContent,
+        effectiveContent: nativePromptSnapshot.effectiveContent,
+      } : null);
       const nativeInstructions = payload.nativeCustomInstructions || { content: "", defaultContent: "" };
       const nativeInstructionsText = el("textarea", {
         style: fieldStyle,
@@ -2160,21 +2167,22 @@
       const required = snapshotLayers.filter((layer) => layer.required).map((layer) => card(layer.title || "必需兼容层", el("pre", { className: "anticodex-result", text: layer.effectiveContent || "" })));
       grid.replaceChildren(
         system.node,
-        card("Codex 开发者提示词", el("div", { className: "anticodex-result anticodex-warn", text: "真实产品链路已把开发者提示词、系统提示词和 CodexPlusPlus 工具指导合并，不能单独控制；请编辑上方合并提示词。" })),
+        card("本地快照说明", el("div", { className: "anticodex-result anticodex-warn", text: "完整提示词快照只保存在 Anti-Codex 隔离目录；只采集 system/developer 层，不采集 user 消息、AGENTS.md、工具参数或请求密钥。内容可能包含你的个性化和项目规则。" })),
+        card("Codex 开发者提示词", el("div", { className: "anticodex-result anticodex-warn", text: "系统和开发者文案会按实际发送顺序合并为上方一层，不能单独控制；AGENTS.md、环境和真实用户消息是独立 user 项，不受关闭或替换影响。" })),
         card("Codex 原生自定义指令 (AGENTS.md)", el("div", { style: "display:grid;gap:9px" }, [
           nativeInstructionsText,
           el("div", { className: "anticodex-result", text: "Gemini、Claude 和第三方模型都沿用这一份隔离配置；留空即关闭。" }),
         ])),
-        card("Anti-Codex 附加提示词（仅 Antigravity）", el("div", { style: "display:grid;gap:9px" }, [
+        card("Anti-Codex 附加提示词（Gemini / Claude / 第三方）", el("div", { style: "display:grid;gap:9px" }, [
           el("label", { style: "display:flex;gap:7px;align-items:center" }, [userEnabled, el("span", { text: "启用" })]),
           userText,
         ])),
-        card("适用范围", el("div", { className: "anticodex-result anticodex-warn", text: "第三方线路不经过本页的合并提示词和 Anti-Codex 附加提示词；上方原生 AGENTS.md 仍会生效。新的合并设置从下一次新模型回合开始生效，同一 Cascade 续传不会中途重写。" })),
-        card("Antigravity 提供方底层", el("div", { className: "anticodex-result anticodex-warn", text: payload.providerBase?.message || "提供方未暴露。" })),
+        card("适用范围", el("div", { className: "anticodex-result anticodex-warn", text: "合并提示词、Anti-Codex 附加提示词和原生 AGENTS.md 均适用于 Gemini、Claude 和第三方线路；下一次新模型请求读取，正在进行的流不会中途改写。恢复默认会继续跟随当前 Codex；旧任务若已固化旧版本提示，需要重启后新建任务才会取得新版本默认。" })),
+        card("模型提供方隐藏提示词", el("div", { className: "anticodex-result anticodex-warn", text: payload.providerBase?.message || "提供方未暴露。" })),
         ...required,
         card("操作", el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveButton, restoreButton, backButton])),
       );
-      result.textContent = payload.snapshot ? "已读取最近一次实际提示词分层。" : "设置可用；当前尚无运行时提示词快照。";
+      result.textContent = nativePromptSnapshot ? "已读取最近一次修改前与生效后的完整提示词。" : "设置可用；当前尚无完整运行时提示词快照。";
     }
 
     promptSettingsButton.onclick = () => { void runManagerExclusive(showPromptSettings); };

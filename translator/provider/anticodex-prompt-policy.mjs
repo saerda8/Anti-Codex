@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 
 const SCHEMA = "anticodex-prompt-policy-v1";
 const MAX_CONTENT_LENGTH = 100_000;
+const NATIVE_SNAPSHOT_SCHEMA = "anticodex-native-prompt-snapshot-v1";
+const MAX_SNAPSHOT_CONTENT_LENGTH = 1_000_000;
 const EDITABLE_LAYERS = Object.freeze({
   "Codex system instructions": "codexSystem",
   "Codex developer instructions": "codexDeveloper",
@@ -69,29 +71,6 @@ export function saveNativeCustomInstructions(codexHome, value) {
   return value;
 }
 
-export function applyPromptPolicy(sections, stateRoot) {
-  const policy = readPromptPolicy(stateRoot);
-  const effective = [];
-  for (const section of Array.isArray(sections) ? sections : []) {
-    const key = EDITABLE_LAYERS[String(section?.title || "")];
-    if (!key) {
-      effective.push(section);
-      continue;
-    }
-    const layer = policy[key];
-    if (!layer.enabled) continue;
-    effective.push(layer.content === null ? section : { ...section, content: layer.content });
-  }
-  if (policy.user.enabled && policy.user.content) {
-    effective.push({
-      title: "Anti-Codex user instructions",
-      content: policy.user.content,
-      metadata: { isInternal: true, userConfigured: true },
-    });
-  }
-  return effective;
-}
-
 export function recordPromptSnapshot(stateRoot, originalSections, effectiveSections) {
   const target = snapshotPath(stateRoot);
   const layers = snapshotLayers(originalSections, effectiveSections);
@@ -117,6 +96,7 @@ export function recordPromptSnapshot(stateRoot, originalSections, effectiveSecti
 export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoot), "codex-home-deepseek-app")) {
   let snapshot = null;
   try { snapshot = JSON.parse(readFileSync(snapshotPath(stateRoot), "utf8")); } catch {}
+  const nativePromptSnapshot = readNativePromptSnapshot(stateRoot);
   const nativeContent = readNativeCustomInstructions(codexHome);
   return {
     ok: true,
@@ -124,6 +104,7 @@ export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoo
     policy: readPromptPolicy(stateRoot),
     defaults: defaultPromptPolicy(),
     snapshot,
+    nativePromptSnapshot,
     nativeCustomInstructions: {
       source: "AGENTS.md",
       enabled: Boolean(nativeContent.trim()),
@@ -136,19 +117,38 @@ export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoo
         effectiveFrom: "next_native_request",
       },
       mergedPromptPolicy: {
-        routes: ["antigravity"],
+        routes: ["antigravity", "third-party"],
         independentDeveloper: false,
-        effectiveFrom: "next_new_cascade",
+        effectiveFrom: "next_native_request",
       },
     },
     providerBase: {
-      id: "antigravityProviderBase",
-      source: "Antigravity",
+      id: "providerHiddenPrompts",
+      source: "Model providers",
       editable: false,
       exposed: false,
-      message: "Antigravity 自带基础提示词未通过本地接口暴露；Anti-Codex 当前不会替换或删除它。",
+      message: "Antigravity 或第三方提供方可能在服务端附加未暴露提示词；本地无法读取、替换或删除这些提供方隐藏内容。",
     },
   };
+}
+
+function readNativePromptSnapshot(stateRoot) {
+  try {
+    const value = JSON.parse(readFileSync(nativeSnapshotPath(stateRoot), "utf8"));
+    if (value?.schema !== NATIVE_SNAPSHOT_SCHEMA) return null;
+    if (!["anticodex-antigravity", "anticodex-third-party"].includes(value.relayId)) return null;
+    if (!["responses", "chatCompletions", "chat_completions"].includes(value.protocol)) return null;
+    for (const key of ["defaultContent", "effectiveContent"]) {
+      if (typeof value[key] !== "string" || value[key].length > MAX_SNAPSHOT_CONTENT_LENGTH) return null;
+    }
+    for (const key of ["defaultSha256", "effectiveSha256"]) {
+      if (!/^[a-f0-9]{64}$/i.test(String(value[key] || ""))) return null;
+    }
+    if (typeof value.updatedAt !== "number" && typeof value.updatedAt !== "string") return null;
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 function normalizePromptPolicy(value, defaults, options = {}) {
@@ -195,4 +195,5 @@ function snapshotLayers(originalSections, effectiveSections) {
 
 function policyPath(stateRoot) { return join(resolve(stateRoot), "prompt-policy.json"); }
 function snapshotPath(stateRoot) { return join(resolve(stateRoot), "prompt-snapshot.json"); }
+function nativeSnapshotPath(stateRoot) { return join(resolve(stateRoot), "native-prompt-snapshot.json"); }
 function nativeCustomInstructionsPath(codexHome) { return join(resolve(codexHome), "AGENTS.md"); }

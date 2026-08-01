@@ -8,6 +8,14 @@ const WINDOWS_TRAY_BRAND_ICONS = [
 
 const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
   /await [\w$]+\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+\([\w$]+\),expectedVersion:null,filePath:null,reloadUserConfig:!(?<reload>[01])\}\)/;
+const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
+  /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:[\w$]+,message:\k<messages>\.securitySettings\}\}/g;
+const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
+  /[\w$]+=\{\/\*anticodex-local-settings-only\*\/\}/g;
+const APP_SERVER_NATIVE_SPAWN_PATTERN =
+  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
+const APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN =
+  /spawnProcess\(\)\{let [\w$]+=this\.options,[\s\S]{0,600}?approval_policy="never"[\s\S]{0,200}?sandbox_mode="danger-full-access"[\s\S]{0,600}?Error`Codex CLI spawn failed`;/g;
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -20,6 +28,78 @@ function padReplacement(match, replacement) {
     );
   }
   return replacement + " ".repeat(match.length - replacement.length);
+}
+
+function allMatches(source, pattern) {
+  return [...source.matchAll(new RegExp(pattern.source, pattern.flags))];
+}
+
+export function hasSettingsExternalNavigationPatch(text) {
+  const source = String(text ?? "");
+  return allMatches(source, SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN).length === 1
+    && allMatches(source, SETTINGS_EXTERNAL_NAVIGATION_PATTERN).length === 0;
+}
+
+export function patchSettingsExternalNavigation(text) {
+  const source = String(text ?? "");
+  const original = allMatches(source, SETTINGS_EXTERNAL_NAVIGATION_PATTERN);
+  const patched = allMatches(source, SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN);
+  if (original.length === 0 && patched.length === 1) return source;
+  if (original.length !== 1 || patched.length !== 0) {
+    throw new Error("Expected exactly one supported ChatGPT settings navigation");
+  }
+
+  const match = original[0];
+  const replacement = `${match.groups.binding}={/*anticodex-local-settings-only*/}`;
+  return source.slice(0, match.index)
+    + replacement
+    + " ".repeat(match[0].length - replacement.length)
+    + source.slice(match.index + match[0].length);
+}
+
+export function hasAppServerManagedSessionFlags(text) {
+  const source = String(text ?? "");
+  return allMatches(source, APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN).length === 1
+    && allMatches(source, APP_SERVER_NATIVE_SPAWN_PATTERN).length === 0;
+}
+
+export function patchAppServerManagedSessionFlags(text) {
+  const source = String(text ?? "");
+  const original = allMatches(source, APP_SERVER_NATIVE_SPAWN_PATTERN);
+  const patched = allMatches(source, APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN);
+  if (original.length === 0 && patched.length === 1) return source;
+  if (original.length !== 1 || patched.length !== 0) {
+    throw new Error("Expected exactly one supported native app-server spawn");
+  }
+
+  const match = original[0];
+  const { command, proc, resolver, spawn } = match.groups;
+  const logger = `this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),`;
+  const target = match[0] + logger;
+  if (!source.startsWith(target, match.index)) {
+    throw new Error("Expected exactly one supported native app-server spawn");
+  }
+  const methodTailEnd = source.indexOf("onProcessError=", match.index + target.length);
+  const methodTail = source.slice(match.index + target.length, methodTailEnd < 0 ? match.index + target.length : methodTailEnd);
+  const reserved = new Set([
+    command,
+    proc,
+    resolver,
+    ...(spawn.match(/[A-Za-z_$][\w$]*/g) ?? []),
+    ...(methodTail.match(/[A-Za-z_$][\w$]*/g) ?? []),
+  ]);
+  const aliases = ["o", "n", "r", "i", "a", "s", "c", "l", "u", "d", "f", "p", "m", "h", "g", "_", "v", "y", "b", "x"]
+    .filter((alias) => !reserved.has(alias));
+  if (aliases.length < 2) throw new Error("Could not reserve app-server patch aliases");
+  const [options, args] = aliases;
+  const replacement = `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`);if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${proc}=${spawn}(${resolver}.resolve(${command},{env:${options}.env})??${command},${args},{stdio:\`pipe\`,env:${options}.env});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`;
+  if (replacement.length > target.length) {
+    throw new Error(`Managed app-server session flags patch did not fit in place: ${replacement.length} > ${target.length}`);
+  }
+  return source.slice(0, match.index)
+    + replacement
+    + " ".repeat(target.length - replacement.length)
+    + source.slice(match.index + target.length);
 }
 
 export function hasStartupMcpConfigReload(text) {

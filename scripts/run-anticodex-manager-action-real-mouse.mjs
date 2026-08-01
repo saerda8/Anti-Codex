@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
+
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
   const key = process.argv[index];
@@ -12,6 +16,7 @@ const port = Number(args.get("--port") || process.env.DEEPCODEX_CDP_PORT || 1831
 const action = String(args.get("--action") || "syncHost");
 const confirmed = String(args.get("--confirm") || "false").toLowerCase() === "true";
 const inspectOnly = String(args.get("--inspect-only") || "false").toLowerCase() === "true";
+const nativeSettingsAcceptance = String(args.get("--native-settings") || "false").toLowerCase() === "true";
 const promptSettingsSaveRestore = String(args.get("--prompt-settings-save-restore") || "false").toLowerCase() === "true";
 const promptClosePosition = String(args.get("--prompt-close-position") || "").toLowerCase();
 const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore
@@ -19,9 +24,22 @@ const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveR
 const timeoutMs = Number(args.get("--timeout-ms") || 15_000);
 
 if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
-if (action !== "syncHost" && !promptSettingsUiOnly) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
-if (!confirmed && !inspectOnly && !promptSettingsUiOnly) throw new Error("Refusing to arm the high-impact Manager action without --confirm true.");
+if (action !== "syncHost" && !promptSettingsUiOnly && !nativeSettingsAcceptance) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
+if (!confirmed && !inspectOnly && !promptSettingsUiOnly) throw new Error("Refusing to arm a write-capable real-mouse action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
+
+const stateRoot = nativeSettingsAcceptance
+  ? resolve(String(args.get("--state-root") || join(process.env.APPDATA || "", "anticodex")))
+  : "";
+const codexHome = nativeSettingsAcceptance
+  ? resolve(String(args.get("--codex-home") || join(stateRoot, "codex-home-deepseek-app")))
+  : "";
+if (nativeSettingsAcceptance) {
+  const codexHomeRelative = relative(stateRoot, codexHome);
+  if (!process.env.APPDATA || !codexHomeRelative || codexHomeRelative.startsWith("..") || isAbsolute(codexHomeRelative)) {
+    throw new Error("Refusing to inspect custom instructions outside the isolated Anti-Codex state root.");
+  }
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -33,6 +51,17 @@ function pickPrimaryAppTarget(targets) {
     || pages.find((target) => String(target.url || "").startsWith("app://"))
     || pages[0]
     || null;
+}
+
+function pickUniquePrimaryAppTarget(targets) {
+  const pages = targets.filter((target) => target?.type === "page"
+    && target.webSocketDebuggerUrl
+    && /^app:\/\/-\/index\.html(?:[?#]|$)/i.test(String(target.url || ""))
+    && !String(target.url || "").toLowerCase().includes("avatar-overlay"));
+  if (pages.length !== 1) {
+    throw new Error(`Expected exactly one visible Anti-Codex page target, found ${pages.length}.`);
+  }
+  return pages[0];
 }
 
 async function getTargets() {
@@ -57,6 +86,7 @@ function connect(url) {
 }
 
 const targets = await getTargets();
+if (nativeSettingsAcceptance) pickUniquePrimaryAppTarget(targets);
 const target = pickPrimaryAppTarget(targets);
 if (!target) throw new Error(`No Anti-Codex page target found on CDP port ${port}.`);
 
@@ -155,14 +185,288 @@ const visiblePoint = (selectorExpression) => `(() => {
     y,
     text: String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim(),
     ariaLabel: String(node.getAttribute?.('aria-label') || ''),
+    disabled: Boolean(node.disabled),
+    ariaDisabled: node.getAttribute?.('aria-disabled') === 'true',
     tag: node.tagName || '',
   };
 })()`;
 
+const nativeSettingsNavExpression = `document.querySelector('nav[aria-label="Settings"], nav[aria-label="设置"]')`;
+const nativeSettingsPanelExpression = `(() => {
+  const nav = ${nativeSettingsNavExpression};
+  const visible = (node) => {
+    const rect = node?.getBoundingClientRect?.();
+    return rect && rect.width > 0 && rect.height > 0 && !node.contains(nav);
+  };
+  const semantic = Array.from(document.querySelectorAll('main,[role="main"],.main-surface,[class*="main-surface"]')).filter(visible);
+  if (semantic.length > 0) {
+    return semantic.sort((left, right) => String(right.innerText || '').length - String(left.innerText || '').length)[0];
+  }
+  let ancestor = nav;
+  while (ancestor?.parentElement && ancestor.parentElement !== document.body) {
+    const siblings = Array.from(ancestor.parentElement.children || []).filter(visible);
+    if (siblings.length > 0) {
+      return siblings.sort((left, right) => String(right.innerText || '').length - String(left.innerText || '').length)[0];
+    }
+    ancestor = ancestor.parentElement;
+  }
+  return null;
+})()`;
+const nativeInstructionTextareaExpression = `(() => {
+  const scope = ${nativeSettingsPanelExpression} || document.body;
+  const labels = Array.from(scope.querySelectorAll('h1,h2,h3,label,span,div,p'));
+  const label = labels.find((node) => /^(Custom instructions|自定义指令)$/.test(String(node.textContent || '').trim()));
+  let container = label;
+  while (container && container !== scope) {
+    const textarea = container.querySelector?.('textarea');
+    if (textarea) return textarea;
+    container = container.parentElement;
+  }
+  const textareas = Array.from(scope.querySelectorAll('textarea'));
+  return textareas.length === 1 ? textareas[0] : null;
+})()`;
+const nativeInstructionsSaveButtonExpression = `(() => {
+  const textarea = ${nativeInstructionTextareaExpression};
+  let container = textarea;
+  while (container && container !== document.body) {
+    const button = Array.from(container.querySelectorAll?.('button') || [])
+      .find((node) => /^(Save|保存)$/.test(String(node.innerText || node.textContent || '').trim()));
+    if (button) return button;
+    container = container.parentElement;
+  }
+  return null;
+})()`;
+
+function readAgentsSnapshot() {
+  const filePath = join(codexHome, "AGENTS.md");
+  return {
+    filePath,
+    existed: existsSync(filePath),
+    contents: existsSync(filePath) ? readFileSync(filePath, "utf8") : "",
+  };
+}
+
+async function waitForLocal(probe, predicate, waitMs = timeoutMs) {
+  const deadline = Date.now() + waitMs;
+  let value;
+  do {
+    value = probe();
+    if (predicate(value)) return value;
+    await sleep(100);
+  } while (Date.now() < deadline);
+  throw new Error("Timed out waiting for the isolated Anti-Codex AGENTS.md state.");
+}
+
+async function openNativeSettingsSection(slug) {
+  await evaluate(`(() => {
+    const node = Array.from((${nativeSettingsNavExpression})?.querySelectorAll('button[data-settings-panel-slug]') || [])
+      .find((entry) => entry.getAttribute('data-settings-panel-slug') === ${JSON.stringify(slug)});
+    node?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    return Boolean(node);
+  })()`);
+  const point = await waitFor(
+    visiblePoint(`Array.from((${nativeSettingsNavExpression})?.querySelectorAll('button[data-settings-panel-slug]') || [])
+      .find((entry) => entry.getAttribute('data-settings-panel-slug') === ${JSON.stringify(slug)})`),
+    (value) => value?.ok === true && value.disabled !== true && value.ariaDisabled !== true,
+  );
+  await realMouseClick(point);
+  return waitFor(`(() => {
+    const nav = ${nativeSettingsNavExpression};
+    const active = Array.from(nav?.querySelectorAll('button[data-settings-panel-slug]') || [])
+      .find((entry) => entry.getAttribute('data-settings-panel-slug') === ${JSON.stringify(slug)});
+    const panel = ${nativeSettingsPanelExpression};
+    const panelText = String(panel?.innerText || '').replace(/\\s+/g, ' ').trim();
+    const bodyText = String(document.body?.innerText || '');
+    const crash = /(ChatGPT 已意外停止|unexpectedly stopped|Something went wrong|出了点问题|崩溃)/i.test(bodyText);
+    const loading = /^(Loading settings…?|正在加载设置…?)$/i.test(panelText);
+    const routeMatches = location.pathname.includes('/settings/${String(slug).replaceAll("'", "\\'")}');
+    const controlCount = panel?.querySelectorAll?.('button,input,textarea,select,a').length || 0;
+    return {
+      ok: Boolean(nav && active && routeMatches && panel && !crash && !loading && (panelText.length > 0 || controlCount > 0)),
+      route: location.pathname,
+      panelTextLength: panelText.length,
+      controlCount,
+      crash,
+      loading,
+    };
+  })()`, (value) => value?.ok === true);
+}
+
+async function replaceNativeInstructions(contents) {
+  const point = await waitFor(visiblePoint(nativeInstructionTextareaExpression), (value) => value?.ok === true);
+  await realMouseClick(point);
+  for (const type of ["keyDown", "keyUp"]) {
+    await call("Input.dispatchKeyEvent", {
+      type,
+      key: "a",
+      code: "KeyA",
+      modifiers: 2,
+      windowsVirtualKeyCode: 65,
+      nativeVirtualKeyCode: 65,
+    });
+  }
+  await call("Input.insertText", { text: contents });
+  await waitFor(
+    `(() => ((${nativeInstructionTextareaExpression})?.value || '') === ${JSON.stringify(contents)})()`,
+    (value) => value === true,
+  );
+}
+
+async function saveNativeInstructions() {
+  const point = await waitFor(
+    visiblePoint(nativeInstructionsSaveButtonExpression),
+    (value) => value?.ok === true && value.disabled !== true && value.ariaDisabled !== true,
+  );
+  await realMouseClick(point);
+}
+
+async function restoreNativeInstructions(originalUiValue, originalFile) {
+  await openNativeSettingsSection("personalization");
+  await replaceNativeInstructions(originalUiValue);
+  await saveNativeInstructions();
+  await waitForLocal(readAgentsSnapshot, (snapshot) => originalFile.existed
+    ? snapshot.existed && snapshot.contents === originalFile.contents
+    : !snapshot.existed || snapshot.contents === "");
+  return { restored: true, originalExisted: originalFile.existed, originalLength: originalUiValue.length };
+}
+
+async function auditNativeAgentSettings() {
+  const snapshot = await evaluate(`(() => {
+    const panel = ${nativeSettingsPanelExpression};
+    if (!panel) return { ok: false, missingPanel: true };
+    const text = String(panel.innerText || '').replace(/\\s+/g, ' ').trim();
+    const findControl = (pattern) => {
+      const label = Array.from(panel.querySelectorAll('label,h1,h2,h3,span,p,div'))
+        .find((node) => pattern.test(String(node.textContent || '').trim()));
+      let container = label;
+      while (container && container !== panel) {
+        const control = Array.from(container.querySelectorAll?.('button,select,input') || [])
+          .find((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0);
+        if (control) return {
+          found: true,
+          disabled: Boolean(control.disabled) || control.getAttribute('aria-disabled') === 'true' || control.hasAttribute('data-disabled'),
+        };
+        container = container.parentElement;
+      }
+      return { found: Boolean(label), disabled: false };
+    };
+    const approval = findControl(/^(Approval policy|批准策略)$/i);
+    const sandbox = findControl(/^(Sandbox settings|沙盒设置)$/i);
+    const network = findControl(/^(Allow network access|允许网络访问)$/i);
+    const fullAccess = /(Full access|完全访问)/i.test(text);
+    const managed = /(restricted by this installation|managed by admin policy|受此次安装的限制|管理员策略管理)/i.test(text);
+    return {
+      ok: approval.found && approval.disabled && sandbox.found && sandbox.disabled && managed
+        && !(fullAccess && network.found && !network.disabled),
+      approval,
+      sandbox,
+      network,
+      fullAccess,
+      managed,
+    };
+  })()`);
+  if (!snapshot?.ok) throw new Error(`Native Agent settings are not truthfully managed: ${JSON.stringify(snapshot)}`);
+  return snapshot;
+}
+
+async function auditNativePersonalization({ allowWrite }) {
+  const originalFile = readAgentsSnapshot();
+  await waitFor(`(() => Boolean(${nativeInstructionTextareaExpression}))()`, (value) => value === true);
+  const originalUiValue = await evaluate(`(() => (${nativeInstructionTextareaExpression})?.value || '')()`);
+  if (originalUiValue !== originalFile.contents) {
+    throw new Error("Native custom instructions do not resolve to the isolated Anti-Codex AGENTS.md.");
+  }
+  if (!allowWrite) {
+    return { inspected: true, mutated: false, originalExisted: originalFile.existed, originalLength: originalUiValue.length };
+  }
+
+  const sentinel = `Anti-Codex native Settings acceptance ${randomUUID()}`;
+  let restoreRequired = false;
+  let failure = null;
+  let saved = null;
+  try {
+    restoreRequired = true;
+    await replaceNativeInstructions(sentinel);
+    await saveNativeInstructions();
+    saved = await waitForLocal(readAgentsSnapshot, (snapshot) => snapshot.existed && snapshot.contents === sentinel);
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (restoreRequired) {
+      try {
+        await restoreNativeInstructions(originalUiValue, originalFile);
+      } catch (restoreError) {
+        failure = new AggregateError([failure, restoreError].filter(Boolean), "Native custom-instructions acceptance failed and restoration was incomplete.");
+      }
+    }
+  }
+  if (failure) throw failure;
+  return {
+    inspected: true,
+    mutated: true,
+    savedToIsolatedAgentsFile: saved?.filePath === originalFile.filePath,
+    restored: true,
+    originalExisted: originalFile.existed,
+    originalLength: originalUiValue.length,
+  };
+}
+
+async function runNativeSettingsAcceptance() {
+  const nav = await waitFor(`(() => {
+    const node = ${nativeSettingsNavExpression};
+    const rect = node?.getBoundingClientRect?.();
+    const entries = Array.from(node?.querySelectorAll('button[data-settings-panel-slug]') || [])
+      .filter((entry) => {
+        const entryRect = entry.getBoundingClientRect();
+        return entryRect.width > 0 && entryRect.height > 0 && !entry.disabled && entry.getAttribute('aria-disabled') !== 'true';
+      })
+      .map((entry) => ({ slug: entry.getAttribute('data-settings-panel-slug'), label: entry.getAttribute('aria-label') || String(entry.textContent || '').trim() }));
+    const externalTargets = Array.from(node?.querySelectorAll('a,button') || []).filter((entry) => {
+      if (entry.hasAttribute('data-settings-panel-slug')) return false;
+      const href = String(entry.href || entry.querySelector?.('a')?.href || '');
+      const label = String(entry.getAttribute('aria-label') || entry.textContent || '').replace(/\\s+/g, ' ').trim();
+      return href.includes('chatgpt.com/#settings')
+        || href.includes('chatgpt.com/open-security-settings')
+        || /^(?:ChatGPT\\s+)?Account$|^账户$|^(?:ChatGPT\\s+)?Security(?: Settings)?$|^安全设置$/i.test(label);
+    }).map((entry) => entry.getAttribute('aria-label') || String(entry.textContent || '').trim());
+    return { ok: Boolean(node && rect && rect.width > 0 && rect.height > 0 && entries.length > 0), entries, externalTargets };
+  })()`, (value) => value?.ok === true);
+  if (nav.externalTargets.length > 0) {
+    throw new Error(`ChatGPT Account or web Security links are still visible: ${nav.externalTargets.join(", ")}`);
+  }
+
+  const pages = [];
+  let agent = null;
+  let personalization = null;
+  for (const entry of nav.entries) {
+    const page = await openNativeSettingsSection(entry.slug);
+    pages.push({ ...entry, ...page });
+    if (entry.slug === "agent") agent = await auditNativeAgentSettings();
+    if (entry.slug === "personalization") {
+      personalization = await auditNativePersonalization({ allowWrite: !inspectOnly });
+    }
+  }
+  if (!agent) throw new Error("Native Settings did not expose the required Configuration page.");
+  if (!personalization) throw new Error("Native Settings did not expose the required Personalization page.");
+  const localSecurityLabels = nav.entries
+    .filter((entry) => /Security|安全/i.test(entry.label))
+    .map((entry) => entry.label);
+  return {
+    ok: pages.length === nav.entries.length && pages.every((page) => page.ok),
+    inspectOnly,
+    pages,
+    externalChatGptSettingsHidden: true,
+    localSecurityLabels,
+    agent,
+    personalization,
+  };
+}
+
 let result;
+let nativeNetworkGuardEnabled = false;
 try {
   await call("Runtime.enable");
-  if (inspectOnly) {
+  if (inspectOnly && !nativeSettingsAcceptance) {
     result = await evaluate(`(() => ({
       ok: true,
       version: window.__ANTICODEX_MANAGER_VERSION__ || '',
@@ -177,6 +481,21 @@ try {
     process.exit(0);
   }
   await call("Page.enable");
+  if (nativeSettingsAcceptance) {
+    const identity = await evaluate(`(() => ({
+      visible: document.visibilityState === 'visible',
+      profileMenu: Boolean(Array.from(document.querySelectorAll('button')).find((node) => /打开个人资料菜单|Open profile menu/i.test(node.getAttribute('aria-label') || ''))),
+      managerVersion: window.__ANTICODEX_MANAGER_VERSION__ || '',
+    }))()`);
+    if (!identity?.visible || !identity?.profileMenu || !identity?.managerVersion) {
+      throw new Error(`Expected exactly one visible Anti-Codex page target with the native profile menu: ${JSON.stringify(identity)}`);
+    }
+    await call("Network.enable");
+    nativeNetworkGuardEnabled = true;
+    await call("Network.setBlockedURLs", {
+      urls: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"],
+    });
+  }
   await call("Page.bringToFront");
   await evaluate(`(() => { window.focus(); return { focused: document.hasFocus(), visibility: document.visibilityState }; })()`);
 
@@ -203,11 +522,30 @@ try {
   }
 
   const profilePoint = await waitFor(
-    visiblePoint(`Array.from(document.querySelectorAll('button')).find((node) => node.getAttribute('aria-label') === '打开个人资料菜单')`),
+    visiblePoint(`Array.from(document.querySelectorAll('button')).find((node) => /打开个人资料菜单|Open profile menu/i.test(node.getAttribute('aria-label') || ''))`),
     (value) => value?.ok === true,
   );
   await realMouseClick(profilePoint);
 
+  if (nativeSettingsAcceptance) {
+    const settingsEntryPoint = await waitFor(
+      visiblePoint(`Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]')).find((node) => {
+        const rect = node.getBoundingClientRect?.();
+        const style = getComputedStyle(node);
+        const text = String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim();
+        return /^(设置|Settings)(?:\\s|$)/i.test(text) && rect && rect.width > 0 && rect.height > 0
+          && style.display !== 'none' && style.visibility !== 'hidden';
+      })`),
+      (value) => value?.ok === true,
+    );
+    await realMouseClick(settingsEntryPoint);
+    result = {
+      ...(await runNativeSettingsAcceptance()),
+      port,
+      target: { id: target.id, title: target.title, url: target.url },
+      settingsEntry: settingsEntryPoint.text,
+    };
+  } else {
   const managerEntryPoint = await waitFor(
     visiblePoint(`Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]')).find((node) => {
       const rect = node.getBoundingClientRect?.();
@@ -242,11 +580,11 @@ try {
         version: window.__ANTICODEX_MANAGER_VERSION__ || '',
       };
     })()`, (value) => [
-      "CodexPlusPlus 合并提示词（仅 Antigravity）",
+      "Codex 完整合并提示词（Gemini / Claude / 第三方）",
       "Codex 开发者提示词",
       "Codex 原生自定义指令 (AGENTS.md)",
-      "Anti-Codex 附加提示词（仅 Antigravity）",
-      "Antigravity 提供方底层",
+      "Anti-Codex 附加提示词（Gemini / Claude / 第三方）",
+      "模型提供方隐藏提示词",
     ].every((label) => value?.text?.includes(label))
       && ["保存", "恢复默认", "返回状态"].every((label) => value?.buttons?.includes(label)));
 
@@ -496,11 +834,24 @@ try {
     accepted,
   };
   }
+  }
 } finally {
   if (!closed && promptSettingsUiOnly) {
     try {
       const cleanupPoint = await evaluate(visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`));
       if (cleanupPoint?.ok) await realMouseClick(cleanupPoint);
+    } catch {}
+  }
+  if (!closed && nativeSettingsAcceptance) {
+    try {
+      const cleanupPoint = await evaluate(visiblePoint(`(${nativeSettingsNavExpression})?.querySelector('[role="link"]')`));
+      if (cleanupPoint?.ok) await realMouseClick(cleanupPoint);
+    } catch {}
+  }
+  if (!closed && nativeNetworkGuardEnabled) {
+    try {
+      await call("Network.setBlockedURLs", { urls: [] });
+      await call("Network.disable");
     } catch {}
   }
   if (!closed) socket.close();

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
-  applyPromptPolicy,
+  defaultPromptPolicy,
   promptPolicyPayload,
   readNativeCustomInstructions,
   recordPromptSnapshot,
@@ -36,7 +36,7 @@ test("native custom instructions use only the isolated AGENTS file and empty con
   }
 });
 
-test("prompt policy preserves defaults, applies explicit edits, and restores from one isolated file", () => {
+test("prompt policy preserves defaults, saves explicit edits, and restores from one isolated file", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-"));
   try {
     const original = [
@@ -44,32 +44,58 @@ test("prompt policy preserves defaults, applies explicit edits, and restores fro
       { title: "Codex developer instructions", content: "developer default" },
       { title: "Prior messages", content: "history" },
     ];
-    assert.deepEqual(applyPromptPolicy(original, root), original);
+    assert.deepEqual(promptPolicyPayload(root).policy, defaultPromptPolicy());
 
     savePromptPolicy(root, {
       codexSystem: { enabled: false, content: null },
       codexDeveloper: { enabled: true, content: "developer override" },
       user: { enabled: true, content: "user layer" },
     });
-    const effective = applyPromptPolicy(original, root);
-    assert.deepEqual(effective.map(({ title, content }) => ({ title, content })), [
-      { title: "Codex developer instructions", content: "developer override" },
-      { title: "Prior messages", content: "history" },
-      { title: "Anti-Codex user instructions", content: "user layer" },
-    ]);
+    const saved = promptPolicyPayload(root).policy;
+    assert.equal(saved.codexSystem.enabled, false);
+    assert.equal(saved.codexDeveloper.content, "developer override");
+    assert.equal(saved.user.content, "user layer");
 
-    recordPromptSnapshot(root, original, [...effective, {
+    recordPromptSnapshot(root, original, [...original, {
       title: "Anti-Codex Antigravity tool compatibility",
       content: "required",
     }]);
     const payload = promptPolicyPayload(root);
     assert.equal(payload.providerBase.exposed, false);
     assert.deepEqual(payload.capabilities.nativeCustomInstructions.routes, ["antigravity", "third-party"]);
-    assert.deepEqual(payload.capabilities.mergedPromptPolicy.routes, ["antigravity"]);
+    assert.deepEqual(payload.capabilities.mergedPromptPolicy.routes, ["antigravity", "third-party"]);
     assert.equal(payload.capabilities.mergedPromptPolicy.independentDeveloper, false);
     assert.equal(payload.snapshot.layers.at(-1).required, true);
-    assert.equal(payload.snapshot.layers[0].defaultContent, "developer default");
+    assert.equal(payload.snapshot.layers[0].defaultContent, "system default");
     assert.equal(JSON.parse(readFileSync(join(root, "prompt-policy.json"), "utf8")).schema, "anticodex-prompt-policy-v1");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("prompt payload exposes the pre-policy native snapshot and the adapter does not apply policy twice", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-native-prompt-snapshot-"));
+  const nativeSnapshot = {
+    schema: "anticodex-native-prompt-snapshot-v1",
+    updatedAt: 1_785_560_000_000,
+    relayId: "anticodex-antigravity",
+    protocol: "chatCompletions",
+    defaultContent: "native default",
+    defaultSha256: "a".repeat(64),
+    effectiveContent: "native effective",
+    effectiveSha256: "b".repeat(64),
+    policyMode: "custom",
+  };
+  try {
+    writeFileSync(join(root, "native-prompt-snapshot.json"), JSON.stringify(nativeSnapshot), "utf8");
+    const payload = promptPolicyPayload(root);
+    assert.deepEqual(payload.nativePromptSnapshot, nativeSnapshot);
+    assert.deepEqual(payload.capabilities.mergedPromptPolicy.routes, ["antigravity", "third-party"]);
+    assert.match(payload.providerBase.message, /provider|提供方/i);
+
+    const cascadeSource = readFileSync(new URL("../provider/antigravity-cascade-client.mjs", import.meta.url), "utf8");
+    assert.doesNotMatch(cascadeSource, /applyPromptPolicy/);
+    assert.match(cascadeSource, /withToolCompatibilitySection\(\s*originalPromptSections,/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -90,6 +116,17 @@ test("prompt policy rejects non-text and oversized edits", () => {
     }), /100000/);
     assert.throws(() => saveNativeCustomInstructions(join(root, "codex-home"), 42), /must be text|必须是文本/);
     assert.throws(() => saveNativeCustomInstructions(join(root, "codex-home"), "x".repeat(100_001)), /100000/);
+    writeFileSync(join(root, "native-prompt-snapshot.json"), JSON.stringify({
+      schema: "anticodex-native-prompt-snapshot-v1",
+      relayId: "ordinary-relay",
+      protocol: "chatCompletions",
+      defaultContent: "not trusted",
+      effectiveContent: "not trusted",
+      defaultSha256: "a".repeat(64),
+      effectiveSha256: "b".repeat(64),
+      updatedAt: Date.now(),
+    }), "utf8");
+    assert.equal(promptPolicyPayload(root).nativePromptSnapshot, null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

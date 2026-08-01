@@ -290,6 +290,7 @@ $requiredSourceFiles = @(
     "third_party\codexplusplus\patches\0008-chore-audit-Codex-tool-conversion.patch",
     "third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch",
     "third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
+    "third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",

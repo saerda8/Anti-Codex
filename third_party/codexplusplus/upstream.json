@@ -6,7 +6,7 @@
     "tag":  "v1.2.44",
     "upstreamCommit":  "77091ccaee4423f35a1b2c51c4ecd703e6201092",
     "isolationPatchCommit":  "66ff2ec29e30901c4adc05f8c8c8a197d6038649",
-    "patchCommit":  "b24197a34ce4ace6dc68d8e0dd6da9d8a6b28cf1",
+    "patchCommit":  "762340c825c64d2e6fffb4f41067fcf117dcd372",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -57,16 +57,21 @@
                         "file":  "patches/0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
                         "sha256":  "e612fdc95a21f46152ec1f5dcd49339066d60fdb19f3bff75d54ac3451397c3f",
                         "scope":  "when Chat SSE omits usage, conservatively estimate Responses input, output and total usage from text and tool context for native Codex auto-compaction; real upstream usage remains authoritative and embedded image Base64 is excluded; routing, retries, history and task control remain unchanged"
+                    },
+                    {
+                        "file":  "patches/0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
+                        "sha256":  "1c2dd4a4984b947ee60d85fb175d25a76b1352bde02b7a663b0e4725daea9d2e",
+                        "scope":  "apply the isolated prompt policy only to the exact reserved Anti-Codex relays before the Responses/Chat branch; default and invalid policy input preserve request JSON, disabled/custom modes replace only system/developer carriers, user messages and AGENTS remain intact, the optional user instruction is added once, and a no-secret native prompt snapshot is written atomically"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "10 project patches replayed without automatic conflict resolution; head b24197a34ce4ace6dc68d8e0dd6da9d8a6b28cf1; tree cf942882c8747d8e5aab86c99ae5a0ea8873283a",
+                         "patchReplay":  "11 project patches replayed without automatic conflict resolution; head 762340c825c64d2e6fffb4f41067fcf117dcd372; tree 0c00227e79930b7d7a917f0867594f6569bb6673",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be",
+                         "launcherReleaseBuild":  "sha256:4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }

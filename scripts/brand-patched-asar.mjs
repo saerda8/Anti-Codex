@@ -2,17 +2,21 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  hasAppServerManagedSessionFlags,
   hasPatchedAuthRequirement,
   hasPatchedLocalModelAvailability,
   hasPrimaryWindowRestoreRepaint,
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
+  hasSettingsExternalNavigationPatch,
   hasWindowsTrayIconSelection,
+  patchAppServerManagedSessionFlags,
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
+  patchSettingsExternalNavigation,
   patchWindowsTrayIconSelection,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
@@ -175,6 +179,8 @@ function patchLocaleInfo(text) {
 }
 
 function patchConfigWriteHandler(text) {
+  const currentConfigWriteMarker = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
+  if (text.includes(currentConfigWriteMarker)) return patchCurrentConfigWriteHandler(text);
   if (/"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.test(text)) {
     return patchCurrentConfigWriteHandler(text);
   }
@@ -515,6 +521,23 @@ function findStartupMcpConfigReloadPatch(fd, header, dataOffset) {
   throw new Error("Could not find startup MCP config reload under .vite/build/*.js");
 }
 
+function findAppServerManagedSessionFlagsPatch(fd, header, dataOffset) {
+  const candidates = [];
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if ((!text.includes("Failed to spawn Codex CLI at") || !text.includes("spawnArgs??this.options.args")) &&
+        !hasAppServerManagedSessionFlags(text)) continue;
+    patchAppServerManagedSessionFlags(text);
+    candidates.push([rel, patchAppServerManagedSessionFlags]);
+  }
+  if (candidates.length !== 1) {
+    throw new Error(`Expected exactly one native app-server spawn bundle, found ${candidates.length}`);
+  }
+  return candidates[0];
+}
+
 function findDefaultLocalePatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
@@ -677,6 +700,24 @@ function findBrowserWindowIconPatch(fd, header, dataOffset) {
   throw new Error("Could not find BrowserWindow options under .vite/build/main-*.js");
 }
 
+function findSettingsExternalLinksPatch(fd, header, dataOffset) {
+  const candidates = [];
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if ((!text.includes("https://chatgpt.com/#settings") ||
+         !text.includes("https://chatgpt.com/open-security-settings")) &&
+        !hasSettingsExternalNavigationPatch(text)) continue;
+    patchSettingsExternalNavigation(text);
+    candidates.push([rel, patchSettingsExternalNavigation]);
+  }
+  if (candidates.length !== 1) {
+    throw new Error(`Expected exactly one ChatGPT settings navigation bundle, found ${candidates.length}`);
+  }
+  return candidates[0];
+}
+
 function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
@@ -829,6 +870,7 @@ const patchSpecs = [
   ["windows-close", () => findWindowsClosePatch(fd, header, dataOffset)],
   ["locale-info", () => findLocaleInfoPatch(fd, header, dataOffset)],
   ["startup-mcp-config-reload", () => findStartupMcpConfigReloadPatch(fd, header, dataOffset)],
+  ["app-server-managed-session-flags", () => findAppServerManagedSessionFlagsPatch(fd, header, dataOffset)],
   ["config-write", () => findConfigWriteHandlerPatch(fd, header, dataOffset)],
   ["default-locale", () => findDefaultLocalePatch(fd, header, dataOffset)],
   ["enable-i18n", () => findEnableI18nPatch(fd, header, dataOffset)],
@@ -838,6 +880,7 @@ const patchSpecs = [
   ["app-route-gate", () => findAppRouteGatePatch(fd, header, dataOffset)],
   ["appearance-settings", () => findAppearanceSettingsPatch(fd, header, dataOffset)],
   ["profile-dropdown-settings", () => findProfileDropdownSettingsPatch(fd, header, dataOffset)],
+  ["settings-external-links", () => findSettingsExternalLinksPatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
   ["primary-window-restore-repaint", () => findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset)],
   ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
@@ -858,10 +901,12 @@ const fixedShellCriticalPatchNames = new Set([
   "app-user-model-id",
   "session-title",
   "startup-mcp-config-reload",
+  "app-server-managed-session-flags",
   "config-write",
   "auth-requirement",
   "app-route-gate",
   "profile-dropdown-settings",
+  "settings-external-links",
   "browser-window-icon",
   "primary-window-restore-repaint",
   "windows-tray-icon",

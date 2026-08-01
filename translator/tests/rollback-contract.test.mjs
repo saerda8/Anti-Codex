@@ -378,6 +378,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   const installerCriticalPatches = installer.match(/\$fixedShellCriticalPatches\s*=\s*@\([\s\S]*?\n\)/)?.[0] ?? "";
 
   assert.match(installerCriticalPatches, /"config-write"/);
+  assert.match(installerCriticalPatches, /"app-server-managed-session-flags"/);
+  assert.match(installerCriticalPatches, /"settings-external-links"/);
   assert.match(validator, /anticodex-host-manifest-v2/);
   assert.match(validator, /fixed-shell-v1/);
   assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full/);
@@ -408,10 +410,12 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "app-user-model-id",
     "session-title",
     "startup-mcp-config-reload",
+    "app-server-managed-session-flags",
     "config-write",
     "auth-requirement",
     "app-route-gate",
     "profile-dropdown-settings",
+    "settings-external-links",
     "browser-window-icon",
     "primary-window-restore-repaint",
     "windows-tray-icon",
@@ -495,7 +499,7 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCur
         return $false
     }
 }
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
+$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
 $previous = @($current | Where-Object { $_ -ne "config-write" })
 [pscustomobject]@{
     currentHook = Accept-Asar ${quote(paths.one)} 1 1 0
@@ -614,7 +618,7 @@ test("host sync validates the exact rollback contract and separates activation r
   assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\s+-and\s+\$rollbackManifestSchemaCompatible\)\s*\{[\s\S]*?Repair-RollbackHostIconManifest[\s\S]*?&\s+\$rollbackScript\s+-ValidateOnly[\s\S]*?\$rollbackAvailable\s*=\s*\$true/);
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\)\s*\{[\s\S]*?\$activationRestored\s*=\s*\$true[\s\S]*?\$rollbackAvailable\s*=\s*\$false/);
-  assert.match(sync, /-State\s+"rolled_back"\s+-Stage\s+"activation"[\s\S]*?-RollbackAvailable\s+\$false/);
+  assert.match(sync, /if\s*\(\$activationRestored\)\s*\{[\s\S]*?-State\s+"failed"\s+-Stage\s+\$updateStage[\s\S]*?-RollbackAvailable\s+\$false[\s\S]*?-State\s+"rolled_back"\s+-Stage\s+"complete"[\s\S]*?-RollbackAvailable\s+\$false/);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{\s*throw[\s\S]*?No compatible rollback release was available\./);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{[\s\S]*?Remove-Item\s+-LiteralPath\s+\$rollbackMarker[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackHost[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackComponent/);
   assert.match(sync, /No compatible previous release is available for rollback\./);

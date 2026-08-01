@@ -15,10 +15,7 @@ import {
 } from "../antigravity-native-mcp-bridge.mjs";
 import { DEFAULT_TOOL_CONTINUATION_TIMEOUT_MS } from "../antigravity-contract.mjs";
 import { extractAvailableAgentModels } from "../antigravity-model-catalog.mjs";
-import {
-  applyPromptPolicy,
-  recordPromptSnapshot,
-} from "./anticodex-prompt-policy.mjs";
+import { recordPromptSnapshot } from "./anticodex-prompt-policy.mjs";
 
 const SERVICE_PREFIX = "/exa.language_server_pb.LanguageServerService";
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -108,10 +105,7 @@ export function createAntigravityCascadeClient(options = {}) {
     const model = resolveModel(modelEntries, request.model);
     const activeConnection = connection();
     const originalPromptSections = renderSystemPromptSections(request.systemSections);
-    const systemPromptSections = withToolCompatibilitySection(
-      applyPromptPolicy(originalPromptSections, promptStateRoot),
-      request.tools,
-    );
+    const systemPromptSections = withToolCompatibilitySection(originalPromptSections, request.tools);
     recordPromptSnapshot(promptStateRoot, originalPromptSections, systemPromptSections);
     let bridge = null;
     let continuation = null;

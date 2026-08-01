@@ -1,6 +1,6 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly ten narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, and conservative missing-usage estimation for native compaction. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries exactly eleven narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, conservative missing-usage estimation for native compaction, and common-entry editable prompt policy for the two reserved Anti-Codex relays. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
 
 ## Upstream
 
@@ -41,7 +41,9 @@ The ninth patch raises the decoded loopback helper request limit from 32 MiB to 
 
 The tenth patch estimates nonzero Responses usage only when a completed Chat SSE stream omitted real usage. It counts text and tool context conservatively, excludes embedded image Base64, and never overrides upstream usage.
 
-None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. None may add retries or task-control behavior.
+The eleventh patch reads only the explicitly configured absolute `prompt-policy.json` path for the exact `anticodex-antigravity` and `anticodex-third-party` relays. Default mode preserves request JSON unchanged; disabled and custom modes operate on the merged system/developer carriers before the Responses/Chat branch while preserving every user message, including the native AGENTS wrapper. It adds the optional user instruction once, keeps existing tool compatibility guidance intact, and atomically records only the original/effective merged instruction text, hashes and local route metadata in `native-prompt-snapshot.json`; an unchanged snapshot is not rewritten. Missing, malformed or out-of-scope policy input passes the original request through unchanged.
+
+None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. The eleventh patch may change only the two reserved Anti-Codex relays at the common request entry, read only the explicit absolute policy path, preserve user messages, and record only local merged prompt text, hashes and routing metadata. None may add retries or task-control behavior.
 
 ## Replay
 
@@ -60,6 +62,7 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0008-chore-audit-Codex-tool-conversion.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch
+git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch
 ```
 
 `upstream.json` records the patch hash and verification state.
@@ -72,12 +75,11 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- All ten patches replay on pinned upstream `v1.2.44` to head `b24197a34ce4ace6dc68d8e0dd6da9d8a6b28cf1` and tree `cf942882c8747d8e5aab86c99ae5a0ea8873283a`. Patches 0001, 0002 and 0004 were narrowly rebased across upstream launcher, request-path and remote-control changes; the remaining patch boundaries stay unchanged.
-- `cargo fmt --all -- --check`, the protocol proxy suite and the watcher suite passed in the clean candidate.
-- Project security-boundary tests pass 6/6, isolation audit passes 7/7 and the ten-patch Gate 8 binding passes 34/34. The independent candidate preparer passes 13/13 and the component installer passes 33/33, including verifier-provenance invalidation, old-to-new metadata promotion, prepared-candidate identity rejection and the component-junction boundary.
-- Pinned `messense/cargo-xwin:0.23.0` Windows x64 Manager check and release launcher build passed. The temporary ignored build-only frontend stub used by the Manager check was removed afterward.
+- All eleven patches replay without conflict on pinned upstream `v1.2.44` to head `762340c825c64d2e6fffb4f41067fcf117dcd372` and tree `0c00227e79930b7d7a917f0867594f6569bb6673`.
+- The managed candidate runner passes format, protocol-proxy, watcher, Windows x64 Manager check, release build, Windows process creation, source cleanliness and Docker pre/postflight checks. The resulting 18,040,320-byte launcher has SHA-256 `4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab`.
+- The focused supervisor, component-install, security-boundary and candidate-preparation source contracts pass 101/101. Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- Release launcher build: passed; 18,053,632 bytes; SHA-256 `f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be`.
-- The accepted source metadata now targets `v1.2.44`; the active installed component remains `v1.2.43` until the guarded installer and runtime acceptance gates pass. Current-client release gates remain separate later verification.
+- The prior 10-patch release launcher SHA-256 `f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be` is historical evidence only and is not accepted for this 11-patch source.
+- The 11-patch candidate is built but not installed or activated. The active installed component remains `v1.2.43`; current-client release gates remain separate later verification.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.
