@@ -13,6 +13,9 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
 
   assert.match(profileFinder, /webview\/assets\/app-initial-/);
   assert.match(modelFinder, /webview\/assets\/app-initial-/);
+  assert.match(modelFinder, /const candidates = \[\]/);
+  assert.match(modelFinder, /candidates\.length !== 1/);
+  assert.match(modelFinder, /return candidates\[0\]/);
 });
 
 const settingsExternalLinksFixtures = [
@@ -139,6 +142,7 @@ test("patches startup MCP config reload across minified variable renames", () =>
 });
 
 const configHandlerSource = '"get-configuration":async({key:e})=>({value:this.getConfigurationValue(e)}),"set-configuration":async({key:e,value:t})=>(this.setConfigurationValue(e,t),{success:!0}),"get-setting":async({key:e})=>({value:this.getSettingValue(e)}),"get-settings":async()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":async({key:e,value:t})=>(this.setSettingValue(e,t),{success:!0}),"settings-read":async()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:n.qi}),"settings-write":async({settings:e})=>{let t=Object.entries(e).map(([e,t])=>{let r=n.Wi(e);if(r==null)throw Error(`Unknown setting: ${e}`);if(r.agentAccess!==`read-write`)throw Error(`Setting cannot be written by Codex: ${e}`);return{definition:r,value:n.Gi(r.key).parse(t)}});for(let{definition:e,value:n}of t)this.setSettingValue(e.key,n);return await this.getSettingsStore().flush(),{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},"apply-patch":()=>{},';
+const latestConfigHandlerSource = '"get-configuration":async({key:e})=>({value:this.getConfigurationValue(e)}),"set-configuration":async({key:e,value:t})=>(this.setConfigurationValue(e,t),{success:!0}),"get-setting":async({key:e})=>({value:this.getSettingValue(e)}),"get-settings":async()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":async({key:e,value:t})=>(this.setSettingValue(e,t),{success:!0}),"settings-read":async()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:n.Ii}),"settings-write":async({settings:e})=>{let t=Object.entries(e).map(([e,t])=>{let r=n.Ni(e);if(r==null)throw Error(`Unknown setting: ${e}`);if(r.agentAccess!==`read-write`)throw Error(`Setting cannot be written by Codex: ${e}`);return{definition:r,value:n.Pi(r.key).parse(t)}});for(let{definition:e,value:n}of t)this.setSettingValue(e.key,n);return await this.getSettingsStore().flush(),{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},"apply-patch":async({origin:e,...t})=>n.R(t,this.gitManager),';
 
 test("adds the native batch config bridge to the current desktop handler table", () => {
   const source = configHandlerSource;
@@ -155,6 +159,17 @@ test("adds the native batch config bridge to the current desktop handler table",
   assert.match(asarConfigDispatcher, /patchCurrentConfigWriteHandler\(text\)/);
   const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
   assert.match(criticalBlock, /"config-write"/);
+});
+
+test("preserves the 26.727 settings contract while adding the native batch config bridge", () => {
+  const patched = brandPatchCompat.patchConfigWriteHandler(latestConfigHandlerSource);
+
+  assert.equal(patched.length, latestConfigHandlerSource.length);
+  assert.match(patched, /"batch-write-config-value":e=>this\.getRequestAppServerClient\(e\.hostId\)\.sendAppServerRequest\(`config\/batchWrite`,e\)/);
+  assert.match(patched, /definitions:n\.Ii/);
+  assert.match(patched, /n\.Ni\(e\)/);
+  assert.match(patched, /n\.Pi\(r\.key\)\.parse\(t\)/);
+  assert.equal(brandPatchCompat.patchConfigWriteHandler(patched), patched);
 });
 
 test("validates every settings write before applying any of them", async () => {
@@ -219,6 +234,22 @@ test("recognizes padded idempotent auth and local-model patches", () => {
     ),
     false,
   );
+});
+
+test("patches the extracted 26.727 local-model availability helper without changing its other rules", () => {
+  const source = "function q$r({additionalAvailableModels:e,authMethod:t,availableModels:n,model:r,useHiddenModels:i}){return e?.has(r.model)===!0||(i&&t!==`amazonBedrock`?n.has(r.model):!r.hidden)}";
+  assert.equal(typeof brandPatchCompat.patchLocalModelAvailability, "function");
+  const patched = brandPatchCompat.patchLocalModelAvailability(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(patched), true);
+  assert.equal(brandPatchCompat.patchLocalModelAvailability(patched), patched);
+  const filter = new Function(`${patched};return q$r;`)();
+  const hidden = { model: "hidden", hidden: true };
+  const visible = { model: "visible", hidden: false };
+  assert.equal(filter({ additionalAvailableModels: new Set(["hidden"]), authMethod: "chatgpt", availableModels: new Set(), model: hidden, useHiddenModels: true }), true);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["hidden"]), model: hidden, useHiddenModels: true }), false);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(), model: visible, useHiddenModels: true }), true);
 });
 
 test("patches Codex 26.609 system window titles without changing bundle size", () => {

@@ -128,12 +128,22 @@ export function patchConfigWriteHandler(text) {
   const end = start < 0 ? -1 : source.indexOf('"apply-patch":', start);
   if (start < 0 || end < 0) throw new Error("Current desktop config handler table not found");
   const original = source.slice(start, end);
-  const settingsModule = /definitions:([\w$]+)\.qi/.exec(original)?.[1];
+  const settingsContract = /definitions:([\w$]+)\.([\w$]+)/.exec(original);
+  const settingsModule = settingsContract?.[1];
+  const definitionsMember = settingsContract?.[2];
+  const escapedSettingsModule = settingsModule ? escapeRegExp(settingsModule) : "";
+  const lookupMember = settingsModule
+    ? new RegExp(`let [\\w$]+=${escapedSettingsModule}\\.([\\w$]+)\\([\\w$]+\\);if\\([\\w$]+==null\\)throw Error\\(\\\`Unknown setting:`).exec(original)?.[1]
+    : null;
+  const parserMember = settingsModule
+    ? new RegExp(`value:${escapedSettingsModule}\\.([\\w$]+)\\([\\w$]+\\.key\\)\\.parse\\([\\w$]+\\)`).exec(original)?.[1]
+    : null;
   const requiredHandlers = ["set-configuration", "get-setting", "get-settings", "set-setting", "settings-read", "settings-write"];
-  if (!settingsModule || !requiredHandlers.every((name) => original.includes(`"${name}"`))) {
+  if (!settingsModule || !definitionsMember || !lookupMember || !parserMember ||
+      !requiredHandlers.every((name) => original.includes(`"${name}"`))) {
     throw new Error("Current desktop config handler table is incomplete");
   }
-  const replacement = `"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\`config/batchWrite\`,e),"set-configuration":e=>(this.setConfigurationValue(e.key,e.value),{success:!0}),"get-setting":e=>({value:this.getSettingValue(e.key)}),"get-settings":()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":e=>(this.setSettingValue(e.key,e.value),{success:!0}),"settings-read":()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:${settingsModule}.qi}),"settings-write":async e=>{let t=Object.entries(e.settings).map(([e,t])=>{let r=${settingsModule}.Wi(e);if(!r)throw Error("Unknown setting: "+e);if(r.agentAccess!==\`read-write\`)throw Error("Setting is read-only: "+e);return[r.key,${settingsModule}.Gi(r.key).parse(t)]});t.map(e=>this.setSettingValue(...e));await this.getSettingsStore().flush();return{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},`;
+  const replacement = `"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(\`config/batchWrite\`,e),"set-configuration":e=>(this.setConfigurationValue(e.key,e.value),{success:!0}),"get-setting":e=>({value:this.getSettingValue(e.key)}),"get-settings":()=>({configuredValues:this.getConfiguredSettingValues(),values:this.getSettingValues()}),"set-setting":e=>(this.setSettingValue(e.key,e.value),{success:!0}),"settings-read":()=>({filePath:this.getSettingsStore().getStateFilePath(),settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings(),definitions:${settingsModule}.${definitionsMember}}),"settings-write":async e=>{let t=Object.entries(e.settings).map(([e,t])=>{let r=${settingsModule}.${lookupMember}(e);if(!r)throw Error("Unknown setting: "+e);if(r.agentAccess!==\`read-write\`)throw Error("Setting is read-only: "+e);return[r.key,${settingsModule}.${parserMember}(r.key).parse(t)]});t.map(e=>this.setSettingValue(...e));await this.getSettingsStore().flush();return{settings:this.getToolVisibleSettings(),effectiveSettings:this.getToolVisibleEffectiveSettings()}},`;
   if (replacement.length > original.length) {
     throw new Error(`Current desktop config handler patch did not fit: ${replacement.length} > ${original.length}`);
   }
@@ -195,9 +205,27 @@ export function hasPatchedAuthRequirement(text) {
 }
 
 export function hasPatchedLocalModelAvailability(text) {
-  return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(
-    String(text ?? ""),
-  );
+  const source = String(text ?? "");
+  return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(source) ||
+    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source);
+}
+
+export function patchLocalModelAvailability(text) {
+  const source = String(text ?? "");
+  const legacy = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`(?=[,;])/.exec(source);
+  if (legacy) {
+    const replacement = `let ${legacy[1]}=[],${legacy[2]}=null,${legacy[3]}=!1`;
+    return source.slice(0, legacy.index) + replacement + " ".repeat(legacy[0].length - replacement.length) + source.slice(legacy.index + legacy[0].length);
+  }
+
+  const extracted = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(\k<hidden>&&\k<auth>!==`amazonBedrock`\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.exec(source);
+  if (extracted?.groups) {
+    const gate = `${extracted.groups.hidden}&&${extracted.groups.auth}!==\`amazonBedrock\``;
+    const gateIndex = extracted.index + extracted[0].indexOf(gate);
+    return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
+  }
+  if (hasPatchedLocalModelAvailability(source)) return source;
+  throw new Error("Local model availability filter pattern not found");
 }
 
 function hasPatchedProductNameDrivenSessionTitle(text) {

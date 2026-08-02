@@ -4,7 +4,6 @@ import path from "node:path";
 import {
   hasAppServerManagedSessionFlags,
   hasPatchedAuthRequirement,
-  hasPatchedLocalModelAvailability,
   hasPrimaryWindowRestoreRepaint,
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
@@ -13,6 +12,7 @@ import {
   patchAppServerManagedSessionFlags,
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
+  patchLocalModelAvailability,
   patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
@@ -369,17 +369,6 @@ function patchBrowserWindowIcon(text) {
   return next;
 }
 
-function patchLocalModelAvailability(text) {
-  const source = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`(?=[,;])/;
-  const match = source.exec(text);
-  if (!match) {
-    if (hasPatchedLocalModelAvailability(text)) return text;
-    throw new Error("Local model availability filter pattern not found");
-  }
-  const replacement = `let ${match[1]}=[],${match[2]}=null,${match[3]}=!1`;
-  return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
-}
-
 function patchLocalPluginCatalog(text) {
   // Isolation patch only: disable the remote marketplace catalog, not installed local plugins.
   const source = /function ([\w$]+)\(([\w$]+),([\w$]+)\)\{return \2\.sendRequest\(`plugin\/list`,\3\)\}/;
@@ -732,6 +721,7 @@ function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
 }
 
 function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
+  const candidates = [];
   for (const [rel, entry] of walkFiles(header)) {
     if ((!rel.startsWith("webview/assets/model-list-filter-") &&
          !rel.startsWith("webview/assets/models-and-reasoning-efforts-") &&
@@ -739,12 +729,15 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
         !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (/let [\w$]+=\[\],[\w$]+=null,[\w$]+=[\w$]+&&[\w$]+!==`amazonBedrock`(?=[,;])/.test(text) ||
-        hasPatchedLocalModelAvailability(text)) {
-      return [rel, patchLocalModelAvailability];
-    }
+    try {
+      patchLocalModelAvailability(text);
+      candidates.push([rel, patchLocalModelAvailability]);
+    } catch {}
   }
-  throw new Error("Could not find webview model availability filter");
+  if (candidates.length !== 1) {
+    throw new Error(`Expected exactly one webview model availability filter, found ${candidates.length}`);
+  }
+  return candidates[0];
 }
 
 function findLocalPluginCatalogPatch(fd, header, dataOffset) {
