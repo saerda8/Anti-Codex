@@ -57,6 +57,7 @@ test("interactive shortcut broker recovers the exact hidden main window without 
   const runningBranch = shortcutBroker.match(/if \(\$matchingProcesses\.Count -gt 0\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(runningBranch, /\$matchingProcesses\.Count -eq 1/);
   assert.match(runningBranch, /Focus-ExactAntiCodexWindow -Processes \$matchingProcesses/);
+  assert.match(runningBranch, /Invoke-AntiCodexSecondInstanceRestore -Processes \$matchingProcesses/);
   assert.match(shortcutBroker, /\$eligibleWindowCount \+= \$candidateCount/);
   assert.match(shortcutBroker, /\$eligibleWindowCount -ne 1 -or \$eligibleWindows\.Count -ne 1/);
   assert.match(runningBranch, /exit 0/);
@@ -67,6 +68,12 @@ test("interactive shortcut broker recovers the exact hidden main window without 
   assert.doesNotMatch(runningBranch, /\[void\]\(Focus-ExactAntiCodexWindow/);
   assert.doesNotMatch(runningBranch, /Start-ScheduledTask/);
   assert.doesNotMatch(runningBranch, /\.Run\(/);
+  assert.match(shortcutBroker, /function Invoke-AntiCodexSecondInstanceRestore/);
+  assert.match(shortcutBroker, /CODEX_ELECTRON_USER_DATA_PATH/);
+  assert.match(shortcutBroker, /Start-Process\s+-FilePath\s+\$expectedExecutable\s+-PassThru/);
+  assert.match(shortcutBroker, /\$handoff\.HasExited/);
+  assert.match(shortcutBroker, /\$handoff\.Kill\(\)/);
+  assert.doesNotMatch(shortcutBroker, /anticodex\/fixed-route\/shutdown/);
   assert.match(shortcutBroker, /Start-ScheduledTask\s+-TaskName\s+"Anti-Codex Launcher"/);
   assert.doesNotMatch(shortcutBroker, /Schedule\.Service|GetTask\(|\.Run\(\$null\)/);
 });

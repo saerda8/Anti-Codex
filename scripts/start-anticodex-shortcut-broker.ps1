@@ -191,9 +191,51 @@ public static class AntiCodexShortcutWindow {
     return $false
 }
 
+function Invoke-AntiCodexSecondInstanceRestore {
+    param([object[]]$Processes)
+
+    $userDataPath = Join-Path $env:APPDATA "anticodex\codex-home-deepseek-app\electron-user-data-adaptive"
+    $previousUserDataPath = [Environment]::GetEnvironmentVariable("CODEX_ELECTRON_USER_DATA_PATH", "Process")
+    $handoff = $null
+    try {
+        try {
+            $env:CODEX_ELECTRON_USER_DATA_PATH = $userDataPath
+            $handoff = Start-Process -FilePath $expectedExecutable -PassThru
+            [void]$handoff.Handle
+        } finally {
+            if ($null -eq $previousUserDataPath) {
+                Remove-Item Env:CODEX_ELECTRON_USER_DATA_PATH -ErrorAction SilentlyContinue
+            } else {
+                $env:CODEX_ELECTRON_USER_DATA_PATH = $previousUserDataPath
+            }
+        }
+        $focused = Focus-ExactAntiCodexWindow -Processes $Processes
+        $exitDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            try { $handoff.Refresh() } catch {}
+            if ($handoff.HasExited) { break }
+            Start-Sleep -Milliseconds 50
+        } while ([DateTime]::UtcNow -lt $exitDeadline)
+        return $focused -and $handoff.HasExited
+    } catch {
+        return $false
+    } finally {
+        try {
+            if ($handoff -and -not $handoff.HasExited) {
+                $handoff.Kill()
+                [void]$handoff.WaitForExit(3000)
+            }
+        } catch {}
+        if ($handoff) { $handoff.Dispose() }
+    }
+}
+
 $matchingProcesses = @(Get-ExactAntiCodexProcesses)
 if ($matchingProcesses.Count -gt 0) {
     if (Focus-ExactAntiCodexWindow -Processes $matchingProcesses) {
+        exit 0
+    }
+    if (Invoke-AntiCodexSecondInstanceRestore -Processes $matchingProcesses) {
         exit 0
     }
     Show-AntiCodexShortcutFailure -Message "Anti-Codex is running, but its main window is not ready. Wait a moment and try the shortcut again."
