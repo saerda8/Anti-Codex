@@ -1006,7 +1006,10 @@ async function main() {
       const deliveredAction = payload.action || action;
       const isCurrentAction = Boolean(actionToken)
         && globalThis.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken;
-      if (!isManagerRequest) payload.action = deliveredAction;
+      if (!isManagerRequest) {
+        payload.action = deliveredAction;
+        payload.actionToken = actionToken;
+      }
       if (payload.snapshot && (isManagerRequest || isCurrentAction)) globalThis.__ANTICODEX_MANAGER_SNAPSHOT__ = payload.snapshot;
       const suppressRefreshStatusResult = deliveredAction === "refreshStatus" && ${JSON.stringify(silent)};
       if (!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult) globalThis.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload;

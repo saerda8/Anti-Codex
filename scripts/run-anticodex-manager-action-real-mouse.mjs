@@ -21,7 +21,7 @@ const promptSettingsSaveRestore = String(args.get("--prompt-settings-save-restor
 const promptClosePosition = String(args.get("--prompt-close-position") || "").toLowerCase();
 const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore
   || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
-const timeoutMs = Number(args.get("--timeout-ms") || 15_000);
+const timeoutMs = Number(args.get("--timeout-ms") || 35_000);
 
 if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
 if (action !== "syncHost" && !promptSettingsUiOnly && !nativeSettingsAcceptance) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
@@ -797,29 +797,28 @@ try {
   }))()`);
   await realMouseClick(secondActionPoint);
 
-  let accepted = { accepted: false };
-  try {
-    accepted = await waitFor(`(() => {
+  const accepted = await waitFor(`(() => {
       const overlay = document.querySelector('#anticodex-manager-overlay');
       const resultNode = overlay?.querySelector('[data-anticodex-result="action"]');
       const last = window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ || null;
       const currentActionToken = window.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ || '';
-      const queued = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).some((entry) => entry?.action === 'syncHost');
+      const queueEntry = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).find((entry) => entry?.action === 'syncHost' && entry?.actionToken === currentActionToken);
+      const queued = Boolean(queueEntry);
+      const leased = Number(queueEntry?.leaseCount || 0) > 0;
+      const completed = last?.action === 'syncHost' && last?.actionToken === currentActionToken;
       const running = resultNode?.getAttribute('data-anticodex-running') || '';
       const tokenChanged = Boolean(currentActionToken) && currentActionToken !== ${JSON.stringify(dispatchBaseline.currentActionToken)};
       return {
-        accepted: tokenChanged && (queued || running === 'syncHost' || last?.action === 'syncHost'),
+        accepted: tokenChanged && (leased || completed),
         tokenChanged,
         queued,
+        leased,
+        completed,
         running,
         lastAction: last?.action || '',
         text: String(resultNode?.textContent || last?.managerSummary || '').replace(/\\s+/g, ' ').trim(),
       };
-    })()`, (value) => value?.accepted === true, 5_000);
-  } catch (error) {
-    if (!closed) throw error;
-    accepted = { accepted: true, connectionClosedAfterDispatch: true };
-  }
+    })()`, (value) => value?.accepted === true, Math.min(timeoutMs, 35_000));
 
   result = {
     ok: accepted.accepted === true,

@@ -831,6 +831,7 @@ test("Manager abandons an unleased stale bridge request before the long action t
     Promise,
     Set,
     MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
+    MANAGER_BRIDGE_BACKLOG_GRACE_MS: 100,
     MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
     wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
     window: {
@@ -856,6 +857,49 @@ test("Manager abandons an unleased stale bridge request before the long action t
   assert.ok(Date.now() - startedAt < 500);
   assert.equal(context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.length, 0);
   assert.equal(context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__["stale-request"], undefined);
+});
+
+test("Manager preserves a new action while the bridge drains an already leased backlog", async () => {
+  const staleErrorSource = extractNamedFunction(managerInject, "managerBridgeStaleError");
+  const invokeSource = extractNamedFunction(managerInject, "invokeManagerBridgeWithPickup");
+  const context = {
+    Date,
+    Error,
+    Promise,
+    Set,
+    MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
+    MANAGER_BRIDGE_BACKLOG_GRACE_MS: 100,
+    MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
+    wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+    window: {
+      __ANTICODEX_MANAGER_ACTION_QUEUE__: [],
+      __ANTICODEX_MANAGER_ACTION_PROMISES__: {},
+    },
+  };
+  vm.runInNewContext(
+    `${staleErrorSource}\n${invokeSource}\nthis.invokeManagerBridgeWithPickup = invokeManagerBridgeWithPickup;`,
+    context,
+  );
+
+  context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push(
+    { id: "existing-read", kind: "manager-request", path: "/health", leaseCount: 1 },
+  );
+  const payload = await context.invokeManagerBridgeWithPickup(() => new Promise((resolvePromise) => {
+    const request = { id: "new-action", action: "syncHost", leaseCount: 0 };
+    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[request.id] = { resolve: resolvePromise };
+    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push(request);
+    setTimeout(() => {
+      context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [request];
+      setTimeout(() => {
+        request.leaseCount = 1;
+        context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
+        delete context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[request.id];
+        resolvePromise({ ok: true, action: "syncHost", transport: "bridge" });
+      }, 5);
+    }, 35);
+  }));
+
+  assert.equal(payload.transport, "bridge");
 });
 
 test("Manager uses the bridge only after pickup and safely falls back when app bridge is stale", () => {
@@ -886,6 +930,7 @@ test("Manager app-page stale action falls back once, while a leased action is ne
     Promise,
     Set,
     MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
+    MANAGER_BRIDGE_BACKLOG_GRACE_MS: 100,
     MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
     actionTransportTimeoutMs: () => 500,
     browserReachableApiBase: (value) => value,
@@ -1173,8 +1218,13 @@ test("connector allowlist save receives its status and reload dependencies", asy
 
 test("Manager high-impact real-mouse helper requires dispatch evidence instead of disabled UI", () => {
   assert.match(managerRealMouseAction, /const inspectOnly =/);
+  assert.match(managerRealMouseAction, /const timeoutMs = Number\(args\.get\("--timeout-ms"\) \|\| 35_000\)/);
   assert.match(managerRealMouseAction, /const dispatchBaseline = await evaluate/);
-  assert.match(managerRealMouseAction, /tokenChanged && \(queued \|\| running === 'syncHost' \|\| last\?\.action === 'syncHost'\)/);
+  assert.match(managerRealMouseAction, /tokenChanged && \(leased \|\| completed\)/);
+  assert.match(managerRealMouseAction, /entry\?\.actionToken === currentActionToken/);
+  assert.match(managerRealMouseAction, /last\?\.actionToken === currentActionToken/);
+  assert.doesNotMatch(managerRealMouseAction, /accepted:\s*tokenChanged && \([^\n]*(?:queued|running)/);
+  assert.doesNotMatch(managerRealMouseAction, /connectionClosedAfterDispatch:\s*true/);
   assert.doesNotMatch(managerRealMouseAction, /accepted:[^\n]*button\?\.disabled/);
   assert.doesNotMatch(managerRealMouseAction, /accepted:[^\n]*data-anticodex-busy/);
 });
@@ -1388,6 +1438,7 @@ test("Manager late action delivery is gated by the exact action generation token
   assert.match(installActionsBlock, /runActionViaBridge\(action, actionToken\)/);
   assert.match(deliveryBlock, /request\.actionToken/);
   assert.match(deliveryBlock, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
+  assert.match(deliveryBlock, /payload\.actionToken = actionToken/);
   assert.match(deliveryBlock, /if \(!isManagerRequest && isCurrentAction && !suppressRefreshStatusResult\) globalThis\.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = payload/);
   assert.doesNotMatch(deliveryBlock, /const isCurrentAction = !runningAction \|\| runningAction === deliveredAction/);
   assert.match(bridgeActionBlock, /if \(actionToken && window\.__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken\) \{[\s\S]*?__ANTICODEX_MANAGER_SNAPSHOT__/);

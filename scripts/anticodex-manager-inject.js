@@ -93,6 +93,7 @@
   ]);
   const BRIDGE_TIMEOUT_MS = 5000;
   const MANAGER_BRIDGE_PICKUP_TIMEOUT_MS = 2000;
+  const MANAGER_BRIDGE_BACKLOG_GRACE_MS = 30000;
   const MANAGER_BRIDGE_PICKUP_POLL_MS = 50;
   const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = 340000;
   const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
@@ -432,11 +433,18 @@
 
     return (async () => {
       const requestId = String(queuedRequest.id);
-      const deadline = Date.now() + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        const current = (window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [])
+      const startedAt = Date.now();
+      const backlogDeadline = startedAt + MANAGER_BRIDGE_BACKLOG_GRACE_MS;
+      let pickupDeadline = startedAt + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS;
+      while (Date.now() < backlogDeadline) {
+        const queue = window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [];
+        const current = queue
           .find((request) => String(request?.id || "") === requestId);
         if (!current || Number(current.leaseCount || 0) > 0) return payloadPromise;
+        if (queue.some((request) => String(request?.id || "") !== requestId && Number(request?.leaseCount || 0) > 0)) {
+          pickupDeadline = Math.min(backlogDeadline, Date.now() + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS);
+        }
+        if (Date.now() >= pickupDeadline) break;
         await wait(MANAGER_BRIDGE_PICKUP_POLL_MS);
       }
 
