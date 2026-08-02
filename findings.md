@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-08-02 Clean-Revision Preflight Test-Host Failures
+
+- Complete source preflight report `20260802-112426-source-preflight.json` is truthfully red at clean `aca4be86f743e5575425af81f3257f74dd595092`, with `usedRealTraffic:false`. All reported source checks except translator regression passed; no runtime synchronization, activation, restart or provider request followed it.
+- `source-preflight-runtime-manifest.test.mjs` failed both in the aggregate and alone before reaching product verification because this Windows token returns `EPERM` while creating its directory junction. The test now follows the existing repository pattern: only on `EPERM`, an isolated PowerShell wrapper marks the exact ordinary fixture directory as `ReparsePoint`, executes the real production helper and requires the exact reparse error.
+- `update-status-contract.test.mjs` passed alone `26/26` in 44 seconds. Under four-file aggregate concurrency, only the two-schema legacy-inventory case took 20 seconds and returned `spawnSync.status === null`: the first schema consumed most of its allowance and the second hit the 10-second child timeout. Its Windows child allowance is now the established 30 seconds and timeout diagnostics include the child error; the product assertion is unchanged.
+- The corrected manifest, update-status, runtime-sync and component-install tests pass together under four-file concurrency `74/74` in 58.7 seconds. A new complete clean-revision preflight remains mandatory before staging or activation.
+- An attempted standalone junction capability probe was rejected by the command safety layer before execution, so it caused no filesystem or product side effect. A compact report-extraction command also returned nonzero after asking `rg` to inspect two absent package manifests; the report itself was read successfully, and subsequent reads must name existing files only.
+
 ## 2026-08-02 Windowless Shortcut And Current-Artifact Drift
 
 - Read-only startup evidence contradicted the assumed one-visible-window state: the exact Anti-Codex root PID `30240` and its supervisor/component remained healthy, but Win32 enumeration and CDP `Browser.getWindowForTarget` both found no native window. The existing shortcut broker waited eight seconds, displayed a failure and exited whenever any exact process existed, so it blocked the copied official shell's own `second-instance` handler from recreating the missing primary window.

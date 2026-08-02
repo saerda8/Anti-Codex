@@ -12,7 +12,7 @@ const updateChecker = resolve(projectRoot, "scripts", "check-anticodex-update.ps
 const installer = resolve(projectRoot, "scripts", "install-anticodex.ps1");
 const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
 const runtimeSync = resolve(projectRoot, "scripts", "sync-anticodex-runtime.ps1");
-const POWERSHELL_TIMEOUT_MS = 10_000;
+const POWERSHELL_TIMEOUT_MS = 30_000;
 
 test("Windows maintenance scripts delegate to Windows PowerShell when hosted by PowerShell Core", () => {
   for (const scriptPath of [installer, hostSync, runtimeSync]) {
@@ -542,7 +542,7 @@ test("v1 or v2 without a full unpacked inventory requires migration even when so
         "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot, "-NoPersist",
       ], { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
 
-      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.status, 0, result.error?.message || result.stderr || result.stdout);
       const parsed = JSON.parse(result.stdout.trim());
       assert.equal(parsed.updateNeeded, true);
       assert.equal(parsed.reason, "active_host_guardrail_failed");

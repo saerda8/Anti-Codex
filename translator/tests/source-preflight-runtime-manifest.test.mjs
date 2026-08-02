@@ -82,7 +82,7 @@ function createRuntimeFixture() {
     files: { "payload.txt": entries["payload.txt"].sha256 },
     entries,
   };
-  return { root, runtime, payload, manifest };
+  return { root, runtime, payload, manifest, wrapperPrelude: "" };
 }
 
 function verify(fixture) {
@@ -92,7 +92,7 @@ function verify(fixture) {
   const quotedRoot = fixture.runtime.replaceAll("'", "''");
   writeFileSync(
     wrapper,
-    `$ErrorActionPreference='Stop'\n$SourceRoot='${quotedRoot}'\n${manifestHelpers}\nGet-SourceRuntimeManifestRevision | ConvertTo-Json -Depth 6 -Compress\n`,
+    `$ErrorActionPreference='Stop'\n$SourceRoot='${quotedRoot}'\n${fixture.wrapperPrelude}${manifestHelpers}\nGet-SourceRuntimeManifestRevision | ConvertTo-Json -Depth 6 -Compress\n`,
     "utf8",
   );
   const result = spawnSync(powershell, [
@@ -117,7 +117,7 @@ test("installed runtime manifest accepts only the exact hashed tree", () => {
     rmSync(valid.root, { recursive: true, force: true });
   }
 
-  for (const [name, mutate] of [
+  for (const [name, mutate, expectedReason] of [
     ["tampered file", (fixture) => writeFileSync(fixture.payload, "changed\n", "utf8")],
     ["extra file", (fixture) => writeFileSync(join(fixture.runtime, "extra.txt"), "extra\n", "utf8")],
     ["missing file", (fixture) => rmSync(fixture.payload)],
@@ -129,14 +129,47 @@ test("installed runtime manifest accepts only the exact hashed tree", () => {
     }],
     ["reparse point", (fixture) => {
       const external = join(fixture.root, "external");
+      const linked = join(fixture.runtime, "linked");
       mkdirSync(external);
-      symlinkSync(external, join(fixture.runtime, "linked"), "junction");
-    }],
+      try {
+        symlinkSync(external, linked, "junction");
+      } catch (error) {
+        if (error?.code !== "EPERM") throw error;
+        mkdirSync(linked);
+        const quotedLinked = linked.replaceAll("'", "''");
+        fixture.wrapperPrelude = String.raw`
+function Get-ChildItem {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [switch]$Recurse,
+        [switch]$Force
+    )
+    foreach ($item in @(Microsoft.PowerShell.Management\Get-ChildItem -LiteralPath $LiteralPath -Recurse:$Recurse -Force:$Force -ErrorAction Stop)) {
+        if ([IO.Path]::GetFullPath($item.FullName).Equals(
+            '${quotedLinked}',
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            [pscustomobject]@{
+                PSIsContainer = $true
+                Attributes = ($item.Attributes -bor [IO.FileAttributes]::ReparsePoint)
+                FullName = $item.FullName
+            }
+        } else {
+            $item
+        }
+    }
+}
+`;
+      }
+    }, /reparse point/i],
   ]) {
     const fixture = createRuntimeFixture();
     try {
       mutate(fixture);
-      assert.equal(verify(fixture).ok, false, name);
+      const result = verify(fixture);
+      assert.equal(result.ok, false, name);
+      if (expectedReason) assert.match(result.reason, expectedReason, name);
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }
