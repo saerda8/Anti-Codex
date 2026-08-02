@@ -156,7 +156,7 @@ public static class AntiCodexShortcutWindow {
         $processId = [int]$eligible.processId
         $window = [IntPtr]$eligible.window
         if ([AntiCodexShortcutWindow]::IsIconic($window)) {
-            [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 4)
+            [void][AntiCodexShortcutWindow]::ShowWindowAsync($window, 9)
             $paintDeadline = [DateTime]::UtcNow.AddMilliseconds(250)
             while ([AntiCodexShortcutWindow]::IsIconic($window) -and [DateTime]::UtcNow -lt $paintDeadline) {
                 Start-Sleep -Milliseconds 10

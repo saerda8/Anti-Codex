@@ -43,7 +43,11 @@ test("interactive shortcut broker recovers the exact hidden main window without 
   );
   assert.match(shortcutBroker, /Test-ExactAntiCodexProcessIdentity/);
   assert.match(shortcutBroker, /ShowWindowAsync/);
-  assert.match(shortcutBroker, /ShowWindowAsync\(\$window,\s*4\)/);
+  assert.match(
+    shortcutBroker,
+    /if \(\[AntiCodexShortcutWindow\]::IsIconic\(\$window\)\) \{[\s\S]*?ShowWindowAsync\(\$window,\s*9\)/,
+  );
+  assert.doesNotMatch(shortcutBroker, /ShowWindowAsync\(\$window,\s*4\)/);
   assert.match(shortcutBroker, /RedrawWindow/);
   assert.match(shortcutBroker, /DwmFlush/);
   assert.match(shortcutBroker, /SetForegroundWindow/);
