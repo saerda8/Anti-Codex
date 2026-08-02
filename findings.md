@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-08-02 User-Approved 100% Definition And Prompt Boundary
+
+- The user explicitly rejects every earlier narrow `100%` claim. Source tests or three component percentages are insufficient: installed bytes, visible controls, update lanes, one-window isolation, native Settings truth, cross-provider prompt behavior and current long-task artifacts must all have current independent evidence.
+- User-editable prompt coverage must include custom instructions, personality/writing style and task-working method. Locally supplied rules or restrictions must be visible and editable/disableable where the product can safely control them, with `恢复默认`; required tool/protocol/permission compatibility stays protected and separately identified.
+- Antigravity may already contribute a provider-owned base prompt. Anti-Codex must neither pretend it is absent nor duplicate another local layer over it. Because its exact server-side text is not locally exposed, Manager must label it opaque/read-only while proving every locally added layer occurs at most once.
+- Every native Codex setting must be classified by actual product effect. Unsupported or OpenAI-specific controls must be hidden or visibly disabled with a reason; merely saving a value is not proof that the setting works.
+
 ## 2026-08-02 Minimized Ghost Window Blocks Every Manager Button
 
 - The first physical installed `检查更新` attempt did not run the update action and consumed no provider traffic. Report `20260802-114854-manager-real-buttons-partial.json` failed while closing an already-open Manager overlay: the hit target was the real pseudo-element-backed `关闭` button, but the overlay remained open. A second attempt after Win32 foreground restore failed identically (`20260802-115156-manager-real-buttons-partial.json`).

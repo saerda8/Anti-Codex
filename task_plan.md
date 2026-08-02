@@ -10,6 +10,17 @@
 
 > This checklist is the durable source of truth across context resets. Any newly discovered Settings, prompt, update or long-task defect must be added here before it is fixed; unchecked items forbid a 100% claim.
 
+> **100% definition:** source tests alone are not completion. `100%` requires the exact installed bytes, real visible controls, one-window/native-Codex isolation, current upstream versions, cross-provider prompt behavior and the current autonomous-task artifacts to pass independently. Earlier narrower `100%` statements are permanently superseded by this checklist.
+
+Prompt and native-Settings acceptance debt that must survive every context reset:
+
+- [ ] Build one installed-runtime prompt ledger for Gemini, Claude and direct third-party that distinguishes: user `AGENTS.md`, personality/writing style, task-working method, editable Codex system/developer text, protected tool/protocol/permission compatibility, Anti-Codex add-on, and the provider-owned hidden base. Prove every locally added layer appears at most once and no outer development handbook leaks into the product.
+- [ ] In `管理 -> 提示词`, expose every locally controllable textual layer with source, default, effective value, enabled state, edit/disable and `恢复默认`; keep only execution-critical tool/protocol/permission layers protected. Antigravity's own hidden base must be shown as opaque/read-only because its exact text is not locally available.
+- [ ] Prove the native Personalization custom instruction is genuinely effective and restorable through both the native Settings page and Manager, without spending model traffic merely to monitor it; then verify its actual request-boundary effect once in each provider family during the authorized route acceptance round.
+- [ ] Physically classify every native Codex Settings control as effective, Anti-Codex-managed/read-only, external to the current provider, conditional, or unsupported. Unsupported/misleading controls must be hidden or disabled with a visible reason; a control that merely stores a value but has no product effect does not pass.
+- [ ] Reaccept every embedded and fallback Manager button with real mouse input and real terminal feedback. Update checks must report official Codex and CodexPlusPlus source/active versions plus whether action is needed; sync must report progress, final result and actionable failure without a stray console window.
+- [ ] Reaccept current Gemini -> Claude -> saved-third-party routing, current-hash autonomous-task output and same-task tool evidence. The host may give outcome-only feedback or exact `继续`, never implementation steps or micro-stage planning.
+
 - [x] Make update checking, synchronization handoff, rollback history and original failure results truthful; committed as `6c9dcad5` with focused offline regression green.
 - [x] Classify every visible native Settings control as effective, managed/read-only, external or conditional; the source/ASAR truth matrix is recorded in `findings.md` and physical acceptance remains below.
 - [x] Inject Anti-Codex-only session flags for fixed `never` approval and `danger-full-access` sandbox so the native controls become genuinely managed/read-only; do not use machine-wide policy and do not present network as an independent switch in full-access mode. Source patch, current-ASAR copy proof and fail-closed tests are green; installed physical proof remains in the shared activation item below.
