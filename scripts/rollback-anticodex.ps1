@@ -442,7 +442,10 @@ function Test-AntiCodexHost {
     }
     $patchProfile = "fixed-shell-v1"
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
-    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "config-write" })
+    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object {
+        $_ -notin @("app-server-managed-session-flags", "settings-external-links")
+    })
+    $legacyWithoutConfigWriteCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "config-write" })
 
     $detectedDesktopHost = $null
     foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
@@ -474,7 +477,12 @@ function Test-AntiCodexHost {
     $previousManifestCompatible = Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $previousCriticalPatches
-    if (-not $currentManifestCompatible -and -not $previousManifestCompatible) {
+    $legacyWithoutConfigWriteManifestCompatible = Test-AntiCodexCriticalPatchSet `
+        -Recorded $recordedCriticalPatches `
+        -Expected $legacyWithoutConfigWriteCriticalPatches
+    if (-not $currentManifestCompatible -and
+        -not $previousManifestCompatible -and
+        -not $legacyWithoutConfigWriteManifestCompatible) {
         throw "Anti-Codex host marker is missing critical compatibility patches."
     }
     $recordedFiles = @()
@@ -515,7 +523,7 @@ function Test-AntiCodexHost {
     if ($actualFiles.Count -ne $recordedFiles.Count) {
         throw "Anti-Codex host unpacked file inventory is incomplete."
     }
-    if ($currentManifestCompatible) {
+    if ($currentManifestCompatible -or $previousManifestCompatible) {
         try {
             Test-AntiCodexAsarPatches `
                 -Path $required.appAsar `

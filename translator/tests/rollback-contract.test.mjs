@@ -386,8 +386,19 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /criticalPatches/);
   assert.match(validator, /expectedCriticalPatches/);
   assert.match(validator, /previousCriticalPatches/);
+  assert.match(validator, /legacyWithoutConfigWriteCriticalPatches/);
+  assert.match(
+    validator,
+    /\$previousCriticalPatches\s*=\s*@\([\s\S]*?\$_\s+-notin\s+@\("app-server-managed-session-flags",\s*"settings-external-links"\)/,
+  );
+  assert.match(
+    validator,
+    /\$legacyWithoutConfigWriteCriticalPatches\s*=\s*@\([\s\S]*?\$_\s+-ne\s+"config-write"/,
+  );
   assert.match(validator, /currentManifestCompatible/);
   assert.match(validator, /previousManifestCompatible/);
+  assert.match(validator, /legacyWithoutConfigWriteManifestCompatible/);
+  assert.match(validator, /if\s*\(\$currentManifestCompatible\s+-or\s+\$previousManifestCompatible\)/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   for (const marker of [
@@ -446,7 +457,7 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /Anti-Codex/);
 });
 
-test("rollback patch compatibility accepts only the current or immediate predecessor matrix", () => {
+test("rollback patch compatibility accepts the current and supported predecessor matrices", () => {
   const rollback = readRollbackScript();
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   const patchSetValidator = extractFunction(rollback, "Test-AntiCodexCriticalPatchSet");
@@ -500,7 +511,8 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCur
     }
 }
 $current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
-$previous = @($current | Where-Object { $_ -ne "config-write" })
+$previous = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
+$legacyWithoutConfigWrite = @($current | Where-Object { $_ -ne "config-write" })
 [pscustomobject]@{
     currentHook = Accept-Asar ${quote(paths.one)} 1 1 0
     currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0
@@ -510,7 +522,7 @@ $previous = @($current | Where-Object { $_ -ne "config-write" })
     currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0
     currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0
     currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0
-    immediatePredecessor = Accept-Asar ${quote(paths.missingConfigBridge)} 0 1 0
+    legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 1 0
     predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1 0
     previousNoHook = Accept-Asar ${quote(paths.zero)} 0 1 0
     previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 1 0
@@ -518,6 +530,7 @@ $previous = @($current | Where-Object { $_ -ne "config-write" })
     previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 1 0
     currentManifest = Test-AntiCodexCriticalPatchSet -Recorded $current -Expected $current
     previousManifest = Test-AntiCodexCriticalPatchSet -Recorded $previous -Expected $previous
+    legacyWithoutConfigWriteManifest = Test-AntiCodexCriticalPatchSet -Recorded $legacyWithoutConfigWrite -Expected $legacyWithoutConfigWrite
     missingManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "browser-window-icon" }) -Expected $current
     missingConfigManifest = Test-AntiCodexCriticalPatchSet -Recorded @($current | Where-Object { $_ -ne "config-write" }) -Expected $current
     extraManifest = Test-AntiCodexCriticalPatchSet -Recorded @($previous + "unexpected") -Expected $previous
@@ -536,7 +549,7 @@ $previous = @($current | Where-Object { $_ -ne "config-write" })
       currentSplitCrossHook: false,
       currentMissingConfigBridge: false,
       currentDuplicateConfigBridge: false,
-      immediatePredecessor: true,
+      legacyWithoutConfigWrite: true,
       predecessorRejectsCurrent: false,
       previousNoHook: false,
       previousUnexpectedHook: false,
@@ -544,6 +557,7 @@ $previous = @($current | Where-Object { $_ -ne "config-write" })
       previousUnexpectedFocusOnlyHook: false,
       currentManifest: true,
       previousManifest: true,
+      legacyWithoutConfigWriteManifest: true,
       missingManifest: false,
       missingConfigManifest: false,
       extraManifest: false,
