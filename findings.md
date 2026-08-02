@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-08-02 Exact-Head Preflight Host-Test Process Pressure
+
+- Clean commit `be52be5` failed the complete no-traffic source gate at `907/908`; `usedRealTraffic:false`. The sole failure was `anticodex-host-icon-packaging.test.mjs` receiving `spawnSync.status:null` while validating six temporary SHA-256 harnesses. No product script, installed byte, client process or provider route failed.
+- The affected file passes `10/10` alone. Its six-process hash test took about 7.4 seconds, and four simultaneous file runs all passed but slowed to about 9.7-10.3 seconds per file; the full suite nevertheless lost one child. Because the failed test ended after about 5.8 seconds, timeout alone was not proven and blind retry would hide the next real cause.
+- The minimal harness repair runs the same six extracted production functions sequentially inside one bounded PowerShell child, keeps six labeled expected hashes, and includes child `error` and `signal` in failures. Focused `10/10` now takes about 1.5 seconds; four simultaneous runs pass in about 1.8-2.0 seconds each. Full clean preflight remains required before activation.
+
 ## 2026-08-02 User-Approved 100% Definition And Prompt Boundary
 
 - The user explicitly rejects every earlier narrow `100%` claim. Source tests or three component percentages are insufficient: installed bytes, visible controls, update lanes, one-window isolation, native Settings truth, cross-provider prompt behavior and current long-task artifacts must all have current independent evidence.

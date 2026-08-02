@@ -127,6 +127,8 @@ test("host release and readiness SHA-256 paths work without Utility module autol
     writeFileSync(samplePath, sample);
     const expected = createHash("sha256").update(sample).digest("hex").toUpperCase();
 
+    const snippets = [];
+    const expectedLines = [];
     for (const [label, source] of [
       ["installer", installer],
       ["host sync", hostSync],
@@ -137,19 +139,22 @@ test("host release and readiness SHA-256 paths work without Utility module autol
     ]) {
       assert.doesNotMatch(source, /\bGet-FileHash\b/, `${label} must not depend on Utility module hashing`);
       const sha256 = extractFunction(source, "Get-AntiCodexSha256");
-      const harness = join(fixture, `${label.replaceAll(" ", "-")}.ps1`);
-      writeFileSync(harness, `$ErrorActionPreference = "Stop"
+      snippets.push(`${sha256}
+[Console]::Out.WriteLine(${quotePowerShell(`${label}=`)} + (Get-AntiCodexSha256 -Path ${quotePowerShell(samplePath)}))`);
+      expectedLines.push(`${label}=${expected}`);
+    }
+
+    const harness = join(fixture, "all-sha256-paths.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
 $PSModuleAutoLoadingPreference = "None"
 Remove-Module Microsoft.PowerShell.Utility -Force -ErrorAction SilentlyContinue
-${sha256}
-[Console]::Out.Write((Get-AntiCodexSha256 -Path ${quotePowerShell(samplePath)}))
+${snippets.join("\n")}
 `);
-      const result = spawnSync("powershell.exe", [
-        "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
-      ], { encoding: "utf8", timeout: 10_000, windowsHide: true });
-      assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.equal(result.stdout.trim(), expected);
-    }
+    const result = spawnSync("powershell.exe", [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { encoding: "utf8", timeout: 30_000, windowsHide: true });
+    assert.equal(result.status, 0, [result.error?.message, result.signal, result.stderr, result.stdout].filter(Boolean).join("\n"));
+    assert.deepEqual(result.stdout.trim().split(/\r?\n/), expectedLines);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
