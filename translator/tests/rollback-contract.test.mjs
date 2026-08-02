@@ -169,6 +169,138 @@ function runRollbackRepair(options) {
   return { ...fixture, before, after, result, manifest };
 }
 
+function runRollbackHostPatchMatrix() {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-host-matrix-"));
+  const current = [
+    "package-json",
+    "webview-html-title",
+    "app-name",
+    "app-user-model-id",
+    "session-title",
+    "startup-mcp-config-reload",
+    "app-server-managed-session-flags",
+    "config-write",
+    "auth-requirement",
+    "app-route-gate",
+    "profile-dropdown-settings",
+    "settings-external-links",
+    "browser-window-icon",
+    "primary-window-restore-repaint",
+    "windows-tray-icon",
+    "local-model-availability",
+  ];
+  const previous = current.filter((name) => ![
+    "app-server-managed-session-flags",
+    "settings-external-links",
+  ].includes(name));
+  const legacy = previous.filter((name) => name !== "config-write");
+  const cases = [
+    ["current", current, true],
+    ["previous", previous, true],
+    ["legacy", legacy, false],
+    ["previousMissingBridge", previous, false],
+    ["fictionalFifteen", current.filter((name) => name !== "config-write"), false],
+    ["missingRequired", previous.filter((name) => name !== "browser-window-icon"), true],
+    ["extra", [...previous, "unexpected"], true],
+  ];
+  const paths = {};
+  for (const [name, criticalPatches, hasConfigWrite] of cases) {
+    const hostRoot = join(fixture, name);
+    const markerPath = join(fixture, `${name}.ok`);
+    const unpackedRoot = join(hostRoot, "resources", "app.asar.unpacked");
+    mkdirSync(unpackedRoot, { recursive: true });
+    const hostBytes = Buffer.from(`official-host-${name}`);
+    const cliBytes = Buffer.from(`codex-cli-${name}`);
+    const asarBytes = Buffer.from(hasConfigWrite ? "with-config-bridge" : "without-bridge");
+    const iconBytes = Buffer.from(`icon-${name}`);
+    const unpackedBytes = Buffer.from(`runtime-${name}`);
+    writeFileSync(join(hostRoot, "Anti-Codex.exe"), hostBytes);
+    writeFileSync(join(hostRoot, "ChatGPT.exe"), hostBytes);
+    writeFileSync(join(hostRoot, "resources", "app.asar"), asarBytes);
+    writeFileSync(join(hostRoot, "resources", "codex.exe"), cliBytes);
+    writeFileSync(join(hostRoot, "resources", "icon.ico"), iconBytes);
+    writeFileSync(join(hostRoot, "resources", "codex-tray.ico"), iconBytes);
+    writeFileSync(join(hostRoot, "icon.ico"), iconBytes);
+    writeFileSync(join(unpackedRoot, "runtime.js"), unpackedBytes);
+    writeFileSync(markerPath, JSON.stringify({
+      schema: "anticodex-host-manifest-v2",
+      patchProfile: "fixed-shell-v1",
+      source: {
+        codexHost: sha256(hostBytes),
+        codexCli: sha256(cliBytes),
+      },
+      criticalPatches,
+      unpackedFiles: [{
+        path: "resources\\app.asar.unpacked\\runtime.js",
+        sha256: sha256(unpackedBytes),
+        size: unpackedBytes.length,
+      }],
+      files: {
+        antiCodexExe: sha256(hostBytes),
+        appAsar: sha256(asarBytes),
+        codexCli: sha256(cliBytes),
+        hostIcon: sha256(iconBytes),
+        trayIcon: sha256(iconBytes),
+        appRootIcon: sha256(iconBytes),
+      },
+    }));
+    paths[name] = { hostRoot, markerPath };
+  }
+
+  const rollback = readRollbackScript();
+  const harness = join(fixture, "matrix.ps1");
+  const checks = Object.entries(paths)
+    .map(([name, value]) => `${name} = Accept-Host ${quotePowerShell(value.hostRoot)} ${quotePowerShell(value.markerPath)}`)
+    .join("\n    ");
+  writeFileSync(harness, `$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+${extractFunction(rollback, "Get-AntiCodexSha256")}
+${extractFunction(rollback, "Test-AntiCodexCriticalPatchSet")}
+function Assert-FixedHostPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return [IO.Path]::GetFullPath($Path)
+}
+function Test-AntiCodexIconPalette {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return $true
+}
+function Test-AntiCodexAsarPatches {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$PatchProfile,
+        [Parameter(Mandatory = $true)][int]$ExpectedConfigWriteBridgeCount,
+        [Parameter(Mandatory = $true)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
+        [Parameter(Mandatory = $true)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount
+    )
+    $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
+    if ($actualConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -or
+        $ExpectedPrimaryWindowFocusRestoreRepaintCount -ne 1 -or
+        $ExpectedLegacyPrimaryWindowRestoreRepaintCount -ne 0) {
+        throw "fixture ASAR contract mismatch"
+    }
+}
+${extractFunction(rollback, "Test-AntiCodexHost")}
+function Accept-Host {
+    param([string]$HostRoot, [string]$MarkerPath)
+    try {
+        Test-AntiCodexHost -HostRoot $HostRoot -MarkerPath $MarkerPath
+        return $true
+    } catch {
+        return $false
+    }
+}
+[ordered]@{
+    ${checks}
+} | ConvertTo-Json -Compress
+`);
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness],
+    { encoding: "utf8", timeout: 30_000, windowsHide: true },
+  );
+  return { fixture, result };
+}
+
 function createLegacyRollbackBinaryFixture({ readOnlyMarker = false } = {}) {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-binary-"));
   const rollbackHost = join(fixture, "rollback-host");
@@ -387,14 +519,16 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /expectedCriticalPatches/);
   assert.match(validator, /previousCriticalPatches/);
   assert.match(validator, /legacyWithoutConfigWriteCriticalPatches/);
-  assert.match(
-    validator,
-    /\$previousCriticalPatches\s*=\s*@\([\s\S]*?\$_\s+-notin\s+@\("app-server-managed-session-flags",\s*"settings-external-links"\)/,
-  );
-  assert.match(
-    validator,
-    /\$legacyWithoutConfigWriteCriticalPatches\s*=\s*@\([\s\S]*?\$_\s+-ne\s+"config-write"/,
-  );
+  const previousCriticalPatches = validator.match(
+    /\$previousCriticalPatches\s*=\s*@\(([\s\S]*?)\n\s*\)/,
+  )?.[1] ?? "";
+  const legacyWithoutConfigWriteCriticalPatches = validator.match(
+    /\$legacyWithoutConfigWriteCriticalPatches\s*=\s*@\(([\s\S]*?)\n\s*\)/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(previousCriticalPatches, /expectedCriticalPatches|Where-Object/);
+  assert.match(previousCriticalPatches, /"config-write"/);
+  assert.doesNotMatch(previousCriticalPatches, /app-server-managed-session-flags|settings-external-links/);
+  assert.doesNotMatch(legacyWithoutConfigWriteCriticalPatches, /expectedCriticalPatches|Where-Object|config-write|app-server-managed-session-flags|settings-external-links/);
   assert.match(validator, /currentManifestCompatible/);
   assert.match(validator, /previousManifestCompatible/);
   assert.match(validator, /legacyWithoutConfigWriteManifestCompatible/);
@@ -512,7 +646,7 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCur
 }
 $current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
 $previous = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
-$legacyWithoutConfigWrite = @($current | Where-Object { $_ -ne "config-write" })
+$legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
 [pscustomobject]@{
     currentHook = Accept-Asar ${quote(paths.one)} 1 1 0
     currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0
@@ -564,6 +698,24 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -ne "config-write" })
     });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test("complete rollback host validation maps immutable predecessor matrices to their ASAR contracts", () => {
+  const fixture = runRollbackHostPatchMatrix();
+  try {
+    assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
+    assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
+      current: true,
+      previous: true,
+      legacy: true,
+      previousMissingBridge: false,
+      fictionalFifteen: false,
+      missingRequired: false,
+      extra: false,
+    });
+  } finally {
+    rmSync(fixture.fixture, { recursive: true, force: true });
   }
 });
 

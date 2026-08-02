@@ -442,10 +442,37 @@ function Test-AntiCodexHost {
     }
     $patchProfile = "fixed-shell-v1"
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
-    $previousCriticalPatches = @($expectedCriticalPatches | Where-Object {
-        $_ -notin @("app-server-managed-session-flags", "settings-external-links")
-    })
-    $legacyWithoutConfigWriteCriticalPatches = @($expectedCriticalPatches | Where-Object { $_ -ne "config-write" })
+    $previousCriticalPatches = @(
+        "package-json",
+        "webview-html-title",
+        "app-name",
+        "app-user-model-id",
+        "session-title",
+        "startup-mcp-config-reload",
+        "config-write",
+        "auth-requirement",
+        "app-route-gate",
+        "profile-dropdown-settings",
+        "browser-window-icon",
+        "primary-window-restore-repaint",
+        "windows-tray-icon",
+        "local-model-availability"
+    )
+    $legacyWithoutConfigWriteCriticalPatches = @(
+        "package-json",
+        "webview-html-title",
+        "app-name",
+        "app-user-model-id",
+        "session-title",
+        "startup-mcp-config-reload",
+        "auth-requirement",
+        "app-route-gate",
+        "profile-dropdown-settings",
+        "browser-window-icon",
+        "primary-window-restore-repaint",
+        "windows-tray-icon",
+        "local-model-availability"
+    )
 
     $detectedDesktopHost = $null
     foreach ($hostName in @("ChatGPT.exe", "Codex.exe")) {
