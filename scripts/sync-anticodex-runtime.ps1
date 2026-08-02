@@ -1577,7 +1577,7 @@ try {
             $compatibilitySyncMutexAcquired = $false
             $syncMutex.ReleaseMutex()
             $syncMutexAcquired = $false
-            $launch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(30, $TimeoutSec))
+            $launch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(60, $TimeoutSec))
             $launchExitCode = $launch.exitCode
             if (-not $launch.ok) {
                 throw "Anti-Codex fixed-route restart failed. exit=$($launch.exitCode) $($launch.stderr)"
@@ -1686,7 +1686,7 @@ try {
                 $compatibilitySyncMutexAcquired = $false
                 $syncMutex.ReleaseMutex()
                 $syncMutexAcquired = $false
-                $restoredLaunch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(30, $TimeoutSec))
+                $restoredLaunch = Invoke-AntiCodexFixedRouteLauncher -Seconds ([Math]::Max(60, $TimeoutSec))
                 if (-not $restoredLaunch.ok) {
                     throw "The previous Anti-Codex runtime was restored but could not be relaunched. exit=$($restoredLaunch.exitCode) $($restoredLaunch.stderr)"
                 }

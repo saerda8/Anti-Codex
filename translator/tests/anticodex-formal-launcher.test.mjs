@@ -660,6 +660,13 @@ test("runtime sync accepts verified health through Launcher state transitions", 
   assert.match(polling, /\$ready = \(\$null -ne \$health -and \$null -ne \$fixedRoute\)/);
 });
 
+test("runtime sync gives both cold launcher attempts enough time before rollback", () => {
+  const minimums = [...runtimeSync.matchAll(/Invoke-AntiCodexFixedRouteLauncher -Seconds \(\[Math\]::Max\((\d+), \$TimeoutSec\)\)/g)]
+    .map((match) => Number(match[1]));
+
+  assert.deepEqual(minimums, [60, 60]);
+});
+
 test("runtime sync no-restart mode verifies copied files without polling live health", () => {
   assert.match(runtimeSync, /\$runtimeHashMismatches\s*=\s*@\(/);
   assert.match(runtimeSync, /function Get-AntiCodexSha256/);
