@@ -18,14 +18,22 @@ const confirmed = String(args.get("--confirm") || "false").toLowerCase() === "tr
 const inspectOnly = String(args.get("--inspect-only") || "false").toLowerCase() === "true";
 const nativeSettingsAcceptance = String(args.get("--native-settings") || "false").toLowerCase() === "true";
 const promptSettingsSaveRestore = String(args.get("--prompt-settings-save-restore") || "false").toLowerCase() === "true";
+const promptSettingsRestoreDefault = String(args.get("--prompt-settings-restore-default") || "false").toLowerCase() === "true";
 const promptClosePosition = String(args.get("--prompt-close-position") || "").toLowerCase();
-const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore
+const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore || promptSettingsRestoreDefault
   || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
+const promptSettingsAcceptanceValue = "Anti-Codex 原生自定义指令实体按钮测试；本次立即恢复默认。";
+const promptSettingsRecoveryFile = promptSettingsRestoreDefault
+  ? resolve(String(process.env.APPDATA || ""), "anticodex", "codex-home-deepseek-app", "AGENTS.md")
+  : "";
+const promptSettingsRecoveryFileValue = promptSettingsRecoveryFile && existsSync(promptSettingsRecoveryFile)
+  ? readFileSync(promptSettingsRecoveryFile, "utf8")
+  : "";
 const timeoutMs = Number(args.get("--timeout-ms") || 35_000);
 
 if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
 if (action !== "syncHost" && !promptSettingsUiOnly && !nativeSettingsAcceptance) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
-if (!confirmed && !inspectOnly && !promptSettingsUiOnly) throw new Error("Refusing to arm a write-capable real-mouse action without --confirm true.");
+if (!confirmed && !inspectOnly && (!promptSettingsUiOnly || promptSettingsSaveRestore || promptSettingsRestoreDefault)) throw new Error("Refusing to arm a write-capable real-mouse action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
 
 const stateRoot = nativeSettingsAcceptance
@@ -140,13 +148,17 @@ async function evaluate(expression, callTimeoutMs = 8_000) {
   return response.result?.value;
 }
 
-async function realMouseClick(point) {
+async function realMouseClick(point, label = "target") {
   for (const event of [
     { type: "mouseMoved", button: "none", buttons: 0 },
     { type: "mousePressed", button: "left", buttons: 1, clickCount: 1 },
     { type: "mouseReleased", button: "left", buttons: 0, clickCount: 1 },
   ]) {
-    await call("Input.dispatchMouseEvent", { ...event, x: point.x, y: point.y, pointerType: "mouse" }, 12_000);
+    try {
+      await call("Input.dispatchMouseEvent", { ...event, x: point.x, y: point.y, pointerType: "mouse" }, 12_000);
+    } catch (error) {
+      throw new Error(`Real mouse click ${label} failed during ${event.type} at ${point.x},${point.y}: ${error?.message || error}`);
+    }
   }
 }
 
@@ -525,7 +537,7 @@ try {
     visiblePoint(`Array.from(document.querySelectorAll('button')).find((node) => /打开个人资料菜单|Open profile menu/i.test(node.getAttribute('aria-label') || ''))`),
     (value) => value?.ok === true,
   );
-  await realMouseClick(profilePoint);
+  await realMouseClick(profilePoint, "profile menu");
 
   if (nativeSettingsAcceptance) {
     const settingsEntryPoint = await waitFor(
@@ -546,29 +558,35 @@ try {
       settingsEntry: settingsEntryPoint.text,
     };
   } else {
-  const managerEntryPoint = await waitFor(
-    visiblePoint(`Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]')).find((node) => {
+  const managerEntryExpression = `Array.from(document.querySelectorAll('[role="menuitem"],[data-radix-collection-item]')).find((node) => {
       const rect = node.getBoundingClientRect?.();
       const style = getComputedStyle(node);
       const text = String(node.innerText || node.textContent || '').replace(/\\s+/g, ' ').trim();
       return text === '管理' && rect && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    })`),
+    })`;
+  await waitFor(
+    visiblePoint(managerEntryExpression),
     (value) => value?.ok === true && value.text === "管理",
   );
-  await realMouseClick(managerEntryPoint);
+  await sleep(200);
+  const settledManagerEntryPoint = await waitFor(
+    visiblePoint(managerEntryExpression),
+    (value) => value?.ok === true && value.text === "管理",
+  );
+  await realMouseClick(settledManagerEntryPoint, "管理");
 
   await waitFor(`(() => ({
     overlay: Boolean(document.querySelector('#anticodex-manager-overlay')),
     heading: String(document.querySelector('#anticodex-manager-overlay h2')?.textContent || ''),
     version: window.__ANTICODEX_MANAGER_VERSION__ || '',
-  }))()`, (value) => value?.overlay === true);
+  }))()`, (value) => value?.overlay === true, 5_000);
 
   if (promptSettingsUiOnly) {
     const promptButtonPoint = await waitFor(
       visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
       (value) => value?.ok === true && value.text === "提示词",
     );
-    await realMouseClick(promptButtonPoint);
+    await realMouseClick(promptButtonPoint, "提示词");
     const promptView = await waitFor(`(() => {
       const overlay = document.querySelector('#anticodex-manager-overlay');
       const text = String(overlay?.innerText || '').replace(/\\s+/g, ' ').trim();
@@ -596,7 +614,47 @@ try {
         : { ok: false };
     })()`);
     if (!panelPoint?.ok) throw new Error("Manager prompt panel is not visible for physical scrolling.");
-    if (promptClosePosition) {
+    if (promptSettingsRestoreDefault) {
+      const nativeCurrent = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')?.value || ''`);
+      if (promptSettingsRecoveryFileValue !== promptSettingsAcceptanceValue || !["", promptSettingsAcceptanceValue].includes(nativeCurrent.trim())) {
+        throw new Error("Refusing to restore unknown native custom instructions during recovery.");
+      }
+      await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
+      await sleep(150);
+      const restorePoint = await waitFor(
+        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
+        (value) => value?.ok === true,
+        5_000,
+      );
+      await realMouseClick(restorePoint, "恢复默认");
+      await sleep(3_000);
+      const restoredMessage = await waitFor(
+        `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
+        (value) => String(value).includes("已保存"),
+        15_000,
+      );
+      const restoredValue = await waitFor(`(() => {
+        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
+        return { value: section?.querySelector('textarea')?.value || '' };
+      })()`, (value) => value?.value === "", 15_000);
+      const closePoint = await waitFor(
+        visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`),
+        (value) => value?.ok === true,
+        5_000,
+      );
+      await realMouseClick(closePoint, "关闭");
+      await waitFor(`(() => !document.querySelector('#anticodex-manager-overlay'))()`, (value) => value === true, 5_000);
+      result = {
+        ok: restoredValue.value === "" && String(restoredMessage).includes("已保存"),
+        port,
+        target: { id: target.id, title: target.title, url: target.url },
+        profileEntry: settledManagerEntryPoint.text,
+        promptButton: promptButtonPoint.text,
+        recoveredKnownTestValue: true,
+        restoredMessage,
+        overlayClosed: true,
+      };
+    } else if (promptClosePosition) {
       await evaluate(`(() => {
         const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
         const maxScroll = Math.max(0, (panel?.scrollHeight || 0) - (panel?.clientHeight || 0));
@@ -624,7 +682,7 @@ try {
         ok: positionOk && promptView.version === "native-panel-v113",
         port,
         target: { id: target.id, title: target.title, url: target.url },
-        profileEntry: managerEntryPoint.text,
+        profileEntry: settledManagerEntryPoint.text,
         promptButton: promptButtonPoint.text,
         promptClosePosition,
         closeScroll,
@@ -633,19 +691,26 @@ try {
       };
     } else {
     const initialScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
-    await realMouseWheel(panelPoint, 900);
-    await sleep(150);
-    const middleScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
-    await realMouseWheel(panelPoint, 2400);
-    await sleep(150);
-    const bottomState = await evaluate(`(() => {
+    let middleScrollTop = initialScrollTop;
+    let bottomState = await evaluate(`(() => {
       const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
       return { scrollTop: panel?.scrollTop || 0, scrollHeight: panel?.scrollHeight || 0, clientHeight: panel?.clientHeight || 0 };
     })()`);
 
     let saveRestore = null;
+    if (!promptSettingsSaveRestore) {
+      await realMouseWheel(panelPoint, 900);
+      await sleep(150);
+      middleScrollTop = await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTop || 0`);
+      await realMouseWheel(panelPoint, 2400);
+      await sleep(150);
+      bottomState = await evaluate(`(() => {
+        const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+        return { scrollTop: panel?.scrollTop || 0, scrollHeight: panel?.scrollHeight || 0, clientHeight: panel?.clientHeight || 0 };
+      })()`);
+    }
     if (promptSettingsSaveRestore) {
-      const testValue = "Anti-Codex 原生自定义指令实体按钮测试；本次立即恢复默认。";
+      const testValue = promptSettingsAcceptanceValue;
       const nativeBefore = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')?.value || ''`);
       if (nativeBefore !== "") throw new Error("Refusing to overwrite non-empty native custom instructions during physical acceptance.");
       await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.scrollIntoView({ block: 'center' })`);
@@ -659,6 +724,12 @@ try {
         await call("Input.dispatchKeyEvent", { type, key: "a", code: "KeyA", modifiers: 2, windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 });
       }
       await call("Input.insertText", { text: testValue });
+      await evaluate(`(() => {
+        const button = Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存');
+        button?.scrollIntoView({ block: 'center' });
+        return Boolean(button);
+      })()`);
+      await sleep(150);
       await waitFor(
         visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
         (value) => value?.ok === true,
@@ -749,12 +820,12 @@ try {
     await realMouseClick(closePoint);
     await waitFor(`(() => !document.querySelector('#anticodex-manager-overlay'))()`, (value) => value === true, 5_000);
     result = {
-      ok: middleScrollTop > initialScrollTop
+      ok: (promptSettingsSaveRestore || (middleScrollTop > initialScrollTop
         && bottomState.scrollTop >= middleScrollTop
-        && promptView.version === "native-panel-v113",
+        )) && promptView.version === "native-panel-v113",
       port,
       target: { id: target.id, title: target.title, url: target.url },
-      profileEntry: managerEntryPoint.text,
+      profileEntry: settledManagerEntryPoint.text,
       promptButton: promptButtonPoint.text,
       promptView,
       scroll: { initialScrollTop, middleScrollTop, bottomState },
@@ -824,7 +895,7 @@ try {
     ok: accepted.accepted === true,
     port,
     target: { id: target.id, title: target.title, url: target.url },
-    profileEntry: managerEntryPoint.text,
+    profileEntry: settledManagerEntryPoint.text,
     action,
     actionLabel: firstActionPoint.text,
     confirmation,

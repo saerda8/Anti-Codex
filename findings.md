@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-08-03 Physical Manager-to-Prompt Entry Passed; Full Prompt Acceptance Remains Open
+
+- The first current `native-panel-v113` runner took a menu point on the first React menu frame, then waited for an overlay that had not opened. A direct independent mouse diagnostic proved the handler works after the menu settles. The runner now treats first visibility as evidence only, waits `200ms`, re-reads a hit-tested `管理` target, and clicks that new target once; it never uses `__ANTICODEX_OPEN_MANAGER__` as a fallback. Focused syntax/contract coverage passes.
+- The post-fix physical probe completed `管理 → 提示词 → 关闭` with real mouse input and a closed overlay. The coupled save/readback runner then exposed verifier-only issues: physical wheel dispatch can time out on this client, and the save button initially sits below the viewport. Save/restore acceptance now scrolls only the needed section/button and leaves separate physical-scroll coverage open.
+- One guarded test value was actually saved to the isolated Anti-Codex `AGENTS.md`; an outer verifier timeout stopped its continuous readback flow. A separate recovery requires the exact known test value on disk and an expected prompt-page value, then physically clicks `恢复默认`. It completed with the visible “提示词设置已保存；从下一次新模型请求开始生效。” receipt and the default-empty file was removed. No model/provider request, updater action, Docker action or native-Codex write occurred.
+- This proves the menu entrance and save/restore controls are real, but does **not** close the independent continuous “save → reopen → read back → restore” and physical prompt-scroll gates. Both remain explicitly unchecked in `docs/FINAL_100_PERCENT_REVIEW_PLAN.md`.
+
 ## 2026-08-03 Built-In Update Physical Acceptance Passed, Release Still 90%
 
 - The one post-fix physical Manager action `syncHost` was accepted by a same-token bridge lease and created operation `397ba237de724808b4353d33e7fd41ec`. It advanced through component preflight, candidate build, activation and acceptance, then ended `succeeded / complete`; no provider/model request was made.

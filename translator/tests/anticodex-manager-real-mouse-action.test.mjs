@@ -21,6 +21,17 @@ test("Manager update runner uses only real CDP mouse clicks and requires explici
   assert.match(source, /const target = pickPrimaryAppTarget\(targets\)/);
   assert.doesNotMatch(source, /targets\.find\(\(item\).*Anti-Codex\|app:/);
   assert.match(source, /existingManagerClosePoint/);
+  assert.match(source, /settledManagerEntryPoint/);
+  assert.match(source, /await sleep\(200\)/);
+  assert.match(source, /sleep\(200\);\s+const settledManagerEntryPoint[\s\S]*?realMouseClick\(settledManagerEntryPoint, "管理"\)/);
+  assert.match(source, /value\?\.overlay === true, 5_000/);
+  assert.doesNotMatch(source, /__ANTICODEX_OPEN_MANAGER__\s*\(/);
+  assert.match(source, /if \(!promptSettingsSaveRestore\) \{[\s\S]*?realMouseWheel/);
+  assert.match(source, /trim\(\) === '保存'\);\s+button\?\.scrollIntoView\(\{ block: 'center' \}\)/);
+  assert.match(source, /--prompt-settings-restore-default/);
+  assert.match(source, /Refusing to restore unknown native custom instructions during recovery/);
+  assert.match(source, /promptSettingsRecoveryFileValue !== promptSettingsAcceptanceValue/);
+  assert.match(source, /promptSettingsSaveRestore \|\| promptSettingsRestoreDefault/);
   assert.match(source, /button\.anticodex-close\[aria-label="\u5173\u95ed"\]/);
   assert.match(source, /Codex \u5b8c\u6574\u5408\u5e76\u63d0\u793a\u8bcd\uff08Gemini \/ Claude \/ \u7b2c\u4e09\u65b9\uff09/);
   assert.match(source, /Codex \u539f\u751f\u81ea\u5b9a\u4e49\u6307\u4ee4 \(AGENTS\.md\)/);
