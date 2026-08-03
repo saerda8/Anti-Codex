@@ -313,6 +313,8 @@ test("desktop verifier physically switches the native model without sending traf
   assert.match(helperBlock, /key: "ArrowRight"/);
   assert.match(helperBlock, /document\.activeElement === item/);
   assert.match(verifier, /const submenuCandidates[\s\S]*?const submenu = submenuCandidates\.find\([\s\S]*?模型\|model[\s\S]*?\)\s*\|\| null/);
+  assert.ok(verifier.includes("/^\\\\s*(?:模型|model)(?:\\\\s|$)/i"));
+  assert.ok(!verifier.includes("(模型|model)\\\\b"));
   assert.doesNotMatch(helperBlock, /\|\| submenuItems\[0\]/);
   assert.match(helperBlock, /scrollIntoView\(\{ block: 'nearest'/);
   assert.match(block, /selectFrontendModelWithPhysicalMouse/);

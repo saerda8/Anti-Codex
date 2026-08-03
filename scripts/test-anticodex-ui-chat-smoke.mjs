@@ -4634,9 +4634,14 @@ function sameChatClickExpression(titleNeedle) {
         && style.display !== "none"
         && style.visibility !== "hidden";
     };
-    const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], [role="link"], [role="treeitem"], [tabindex]'))
+    const candidates = Array.from(document.querySelectorAll('[data-app-action-sidebar-thread-id]'))
       .filter(visible)
-      .map((el) => ({ el, text: String(el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim() }))
+      .map((el) => ({
+        el,
+        text: String(el.getAttribute('data-app-action-sidebar-thread-title') || el.innerText || el.textContent || "")
+          .replace(/\\s+/g, " ")
+          .trim(),
+      }))
       .filter((item) => wanted && item.text.includes(wanted))
       .sort((a, b) => {
         const ar = a.el.getBoundingClientRect();
@@ -4646,8 +4651,7 @@ function sameChatClickExpression(titleNeedle) {
     const selected = candidates[0];
     if (!selected) return { clicked: false, wanted, candidates: [] };
     const rect = selected.el.getBoundingClientRect();
-    const identityElement = selected.el.closest('[data-app-action-sidebar-thread-id]')
-      || selected.el.querySelector('[data-app-action-sidebar-thread-id]');
+    const identityElement = selected.el;
     const rawTaskId = String(identityElement?.getAttribute('data-app-action-sidebar-thread-id') || '').trim();
     const taskId = rawTaskId.includes(':') ? rawTaskId.slice(rawTaskId.lastIndexOf(':') + 1) : rawTaskId;
     return {
@@ -5505,9 +5509,9 @@ function physicalModelMenuProbeExpression(requiredValues = []) {
     const target = menuItems.find((element) => element.getAttribute('aria-haspopup') !== 'menu' && matches(labelFor(element))) || null;
     const submenuCandidates = menuItems.filter((element) => {
       const label = labelFor(element);
-      return element.getAttribute('aria-haspopup') === 'menu' || /^\\s*(模型|model)\\b/i.test(label);
+      return element.getAttribute('aria-haspopup') === 'menu' || /^\\s*(?:模型|model)(?:\\s|$)/i.test(label);
     });
-    const submenu = submenuCandidates.find((element) => /^\\s*(模型|model)\\b/i.test(labelFor(element)))
+    const submenu = submenuCandidates.find((element) => /^\\s*(?:模型|model)(?:\\s|$)/i.test(labelFor(element)))
       || null;
     return {
       target: target ? summarize(target) : null,

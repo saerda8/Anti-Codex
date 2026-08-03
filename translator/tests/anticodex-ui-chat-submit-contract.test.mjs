@@ -357,6 +357,10 @@ test("same-chat title matching is confined to the history sidebar", () => {
     uiSmoke,
     /function sameChatClickExpression[\s\S]*?rect\.left < 420[\s\S]*?rect\.right <= 520/,
   );
+  assert.match(
+    uiSmoke,
+    /function sameChatClickExpression[\s\S]*?querySelectorAll\('\[data-app-action-sidebar-thread-id\]'\)[\s\S]*?data-app-action-sidebar-thread-title/,
+  );
 });
 
 test("forced same-chat recovery opens the target before stopping its active turn", () => {
