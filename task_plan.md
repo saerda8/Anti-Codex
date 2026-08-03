@@ -3458,3 +3458,14 @@ Failure log addition: a read-only `rg` call again passed a Windows wildcard path
 - [ ] After this clean checkpoint, add and dry-run the delegated Anti-Codex-only MCP process high-water guard. It must have separate target identity, mutex, state, log and start entry from the official Codex guard and must remain disabled if Anti-Codex ancestry/signatures do not satisfy the strict reuse contract.
 
 No model/provider request, Docker action, native-Codex modification/stop/restart or second visible Anti-Codex occurred. The project remains **not 100%**; this closes the current shell update and native Settings crash lane only.
+
+### 2026-08-04 Anti-Codex MCP high-water guard
+
+- [x] Measure before implementation without workers or traffic. One exact Anti-Codex app root owned one exact copied `resources\codex.exe`; its only direct MCP-class signature was `fa8cd6c4ef380e1b`, initially two `node_repl.exe` processes using 16.5 MiB. One exited naturally before dry-run, proving presence alone is not a leak.
+- [x] Add a standalone Anti-Codex-only guard and installer with TDD `8/8`. Exact app path, exact core path, isolated user-data command, direct parentage and app/core/candidate creation times are all part of the identity; official Codex and path-prefix siblings are excluded.
+- [x] Keep the verified policy unchanged: newest four copies per exact command signature survive; candidates must be at least 15 minutes old; the same excess identity must survive two scans 60 seconds apart; every termination re-collects and revalidates the full identity immediately before ending only that old process tree.
+- [x] Install to `%APPDATA%\anticodex\maintenance`, create the independent `Anti-Codex MCP Leak Guard.lnk`, use mutex `Local\AntiCodex.McpLeakGuard`, and keep state/log names separate from the official guard. Source/installed guard SHA-256 is `9c48374cadb6878a5c51ab150c26e07c6c0489b86dc5ff37c8e4d0dbddd14834`.
+- [x] Dry-run and enable only after the main-agent target review. Two consecutive enforce scans reported one candidate / 8.2 MiB, zero excess, zero confirmed and zero killed. Anti-Codex app/core PIDs `40380/10808` and official core PID `31820` remained alive.
+- [x] Recheck both cores after enablement. Anti-Codex and official core SHA-256 remain `ecd7a3eaff5e42723dbba03b5c91514b3986b5db5cbca8f34619620b5356f31f`; both Authenticode signatures remain `Valid`, signed by OpenAI OpCo, LLC. Official guard PID `38496` and independent Anti-Codex guard PID `9300` coexist with distinct script paths.
+
+This is a bounded insurance layer, not an upstream leak fix and not a new task controller. No normal process was stopped, no client was restarted, no model/provider request or Docker action occurred, and the test caches were removed.
