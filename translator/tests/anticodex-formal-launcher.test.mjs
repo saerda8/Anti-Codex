@@ -426,6 +426,21 @@ test("launcher gives an auto-started Antigravity desktop durable output handles"
   assert.match(launcher, /Get-CimInstance Win32_Process/);
 });
 
+test("launchers prewarm installed Antigravity for a later native model-menu switch", () => {
+  assert.match(
+    taskLauncherSource,
+    /await ensureAntigravityDesktop\(plan, env, \{ required: plan\.provider === "antigravity" \}\)/,
+  );
+  assert.doesNotMatch(
+    taskLauncherSource,
+    /if \(plan\.provider === "antigravity"\) \{\s*const desktopPath = await ensureAntigravityDesktop/,
+  );
+  assert.match(
+    launcher,
+    /Ensure-AntigravityDesktop -StateRoot \$stateRoot -Optional:\(\$selection\.provider -ne "antigravity"\)/,
+  );
+});
+
 test("Antigravity fixed route preserves native UI model selection", () => {
   assert.doesNotMatch(fixedRouteSupervisor, /adapterOptions:\s*\{\s*fixedModel:/);
   assert.doesNotMatch(fixedRouteSupervisor, /CODEX_PLUS_FIXED_MODEL/);
@@ -461,7 +476,7 @@ test("interactive launch gracefully hands off an existing headless route", () =>
   assert.doesNotMatch(handoff, /taskkill|Get-CimInstance/);
 
   const branchStart = launcher.indexOf("$existingSupervisor = Get-RunningFixedRouteSupervisor");
-  const branchEnd = launcher.indexOf("if ($selection.provider -eq \"antigravity\")", branchStart);
+  const branchEnd = launcher.indexOf("$nodeExecutable =", branchStart);
   const branch = branchStart >= 0 && branchEnd > branchStart
     ? launcher.slice(branchStart, branchEnd)
     : "";

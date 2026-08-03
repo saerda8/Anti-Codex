@@ -502,7 +502,10 @@ function Invoke-AntiCodexFixedRouteShutdown {
 }
 
 function Ensure-AntigravityDesktop {
-    param([Parameter(Mandatory = $true)][string]$StateRoot)
+    param(
+        [Parameter(Mandatory = $true)][string]$StateRoot,
+        [switch]$Optional
+    )
     $desktopHelper = Join-Path $PSScriptRoot "antigravity-desktop.ps1"
     if (-not (Test-Path -LiteralPath $desktopHelper -PathType Leaf)) {
         throw "Anti-Codex could not find its Antigravity Desktop helper."
@@ -516,10 +519,17 @@ function Ensure-AntigravityDesktop {
     }
     $antigravityPath = Resolve-AntigravityDesktopPath
     if (-not $antigravityPath) {
+        if ($Optional) { return }
         throw "Antigravity Desktop is not running and no installed executable was found."
     }
     $env:ANTIGRAVITY_DESKTOP_PATH = $antigravityPath
-    Start-AntigravityDesktop -ExecutablePath $antigravityPath -StateRoot $StateRoot | Out-Null
+    try {
+        Start-AntigravityDesktop -ExecutablePath $antigravityPath -StateRoot $StateRoot | Out-Null
+    } catch {
+        if ($Optional) { return }
+        throw
+    }
+    if ($Optional) { return }
     $startup = Wait-AntigravityDesktopStable -ExecutablePath $antigravityPath -TimeoutSeconds 30 -StableSeconds 8
     if (-not $startup.Stable) {
         throw "Antigravity Desktop did not remain running long enough for Anti-Codex."
@@ -837,6 +847,7 @@ Write-AntiCodexLauncherState -Stage "loading-provider"
 $runtimeProfile = Read-AntiCodexRuntimeProfile -StateRoot $stateRoot
 $nativeSelection = Read-AntiCodexNativeSelection -CodexHome $env:CODEX_HOME_DIR
 $selection = Set-AntiCodexProviderEnvironment -RuntimeProfile $runtimeProfile -NativeSelection $nativeSelection
+Ensure-AntigravityDesktop -StateRoot $stateRoot -Optional:($selection.provider -ne "antigravity")
 Write-AntiCodexLauncherState -Stage "checking-running-client" -Message "$($selection.provider):$($selection.model)"
 
 $runningMain = Get-RunningAntiCodexMain -MainExecutable $mainExecutable
@@ -901,10 +912,6 @@ if ($existingSupervisor) {
     exit 1
 }
 
-if ($selection.provider -eq "antigravity") {
-    Write-AntiCodexLauncherState -Stage "starting-antigravity"
-    Ensure-AntigravityDesktop -StateRoot $stateRoot
-}
 $nodeExecutable = if ($NodeExecutablePath) {
     [IO.Path]::GetFullPath($NodeExecutablePath)
 } else {

@@ -477,7 +477,7 @@ function tasklistContains(executableName, env) {
   return result.status === 0 && String(result.stdout ?? "").toLowerCase().includes(`"${executableName.toLowerCase()}"`);
 }
 
-async function ensureAntigravityDesktop(plan, env) {
+async function ensureAntigravityDesktop(plan, env, { required = true } = {}) {
   if (tasklistContains("Antigravity.exe", env) || tasklistContains("Antigravity IDE.exe", env)) {
     return text(env.ANTIGRAVITY_DESKTOP_PATH);
   }
@@ -487,7 +487,10 @@ async function ensureAntigravityDesktop(plan, env) {
     join(requiredEnv(env, "LOCALAPPDATA"), "Programs", "Antigravity", "Antigravity.exe"),
   ].filter(Boolean);
   const executable = candidates.find((candidate) => existsSync(candidate));
-  if (!executable) throw new Error("Antigravity Desktop is not running and no installed executable was found.");
+  if (!executable) {
+    if (!required) return null;
+    throw new Error("Antigravity Desktop is not running and no installed executable was found.");
+  }
 
   const stdout = openSync(join(plan.stateRoot, "antigravity-desktop.out.log"), "a");
   const stderr = openSync(join(plan.stateRoot, "antigravity-desktop.err.log"), "a");
@@ -498,11 +501,14 @@ async function ensureAntigravityDesktop(plan, env) {
       stdio: ["ignore", stdout, stderr],
       windowsHide: false,
     });
+    if (!required) child.once("error", () => {});
     child.unref();
   } finally {
     closeSync(stdout);
     closeSync(stderr);
   }
+
+  if (!required) return executable;
 
   let stableSince = 0;
   const deadline = Date.now() + ANTIGRAVITY_START_TIMEOUT_MS;
@@ -596,6 +602,7 @@ export async function runTaskLauncher(options = {}) {
   try {
     const startedAt = new Date().toISOString();
     writeLauncherState(plan, startedAt, "initializing");
+    const desktopPath = await ensureAntigravityDesktop(plan, env, { required: plan.provider === "antigravity" });
     if (await fixedRouteReady()) {
       writeLauncherState(plan, startedAt, "ready", "ready", "existing fixed route");
       return { ok: true, reused: true };
@@ -604,10 +611,7 @@ export async function runTaskLauncher(options = {}) {
     const runtimeProfile = readThirdPartyRuntimeProfile(plan, env);
     const childEnv = buildTaskLauncherEnvironment(plan, env, runtimeProfile);
     mkdirSync(plan.stateRoot, { recursive: true });
-    if (plan.provider === "antigravity") {
-      const desktopPath = await ensureAntigravityDesktop(plan, childEnv);
-      if (desktopPath) childEnv.ANTIGRAVITY_DESKTOP_PATH = desktopPath;
-    }
+    if (desktopPath) childEnv.ANTIGRAVITY_DESKTOP_PATH = desktopPath;
     runLogDatabaseGuard(plan, childEnv);
 
     rmSync(plan.stdoutPath, { force: true });
