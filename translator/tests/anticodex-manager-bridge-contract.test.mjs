@@ -1246,6 +1246,15 @@ test("Manager ui-only matrix shortens account observation without editing produc
   assert.match(managerButtonTest, /actionName === "accountSwitch"/);
 });
 
+test("Manager ui-only matrix isolates background handling by function boundary", () => {
+  const start = managerButtonTest.indexOf("if (uiOnlyBatchMode) {");
+  const end = managerButtonTest.indexOf("if (uiOnlyMode && !uiOnlyBatchMode)", start);
+  const setup = managerButtonTest.slice(start, end);
+  assert.match(setup, /indexOf\("  function managerActionContinuesInBackground\("\)/);
+  assert.match(setup, /indexOf\("  function wait\(", backgroundActionStart\)/);
+  assert.doesNotMatch(setup, /payload\\\?\\\.background/);
+});
+
 test("Manager ui-only bridge remains fail-closed until an active action settles", () => {
   const start = managerButtonTest.indexOf("function uiOnlyBridgeSource");
   const end = managerButtonTest.indexOf("function realBridgeSource", start);

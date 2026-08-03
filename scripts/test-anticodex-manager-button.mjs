@@ -109,15 +109,16 @@ if (uiOnlyMode) {
     .replace("const ACCOUNT_SWITCH_TIMEOUT_MS = 120000;", "const ACCOUNT_SWITCH_TIMEOUT_MS = 150;");
 }
 if (uiOnlyBatchMode) {
-  managerInjectSource = managerInjectSource.replace(
-    /  function managerActionContinuesInBackground\(action, payload\) \{\r?\n    return MANAGER_BACKGROUND_START_ACTION_IDS\.has\(action\)\r?\n      && \(action === "syncHost" \|\| payload\?\.background === true\);\r?\n  \}/,
-    `  function managerActionContinuesInBackground() {
-    return false;
-  }`,
-  );
-  if (!managerInjectSource.includes("function managerActionContinuesInBackground()")) {
-    throw new Error("Manager verifier failed to isolate background actions");
+  const backgroundActionStart = managerInjectSource.indexOf("  function managerActionContinuesInBackground(");
+  const backgroundActionEnd = managerInjectSource.indexOf("  function wait(", backgroundActionStart);
+  if (backgroundActionStart < 0 || backgroundActionEnd < 0) {
+    throw new Error("Manager verifier failed to locate background action boundaries");
   }
+  managerInjectSource = `${managerInjectSource.slice(0, backgroundActionStart)}  function managerActionContinuesInBackground() {
+    return false;
+  }
+
+${managerInjectSource.slice(backgroundActionEnd)}`;
 }
 if (uiOnlyMode && !uiOnlyBatchMode) {
   let accountSwitchCapturePatchCount = 0;
