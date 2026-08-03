@@ -2077,10 +2077,10 @@
       actions.style.display = "none";
       result.classList.remove("anticodex-error");
       result.textContent = "正在读取提示词设置...";
-      let promptResult = await safeJson("/anticodex/prompt-policy", { preferSnapshot: true });
+      let promptResult = await safeJson("/anticodex/prompt-policy", { allowSnapshotFallback: false });
       if (!promptResult.ok) {
-        const snapshot = snapshotResponse("/anticodex/prompt-policy")
-          || (await refreshManagerSnapshot())?.responses?.["/anticodex/prompt-policy"];
+        const snapshot = (await refreshManagerSnapshot())?.responses?.["/anticodex/prompt-policy"]
+          || snapshotResponse("/anticodex/prompt-policy");
         if (snapshot) promptResult = { ok: true, value: snapshot };
       }
       if (!promptResult.ok) {

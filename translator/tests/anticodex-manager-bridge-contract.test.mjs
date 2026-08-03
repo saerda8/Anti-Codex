@@ -1690,6 +1690,19 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(managerRealMouseAction, /await sleep\(3_000\)/);
 });
 
+test("Manager prompt editor bypasses a stale snapshot after saving", () => {
+  const promptSettingsBlock = extractNamedFunction(managerInject, "showPromptSettings");
+  assert.match(
+    promptSettingsBlock,
+    /safeJson\("\/anticodex\/prompt-policy", \{ allowSnapshotFallback: false \}\)/,
+  );
+  assert.ok(
+    promptSettingsBlock.indexOf("await refreshManagerSnapshot()")
+      < promptSettingsBlock.indexOf('snapshotResponse("/anticodex/prompt-policy")'),
+    "a failed live read must refresh before accepting an older prompt snapshot",
+  );
+});
+
 test("native compatibility style makes closed Radix menu wrappers mouse transparent", () => {
   assert.match(managerInject, /anticodex-native-compat-style/);
   assert.match(
