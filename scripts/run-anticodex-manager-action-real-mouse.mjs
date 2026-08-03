@@ -775,12 +775,25 @@ try {
         const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
         return { value: section?.querySelector('textarea')?.value || '' };
       })()`, (value) => value?.value === testValue);
+      const promptReadyAfterReload = await waitFor(`(() => {
+        const root = document.querySelector('#anticodex-manager-overlay');
+        const restore = Array.from(root?.querySelectorAll('button') || []).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认');
+        return {
+          view: root?.getAttribute('data-anticodex-manager-view') || '',
+          busy: root?.getAttribute('data-anticodex-busy') || '',
+          restoreDisabled: Boolean(restore?.disabled),
+          result: root?.querySelector('[data-anticodex-result="action"]')?.textContent || '',
+        };
+      })()`, (value) => value?.view === 'prompts'
+        && value?.busy === 'false'
+        && value?.restoreDisabled === false
+        && !String(value?.result || '').startsWith('正在'));
       await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
       const restorePoint = await waitFor(
         visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
         (value) => value?.ok === true,
       );
-      await realMouseClick(restorePoint);
+      await realMouseClick(restorePoint, "恢复默认");
       await sleep(3_000);
       const restoredMessage = await waitFor(
         `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
@@ -800,7 +813,7 @@ try {
         const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
         return { value: section?.querySelector('textarea')?.value || '' };
       })()`, (value) => value?.value === "");
-      saveRestore = { testValue, nativeBefore, savedMessage, reloadedValue, restoredMessage, restoredValue };
+      saveRestore = { testValue, nativeBefore, savedMessage, reloadedValue, promptReadyAfterReload, restoredMessage, restoredValue };
     }
 
     const backPoint = await waitFor(
