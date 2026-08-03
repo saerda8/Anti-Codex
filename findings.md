@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-08-03 Durable 100% Review Plan
+
+- Earlier “100%” text is not current release proof. The new single current checklist is `docs/FINAL_100_PERCENT_REVIEW_PLAN.md`; it groups update, prompt/settings, Manager, shell stability, isolation, provider routing, autonomous long-task, cleanup and final-review evidence. Its unchecked items explicitly forbid a 100% claim.
+- At plan creation, source is clean `main` at `b6297796e90724896088ae3d112aef53e20cdab1`; the exact no-traffic source preflight for that revision is `913/913`. The installed update status still reports `updateNeeded:true`, so the post-fix built-in updater physical acceptance remains open. This planning pass sent no model/provider request, runtime sync, updater action, launch or shutdown.
+- The plan makes one requirement explicit that older documents scattered: every visible native Setting and Manager control needs a real effect/persistence/terminal-result proof, not merely source code or a page that opens. It also records that third-party configuration only saves/tests a profile; provider selection itself belongs exclusively to the chat composer model menu.
+
 ## 2026-08-03 Physical Updater Pickup Passed; Rollback Matrix Rejected Its Real Predecessor
 
 - Commit `aaf2d4f` passed the exact clean no-traffic source gate `912/912` with zero failures/warnings and `usedRealTraffic:false` (`20260802-140343-source-preflight.json`). Guarded transaction `20260802T060829682Z-ec878d9b684846a189350bb3f029942f` then activated 123 verified runtime files. Exactly one Anti-Codex root became ready; Manager support and the fixed route were healthy; all three queue-fix source/installed hashes matched.
