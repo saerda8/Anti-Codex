@@ -1,5 +1,13 @@
 # Anti-Codex Findings
 
+## 2026-08-03 Continuous Prompt Save/Reopen/Restore Passed
+
+- Product commit `367e0aab` fixes a real Manager cache bug: after saving prompt policy, reopening now performs a live local read first, then a fresh snapshot, and uses the old snapshot only as the last fallback. Test hardening `0e9014ad` prevents a missing refresh branch from falsely satisfying the ordering assertion. Exact clean no-traffic source preflight passed `914/914` at `0e9014ad`.
+- Runtime transaction `20260803T123609204Z-e65897a6726e4336b778f230d20dc262` activated 123 verified files. Installed and source `anticodex-manager-inject.js` both hash to `97300a31e265d5617e0c978a676c83af5802a2b23a4475a4d6f25c5311e27602`; one Anti-Codex root returned ready and the pre-existing native Codex process remained alive.
+- The first post-install continuous attempt proved save and reopen readback, then exposed a verifier race: the textarea could appear before the prompt-page `runManagerExclusive` lock released, so an immediate physical `恢复默认` click was ignored. Guarded recovery accepted only the exact known test value and cleared it. Commit `edf353d2` waits for `data-anticodex-busy=false` and an enabled restore button; focused and full Manager contracts pass `1/1` and `64/64`.
+- The exact final real-mouse flow passed: `管理 → 提示词 → save known isolated AGENTS.md value → 返回状态 → reopen/read back → 恢复默认 → reopen/read empty → 返回状态 → 关闭`. The temporary isolated `AGENTS.md` no longer exists. No model/provider request, Docker action, native-Codex write or second Anti-Codex window occurred.
+- This closes only the continuous isolated-AGENTS path. Three-provider prompt ledgers, every other editable layer, native Personalization, independent physical scrolling and request-boundary effects remain open; overall release progress stays `90%`, not 100%.
+
 ## 2026-08-03 Current Installed No-Traffic Recheck Passed; Release Remains 90%
 
 - After the physical Manager checks, current `sync-readiness` fast, installed-overall fast and legacy-zero-hit all passed with `usedRealTraffic:false`. Official and active shell remain `26.727.6591.0`; CodexPlusPlus source/active remain `1.2.44` with the same pinned binary hash; rollback exists; Launcher is running, Updater is ready, and the Manager bridge has one non-stale process.
