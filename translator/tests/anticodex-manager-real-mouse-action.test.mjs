@@ -68,7 +68,6 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.match(source, /restoreNativeInstructions/);
   assert.match(source, /finally/);
   assert.match(source, /inspectOnly/);
-  assert.match(source, /Network\.setBlockedURLs/);
-  assert.match(source, /Network\.disable/);
+  assert.doesNotMatch(source, /Network\.setBlockedURLs|Fetch\.enable|Fetch\.requestPaused/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFileSync/);
 });

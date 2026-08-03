@@ -29,10 +29,45 @@ test("hides only ChatGPT account and web security settings links across supporte
     assert.equal(patched.length, source.length);
     assert.doesNotMatch(patched, /https:\/\/chatgpt\.com\/(?:#settings|open-security-settings)/);
     assert.match(patched, /anticodex-local-settings-only/);
+    assert.match(patched, /account:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.account\}/);
+    assert.match(patched, /securitySettings:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.securitySettings\}/);
     assert.match(patched, /agent:/);
     assert.match(patched, /"plugins-settings":/);
     assert.equal(brandPatchCompat.patchSettingsExternalNavigation(patched), patched);
   }
+});
+
+const settingsExternalRenderFixture = "e.key===(ee?`personal`:`settings`)?(0,Q.jsx)(sn,{canCollapse:h,externalTooltip:he,hideLabels:S}):null;let ye;ye=!w&&m?(0,Q.jsx)(ln,{canCollapse:h,externalTooltip:he,hideLabels:S}):null;function Yt(e){let n=oe(ut);return (0,Q.jsx)(Zt,{...e,securitySettingsEnabled:n})}";
+
+test("hides external account and security controls without deleting their shared definitions", () => {
+  const patched = brandPatchCompat.patchSettingsExternalNavigationRender(settingsExternalRenderFixture);
+  assert.equal(patched.length, settingsExternalRenderFixture.length);
+  assert.match(patched, /anticodex-hide-external-account/);
+  assert.match(patched, /securitySettingsEnabled:0/);
+  assert.match(patched, /ye=!w&&m\?\(0,Q\.jsx\)\(ln,/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patched), patched);
+});
+
+test("keeps a padded multi-character security flag idempotent", () => {
+  const source = settingsExternalRenderFixture.replace(
+    "securitySettingsEnabled:n",
+    "securitySettingsEnabled:enabledFlag",
+  );
+  const patched = brandPatchCompat.patchSettingsExternalNavigationRender(source);
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /securitySettingsEnabled:0\s+\}/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patched), patched);
+});
+
+test("fails closed when the semantic security settings flag is missing or repeated", () => {
+  assert.throws(
+    () => brandPatchCompat.patchSettingsExternalNavigationRender(settingsExternalRenderFixture.replace(/function Yt[\s\S]+$/, "")),
+    /exactly one supported ChatGPT settings navigation render/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchSettingsExternalNavigationRender(`${settingsExternalRenderFixture}function Yt2(e){return (0,Q.jsx)(Zt,{...e,securitySettingsEnabled:m})}`),
+    /exactly one supported ChatGPT settings navigation render/i,
+  );
 });
 
 test("fails closed when ChatGPT settings navigation anchors are missing or repeated", () => {

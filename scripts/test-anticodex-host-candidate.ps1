@@ -135,6 +135,9 @@ if ($manifest.schema -ne "anticodex-host-manifest-v2") {
 if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
     throw "Anti-Codex candidate marker patch profile is invalid."
 }
+if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "2") {
+    throw "Anti-Codex candidate marker patch revision is invalid."
+}
 $expectedFixedShellCriticalPatches = @(
     "package-json",
     "webview-html-title",
@@ -209,6 +212,18 @@ $hostIconPalette = Test-AntiCodexIconPalette -Path $hostIcon
 $trayIconPalette = Test-AntiCodexIconPalette -Path $trayIcon
 $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
 $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
+$settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
+$settingsAccountHiddenPattern = '/\*anticodex-hide-external-account\*/null'
+$settingsSecurityDisabledPattern = 'securitySettingsEnabled:0\s*\}'
+$settingsDynamicWrapperPattern = '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*\}'
+if ([regex]::Matches($asarText, $settingsDefinitionPattern).Count -ne 1 -or
+    [regex]::Matches($asarText, $settingsAccountHiddenPattern).Count -ne 1 -or
+    [regex]::Matches($asarText, $settingsSecurityDisabledPattern).Count -ne 1 -or
+    [regex]::Matches($asarText, $settingsDynamicWrapperPattern).Count -ne 0 -or
+    [regex]::Matches($asarText, '\.securitySettings\.message').Count -lt 1 -or
+    [regex]::Matches($asarText, '/\*anticodex-local-settings-only\*/\s*\}').Count -ne 0) {
+    throw "Anti-Codex candidate Settings compatibility patch is invalid."
+}
 $configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
 if ([regex]::Matches($asarText, $configWriteBridgePattern).Count -ne 1) {
     throw "Anti-Codex candidate native config write bridge count is invalid."

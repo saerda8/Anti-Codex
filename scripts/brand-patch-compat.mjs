@@ -9,9 +9,16 @@ const WINDOWS_TRAY_BRAND_ICONS = [
 const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
   /await [\w$]+\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+\([\w$]+\),expectedVersion:null,filePath:null,reloadUserConfig:!(?<reload>[01])\}\)/;
 const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
-  /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:[\w$]+,message:\k<messages>\.securitySettings\}\}/g;
+  /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:(?<accountIcon>[\w$]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:(?<securityIcon>[\w$]+),message:\k<messages>\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
-  /[\w$]+=\{\/\*anticodex-local-settings-only\*\/\}/g;
+  /[\w$]+=\{\/\*anticodex-local-settings-only\*\/account:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.securitySettings\}\}/g;
+const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN =
+  /[\w$]+\.key===\([\w$]+\?`personal`:`settings`\)\?\(0,[\w$]+\.jsx\)\([\w$]+,\{canCollapse:[\w$]+,externalTooltip:[\w$]+,hideLabels:[\w$]+\}\):null/g;
+const SETTINGS_SECURITY_ENABLED_PATTERN =
+  /(?<prefix>\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:)(?<value>[A-Za-z_$][\w$]*)(?<suffix>\}\))/g;
+const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
+  /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*\}\)/g;
+const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const APP_SERVER_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN =
@@ -50,11 +57,36 @@ export function patchSettingsExternalNavigation(text) {
   }
 
   const match = original[0];
-  const replacement = `${match.groups.binding}={/*anticodex-local-settings-only*/}`;
+  const replacement = `${match.groups.binding}={/*anticodex-local-settings-only*/account:{href:\`about:blank\`,icon:${match.groups.accountIcon},message:${match.groups.messages}.account},securitySettings:{href:\`about:blank\`,icon:${match.groups.securityIcon},message:${match.groups.messages}.securitySettings}}`;
   return source.slice(0, match.index)
-    + replacement
-    + " ".repeat(match[0].length - replacement.length)
+    + padReplacement(match[0], replacement)
     + source.slice(match.index + match[0].length);
+}
+
+export function hasSettingsExternalNavigationRenderPatch(text) {
+  const source = String(text ?? "");
+  return allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN).length === 1
+    && allMatches(source, SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN).length === 1
+    && allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN).length === 0
+    && allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN).length === 0;
+}
+
+export function patchSettingsExternalNavigationRender(text) {
+  let source = String(text ?? "");
+  if (hasSettingsExternalNavigationRenderPatch(source)) return source;
+  const account = allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN);
+  const security = allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN);
+  if (account.length !== 1 || security.length !== 1) {
+    throw new Error("Expected exactly one supported ChatGPT settings navigation render");
+  }
+  source = source.slice(0, account[0].index)
+    + padReplacement(account[0][0], "/*anticodex-hide-external-account*/null")
+    + source.slice(account[0].index + account[0][0].length);
+  const currentSecurity = allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN)[0];
+  const valueIndex = currentSecurity.index + currentSecurity.groups.prefix.length;
+  return source.slice(0, valueIndex)
+    + padReplacement(currentSecurity.groups.value, "0")
+    + source.slice(valueIndex + currentSecurity.groups.value.length);
 }
 
 export function hasAppServerManagedSessionFlags(text) {

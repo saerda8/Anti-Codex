@@ -347,7 +347,8 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][ValidateSet("fixed-shell-v1")][string]$PatchProfile,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedConfigWriteBridgeCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
-        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount
+        [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
+        [ValidateSet(0, 2)][int]$ExpectedHostPatchRevision = 0
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -361,6 +362,17 @@ function Test-AntiCodexAsarPatches {
     foreach ($marker in $requiredMarkers) {
         if (-not $text.Contains($marker)) {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
+        }
+    }
+    if ($ExpectedHostPatchRevision -eq 2) {
+        $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
+        if ([regex]::Matches($text, $settingsDefinitionPattern).Count -ne 1 -or
+            [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count -ne 1 -or
+            [regex]::Matches($text, 'securitySettingsEnabled:0\s*\}').Count -ne 1 -or
+            [regex]::Matches($text, '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*\}').Count -ne 0 -or
+            [regex]::Matches($text, '\.securitySettings\.message').Count -lt 1 -or
+            [regex]::Matches($text, '/\*anticodex-local-settings-only\*/\s*\}').Count -ne 0) {
+            throw "Anti-Codex host app.asar Settings compatibility patch is invalid."
         }
     }
     $retiredFeaturePatchPatterns = @(
@@ -441,6 +453,14 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host marker patch profile is invalid: $MarkerPath"
     }
     $patchProfile = "fixed-shell-v1"
+    $currentHostPatchRevision = 2
+    $hostPatchRevisionProperty = $manifest.PSObject.Properties["hostPatchRevision"]
+    $legacyHostPatchRevision = $null -eq $hostPatchRevisionProperty
+    $hostPatchRevisionText = if ($legacyHostPatchRevision) { "0" } else { [string]$hostPatchRevisionProperty.Value }
+    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -ne [string]$currentHostPatchRevision) {
+        throw "Anti-Codex host marker patch revision is invalid: $MarkerPath"
+    }
+    $hostPatchRevision = [int]$hostPatchRevisionText
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
     $previousCriticalPatches = @(
         "package-json",
@@ -498,15 +518,15 @@ function Test-AntiCodexHost {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Anti-Codex host is incomplete: $path" }
     }
     $recordedCriticalPatches = @($manifest.criticalPatches)
-    $currentManifestCompatible = Test-AntiCodexCriticalPatchSet `
+    $currentManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $expectedCriticalPatches
-    $previousManifestCompatible = Test-AntiCodexCriticalPatchSet `
+        -Expected $expectedCriticalPatches)
+    $previousManifestCompatible = $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $previousCriticalPatches
-    $legacyWithoutConfigWriteManifestCompatible = Test-AntiCodexCriticalPatchSet `
+        -Expected $previousCriticalPatches)
+    $legacyWithoutConfigWriteManifestCompatible = $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $legacyWithoutConfigWriteCriticalPatches
+        -Expected $legacyWithoutConfigWriteCriticalPatches)
     if (-not $currentManifestCompatible -and
         -not $previousManifestCompatible -and
         -not $legacyWithoutConfigWriteManifestCompatible) {
@@ -557,14 +577,16 @@ function Test-AntiCodexHost {
                 -PatchProfile $patchProfile `
                 -ExpectedConfigWriteBridgeCount 1 `
                 -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
-                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
+                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
+                -ExpectedHostPatchRevision $hostPatchRevision
         } catch {
             Test-AntiCodexAsarPatches `
                 -Path $required.appAsar `
                 -PatchProfile $patchProfile `
                 -ExpectedConfigWriteBridgeCount 1 `
                 -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
-                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 1
+                -ExpectedLegacyPrimaryWindowRestoreRepaintCount 1 `
+                -ExpectedHostPatchRevision $hostPatchRevision
         }
     } else {
         Test-AntiCodexAsarPatches `
@@ -572,7 +594,8 @@ function Test-AntiCodexHost {
             -PatchProfile $patchProfile `
             -ExpectedConfigWriteBridgeCount 0 `
             -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
-            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0
+            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
+            -ExpectedHostPatchRevision $hostPatchRevision
     }
     foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
         $actual = Get-AntiCodexSha256 -Path $required[$name]

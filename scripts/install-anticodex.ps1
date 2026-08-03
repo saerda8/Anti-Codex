@@ -282,6 +282,7 @@ function Write-HostManifest {
         [Parameter(Mandatory = $true)][string]$HostRoot,
         [Parameter(Mandatory = $true)][string]$SourceRoot,
         [Parameter(Mandatory = $true)][string]$DesktopHostName,
+        [Parameter(Mandatory = $true)][int]$HostPatchRevision,
         [Parameter(Mandatory = $true)][object[]]$UnpackedFiles
     )
 
@@ -297,6 +298,7 @@ function Write-HostManifest {
     $manifest = [ordered]@{
         schema = "anticodex-host-manifest-v2"
         patchProfile = "fixed-shell-v1"
+        hostPatchRevision = $HostPatchRevision
         generatedAtUtc = [DateTime]::UtcNow.ToString("o")
         source = [ordered]@{
             packageName = if ($sourcePackage) { [string]$sourcePackage.Name } else { $null }
@@ -523,14 +525,18 @@ foreach ($requiredBrandScript in @($brandScript, $brandProfileDropdown)) {
     }
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
-& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") --profile fixed-shell-v1
+$brandOutput = @(& $node $brandScript (Join-Path $copiedCodex "resources\app.asar") --profile fixed-shell-v1 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
+}
+$brandResult = try { (($brandOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex compatibility patch receipt is invalid." }
+if ([string]$brandResult.hostPatchRevision -ne "2") {
+    throw "Anti-Codex compatibility patch revision is invalid."
 }
 if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path $antiCodexHost)) {
     throw "Anti-Codex copied host bytes changed during activation."
 }
-Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -UnpackedFiles $unpackedFiles
+Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -HostPatchRevision ([int]$brandResult.hostPatchRevision) -UnpackedFiles $unpackedFiles
 
 $snapshotSync = Join-Path $runtime "scripts\sync-shared-codex-plugin-host.mjs"
 if (Test-Path -LiteralPath $snapshotSync -PathType Leaf) {

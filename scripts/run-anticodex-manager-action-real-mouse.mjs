@@ -475,7 +475,6 @@ async function runNativeSettingsAcceptance() {
 }
 
 let result;
-let nativeNetworkGuardEnabled = false;
 try {
   await call("Runtime.enable");
   if (inspectOnly && !nativeSettingsAcceptance) {
@@ -502,11 +501,6 @@ try {
     if (!identity?.visible || !identity?.profileMenu || !identity?.managerVersion) {
       throw new Error(`Expected exactly one visible Anti-Codex page target with the native profile menu: ${JSON.stringify(identity)}`);
     }
-    await call("Network.enable");
-    nativeNetworkGuardEnabled = true;
-    await call("Network.setBlockedURLs", {
-      urls: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"],
-    });
   }
   await call("Page.bringToFront");
   await evaluate(`(() => { window.focus(); return { focused: document.hasFocus(), visibility: document.visibilityState }; })()`);
@@ -929,12 +923,6 @@ try {
     try {
       const cleanupPoint = await evaluate(visiblePoint(`(${nativeSettingsNavExpression})?.querySelector('[role="link"]')`));
       if (cleanupPoint?.ok) await realMouseClick(cleanupPoint);
-    } catch {}
-  }
-  if (!closed && nativeNetworkGuardEnabled) {
-    try {
-      await call("Network.setBlockedURLs", { urls: [] });
-      await call("Network.disable");
     } catch {}
   }
   if (!closed) socket.close();

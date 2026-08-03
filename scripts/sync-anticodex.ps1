@@ -215,6 +215,9 @@ $candidateRoot = Join-Path $installRoot "update-candidate"
 $candidateHost = Join-Path $candidateRoot "codex-patched-app"
 $candidateMarker = Join-Path $candidateRoot "codex-patched-app.ok"
 $candidateComponent = Join-Path $candidateRoot "components\codexplusplus"
+$activationRecoveryHost = Join-Path $installRoot "activation-recovery-host"
+$activationRecoveryMarker = Join-Path $installRoot "activation-recovery-host.ok"
+$activationRecoveryComponent = Join-Path $installRoot "activation-recovery-codexplusplus"
 $activeHost = Join-Path $installRoot "codex-patched-app"
 $activeMarker = Join-Path $installRoot "codex-patched-app.ok"
 $activeComponent = Join-Path $installRoot "components\codexplusplus"
@@ -309,20 +312,16 @@ if (-not $NoRestart) {
     Assert-AntiCodexUpdateTaskContext
 }
 
-$global:LASTEXITCODE = 0
-& $sourcePreflight -SkipFullRegression | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Anti-Codex source preflight failed. Sync was stopped before building an update candidate."
-}
-
 function Remove-FixedUpdateDirectory {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     $fullPath = [IO.Path]::GetFullPath($Path)
     $allowed = @(
         [IO.Path]::GetFullPath($candidateRoot),
+        [IO.Path]::GetFullPath($activationRecoveryHost),
         [IO.Path]::GetFullPath($rollbackHost),
         [IO.Path]::GetFullPath($activeHost),
+        [IO.Path]::GetFullPath($activationRecoveryComponent),
         [IO.Path]::GetFullPath($rollbackComponent),
         [IO.Path]::GetFullPath($activeComponent)
     )
@@ -346,9 +345,11 @@ function Move-FixedUpdateDirectory {
     $fullDestination = [IO.Path]::GetFullPath($Destination)
     $allowed = @(
         [IO.Path]::GetFullPath($candidateHost),
+        [IO.Path]::GetFullPath($activationRecoveryHost),
         [IO.Path]::GetFullPath($rollbackHost),
         [IO.Path]::GetFullPath($activeHost),
         [IO.Path]::GetFullPath($candidateComponent),
+        [IO.Path]::GetFullPath($activationRecoveryComponent),
         [IO.Path]::GetFullPath($rollbackComponent),
         [IO.Path]::GetFullPath($activeComponent)
     )
@@ -364,6 +365,76 @@ function Move-FixedUpdateDirectory {
         throw "Anti-Codex update destination already exists: $fullDestination"
     }
     [IO.Directory]::Move($extendedSource, $extendedDestination)
+}
+
+function Get-ActivationRecoveryState {
+    $recoveryHostExists = [IO.Directory]::Exists("\\?\$activationRecoveryHost")
+    $recoveryComponentExists = [IO.Directory]::Exists("\\?\$activationRecoveryComponent")
+    $recoveryMarkerExists = [IO.File]::Exists($activationRecoveryMarker)
+    if (-not $recoveryHostExists -and -not $recoveryComponentExists -and -not $recoveryMarkerExists) {
+        return "none"
+    }
+
+    $activeHostExists = [IO.Directory]::Exists("\\?\$activeHost")
+    $activeComponentExists = [IO.Directory]::Exists("\\?\$activeComponent")
+    $activeMarkerExists = [IO.File]::Exists($activeMarker)
+    if ($recoveryMarkerExists) {
+        return $(if ($recoveryHostExists -and $recoveryComponentExists) { "prepared" } else { "invalid" })
+    }
+    if ($activeHostExists -and $activeComponentExists -and $activeMarkerExists) {
+        return "cleanup_pending"
+    }
+    if ($activeMarkerExists -and
+        ($recoveryHostExists -xor $activeHostExists) -and
+        ($recoveryComponentExists -xor $activeComponentExists)) {
+        return "pre_marker"
+    }
+    return "invalid"
+}
+
+function Restore-ActivationRecoveryRelease {
+    param([Parameter(Mandatory = $true)][ValidateSet("prepared", "pre_marker")][string]$State)
+
+    if ($State -eq "prepared") {
+        Remove-FixedUpdateDirectory -Path $activeHost
+        Remove-FixedUpdateDirectory -Path $activeComponent
+        if ([IO.File]::Exists($activeMarker)) { [IO.File]::Delete($activeMarker) }
+    }
+    if ([IO.Directory]::Exists("\\?\$activationRecoveryHost")) {
+        Move-FixedUpdateDirectory -Source $activationRecoveryHost -Destination $activeHost
+    }
+    if ([IO.Directory]::Exists("\\?\$activationRecoveryComponent")) {
+        Move-FixedUpdateDirectory -Source $activationRecoveryComponent -Destination $activeComponent
+    }
+    if ([IO.File]::Exists($activationRecoveryMarker)) {
+        [IO.File]::Move($activationRecoveryMarker, $activeMarker)
+    }
+    if (-not [IO.Directory]::Exists("\\?\$activeHost") -or
+        -not [IO.Directory]::Exists("\\?\$activeComponent") -or
+        -not [IO.File]::Exists($activeMarker)) {
+        throw "Anti-Codex activation recovery did not restore a complete active release."
+    }
+}
+
+function Complete-ActivationRecoveryCleanup {
+    if ([IO.File]::Exists($activationRecoveryMarker)) {
+        try {
+            [IO.File]::Delete($activationRecoveryMarker)
+        } catch {
+            Write-Warning "The accepted Anti-Codex release is active, but its recovery marker cleanup is pending: $($_.Exception.Message)"
+            return $false
+        }
+    }
+    $cleanupComplete = $true
+    foreach ($path in @($activationRecoveryHost, $activationRecoveryComponent)) {
+        try {
+            Remove-FixedUpdateDirectory -Path $path
+        } catch {
+            $cleanupComplete = $false
+            Write-Warning "The accepted Anti-Codex release is active, but recovery cleanup is pending: $($_.Exception.Message)"
+        }
+    }
+    return $cleanupComplete
 }
 
 function Test-AntiCodexPathInsideRoot {
@@ -993,10 +1064,70 @@ $restartAfterSync = $false
 $rollbackAvailable = $false
 $rollbackRestoreAvailable = $false
 $activationRestored = $false
+$legacyCurrentRecoveryOnly = $false
+$preservedRollbackAvailable = $false
+$activationRecoveryCleanupPending = $false
 $originalCodexBeforeSync = @()
 $updateStage = "component_preflight"
 try {
     try {
+        $startupRecoveryState = Get-ActivationRecoveryState
+        if ($startupRecoveryState -eq "invalid") {
+            throw "An incomplete Anti-Codex activation recovery exists; candidate cleanup and activation were refused."
+        }
+        if ($startupRecoveryState -ne "none") {
+            $lastOperation = (Get-AntiCodexUpdateStatus -StateRoot $stateRoot).operation
+            $activeRecoveryRevision = $null
+            if ([IO.File]::Exists($activeMarker)) {
+                $activeRecoveryManifest = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
+                $activeRecoveryRevisionProperty = $activeRecoveryManifest.PSObject.Properties["hostPatchRevision"]
+                if ($activeRecoveryRevisionProperty) { $activeRecoveryRevision = $activeRecoveryRevisionProperty.Value }
+            }
+            $acceptedRecoveryResidue = (
+                $startupRecoveryState -in @("prepared", "cleanup_pending") -and
+                [string]$lastOperation.state -eq "succeeded" -and
+                [string]$lastOperation.stage -eq "complete" -and
+                [string]$activeRecoveryRevision -eq "2" -and
+                [IO.Directory]::Exists("\\?\$activeHost") -and
+                [IO.Directory]::Exists("\\?\$activeComponent") -and
+                [IO.File]::Exists($activeMarker)
+            )
+            if ($acceptedRecoveryResidue) {
+                if (-not (Complete-ActivationRecoveryCleanup)) {
+                    throw "The accepted Anti-Codex release is intact, but its activation recovery cleanup is still pending."
+                }
+            } elseif ($startupRecoveryState -eq "cleanup_pending") {
+                if (-not (Complete-ActivationRecoveryCleanup)) {
+                    throw "Anti-Codex activation recovery cleanup is still pending."
+                }
+            } else {
+                $updateStage = "activation_recovery"
+                Set-AntiCodexUpdateOperation -State "running" -Stage "activation_recovery" -Message "Recovering the last complete Anti-Codex release before a new update." -StateRoot $stateRoot
+                New-Item -ItemType Directory -Path (Split-Path -Parent $hostSyncMarker) -Force | Out-Null
+                "Host activation recovery marker $(Get-Date -Format o)" | Set-Content -LiteralPath $hostSyncMarker -Encoding ASCII
+                $restartAfterSync = -not $NoRestart
+                if ($NoRestart) {
+                    Assert-AntiCodexNoRunningReleaseProcesses
+                } else {
+                    Stop-AntiCodexLaunchTaskForMaintenance
+                    if (-not (Wait-AntiCodexLaunchersStopped -TimeoutSeconds 10) -or
+                        -not (Wait-AntiCodexHostRelease -TimeoutSeconds 20) -or
+                        -not (Wait-AntiCodexComponentRelease -TimeoutSeconds 20)) {
+                        throw "Anti-Codex could not stop cleanly for activation recovery; no directory was moved."
+                    }
+                }
+                Restore-ActivationRecoveryRelease -State $startupRecoveryState
+                $activationRestored = $true
+                throw "Anti-Codex restored an interrupted activation. Retry the update after the recovered release is ready."
+            }
+        }
+
+        $global:LASTEXITCODE = 0
+        & $sourcePreflight -SkipFullRegression | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Anti-Codex source preflight failed. Sync was stopped before building an update candidate."
+        }
+
         Set-AntiCodexUpdateOperation -State "running" -Stage "component_preflight" -Message "Verifying the pinned CodexPlusPlus component before building the copied host." -StateRoot $stateRoot
         Remove-FixedUpdateDirectory -Path $candidateRoot
 
@@ -1039,6 +1170,42 @@ try {
             throw "Candidate validation failed. The active host was not changed."
         }
 
+        if ([IO.File]::Exists($activeMarker)) {
+            $activeManifestForActivation = Get-Content -LiteralPath $activeMarker -Raw | ConvertFrom-Json
+            $candidateManifestForActivation = Get-Content -LiteralPath $candidateMarker -Raw | ConvertFrom-Json
+            $activeRevisionProperty = $activeManifestForActivation.PSObject.Properties["hostPatchRevision"]
+            [string[]]$activeCriticalPatches = @($activeManifestForActivation.criticalPatches | ForEach-Object { [string]$_ })
+            [string[]]$candidateCriticalPatches = @($candidateManifestForActivation.criticalPatches | ForEach-Object { [string]$_ })
+            [Array]::Sort($activeCriticalPatches)
+            [Array]::Sort($candidateCriticalPatches)
+            $activeCriticalPatchFingerprint = $activeCriticalPatches -join "`n"
+            $candidateCriticalPatchFingerprint = $candidateCriticalPatches -join "`n"
+            [string[]]$activeGuardrailFailures = @($sourceSelection.guardrails.failures | ForEach-Object { [string]$_ })
+            $legacyCurrentRecoveryOnly = (
+                $null -eq $activeRevisionProperty -and
+                [string]$activeManifestForActivation.patchProfile -eq "fixed-shell-v1" -and
+                $activeCriticalPatches.Count -eq $candidateCriticalPatches.Count -and
+                $activeCriticalPatchFingerprint -ceq $candidateCriticalPatchFingerprint -and
+                $activeGuardrailFailures.Count -eq 1 -and
+                $activeGuardrailFailures[0] -eq "active host patch revision is not current"
+            )
+        }
+        if ($legacyCurrentRecoveryOnly) {
+            $existingRollbackParts = @(
+                [IO.Directory]::Exists("\\?\$rollbackHost"),
+                [IO.Directory]::Exists("\\?\$rollbackComponent"),
+                [IO.File]::Exists($rollbackMarker)
+            )
+            $existingRollbackPartCount = @($existingRollbackParts | Where-Object { $_ }).Count
+            if ($existingRollbackPartCount -notin @(0, 3)) {
+                throw "The existing Anti-Codex rollback pair is incomplete; activation was refused."
+            }
+            if ($existingRollbackPartCount -eq 3) {
+                & $rollbackScript -ValidateOnly
+                $preservedRollbackAvailable = $true
+            }
+        }
+
         $updateStage = "stopping_host"
         Set-AntiCodexUpdateOperation -State "running" -Stage "stopping_host" -Message "Stopping Anti-Codex before activating both release components." -StateRoot $stateRoot
         $originalCodexBeforeSync = @(Get-OriginalCodexProcessSnapshot)
@@ -1066,51 +1233,72 @@ try {
         $activeComponentChanged = $false
         $rollbackHostAvailable = $false
         $rollbackComponentAvailable = $false
+        $activationRecoveryHostAvailable = $false
+        $activationRecoveryComponentAvailable = $false
         $updateStage = "activation"
         Set-AntiCodexUpdateOperation -State "running" -Stage "activation" -Message "Activating the validated copied Codex host and CodexPlusPlus component." -StateRoot $stateRoot
         try {
-            Remove-FixedUpdateDirectory -Path $rollbackHost
-            Remove-FixedUpdateDirectory -Path $rollbackComponent
-            Remove-Item -LiteralPath $rollbackMarker -Force -ErrorAction SilentlyContinue
+            if (-not $legacyCurrentRecoveryOnly) {
+                Remove-FixedUpdateDirectory -Path $rollbackHost
+                Remove-FixedUpdateDirectory -Path $rollbackComponent
+                Remove-Item -LiteralPath $rollbackMarker -Force -ErrorAction SilentlyContinue
+            }
 
             $activeHostExists = [IO.Directory]::Exists("\\?\$activeHost")
             $activeComponentExists = [IO.Directory]::Exists("\\?\$activeComponent")
-            if ($activeHostExists -ne $activeComponentExists) {
+            $activeMarkerExists = [IO.File]::Exists($activeMarker)
+            if ($activeHostExists -ne $activeComponentExists -or $activeHostExists -ne $activeMarkerExists) {
                 throw "Active Anti-Codex host/component state is incomplete; activation was refused."
             }
 
             if ($activeHostExists) {
-                Move-FixedUpdateDirectory -Source $activeHost -Destination $rollbackHost
-                $rollbackHostAvailable = $true
+                if ($legacyCurrentRecoveryOnly) {
+                    Move-FixedUpdateDirectory -Source $activeHost -Destination $activationRecoveryHost
+                    $activationRecoveryHostAvailable = $true
+                } else {
+                    Move-FixedUpdateDirectory -Source $activeHost -Destination $rollbackHost
+                    $rollbackHostAvailable = $true
+                }
                 $activationStarted = $true
-            }
-            if ([IO.File]::Exists($activeMarker)) {
-                [IO.File]::Move($activeMarker, $rollbackMarker)
             }
             if ($activeComponentExists) {
-                Move-FixedUpdateDirectory -Source $activeComponent -Destination $rollbackComponent
-                $rollbackComponentAvailable = $true
+                if ($legacyCurrentRecoveryOnly) {
+                    Move-FixedUpdateDirectory -Source $activeComponent -Destination $activationRecoveryComponent
+                    $activationRecoveryComponentAvailable = $true
+                } else {
+                    Move-FixedUpdateDirectory -Source $activeComponent -Destination $rollbackComponent
+                    $rollbackComponentAvailable = $true
+                }
                 $activationStarted = $true
             }
-            $rollbackRestoreAvailable = (
+            if ($activeMarkerExists) {
+                [IO.File]::Move($activeMarker, $(if ($legacyCurrentRecoveryOnly) { $activationRecoveryMarker } else { $rollbackMarker }))
+            }
+            $rollbackRestoreAvailable = if ($legacyCurrentRecoveryOnly) {
+                $activationRecoveryHostAvailable -and
+                $activationRecoveryComponentAvailable -and
+                [IO.File]::Exists($activationRecoveryMarker)
+            } else {
                 $rollbackHostAvailable -and
                 $rollbackComponentAvailable -and
                 [IO.File]::Exists($rollbackMarker)
-            )
-            $rollbackAvailable = $false
+            }
+            $rollbackAvailable = $preservedRollbackAvailable
 
             Move-FixedUpdateDirectory -Source $candidateHost -Destination $activeHost
             $activeHostChanged = $true
             $activationStarted = $true
-            [IO.File]::Move($candidateMarker, $activeMarker)
             Move-FixedUpdateDirectory -Source $candidateComponent -Destination $activeComponent
             $activeComponentChanged = $true
+            [IO.File]::Move($candidateMarker, $activeMarker)
             Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
-            $rollbackManifestSchemaCompatible = [bool](Repair-RollbackHostUnpackedFileManifest)
-            if ($rollbackRestoreAvailable -and $rollbackManifestSchemaCompatible) {
-                Repair-RollbackHostIconManifest
-                & $rollbackScript -ValidateOnly
-                $rollbackAvailable = $true
+            if (-not $legacyCurrentRecoveryOnly) {
+                $rollbackManifestSchemaCompatible = [bool](Repair-RollbackHostUnpackedFileManifest)
+                if ($rollbackRestoreAvailable -and $rollbackManifestSchemaCompatible) {
+                    Repair-RollbackHostIconManifest
+                    & $rollbackScript -ValidateOnly
+                    $rollbackAvailable = $true
+                }
             }
             Remove-FixedUpdateDirectory -Path $candidateRoot
             $activatedMarkerSha256 = Get-AntiCodexSha256 -Path $activeMarker
@@ -1126,22 +1314,39 @@ try {
                         Remove-FixedUpdateDirectory -Path $activeComponent
                     }
                     Remove-Item -LiteralPath $activeMarker -Force -ErrorAction SilentlyContinue
-                    if ($rollbackHostAvailable) {
-                        Move-FixedUpdateDirectory -Source $rollbackHost -Destination $activeHost
-                        if ([IO.File]::Exists($rollbackMarker)) {
-                            [IO.File]::Move($rollbackMarker, $activeMarker)
+                    if ($legacyCurrentRecoveryOnly) {
+                        if ($activationRecoveryHostAvailable) {
+                            Move-FixedUpdateDirectory -Source $activationRecoveryHost -Destination $activeHost
+                            if ([IO.File]::Exists($activationRecoveryMarker)) {
+                                [IO.File]::Move($activationRecoveryMarker, $activeMarker)
+                            }
                         }
-                    }
-                    if ($rollbackComponentAvailable) {
-                        Move-FixedUpdateDirectory -Source $rollbackComponent -Destination $activeComponent
+                        if ($activationRecoveryComponentAvailable) {
+                            Move-FixedUpdateDirectory -Source $activationRecoveryComponent -Destination $activeComponent
+                        }
+                    } else {
+                        if ($rollbackHostAvailable) {
+                            Move-FixedUpdateDirectory -Source $rollbackHost -Destination $activeHost
+                            if ([IO.File]::Exists($rollbackMarker)) {
+                                [IO.File]::Move($rollbackMarker, $activeMarker)
+                            }
+                        }
+                        if ($rollbackComponentAvailable) {
+                            Move-FixedUpdateDirectory -Source $rollbackComponent -Destination $activeComponent
+                        }
                     }
                 } catch {
                     $recoveryState = if ($rollbackRestoreAvailable) { "the previous host and component were preserved" } else { "a complete previous release was not available" }
                     throw "Anti-Codex activation failed. Automatic recovery also failed; ${recoveryState}: $activationError; recovery error: $($_.Exception.Message)"
                 }
+                $rollbackRestoreAvailable = (
+                    [IO.Directory]::Exists("\\?\$activeHost") -and
+                    [IO.Directory]::Exists("\\?\$activeComponent") -and
+                    [IO.File]::Exists($activeMarker)
+                )
                 if ($rollbackRestoreAvailable) {
                     $activationRestored = $true
-                    $rollbackAvailable = $false
+                    $rollbackAvailable = $preservedRollbackAvailable
                     throw "Anti-Codex activation failed and the previous host/component release was restored: $activationError"
                 }
                 throw "Anti-Codex activation failed and the incomplete first-install release was removed: $activationError"
@@ -1175,8 +1380,8 @@ if ($syncError) {
             }
         }
         if ($activationRestored) {
-            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $false -StateRoot $stateRoot
-            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component after activation failed." -RollbackAvailable $false -StateRoot $stateRoot
+            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component after activation failed." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
         } else {
             Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
         }
@@ -1258,6 +1463,42 @@ if ($syncCompleted) {
 }
 
 if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $true)) {
+    if ($legacyCurrentRecoveryOnly) {
+        $failureReason = [string]$postSyncAcceptance.message
+        Set-AntiCodexUpdateOperation -State "failed" -Stage "acceptance" -Message $failureReason -FailureCode "sync_failed" -RollbackAvailable $preservedRollbackAvailable -StateRoot $stateRoot
+        try {
+            if (-not $NoRestart) {
+                New-Item -ItemType Directory -Path (Split-Path -Parent $hostSyncMarker) -Force | Out-Null
+                "Host acceptance recovery marker $(Get-Date -Format o)" | Set-Content -LiteralPath $hostSyncMarker -Encoding ASCII
+                Stop-AntiCodexLaunchTaskForMaintenance
+                if (-not (Wait-AntiCodexLaunchersStopped -TimeoutSeconds 10) -or
+                    -not (Wait-AntiCodexHostRelease -TimeoutSeconds 20) -or
+                    -not (Wait-AntiCodexComponentRelease -TimeoutSeconds 20)) {
+                    throw "Anti-Codex could not stop cleanly after candidate acceptance failed; the activation recovery was preserved."
+                }
+            }
+            Restore-ActivationRecoveryRelease -State "prepared"
+            $activationRestored = $true
+            $rollbackAvailable = $preservedRollbackAvailable
+            Remove-Item -LiteralPath $hostSyncMarker -Force -ErrorAction SilentlyContinue
+            $restoredReady = $true
+            if (-not $NoRestart) {
+                Start-AntiCodexAfterSync -StartScript $startAntiCodex
+                $restoredReady = Wait-AntiCodexPostSyncReady `
+                    -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC `
+                    -StableSeconds 10 `
+                    -OriginalCodexBefore $originalCodexBeforeSync
+            }
+            if (-not $restoredReady) {
+                throw "The immediate previous Anti-Codex release was restored but did not become ready."
+            }
+            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the immediate previous host and CodexPlusPlus component after candidate acceptance failed." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+            $terminalStatusOwnedByRollback = $true
+        } finally {
+            Remove-Item -LiteralPath $hostSyncMarker -Force -ErrorAction SilentlyContinue
+        }
+        throw "$failureReason Anti-Codex restored the immediate previous release."
+    }
     if (-not $rollbackAvailable) {
         throw "$([string]$postSyncAcceptance.message) No compatible rollback release was available."
     }
@@ -1307,6 +1548,9 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
 }
 
 if ($syncCompleted) {
+    if ($legacyCurrentRecoveryOnly) {
+        $activationRecoveryCleanupPending = -not (Complete-ActivationRecoveryCleanup)
+    }
     if (-not $rollbackAvailable) {
         if ([IO.File]::Exists($rollbackMarker)) {
             Remove-Item -LiteralPath $rollbackMarker -Force -ErrorAction Stop
@@ -1323,6 +1567,9 @@ if ($syncCompleted) {
         "The previous release is available for rollback."
     } else {
         "No compatible previous release is available for rollback."
+    }
+    if ($activationRecoveryCleanupPending) {
+        $rollbackCompletionMessage += " Accepted-release recovery cleanup is pending and will be retried before the next update."
     }
     $completionMessage = if ($NoRestart) {
         "Anti-Codex is synced with the installed Codex version and will use it on the next launch. $rollbackCompletionMessage"

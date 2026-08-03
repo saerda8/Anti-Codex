@@ -69,6 +69,32 @@ test("candidate validation requires one complete primary-window focus/restore re
   assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$legacyPrimaryRestoreRepaintPattern\)\.Count -ne 0/);
 });
 
+test("host patch revision is release-bound without changing the fixed-shell profile", () => {
+  assert.match(brandPatcher, /const hostPatchRevision = 2/);
+  assert.match(brandPatcher, /hostPatchRevision,/);
+  assert.match(installer, /hostPatchRevision\s*=\s*\$HostPatchRevision/);
+  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"2"/);
+  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*2/);
+  assert.match(updateChecker, /active host patch revision is not current/);
+  assert.match(updateChecker, /\$sourceFingerprint[\s\S]{0,260}hostPatchRevision=/);
+  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"2"/);
+  assert.match(candidateValidator, /anticodex-local-settings-only/);
+  assert.match(candidateValidator, /securitySettingsEnabled:0/);
+  assert.match(rollback, /hostPatchRevision/);
+  for (const source of [brandPatcher, installer, candidateValidator, updateChecker, rollback]) {
+    assert.match(source, /fixed-shell-v1/);
+  }
+});
+
+test("candidate and rollback validators require both preserved Settings messages", () => {
+  for (const source of [candidateValidator, rollback]) {
+    const pattern = source.match(/\$settingsDefinitionPattern\s*=\s*'([^']+)'/)?.[1] ?? "";
+    assert.match(pattern, /message:\(\?<messages>/);
+    assert.match(pattern, /message:\\k<messages>\\\.securitySettings/);
+    assert.match(source, /securitySettingsEnabled:0\\s\*\\\}/);
+  }
+});
+
 test("shortcuts continue to use the external Anti-Codex icon", () => {
   assert.match(shortcutRepair, /\$hostIcon\s*=\s*Join-Path\s+\$hostRoot\s+"resources\\icon\.ico"/);
   assert.match(shortcutRepair, /\$shortcut\.IconLocation\s*=\s*\[string\]\$Spec\.expectedIconLocation/);

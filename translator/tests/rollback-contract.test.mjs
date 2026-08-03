@@ -195,7 +195,8 @@ function runRollbackHostPatchMatrix() {
   ].includes(name));
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
-    ["current", current, true],
+    ["current", current, true, 2],
+    ["legacyCurrent", current, true],
     ["previous", previous, true],
     ["legacy", legacy, false],
     ["previousMissingBridge", previous, false],
@@ -204,7 +205,7 @@ function runRollbackHostPatchMatrix() {
     ["extra", [...previous, "unexpected"], true],
   ];
   const paths = {};
-  for (const [name, criticalPatches, hasConfigWrite] of cases) {
+  for (const [name, criticalPatches, hasConfigWrite, hostPatchRevision] of cases) {
     const hostRoot = join(fixture, name);
     const markerPath = join(fixture, `${name}.ok`);
     const unpackedRoot = join(hostRoot, "resources", "app.asar.unpacked");
@@ -229,6 +230,7 @@ function runRollbackHostPatchMatrix() {
         codexHost: sha256(hostBytes),
         codexCli: sha256(cliBytes),
       },
+      ...(hostPatchRevision === undefined ? {} : { hostPatchRevision }),
       criticalPatches,
       unpackedFiles: [{
         path: "resources\\app.asar.unpacked\\runtime.js",
@@ -270,7 +272,8 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][string]$PatchProfile,
         [Parameter(Mandatory = $true)][int]$ExpectedConfigWriteBridgeCount,
         [Parameter(Mandatory = $true)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
-        [Parameter(Mandatory = $true)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount
+        [Parameter(Mandatory = $true)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
+        [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
     if ($actualConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -or
@@ -516,6 +519,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /fixed-shell-v1/);
   assert.doesNotMatch(validator, /anticodex-host-manifest-v1|legacy-full/);
   assert.match(validator, /criticalPatches/);
+  assert.match(validator, /hostPatchRevision/);
+  assert.match(validator, /currentHostPatchRevision/);
+  assert.match(validator, /legacyHostPatchRevision/);
   assert.match(validator, /expectedCriticalPatches/);
   assert.match(validator, /previousCriticalPatches/);
   assert.match(validator, /legacyWithoutConfigWriteCriticalPatches/);
@@ -532,6 +538,7 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /currentManifestCompatible/);
   assert.match(validator, /previousManifestCompatible/);
   assert.match(validator, /legacyWithoutConfigWriteManifestCompatible/);
+  assert.doesNotMatch(validator, /legacyCurrentManifestCompatible/);
   assert.match(validator, /if\s*\(\$currentManifestCompatible\s+-or\s+\$previousManifestCompatible\)/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
@@ -607,6 +614,11 @@ test("rollback patch compatibility accepts the current and supported predecessor
     ].join(";");
     const configWriteBridge = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
     const patchedBase = `${base};${configWriteBridge}`;
+    const currentSettingsPatch = 'q={/*anticodex-local-settings-only*/account:{href:`about:blank`,icon:a,message:m.account},securitySettings:{href:`about:blank`,icon:b,message:m.securitySettings}};/*anticodex-hide-external-account*/null;(0,Q.jsx)(Zt,{...e,securitySettingsEnabled:0});Z.securitySettings.message';
+    const paddedCurrentSettingsPatch = currentSettingsPatch.replace("securitySettingsEnabled:0}", "securitySettingsEnabled:0          }");
+    const missingAccountMessagePatch = currentSettingsPatch.replace("message:m.account", "missing:m.account");
+    const missingSecurityMessagePatch = currentSettingsPatch.replace("message:m.securitySettings", "missing:m.securitySettings");
+    const previousSettingsPatch = 'q={/*anticodex-local-settings-only*/};Z.securitySettings.message';
     const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
     const restoreOnlyHook = hook.replace(",n()", "");
     const focusOnlyHook = hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
@@ -621,6 +633,11 @@ test("rollback patch compatibility accepts the current and supported predecessor
       legacyRestoreOnly: join(fixture, "legacy-restore-only.asar"),
       missingConfigBridge: join(fixture, "missing-config-bridge.asar"),
       duplicateConfigBridge: join(fixture, "duplicate-config-bridge.asar"),
+      currentSettings: join(fixture, "current-settings.asar"),
+      paddedCurrentSettings: join(fixture, "padded-current-settings.asar"),
+      missingAccountMessage: join(fixture, "missing-account-message.asar"),
+      missingSecurityMessage: join(fixture, "missing-security-message.asar"),
+      previousSettings: join(fixture, "previous-settings.asar"),
     };
     writeFileSync(paths.zero, patchedBase);
     writeFileSync(paths.one, `${patchedBase};${hook}`);
@@ -631,14 +648,19 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
     writeFileSync(paths.missingConfigBridge, `${base};${hook}`);
     writeFileSync(paths.duplicateConfigBridge, `${patchedBase};${configWriteBridge};${hook}`);
+    writeFileSync(paths.currentSettings, `${patchedBase};${hook};${currentSettingsPatch}`);
+    writeFileSync(paths.paddedCurrentSettings, `${patchedBase};${hook};${paddedCurrentSettingsPatch}`);
+    writeFileSync(paths.missingAccountMessage, `${patchedBase};${hook};${missingAccountMessagePatch}`);
+    writeFileSync(paths.missingSecurityMessage, `${patchedBase};${hook};${missingSecurityMessagePatch}`);
+    writeFileSync(paths.previousSettings, `${patchedBase};${hook};${previousSettingsPatch}`);
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
 ${asarValidator}
 ${patchSetValidator}
-function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore) {
+function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
     try {
-        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore
+        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore -ExpectedHostPatchRevision $ExpectedHostPatchRevision
         return $true
     } catch {
         return $false
@@ -656,6 +678,11 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-
     currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0
     currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0
     currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0
+    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 2
+    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 2
+    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 2
+    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 2
+    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 2
     legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 1 0
     predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1 0
     previousNoHook = Accept-Asar ${quote(paths.zero)} 0 1 0
@@ -683,6 +710,11 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-
       currentSplitCrossHook: false,
       currentMissingConfigBridge: false,
       currentDuplicateConfigBridge: false,
+      currentSettingsRevision: true,
+      paddedCurrentSettingsRevision: true,
+      missingAccountMessageRejected: false,
+      missingSecurityMessageRejected: false,
+      previousSettingsRejectedAsCurrent: false,
       legacyWithoutConfigWrite: true,
       predecessorRejectsCurrent: false,
       previousNoHook: false,
@@ -707,6 +739,7 @@ test("complete rollback host validation maps immutable predecessor matrices to t
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
       current: true,
+      legacyCurrent: false,
       previous: true,
       legacy: true,
       previousMissingBridge: false,
@@ -724,6 +757,176 @@ test("post-sync acceptance uses local health without probing a model provider", 
 
   assert.match(acceptance, /\$health\.modelCount/);
   assert.doesNotMatch(acceptance, /\$baseUrl\/models|\$models\.data/);
+});
+
+test("host sync keeps a valid predecessor rollback while using the revisionless current host only for activation recovery", () => {
+  const sync = readSyncScript();
+  const rollback = readRollbackScript();
+
+  assert.match(sync, /\$legacyCurrentRecoveryOnly/);
+  assert.match(sync, /\$activationRecoveryHost/);
+  assert.match(sync, /\$activationRecoveryComponent/);
+  assert.match(sync, /hostPatchRevision/);
+  assert.match(sync, /\$activeCriticalPatchFingerprint\s*=\s*\$activeCriticalPatches\s+-join/);
+  assert.match(sync, /\$activeCriticalPatchFingerprint\s+-ceq\s+\$candidateCriticalPatchFingerprint/);
+  assert.match(sync, /\[Array\]::Sort\(\$activeCriticalPatches\)/);
+  assert.match(sync, /active host patch revision is not current/);
+  assert.match(sync, /&\s+\$rollbackScript\s+-ValidateOnly/);
+  assert.match(sync, /Move-FixedUpdateDirectory\s+-Source\s+\$activeHost\s+-Destination\s+\$activationRecoveryHost/);
+  assert.match(sync, /Move-FixedUpdateDirectory\s+-Source\s+\$activationRecoveryHost\s+-Destination\s+\$activeHost/);
+  assert.match(sync, /if\s*\(\$legacyCurrentRecoveryOnly\)[\s\S]*?Restore-ActivationRecoveryRelease\s+-State\s+"prepared"/);
+  assert.match(sync, /\$activationRecoveryCleanupPending\s*=\s*-not\s*\(Complete-ActivationRecoveryCleanup\)/);
+  assert.ok(
+    sync.indexOf("$startupRecoveryState = Get-ActivationRecoveryState") <
+      sync.indexOf("& $sourcePreflight -SkipFullRegression") &&
+      sync.indexOf("& $sourcePreflight -SkipFullRegression") <
+      sync.indexOf("Remove-FixedUpdateDirectory -Path $candidateRoot", sync.indexOf("& $sourcePreflight -SkipFullRegression")),
+    "interrupted activation recovery must run before source preflight and candidate cleanup",
+  );
+  assert.doesNotMatch(rollback, /AllowLegacyCurrent/);
+});
+
+test("activation recovery restores the immediate release, preserves the advertised rollback, and keeps cleanup retryable", () => {
+  const sync = readSyncScript();
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-activation-recovery-"));
+  const paths = Object.fromEntries([
+    "activeHost", "activeComponent", "activeMarker",
+    "recoveryHost", "recoveryComponent", "recoveryMarker",
+    "rollbackHost", "rollbackComponent", "rollbackMarker",
+    "preMarkerActiveHost", "preMarkerActiveComponent", "preMarkerActiveMarker",
+    "preMarkerRecoveryHost", "preMarkerRecoveryComponent", "preMarkerRecoveryMarker",
+    "cleanupActiveHost", "cleanupActiveComponent", "cleanupActiveMarker",
+    "cleanupRecoveryHost", "cleanupRecoveryComponent", "cleanupRecoveryMarker",
+    "invalidActiveHost", "invalidActiveComponent", "invalidActiveMarker",
+    "invalidRecoveryHost", "invalidRecoveryComponent", "invalidRecoveryMarker",
+  ].map((name) => [name, join(fixture, name)]));
+  try {
+    for (const [path, value] of [
+      [paths.activeHost, "candidate-host"],
+      [paths.activeComponent, "candidate-component"],
+      [paths.recoveryHost, "immediate-host"],
+      [paths.recoveryComponent, "immediate-component"],
+      [paths.rollbackHost, "advertised-host"],
+      [paths.rollbackComponent, "advertised-component"],
+      [paths.preMarkerRecoveryHost, "pre-marker-host"],
+      [paths.preMarkerRecoveryComponent, "pre-marker-component"],
+      [paths.cleanupActiveHost, "accepted-host"],
+      [paths.cleanupActiveComponent, "accepted-component"],
+      [paths.cleanupRecoveryHost, "cleanup-host"],
+      [paths.cleanupRecoveryComponent, "cleanup-component"],
+      [paths.invalidRecoveryHost, "partial-host"],
+    ]) {
+      mkdirSync(path, { recursive: true });
+      writeFileSync(join(path, "sentinel.txt"), value);
+    }
+    for (const [path, value] of [
+      [paths.activeMarker, "candidate-marker"],
+      [paths.recoveryMarker, "immediate-marker"],
+      [paths.rollbackMarker, "advertised-marker"],
+      [paths.preMarkerActiveMarker, "pre-marker-active"],
+      [paths.cleanupActiveMarker, "accepted-marker"],
+      [paths.cleanupRecoveryMarker, "cleanup-marker"],
+    ]) writeFileSync(path, value);
+
+    const harness = join(fixture, "recovery.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
+$WarningPreference = "SilentlyContinue"
+function Remove-FixedUpdateDirectory {
+    param([string]$Path)
+    if ($script:FailCleanup -and $Path -eq $activationRecoveryHost) { throw "injected cleanup failure" }
+    if ([IO.Directory]::Exists($Path)) { [IO.Directory]::Delete($Path, $true) }
+}
+function Move-FixedUpdateDirectory {
+    param([string]$Source, [string]$Destination)
+    [IO.Directory]::Move($Source, $Destination)
+}
+${extractFunction(sync, "Get-ActivationRecoveryState")}
+${extractFunction(sync, "Restore-ActivationRecoveryRelease")}
+${extractFunction(sync, "Complete-ActivationRecoveryCleanup")}
+$activeHost = ${quotePowerShell(paths.activeHost)}
+$activeComponent = ${quotePowerShell(paths.activeComponent)}
+$activeMarker = ${quotePowerShell(paths.activeMarker)}
+$activationRecoveryHost = ${quotePowerShell(paths.recoveryHost)}
+$activationRecoveryComponent = ${quotePowerShell(paths.recoveryComponent)}
+$activationRecoveryMarker = ${quotePowerShell(paths.recoveryMarker)}
+$preparedState = Get-ActivationRecoveryState
+Restore-ActivationRecoveryRelease -State $preparedState
+$restoredHost = Get-Content -LiteralPath (Join-Path $activeHost "sentinel.txt") -Raw
+$restoredComponent = Get-Content -LiteralPath (Join-Path $activeComponent "sentinel.txt") -Raw
+$restoredMarker = Get-Content -LiteralPath $activeMarker -Raw
+
+$activeHost = ${quotePowerShell(paths.preMarkerActiveHost)}
+$activeComponent = ${quotePowerShell(paths.preMarkerActiveComponent)}
+$activeMarker = ${quotePowerShell(paths.preMarkerActiveMarker)}
+$activationRecoveryHost = ${quotePowerShell(paths.preMarkerRecoveryHost)}
+$activationRecoveryComponent = ${quotePowerShell(paths.preMarkerRecoveryComponent)}
+$activationRecoveryMarker = ${quotePowerShell(paths.preMarkerRecoveryMarker)}
+$preMarkerState = Get-ActivationRecoveryState
+Restore-ActivationRecoveryRelease -State $preMarkerState
+$preMarkerHost = Get-Content -LiteralPath (Join-Path $activeHost "sentinel.txt") -Raw
+$preMarkerComponent = Get-Content -LiteralPath (Join-Path $activeComponent "sentinel.txt") -Raw
+$preMarkerActiveMarker = Get-Content -LiteralPath $activeMarker -Raw
+
+$activeHost = ${quotePowerShell(paths.cleanupActiveHost)}
+$activeComponent = ${quotePowerShell(paths.cleanupActiveComponent)}
+$activeMarker = ${quotePowerShell(paths.cleanupActiveMarker)}
+$activationRecoveryHost = ${quotePowerShell(paths.cleanupRecoveryHost)}
+$activationRecoveryComponent = ${quotePowerShell(paths.cleanupRecoveryComponent)}
+$activationRecoveryMarker = ${quotePowerShell(paths.cleanupRecoveryMarker)}
+$cleanupState = Get-ActivationRecoveryState
+$script:FailCleanup = $true
+$cleanupComplete = Complete-ActivationRecoveryCleanup
+$cleanupRetryState = Get-ActivationRecoveryState
+
+$activeHost = ${quotePowerShell(paths.invalidActiveHost)}
+$activeComponent = ${quotePowerShell(paths.invalidActiveComponent)}
+$activeMarker = ${quotePowerShell(paths.invalidActiveMarker)}
+$activationRecoveryHost = ${quotePowerShell(paths.invalidRecoveryHost)}
+$activationRecoveryComponent = ${quotePowerShell(paths.invalidRecoveryComponent)}
+$activationRecoveryMarker = ${quotePowerShell(paths.invalidRecoveryMarker)}
+$invalidState = Get-ActivationRecoveryState
+[pscustomobject]@{
+    preparedState = $preparedState
+    restoredHost = $restoredHost.Trim()
+    restoredComponent = $restoredComponent.Trim()
+    restoredMarker = $restoredMarker.Trim()
+    preMarkerState = $preMarkerState
+    preMarkerHost = $preMarkerHost.Trim()
+    preMarkerComponent = $preMarkerComponent.Trim()
+    preMarkerActiveMarker = $preMarkerActiveMarker.Trim()
+    advertisedHost = (Get-Content -LiteralPath ${quotePowerShell(join(paths.rollbackHost, "sentinel.txt"))} -Raw).Trim()
+    advertisedComponent = (Get-Content -LiteralPath ${quotePowerShell(join(paths.rollbackComponent, "sentinel.txt"))} -Raw).Trim()
+    advertisedMarker = (Get-Content -LiteralPath ${quotePowerShell(paths.rollbackMarker)} -Raw).Trim()
+    cleanupState = $cleanupState
+    cleanupComplete = $cleanupComplete
+    cleanupRetryState = $cleanupRetryState
+    invalidState = $invalidState
+} | ConvertTo-Json -Compress
+`);
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      preparedState: "prepared",
+      restoredHost: "immediate-host",
+      restoredComponent: "immediate-component",
+      restoredMarker: "immediate-marker",
+      preMarkerState: "pre_marker",
+      preMarkerHost: "pre-marker-host",
+      preMarkerComponent: "pre-marker-component",
+      preMarkerActiveMarker: "pre-marker-active",
+      advertisedHost: "advertised-host",
+      advertisedComponent: "advertised-component",
+      advertisedMarker: "advertised-marker",
+      cleanupState: "prepared",
+      cleanupComplete: false,
+      cleanupRetryState: "cleanup_pending",
+      invalidState: "invalid",
+    });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test("maintenance process ownership uses exact directory containment, not path prefixes", () => {
@@ -780,11 +983,12 @@ test("host sync validates the exact rollback contract and separates activation r
   assert.match(rollback, /if \(\$activeComponentValid\)\s*\{\s*Commit-AntiCodexRollbackCheckpoint\s*\}\s*else\s*\{\s*Remove-InvalidRollbackSwap\s*\}/);
   assert.match(rollback, /-State "rolled_back" -Stage "complete"[\s\S]*?-RollbackAvailable \$activeComponentValid/);
   assert.doesNotMatch(sync, /Repair-RollbackHostBinaryManifest/);
-  assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\([\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable[\s\S]*?\[IO\.File\]::Exists\(\$rollbackMarker\)/);
+  assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*if\s*\(\$legacyCurrentRecoveryOnly\)[\s\S]*?\$activationRecoveryHostAvailable[\s\S]*?\$activationRecoveryComponentAvailable[\s\S]*?\$rollbackHostAvailable[\s\S]*?\$rollbackComponentAvailable/);
   assert.match(sync, /\$rollbackManifestSchemaCompatible\s*=\s*\[bool\]\(Repair-RollbackHostUnpackedFileManifest\)/);
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\s+-and\s+\$rollbackManifestSchemaCompatible\)\s*\{[\s\S]*?Repair-RollbackHostIconManifest[\s\S]*?&\s+\$rollbackScript\s+-ValidateOnly[\s\S]*?\$rollbackAvailable\s*=\s*\$true/);
-  assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\)\s*\{[\s\S]*?\$activationRestored\s*=\s*\$true[\s\S]*?\$rollbackAvailable\s*=\s*\$false/);
-  assert.match(sync, /if\s*\(\$activationRestored\)\s*\{[\s\S]*?-State\s+"failed"\s+-Stage\s+\$updateStage[\s\S]*?-RollbackAvailable\s+\$false[\s\S]*?-State\s+"rolled_back"\s+-Stage\s+"complete"[\s\S]*?-RollbackAvailable\s+\$false/);
+  assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\)\s*\{[\s\S]*?\$activationRestored\s*=\s*\$true[\s\S]*?\$rollbackAvailable\s*=\s*\$preservedRollbackAvailable/);
+  assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\(\s*\[IO\.Directory\]::Exists\("\\\\\?\\\$activeHost"\)[\s\S]*?\[IO\.Directory\]::Exists\("\\\\\?\\\$activeComponent"\)[\s\S]*?\[IO\.File\]::Exists\(\$activeMarker\)/);
+  assert.match(sync, /if\s*\(\$activationRestored\)\s*\{[\s\S]*?-State\s+"failed"\s+-Stage\s+\$updateStage[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable[\s\S]*?-State\s+"rolled_back"\s+-Stage\s+"complete"[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable/);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{\s*throw[\s\S]*?No compatible rollback release was available\./);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{[\s\S]*?Remove-Item\s+-LiteralPath\s+\$rollbackMarker[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackHost[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackComponent/);
   assert.match(sync, /No compatible previous release is available for rollback\./);

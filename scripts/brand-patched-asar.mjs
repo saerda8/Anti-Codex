@@ -8,6 +8,7 @@ import {
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
   hasSettingsExternalNavigationPatch,
+  hasSettingsExternalNavigationRenderPatch,
   hasWindowsTrayIconSelection,
   patchAppServerManagedSessionFlags,
   patchComputerUseLegacyNotifyOptOut,
@@ -17,6 +18,7 @@ import {
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchSettingsExternalNavigation,
+  patchSettingsExternalNavigationRender,
   patchWindowsTrayIconSelection,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
@@ -24,6 +26,7 @@ import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.m
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
+const hostPatchRevision = 2;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -690,21 +693,27 @@ function findBrowserWindowIconPatch(fd, header, dataOffset) {
 }
 
 function findSettingsExternalLinksPatch(fd, header, dataOffset) {
-  const candidates = [];
+  const definitionCandidates = [];
+  const renderCandidates = [];
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if ((!text.includes("https://chatgpt.com/#settings") ||
-         !text.includes("https://chatgpt.com/open-security-settings")) &&
-        !hasSettingsExternalNavigationPatch(text)) continue;
-    patchSettingsExternalNavigation(text);
-    candidates.push([rel, patchSettingsExternalNavigation]);
+    if ((text.includes("https://chatgpt.com/#settings") &&
+         text.includes("https://chatgpt.com/open-security-settings")) ||
+        hasSettingsExternalNavigationPatch(text)) {
+      patchSettingsExternalNavigation(text);
+      definitionCandidates.push([rel, patchSettingsExternalNavigation]);
+    }
+    try {
+      patchSettingsExternalNavigationRender(text);
+      renderCandidates.push([rel, patchSettingsExternalNavigationRender]);
+    } catch {}
   }
-  if (candidates.length !== 1) {
-    throw new Error(`Expected exactly one ChatGPT settings navigation bundle, found ${candidates.length}`);
+  if (definitionCandidates.length !== 1 || renderCandidates.length !== 1) {
+    throw new Error(`Expected one ChatGPT settings definition and render bundle, found ${definitionCandidates.length}/${renderCandidates.length}`);
   }
-  return candidates[0];
+  return [definitionCandidates[0], renderCandidates[0]];
 }
 
 function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
@@ -914,22 +923,25 @@ for (const [name, findPatch] of selectedPatchSpecs) {
     if (forcedFailurePatch === name) {
       throw new Error(`Forced critical patch failure for transaction safety test: ${name}`);
     }
-    const [rel, patch] = findPatch();
-    const entry = walkToEntry(header, rel);
-    const { buf, offset } = readFileFromAsar(fd, entry, dataOffset);
-    const before = buf.toString("utf8");
-    const after = patch(before);
-    const afterBuf = Buffer.from(after, "utf8");
-    if (afterBuf.length !== buf.length) {
-      throw new Error(`${rel} size changed: ${afterBuf.length} !== ${buf.length}`);
+    const found = findPatch();
+    const patchTargets = Array.isArray(found[0]) ? found : [found];
+    for (const [rel, patch] of patchTargets) {
+      const entry = walkToEntry(header, rel);
+      const { buf, offset } = readFileFromAsar(fd, entry, dataOffset);
+      const before = buf.toString("utf8");
+      const after = patch(before);
+      const afterBuf = Buffer.from(after, "utf8");
+      if (afterBuf.length !== buf.length) {
+        throw new Error(`${rel} size changed: ${afterBuf.length} !== ${buf.length}`);
+      }
+      fs.writeSync(fd, afterBuf, 0, afterBuf.length, offset);
+      const hash = crypto.createHash("sha256").update(afterBuf).digest("hex");
+      if (entry.integrity) {
+        entry.integrity.hash = hash;
+        entry.integrity.blocks = [hash];
+      }
+      written.push({ name, rel, size: afterBuf.length });
     }
-    fs.writeSync(fd, afterBuf, 0, afterBuf.length, offset);
-    const hash = crypto.createHash("sha256").update(afterBuf).digest("hex");
-    if (entry.integrity) {
-      entry.integrity.hash = hash;
-      entry.integrity.blocks = [hash];
-    }
-    written.push({ name, rel, size: afterBuf.length });
   } catch (error) {
     skipped.push({ name, error: error?.message || String(error) });
   }
@@ -950,6 +962,7 @@ const criticalSkipped = skipped.filter((item) => activeCriticalPatchNames.has(it
 console.log(JSON.stringify({
   asarPath,
   patchProfile,
+  hostPatchRevision,
   selectedPatchNames: [...selectedPatchNames],
   written,
   skipped,

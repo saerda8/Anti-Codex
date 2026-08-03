@@ -11,6 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$expectedHostPatchRevision = 2
 
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex" }
 if (-not $StateRoot) { $StateRoot = Join-Path $env:APPDATA "anticodex" }
@@ -313,6 +314,12 @@ function Test-ActiveHostGuardrails {
         } elseif ($manifestSchema -ne "anticodex-host-manifest-v2") {
             $failures.Add("active host marker schema is invalid") | Out-Null
         }
+        if ([string](Get-ObjectPropertyValue -InputObject $Manifest -Name "patchProfile") -ne "fixed-shell-v1") {
+            $failures.Add("active host patch profile is invalid") | Out-Null
+        }
+        if ([string](Get-ObjectPropertyValue -InputObject $Manifest -Name "hostPatchRevision") -ne [string]$expectedHostPatchRevision) {
+            $failures.Add("active host patch revision is not current") | Out-Null
+        }
     }
     $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"
     $manifestSource = Get-ObjectPropertyValue -InputObject $Manifest -Name "source"
@@ -453,6 +460,7 @@ $activeComponentBinaryPath = Join-Path $activeComponentRoot "codex-plus-plus.exe
 $activeComponentManifest = Read-ActiveHostManifest -MarkerPath $activeComponentManifestPath
 $activeManifestSource = Get-ObjectPropertyValue -InputObject $activeManifest -Name "source"
 $activePackageVersion = Get-ObjectPropertyValue -InputObject $activeManifestSource -Name "packageVersion"
+$activeHostPatchRevision = Get-ObjectPropertyValue -InputObject $activeManifest -Name "hostPatchRevision"
 $statusPath = Join-Path $StateRoot "update-status.json"
 $existingStatus = Get-AntiCodexUpdateStatus -StateRoot $StateRoot
 $existingOperation = $existingStatus.operation
@@ -556,7 +564,7 @@ $syncLauncher = Join-Path $InstallRoot "runtime\scripts\sync-anticodex-launcher.
 $launchedSync = $false
 $prompted = $false
 $sourceFingerprint = if ($sourceHostHash -and $sourceCliHash) {
-    "$($source.packageName):$($source.packageVersion):$sourceHostHash`:$sourceCliHash"
+    "$($source.packageName):$($source.packageVersion):$sourceHostHash`:$sourceCliHash`:hostPatchRevision=$expectedHostPatchRevision"
 } else { $null }
 $promptStatePath = Join-Path $StateRoot "update-prompt.json"
 $lastPromptFingerprint = $null
@@ -614,12 +622,14 @@ $result = [pscustomobject]@{
         desktopHostName = $sourceDesktopHost
         hostHash = $sourceHostHash
         cliHash = $sourceCliHash
+        hostPatchRevision = $expectedHostPatchRevision
     }
     active = [pscustomobject]@{
         root = $activeRoot
         hostHash = $activeHostHash
         cliHash = $activeCliHash
         packageVersion = $activePackageVersion
+        hostPatchRevision = $activeHostPatchRevision
     }
     components = [pscustomobject]@{
         updateNeeded = $componentDrift

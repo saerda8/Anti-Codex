@@ -437,6 +437,8 @@ test("update check clears stale running operation when active host is already sy
     const markerPath = resolve(installRoot, "codex-patched-app.ok");
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
+      patchProfile: "fixed-shell-v1",
+      hostPatchRevision: 2,
       source: {
         packageName: "explicit",
         packageVersion: "test-version",
@@ -600,6 +602,8 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     const markerPath = resolve(installRoot, "codex-patched-app.ok");
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
+      patchProfile: "fixed-shell-v1",
+      hostPatchRevision: 2,
       source: {
         packageName: "explicit",
         codexHost: sha256(fileContents.antiCodexExe),
@@ -635,6 +639,18 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
 
     const initial = runCheck();
     assert.equal(initial.updateNeeded, false, JSON.stringify(initial));
+    fs.writeFileSync(markerPath, JSON.stringify({ ...validManifest, hostPatchRevision: 1 }));
+    const previousPatchRevision = runCheck();
+    assert.equal(previousPatchRevision.updateNeeded, true, JSON.stringify(previousPatchRevision));
+    assert.equal(previousPatchRevision.reason, "active_host_guardrail_failed");
+    assert.ok(previousPatchRevision.guardrails.failures.some((failure) => /patch revision/i.test(failure)));
+    const { hostPatchRevision: _removedRevision, ...missingRevisionManifest } = validManifest;
+    fs.writeFileSync(markerPath, JSON.stringify(missingRevisionManifest));
+    const missingPatchRevision = runCheck();
+    assert.equal(missingPatchRevision.updateNeeded, true, JSON.stringify(missingPatchRevision));
+    assert.equal(missingPatchRevision.reason, "active_host_guardrail_failed");
+    assert.ok(missingPatchRevision.guardrails.failures.some((failure) => /patch revision/i.test(failure)));
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
     for (const name of ["winpty.dll", "winpty-agent.exe", "runtime.js"]) {
       const path = resolve(unpackedRoot, name);
       fs.rmSync(path);
