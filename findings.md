@@ -1,5 +1,11 @@
 # Anti-Codex Findings
 
+## 2026-08-03 Current Installed No-Traffic Recheck Passed; Release Remains 90%
+
+- After the physical Manager checks, current `sync-readiness` fast, installed-overall fast and legacy-zero-hit all passed with `usedRealTraffic:false`. Official and active shell remain `26.727.6591.0`; CodexPlusPlus source/active remain `1.2.44` with the same pinned binary hash; rollback exists; Launcher is running, Updater is ready, and the Manager bridge has one non-stale process.
+- The current fixed route is a passive saved third-party `gpt-5.6-terra` selection. No provider request was made by this recheck. Per the durable provider policy, the next actual task turn must prefer Gemini, then Claude, and use this route only after both have a clear unavailable/quota outcome.
+- Release-gates remains binding-valid but `releaseReady:false`: shell `88%`, CodexPlusPlus `94%`, Antigravity `94%`, overall `90%`, Gates 1–8 all still missing. Passing this no-traffic health check does not mark any final UI, prompt, stability or long-task item complete.
+
 ## 2026-08-03 Physical Manager-to-Prompt Entry Passed; Full Prompt Acceptance Remains Open
 
 - The first current `native-panel-v113` runner took a menu point on the first React menu frame, then waited for an overlay that had not opened. A direct independent mouse diagnostic proved the handler works after the menu settles. The runner now treats first visibility as evidence only, waits `200ms`, re-reads a hit-tested `管理` target, and clicks that new target once; it never uses `__ANTICODEX_OPEN_MANAGER__` as a fallback. Focused syntax/contract coverage passes.
