@@ -643,7 +643,7 @@ test("host sync rejects a missing CodexPlusPlus source before building or stoppi
   const componentPreflight = execution.indexOf("& $componentInstaller -InstallRoot $candidateRoot -VerifyOnly");
   const buildStatus = execution.indexOf('-Stage "candidate_build" -Message "Building a candidate from the installed Codex version."');
   const hostBuild = execution.indexOf("& $installer -InstallTarget $candidateRoot -SourceRoot $selectedSourceRoot -HostOnly");
-  const hostStop = execution.indexOf("Stop-AntiCodexLaunchTaskForMaintenance");
+  const hostStop = execution.indexOf("Stop-AntiCodexLaunchTaskForMaintenance", componentPreflight);
 
   assert.ok(candidateCleanup >= 0, "sync must clear the stale candidate before verifying reusable component input");
   assert.ok(preflightStatus >= 0 && preflightStatus < componentPreflight, "sync status must describe component preflight before it starts");
