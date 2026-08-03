@@ -1696,9 +1696,12 @@ test("Manager prompt editor bypasses a stale snapshot after saving", () => {
     promptSettingsBlock,
     /safeJson\("\/anticodex\/prompt-policy", \{ allowSnapshotFallback: false \}\)/,
   );
+  const refreshIndex = promptSettingsBlock.indexOf("await refreshManagerSnapshot()");
+  const staleFallbackIndex = promptSettingsBlock.indexOf('snapshotResponse("/anticodex/prompt-policy")');
+  assert.ok(refreshIndex >= 0, "a failed live read must refresh the Manager snapshot");
+  assert.ok(staleFallbackIndex >= 0, "prompt reads must retain a last-resort snapshot fallback");
   assert.ok(
-    promptSettingsBlock.indexOf("await refreshManagerSnapshot()")
-      < promptSettingsBlock.indexOf('snapshotResponse("/anticodex/prompt-policy")'),
+    refreshIndex < staleFallbackIndex,
     "a failed live read must refresh before accepting an older prompt snapshot",
   );
 });
