@@ -1,5 +1,12 @@
 # Anti-Codex Findings
 
+## 2026-08-03 Built-In Update Physical Acceptance Passed, Release Still 90%
+
+- The one post-fix physical Manager action `syncHost` was accepted by a same-token bridge lease and created operation `397ba237de724808b4353d33e7fd41ec`. It advanced through component preflight, candidate build, activation and acceptance, then ended `succeeded / complete`; no provider/model request was made.
+- Current source/active official Codex are both `26.727.6591.0` with equal host/CLI hashes. CodexPlusPlus source/active are both `1.2.44` with equal executable SHA-256 `4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab`; update status is `up_to_date`, and a rollback checkpoint exists.
+- Independent post-update no-traffic checks passed: sync-readiness, fast installed-overall and source legacy-zero-hit. The release-gate summary remains honestly at shell `88%`, CodexPlusPlus `94%`, Antigravity `94%`, overall `90%`, with Gates 1–8 still uncompleted. The current physical updater receipt closes only the updater execution item in `docs/FINAL_100_PERCENT_REVIEW_PLAN.md`.
+- Operator-only read failures: a PowerShell renderer tried to use `if` as an expression and stopped before status inspection; a later read-only file search named a nonexistent `tests` directory. Both were immediately replaced by valid, narrower reads; neither changed the product, update, runtime or traffic state.
+
 ## 2026-08-03 Durable 100% Review Plan
 
 - Earlier “100%” text is not current release proof. The new single current checklist is `docs/FINAL_100_PERCENT_REVIEW_PLAN.md`; it groups update, prompt/settings, Manager, shell stability, isolation, provider routing, autonomous long-task, cleanup and final-review evidence. Its unchecked items explicitly forbid a 100% claim.
