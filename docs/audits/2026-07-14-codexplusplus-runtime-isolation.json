@@ -1,9 +1,9 @@
 {
     "schema":  "anticodex-codexplusplus-runtime-isolation-v1",
-    "runId":  "r1785793421335-8efadb8e",
-    "generatedAtUtc":  "2026-08-03T21:45:08.1196772Z",
-    "startedAtUtc":  "2026-08-03T21:43:41.3351133Z",
-    "finishedAtUtc":  "2026-08-03T21:45:08.1212972Z",
+    "runId":  "r1785794544120-61a03fa1",
+    "generatedAtUtc":  "2026-08-03T22:03:53.0200550Z",
+    "startedAtUtc":  "2026-08-03T22:02:24.1206104Z",
+    "finishedAtUtc":  "2026-08-03T22:03:53.0212957Z",
     "ok":  true,
     "noModelTraffic":  true,
     "launcher":  {
@@ -17,21 +17,21 @@
                       "executable":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe"
                   },
     "ports":  {
-                  "debug":  52656,
-                  "helper":  52657,
-                  "protocolProxy":  52658,
-                  "launcherGuard":  52659,
-                  "managerGuard":  52660
+                  "debug":  58737,
+                  "helper":  58738,
+                  "protocolProxy":  58739,
+                  "launcherGuard":  58740,
+                  "managerGuard":  58741
               },
     "isolatedPaths":  {
-                          "root":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch",
-                          "state":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-plus-state",
-                          "codexHome":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-home",
-                          "appData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\appdata",
-                          "localAppData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\localappdata",
-                          "userData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\electron-user-data",
-                          "temp":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\temp",
-                          "antiCodexState":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\anticodex-state"
+                          "root":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch",
+                          "state":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\codex-plus-state",
+                          "codexHome":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\codex-home",
+                          "appData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\appdata",
+                          "localAppData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\localappdata",
+                          "userData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\electron-user-data",
+                          "temp":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\temp",
+                          "antiCodexState":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\anticodex-state"
                       },
     "invalidSelectorExitCode":  1,
     "checks":  [
@@ -48,7 +48,7 @@
                                         "codexPlusPlusBinarySha256":  "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
                                         "codexPlusPlusPatchTreeSha256":  "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
                                         "codexPlusPlusPatchCount":  11,
-                                        "syncReadinessSha256":  "94efce46be0c315561cbfe929ac4802d69b5155fb73d4aebd369d739a15cd2e7"
+                                        "syncReadinessSha256":  "da69026f58ee55f61f6675cf76de4909359405749e949a5619d887c9ce6e9438"
                                     }
                    },
                    {
@@ -151,7 +151,7 @@
                        "id":  "launcher_remained_running",
                        "ok":  true,
                        "evidence":  {
-                                        "processId":  17584
+                                        "processId":  24024
                                     }
                    },
                    {
@@ -159,67 +159,18 @@
                        "ok":  true,
                        "evidence":  [
                                         {
-                                            "processId":  3792,
-                                            "parentProcessId":  36372,
+                                            "processId":  6292,
+                                            "parentProcessId":  24024,
                                             "name":  "Anti-Codex.exe",
                                             "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:05.4169067Z"
+                                            "createdAtUtc":  "2026-08-03T22:02:51.4577068Z"
                                         },
                                         {
-                                            "processId":  26300,
-                                            "parentProcessId":  35760,
+                                            "processId":  37132,
+                                            "parentProcessId":  6292,
                                             "name":  "Anti-Codex.exe",
                                             "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:06.0333112Z"
-                                        },
-                                        {
-                                            "processId":  29380,
-                                            "parentProcessId":  35760,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:07.9815199Z"
-                                        },
-                                        {
-                                            "processId":  29796,
-                                            "parentProcessId":  35760,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:06.0983245Z"
-                                        },
-                                        {
-                                            "processId":  31440,
-                                            "parentProcessId":  35760,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:07.9826924Z"
-                                        },
-                                        {
-                                            "processId":  35760,
-                                            "parentProcessId":  17584,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:05.3367778Z"
-                                        },
-                                        {
-                                            "processId":  36372,
-                                            "parentProcessId":  35760,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:05.3746520Z"
-                                        },
-                                        {
-                                            "processId":  36828,
-                                            "parentProcessId":  35760,
-                                            "name":  "Anti-Codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:06.0402410Z"
-                                        },
-                                        {
-                                            "processId":  31388,
-                                            "parentProcessId":  35760,
-                                            "name":  "codex.exe",
-                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe",
-                                            "createdAtUtc":  "2026-08-03T21:44:07.0062467Z"
+                                            "createdAtUtc":  "2026-08-03T22:02:53.2053411Z"
                                         }
                                     ]
                    },
@@ -227,7 +178,7 @@
                        "id":  "candidate_parent_is_launcher",
                        "ok":  true,
                        "evidence":  {
-                                        "launcherProcessId":  17584
+                                        "launcherProcessId":  24024
                                     }
                    },
                    {
@@ -236,9 +187,9 @@
                        "evidence":  {
                                         "status":  "running",
                                         "message":  "Codex++ launcher ready",
-                                        "started_at_ms":  1785793445365,
-                                        "debug_port":  52656,
-                                        "helper_port":  52657,
+                                        "started_at_ms":  1785794573195,
+                                        "debug_port":  58737,
+                                        "helper_port":  58738,
                                         "codex_app":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app"
                                     }
                    },
@@ -246,70 +197,70 @@
                        "id":  "isolated_user_data_written",
                        "ok":  true,
                        "evidence":  {
-                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\electron-user-data",
+                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\electron-user-data",
                                         "exists":  true,
-                                        "fileCount":  324,
-                                        "totalBytes":  30554153,
+                                        "fileCount":  228,
+                                        "totalBytes":  8505880,
                                         "samples":  [
                                                         {
-                                                            "relativePath":  "BrowserMetrics\\BrowserMetrics-6A710BA5-8BB0.pma",
+                                                            "relativePath":  "BrowserMetrics\\BrowserMetrics-6A71100D-1894.pma",
                                                             "length":  4194304,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:05.5265815Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:53.6772326Z"
                                                         },
                                                         {
                                                             "relativePath":  "Crashpad\\settings.dat",
                                                             "length":  40,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.0380461Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.1840688Z"
                                                         },
                                                         {
                                                             "relativePath":  "Default\\Account Web Data",
                                                             "length":  77824,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2713800Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.2843177Z"
                                                         },
                                                         {
                                                             "relativePath":  "Default\\Account Web Data-journal",
                                                             "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2785036Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.2853205Z"
                                                         },
                                                         {
                                                             "relativePath":  "Default\\Affiliation Database",
                                                             "length":  53248,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2460880Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.2713641Z"
                                                         },
                                                         {
                                                             "relativePath":  "Default\\Affiliation Database-journal",
                                                             "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2498409Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.2729356Z"
                                                         },
                                                         {
-                                                            "relativePath":  "Default\\AutofillAiModelCache\\LOCK",
+                                                            "relativePath":  "Default\\Cache\\Cache_Data\\data_0",
+                                                            "length":  45056,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5689436Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Cache\\Cache_Data\\data_1",
+                                                            "length":  270336,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5689281Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Cache\\Cache_Data\\data_2",
+                                                            "length":  8192,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5639982Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Cache\\Cache_Data\\data_3",
+                                                            "length":  8192,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5650510Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Cache\\Cache_Data\\index",
+                                                            "length":  524656,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5564474Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Cache\\No_Vary_Search\\journal.baj",
                                                             "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5513807Z"
-                                                        },
-                                                        {
-                                                            "relativePath":  "Default\\AutofillAiModelCache\\LOG",
-                                                            "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5503815Z"
-                                                        },
-                                                        {
-                                                            "relativePath":  "Default\\AutofillStrikeDatabase\\LOCK",
-                                                            "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5553805Z"
-                                                        },
-                                                        {
-                                                            "relativePath":  "Default\\AutofillStrikeDatabase\\LOG",
-                                                            "length":  0,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5543797Z"
-                                                        },
-                                                        {
-                                                            "relativePath":  "Default\\BookmarkMergedSurfaceOrdering",
-                                                            "length":  6,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5292276Z"
-                                                        },
-                                                        {
-                                                            "relativePath":  "Default\\BrowsingTopicsSiteData",
-                                                            "length":  28672,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5643785Z"
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.5779778Z"
                                                         }
                                                     ]
                                     }
@@ -318,70 +269,70 @@
                        "id":  "isolated_codex_home_written",
                        "ok":  true,
                        "evidence":  {
-                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-home",
+                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785794544120-61a03fa1\\valid-launch\\codex-home",
                                         "exists":  true,
-                                        "fileCount":  4041,
-                                        "totalBytes":  547664799,
+                                        "fileCount":  15,
+                                        "totalBytes":  187634,
                                         "samples":  [
                                                         {
                                                             "relativePath":  ".codex-global-state.json",
-                                                            "length":  939,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.2967862Z"
+                                                            "length":  559,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.0004312Z"
                                                         },
                                                         {
                                                             "relativePath":  ".codex-global-state.json.bak",
-                                                            "length":  939,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.2989965Z"
+                                                            "length":  559,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.0174453Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\.agents\\plugins\\marketplace.json",
-                                                            "length":  1443,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.3355953Z"
+                                                            "relativePath":  "goals_1.sqlite",
+                                                            "length":  4096,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1536146Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\.materialization-key",
-                                                            "length":  429,
-                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:15.3862369Z"
+                                                            "relativePath":  "goals_1.sqlite-journal",
+                                                            "length":  4616,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1525701Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\.codex-plugin\\plugin.json",
-                                                            "length":  2193,
-                                                            "lastWriteTimeUtc":  "2026-08-01T02:11:30.9795265Z"
+                                                            "relativePath":  "logs_2.sqlite",
+                                                            "length":  4096,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1353619Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\browser.png",
-                                                            "length":  9692,
-                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7883983Z"
+                                                            "relativePath":  "logs_2.sqlite-shm",
+                                                            "length":  32768,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1393606Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\composer-icon.png",
-                                                            "length":  624,
-                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7889219Z"
+                                                            "relativePath":  "logs_2.sqlite-wal",
+                                                            "length":  32,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1393606Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\google-chrome.png",
-                                                            "length":  113744,
-                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.9522591Z"
+                                                            "relativePath":  "sqlite\\codex-dev.db",
+                                                            "length":  98304,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:54.3953954Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\microsoft-edge.svg",
-                                                            "length":  4450,
-                                                            "lastWriteTimeUtc":  "2026-08-01T02:11:30.9795265Z"
+                                                            "relativePath":  "state_5.sqlite",
+                                                            "length":  4096,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.0906849Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\all-tabs-cleanup.md",
-                                                            "length":  282,
-                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7889219Z"
+                                                            "relativePath":  "state_5.sqlite-shm",
+                                                            "length":  32768,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.0960512Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\api.json",
-                                                            "length":  53368,
-                                                            "lastWriteTimeUtc":  "2026-07-23T22:27:17.8722050Z"
+                                                            "relativePath":  "state_5.sqlite-wal",
+                                                            "length":  4152,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.1021834Z"
                                                         },
                                                         {
-                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\api-use-behavior.md",
-                                                            "length":  3730,
-                                                            "lastWriteTimeUtc":  "2026-07-23T22:27:17.8716749Z"
+                                                            "relativePath":  "tmp\\arg0\\codex-arg0cbN4Zf\\.lock",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T22:02:57.0544373Z"
                                                         }
                                                     ]
                                     }
@@ -748,7 +699,7 @@
                            "codexPlusPlusBinarySha256":  "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
                            "codexPlusPlusPatchTreeSha256":  "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
                            "codexPlusPlusPatchCount":  11,
-                           "syncReadinessSha256":  "94efce46be0c315561cbfe929ac4802d69b5155fb73d4aebd369d739a15cd2e7"
+                           "syncReadinessSha256":  "da69026f58ee55f61f6675cf76de4909359405749e949a5619d887c9ce6e9438"
                        },
     "processEvidence":  {
                             "originalBefore":  [
@@ -978,67 +929,18 @@
                                                   ],
                             "candidateDuring":  [
                                                     {
-                                                        "processId":  3792,
-                                                        "parentProcessId":  36372,
+                                                        "processId":  6292,
+                                                        "parentProcessId":  24024,
                                                         "name":  "Anti-Codex.exe",
                                                         "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:05.4169067Z"
+                                                        "createdAtUtc":  "2026-08-03T22:02:51.4577068Z"
                                                     },
                                                     {
-                                                        "processId":  26300,
-                                                        "parentProcessId":  35760,
+                                                        "processId":  37132,
+                                                        "parentProcessId":  6292,
                                                         "name":  "Anti-Codex.exe",
                                                         "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:06.0333112Z"
-                                                    },
-                                                    {
-                                                        "processId":  29380,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:07.9815199Z"
-                                                    },
-                                                    {
-                                                        "processId":  29796,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:06.0983245Z"
-                                                    },
-                                                    {
-                                                        "processId":  31440,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:07.9826924Z"
-                                                    },
-                                                    {
-                                                        "processId":  35760,
-                                                        "parentProcessId":  17584,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:05.3367778Z"
-                                                    },
-                                                    {
-                                                        "processId":  36372,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:05.3746520Z"
-                                                    },
-                                                    {
-                                                        "processId":  36828,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "Anti-Codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:06.0402410Z"
-                                                    },
-                                                    {
-                                                        "processId":  31388,
-                                                        "parentProcessId":  35760,
-                                                        "name":  "codex.exe",
-                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe",
-                                                        "createdAtUtc":  "2026-08-03T21:44:07.0062467Z"
+                                                        "createdAtUtc":  "2026-08-03T22:02:53.2053411Z"
                                                     }
                                                 ]
                         }
