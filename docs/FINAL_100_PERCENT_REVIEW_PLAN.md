@@ -137,3 +137,15 @@
 - 不改原生 Codex；不使用原生 Codex 内置浏览器/IAB/Browser Use；不把开发 MCP worker 注入产品；不重建 `R:`；不创建 Anti-Codex Docker 容器。
 - 不为“看一下是否可用”发送模型或第三方 API 请求；不因源码绿灯跳过安装版或真实界面验证。
 - 不把一次历史成功、一次页面打开、一次按钮命中或一次模型自报，写成最终完成。
+
+## 2026-08-04 当前更新与原生 Settings 状态卡
+
+- [x] 源码提交 `2b2746ac` 的完整无流量门为 `922/922`；报告 `20260804-014356-source-preflight.json`，`usedRealTraffic:false`。
+- [x] 运行时事务 `20260803T174900058Z-5dd1b202023248bf9168abfdae0ec31f` 验证并激活 123 个文件；内置更新操作 `4b9b564a2bfd4b8d9b3d9407cb58c6ee` 唯一提交并以 `succeeded / complete` 结束。
+- [x] 官方源/活动壳均为 `26.727.6591.0`，源/活动 host patch revision 均为 `2`；当前更新状态 `up_to_date`。`20260804-015704-sync-readiness.json`、`20260804-015711-installed-overall-fast.json` 与 legacy-zero-hit 均通过且无模型流量。
+- [x] 更新后的窗口空根状态只对 Anti-Codex 做了一次隔离恢复；没有第二个可见 Anti-Codex，原生 Codex 未被修改、关闭或重启。
+- [x] 当前安装版以真实鼠标逐页点击 16 个原生 Settings 页面，全部 `ok:true`、无崩溃/加载壳；ChatGPT Account/web Security 不可见，批准/沙盒真实禁用且显示管理员托管，个性化读取隔离且当前为空的 `AGENTS.md`，未发生写入。
+- [x] 验收器已适配新版原生语义：页面仍在 `/index.html`，选择态由 `aria-current="page"` 表示；Agent 选择态早于内容切换时继续等待真实受管控内容。聚焦回归 `2/2`、JavaScript 语法与 whitespace 检查通过。
+- [ ] 下一项是 Anti-Codex 自己的 MCP 进程泄露高水位保险：先只读测量真实父子链与精确命令签名，再写失败测试和 dry-run；只有严格复用条件成立才启用。它必须与官方保险的目标、互斥锁、状态、日志和入口完全隔离。
+
+这一状态卡只关闭当前更新和 Settings 崩溃复验，不改变发布门：壳 `88%`、CodexPlusPlus `94%`、Antigravity `94%`、整体 `90%`，仍然不是 100%。

@@ -52,6 +52,9 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.match(source, /pickUniquePrimaryAppTarget/);
   assert.match(source, /Expected exactly one visible Anti-Codex page target/);
   assert.match(source, /data-settings-panel-slug/);
+  assert.match(source, /getAttribute\('aria-current'\) === 'page'/);
+  assert.doesNotMatch(source, /location\.pathname\.includes\('\/settings\//);
+  assert.match(source, /async function auditNativeAgentSettings\(\) \{[\s\S]*?await waitFor\(/);
   assert.match(source, /nav\[aria-label="Settings"\], nav\[aria-label="\u8bbe\u7f6e"\]/);
   assert.match(source, /chatgpt\.com\/#settings/);
   assert.match(source, /chatgpt\.com\/open-security-settings/);

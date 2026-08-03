@@ -291,11 +291,12 @@ async function openNativeSettingsSection(slug) {
     const bodyText = String(document.body?.innerText || '');
     const crash = /(ChatGPT 已意外停止|unexpectedly stopped|Something went wrong|出了点问题|崩溃)/i.test(bodyText);
     const loading = /^(Loading settings…?|正在加载设置…?)$/i.test(panelText);
-    const routeMatches = location.pathname.includes('/settings/${String(slug).replaceAll("'", "\\'")}');
+    const selected = active?.getAttribute('aria-current') === 'page';
     const controlCount = panel?.querySelectorAll?.('button,input,textarea,select,a').length || 0;
     return {
-      ok: Boolean(nav && active && routeMatches && panel && !crash && !loading && (panelText.length > 0 || controlCount > 0)),
+      ok: Boolean(nav && active && selected && panel && !crash && !loading && (panelText.length > 0 || controlCount > 0)),
       route: location.pathname,
+      selected,
       panelTextLength: panelText.length,
       controlCount,
       crash,
@@ -343,7 +344,7 @@ async function restoreNativeInstructions(originalUiValue, originalFile) {
 }
 
 async function auditNativeAgentSettings() {
-  const snapshot = await evaluate(`(() => {
+  const snapshot = await waitFor(`(() => {
     const panel = ${nativeSettingsPanelExpression};
     if (!panel) return { ok: false, missingPanel: true };
     const text = String(panel.innerText || '').replace(/\\s+/g, ' ').trim();
@@ -376,7 +377,7 @@ async function auditNativeAgentSettings() {
       fullAccess,
       managed,
     };
-  })()`);
+  })()`, (value) => value?.ok === true);
   if (!snapshot?.ok) throw new Error(`Native Agent settings are not truthfully managed: ${JSON.stringify(snapshot)}`);
   return snapshot;
 }
