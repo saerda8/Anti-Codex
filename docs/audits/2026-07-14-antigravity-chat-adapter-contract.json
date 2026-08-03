@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-24T14:23:31.062Z",
+  "generatedAtUtc": "2026-08-03T22:53:15.342Z",
   "gate": "Gate 3 thin Antigravity Chat adapter contract",
   "ok": true,
   "failedIds": [],
@@ -17,14 +17,14 @@
       "releaseBinding": {
         "schema": "anticodex-release-binding-v1",
         "valid": true,
-        "officialShellVersion": "26.721.3996.0",
-        "activeShellVersion": "26.721.3996.0",
-        "codexPlusPlusVersion": "1.2.39",
-        "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-        "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-        "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-        "codexPlusPlusPatchCount": 9,
-        "syncReadinessSha256": "63a90a52668558e601d6859c2eda5848a73592ef56c314c933cf95ea7092f0db"
+        "officialShellVersion": "26.727.6591.0",
+        "activeShellVersion": "26.727.6591.0",
+        "codexPlusPlusVersion": "1.2.44",
+        "codexPlusPlusPatchCommit": "762340c825c64d2e6fffb4f41067fcf117dcd372",
+        "codexPlusPlusBinarySha256": "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+        "codexPlusPlusPatchTreeSha256": "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+        "codexPlusPlusPatchCount": 11,
+        "syncReadinessSha256": "2c56f35c388d4d4324296565185d62e8da0ece7d29ae8072e8d7015e931894c6"
       }
     },
     {
@@ -57,8 +57,8 @@
       "id": "deterministic_contract_tests",
       "ok": true,
       "exitCode": 0,
-      "tests": 54,
-      "pass": 54,
+      "tests": 61,
+      "pass": 61,
       "fail": 0,
       "stderr": ""
     },
@@ -68,8 +68,8 @@
       "sources": [
         {
           "path": "translator/provider/antigravity-chat-adapter.mjs",
-          "bytes": 38813,
-          "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
+          "bytes": 40486,
+          "sha256": "b84d6d18445669fbdbaf5102e91348bd0136f4ec23cc7ee63a47dca6baaaba66",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
@@ -82,8 +82,8 @@
         },
         {
           "path": "translator/provider/antigravity-cascade-client.mjs",
-          "bytes": 35265,
-          "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
+          "bytes": 36008,
+          "sha256": "b8a9cd08cdb0e090573597182752a724f0ac6041b92c4ad2f12f9bbdff993faf",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
@@ -103,7 +103,7 @@
     {
       "id": "provider_boundary_small",
       "ok": true,
-      "totalBytes": 83415
+      "totalBytes": 85831
     },
     {
       "id": "real_desktop_read_only_discovery",
@@ -133,17 +133,17 @@
       "used": true,
       "reason": "passed",
       "model": "gemini-3.5-flash-low",
-      "inputMarker": "REAL_ADAPTER_TOOL_INPUT_F01A1C470E6D",
-      "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_F01A1C470E6D",
+      "inputMarker": "REAL_ADAPTER_TOOL_INPUT_0A0C197E720A",
+      "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_0A0C197E720A",
       "firstStatus": 200,
       "secondStatus": 200,
       "firstFinishReason": "tool_calls",
       "secondFinishReason": "stop",
       "toolName": "echo_probe",
-      "toolCallId": "call_daf5051836374393acd17c848517763b",
+      "toolCallId": "call_070699384c1441228504135a25d9b4b2",
       "exactArguments": true,
       "exactToolResultObserved": true,
-      "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_F01A1C470E6D",
+      "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_0A0C197E720A",
       "counters": {
         "start": 1,
         "resume": 1,
@@ -177,17 +177,17 @@
     "ok": true,
     "reason": "passed",
     "model": "gemini-3.5-flash-low",
-    "inputMarker": "REAL_ADAPTER_TOOL_INPUT_F01A1C470E6D",
-    "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_F01A1C470E6D",
+    "inputMarker": "REAL_ADAPTER_TOOL_INPUT_0A0C197E720A",
+    "resultMarker": "REAL_ADAPTER_TOOL_RESULT_OK_0A0C197E720A",
     "firstStatus": 200,
     "secondStatus": 200,
     "firstFinishReason": "tool_calls",
     "secondFinishReason": "stop",
     "toolName": "echo_probe",
-    "toolCallId": "call_daf5051836374393acd17c848517763b",
+    "toolCallId": "call_070699384c1441228504135a25d9b4b2",
     "exactArguments": true,
     "exactToolResultObserved": true,
-    "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_F01A1C470E6D",
+    "finalText": "REAL_ADAPTER_TOOL_RESULT_OK_0A0C197E720A",
     "counters": {
       "start": 1,
       "resume": 1,
@@ -197,8 +197,8 @@
   "providerSources": [
     {
       "path": "translator/provider/antigravity-chat-adapter.mjs",
-      "bytes": 38813,
-      "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
+      "bytes": 40486,
+      "sha256": "b84d6d18445669fbdbaf5102e91348bd0136f4ec23cc7ee63a47dca6baaaba66",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
@@ -211,8 +211,8 @@
     },
     {
       "path": "translator/provider/antigravity-cascade-client.mjs",
-      "bytes": 35265,
-      "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
+      "bytes": 36008,
+      "sha256": "b8a9cd08cdb0e090573597182752a724f0ac6041b92c4ad2f12f9bbdff993faf",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
@@ -227,14 +227,14 @@
   "releaseBinding": {
     "schema": "anticodex-release-binding-v1",
     "valid": true,
-    "officialShellVersion": "26.721.3996.0",
-    "activeShellVersion": "26.721.3996.0",
-    "codexPlusPlusVersion": "1.2.39",
-    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-    "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-    "codexPlusPlusPatchCount": 9,
-    "syncReadinessSha256": "63a90a52668558e601d6859c2eda5848a73592ef56c314c933cf95ea7092f0db"
+    "officialShellVersion": "26.727.6591.0",
+    "activeShellVersion": "26.727.6591.0",
+    "codexPlusPlusVersion": "1.2.44",
+    "codexPlusPlusPatchCommit": "762340c825c64d2e6fffb4f41067fcf117dcd372",
+    "codexPlusPlusBinarySha256": "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+    "codexPlusPlusPatchTreeSha256": "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+    "codexPlusPlusPatchCount": 11,
+    "syncReadinessSha256": "2c56f35c388d4d4324296565185d62e8da0ece7d29ae8072e8d7015e931894c6"
   },
   "workerReview": {
     "jobId": "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
