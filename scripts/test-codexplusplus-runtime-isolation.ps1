@@ -613,7 +613,7 @@ if ($PreflightOnly) {
     exit 0
 }
 
-$script:IsolationTempRoot = Get-FullPath (Join-Path $env:TEMP 'AntiCodex-CodexPlusPlus-Isolation')
+$script:IsolationTempRoot = Get-FullPath (Join-Path $env:TEMP 'ac-g1')
 if (Test-Path -LiteralPath $script:IsolationTempRoot) {
     $tempRootItem = Get-Item -LiteralPath $script:IsolationTempRoot -Force -ErrorAction Stop
     if (-not $tempRootItem.PSIsContainer -or ($tempRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {

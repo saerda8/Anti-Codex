@@ -75,6 +75,12 @@ test("runtime isolation probe never reads or hashes Codex credentials", async ()
   assert.doesNotMatch(text, /Get-FileHash[^\r\n]*auth\.json/i);
 });
 
+test("runtime isolation probe uses a short Windows temp-root leaf", async () => {
+  const text = await source();
+
+  assert.match(text, /\$script:IsolationTempRoot\s*=\s*Get-FullPath\s*\(Join-Path\s+\$env:TEMP\s+'ac-g1'\)/);
+});
+
 test("runtime isolation artifact cleanup is bounded, exact-root guarded, and reported before success", async () => {
   const text = await source();
   const cleanupStart = text.indexOf("function Remove-IsolationRunRoot");
