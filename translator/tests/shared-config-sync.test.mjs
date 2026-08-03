@@ -167,6 +167,7 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   const includeTarget = path.join(dir, "include-workers.toml");
   const developmentWorkers = [
     "deepseek-code-worker",
+    "deepseek-external",
     "mimo-claude-coworker",
     "mimocode-worker",
     "deveco-code-worker",
@@ -229,6 +230,7 @@ test("MCP verifier rejects development workers inside the Anti-Codex product con
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
   for (const worker of [
     "deepseek-code-worker",
+    "deepseek-external",
     "mimo-claude-coworker",
     "mimocode-worker",
     "deveco-code-worker",

@@ -19,6 +19,7 @@ const codexHome = optionValue("--codex-home") || path.dirname(path.resolve(targe
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
 const developmentWorkerServers = new Set([
   "deepseek-code-worker",
+  "deepseek-external",
   "mimo-claude-coworker",
   "mimocode-worker",
   "deveco-code-worker",

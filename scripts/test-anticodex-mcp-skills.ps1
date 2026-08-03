@@ -227,6 +227,7 @@ $changedSharedMcpNames = @()
 $changedSharedMcpDetails = @()
 $developmentWorkerMcpNames = @(
     "deepseek-code-worker",
+    "deepseek-external",
     "mimo-claude-coworker",
     "mimocode-worker",
     "deveco-code-worker",

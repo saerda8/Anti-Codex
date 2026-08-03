@@ -3827,3 +3827,11 @@ The guard intentionally does not claim that any observed node copy is leaked. It
 
 - The append-only rollout contains 77 started turns and 20 `thread_rolled_back` events removing 48 turns. Applying the native rollback counts leaves 29 active turns with one normalized total-goal turn, but the active branch also retains result evaluations, exact `继续` turns and unrelated user questions.
 - Therefore the active branch is materially cleaner than the raw 77-turn append-only history, but still does not prove a one-goal, no-host-intervention autonomous receipt. Gate 8 remains red; the original signed HTTP 502 receipt stays immutable and the verifier must not be weakened to turn this history green.
+
+## 2026-08-04 Manager MCP/Skill physical action found a real isolation defect
+
+- The installed Manager `检查 MCP/Skill` action was physically clicked once and returned a real red terminal result after about 84.5 seconds. Report `latest-mcp-skills.json` is `ok:false`, SHA-256 `87b0879b4130390023493e2e9a0660820c93d029f20877cccf8e6974088b3c83`; this is backend acceptance evidence, not the earlier UI-only matrix.
+- Current local Skills are otherwise complete at 128, and local MCP contains only `node_repl`. The two exact failures are an inherited native computer-use pipe in that local `node_repl` config and a false missing-MCP result for shared `deepseek-external`.
+- `deepseek-external` is a development worker, not an Anti-Codex product capability. The shared-config sync and MCP verifier each had the same incomplete exact-name exclusion list. Adding the one missing name to both lists is the minimal root fix; focused coverage moved from the intended RED `4/6` to GREEN `6/6`.
+- The existing localizer already strips `SKY_CUA_NATIVE_PIPE` and `SKY_CUA_NATIVE_PIPE_DIRECTORY`; the installed isolated config is simply older than that source behavior. Runtime activation must precede one Manager local-feature refresh, otherwise refreshing from the old installed script could wrongly copy `deepseek-external`.
+- No development worker was dispatched or injected while measuring or fixing this defect, and no model/provider traffic, Docker action, native-Codex mutation or client restart occurred.

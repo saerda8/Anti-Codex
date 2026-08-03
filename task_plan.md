@@ -3475,3 +3475,13 @@ No model/provider request, Docker action, native-Codex modification/stop/restart
 - [x] Recheck both cores after enablement. Anti-Codex and official core SHA-256 remain `ecd7a3eaff5e42723dbba03b5c91514b3986b5db5cbca8f34619620b5356f31f`; both Authenticode signatures remain `Valid`, signed by OpenAI OpCo, LLC. Official guard PID `38496` and independent Anti-Codex guard PID `9300` coexist with distinct script paths.
 
 This is a bounded insurance layer, not an upstream leak fix and not a new task controller. No normal process was stopped, no client was restarted, no model/provider request or Docker action occurred, and the test caches were removed.
+
+### 2026-08-04 Manager MCP/Skill real-action repair
+
+- [x] Physically run the installed Manager `检查 MCP/Skill` action once. The button completed with a real red terminal result instead of silently failing; signed report `latest-mcp-skills.json` has SHA-256 `87b0879b4130390023493e2e9a0660820c93d029f20877cccf8e6974088b3c83`.
+- [x] Confirm the two exact failures without provider/model traffic: local `node_repl` still inherits `SKY_CUA_NATIVE_PIPE*`, and the verifier incorrectly treats shared `deepseek-external` as a product MCP that should be copied.
+- [x] Fix the shared root cause with the existing exact-name exclusion list only: classify `deepseek-external` as a development worker in both sync and verification paths, with focused RED `4/6` and GREEN `6/6` coverage.
+- [ ] Checkpoint the source fix, pass the clean no-traffic preflight, activate once through the guarded runtime path, then use Manager `刷新本地功能` once. The refresh must remove the inherited native pipe while keeping all nine development workers, `deepseek-external`, and sealed Xiaoqiang workers out of Anti-Codex.
+- [ ] Re-run the physical `检查 MCP/Skill` and `检查插件/应用` actions on the same installed fingerprint and retain their real terminal reports. Do not mark the Manager or isolation gate green before both pass.
+
+This repair remains source-only. No runtime refresh, client restart, model/provider request, Docker action, development-worker dispatch or native-Codex change has occurred in this step.
