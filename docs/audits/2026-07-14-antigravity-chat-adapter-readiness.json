@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAtUtc": "2026-07-25T18:32:40.825Z",
+  "generatedAtUtc": "2026-08-03T22:32:30.056Z",
   "gate": "Gate 3 thin Antigravity Chat adapter contract",
-  "ok": true,
-  "failedIds": [],
+  "ok": false,
+  "failedIds": [
+    "real_desktop_read_only_discovery"
+  ],
   "requestedRealTraffic": false,
   "usedRealTraffic": false,
   "behaviorCovered": false,
@@ -17,14 +19,14 @@
       "releaseBinding": {
         "schema": "anticodex-release-binding-v1",
         "valid": true,
-        "officialShellVersion": "26.721.4979.0",
-        "activeShellVersion": "26.721.4979.0",
-        "codexPlusPlusVersion": "1.2.39",
-        "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-        "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-        "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-        "codexPlusPlusPatchCount": 9,
-        "syncReadinessSha256": "6705bb6f595b14560757a97d5fb09045439dcc341f0c458e202fb9c545f4d1c5"
+        "officialShellVersion": "26.727.6591.0",
+        "activeShellVersion": "26.727.6591.0",
+        "codexPlusPlusVersion": "1.2.44",
+        "codexPlusPlusPatchCommit": "762340c825c64d2e6fffb4f41067fcf117dcd372",
+        "codexPlusPlusBinarySha256": "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+        "codexPlusPlusPatchTreeSha256": "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+        "codexPlusPlusPatchCount": 11,
+        "syncReadinessSha256": "da69026f58ee55f61f6675cf76de4909359405749e949a5619d887c9ce6e9438"
       }
     },
     {
@@ -57,8 +59,8 @@
       "id": "deterministic_contract_tests",
       "ok": true,
       "exitCode": 0,
-      "tests": 54,
-      "pass": 54,
+      "tests": 61,
+      "pass": 61,
       "fail": 0,
       "stderr": ""
     },
@@ -68,8 +70,8 @@
       "sources": [
         {
           "path": "translator/provider/antigravity-chat-adapter.mjs",
-          "bytes": 38813,
-          "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
+          "bytes": 40486,
+          "sha256": "b84d6d18445669fbdbaf5102e91348bd0136f4ec23cc7ee63a47dca6baaaba66",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
@@ -82,8 +84,8 @@
         },
         {
           "path": "translator/provider/antigravity-cascade-client.mjs",
-          "bytes": 35265,
-          "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
+          "bytes": 36008,
+          "sha256": "b8a9cd08cdb0e090573597182752a724f0ac6041b92c4ad2f12f9bbdff993faf",
           "forbiddenImport": false,
           "forbiddenSemantics": false
         },
@@ -103,49 +105,17 @@
     {
       "id": "provider_boundary_small",
       "ok": true,
-      "totalBytes": 83415
+      "totalBytes": 85831
     },
     {
       "id": "real_desktop_read_only_discovery",
-      "ok": true,
-      "modelCount": 11,
-      "modelIds": [
-        "gemini-3.6-flash-high",
-        "gemini-3.6-flash-medium",
-        "gemini-3.6-flash-low",
-        "gemini-3-flash-agent",
-        "gemini-3.5-flash-low",
-        "gemini-3.5-flash-extra-low",
-        "gemini-pro-agent",
-        "gemini-3.1-pro-low",
-        "claude-sonnet-4-6",
-        "claude-opus-4-6-thinking",
-        "gpt-oss-120b-medium"
-      ],
-      "signedIn": true,
-      "identityAvailable": true,
-      "planName": "Pro"
+      "ok": false,
+      "error": "fetch failed"
     }
   ],
   "readOnlyProbe": {
-    "ok": true,
-    "modelCount": 11,
-    "modelIds": [
-      "gemini-3.6-flash-high",
-      "gemini-3.6-flash-medium",
-      "gemini-3.6-flash-low",
-      "gemini-3-flash-agent",
-      "gemini-3.5-flash-low",
-      "gemini-3.5-flash-extra-low",
-      "gemini-pro-agent",
-      "gemini-3.1-pro-low",
-      "claude-sonnet-4-6",
-      "claude-opus-4-6-thinking",
-      "gpt-oss-120b-medium"
-    ],
-    "signedIn": true,
-    "identityAvailable": true,
-    "planName": "Pro"
+    "ok": false,
+    "error": "fetch failed"
   },
   "realTraffic": {
     "requested": false,
@@ -156,8 +126,8 @@
   "providerSources": [
     {
       "path": "translator/provider/antigravity-chat-adapter.mjs",
-      "bytes": 38813,
-      "sha256": "ff48ea2b2fb8353acec2df9831e8a75b9f3c2e36fe0870c4bbb077044c5773f8",
+      "bytes": 40486,
+      "sha256": "b84d6d18445669fbdbaf5102e91348bd0136f4ec23cc7ee63a47dca6baaaba66",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
@@ -170,8 +140,8 @@
     },
     {
       "path": "translator/provider/antigravity-cascade-client.mjs",
-      "bytes": 35265,
-      "sha256": "154909a29fa85a628d864f2804c8f485e54b71d583f4c5f7844e024fd723effa",
+      "bytes": 36008,
+      "sha256": "b8a9cd08cdb0e090573597182752a724f0ac6041b92c4ad2f12f9bbdff993faf",
       "forbiddenImport": false,
       "forbiddenSemantics": false
     },
@@ -186,14 +156,14 @@
   "releaseBinding": {
     "schema": "anticodex-release-binding-v1",
     "valid": true,
-    "officialShellVersion": "26.721.4979.0",
-    "activeShellVersion": "26.721.4979.0",
-    "codexPlusPlusVersion": "1.2.39",
-    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-    "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-    "codexPlusPlusPatchCount": 9,
-    "syncReadinessSha256": "6705bb6f595b14560757a97d5fb09045439dcc341f0c458e202fb9c545f4d1c5"
+    "officialShellVersion": "26.727.6591.0",
+    "activeShellVersion": "26.727.6591.0",
+    "codexPlusPlusVersion": "1.2.44",
+    "codexPlusPlusPatchCommit": "762340c825c64d2e6fffb4f41067fcf117dcd372",
+    "codexPlusPlusBinarySha256": "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+    "codexPlusPlusPatchTreeSha256": "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+    "codexPlusPlusPatchCount": 11,
+    "syncReadinessSha256": "da69026f58ee55f61f6675cf76de4909359405749e949a5619d887c9ce6e9438"
   },
   "workerReview": {
     "jobId": "ag-8132d815-31ef-4895-a55d-453bdcdef9d2",
