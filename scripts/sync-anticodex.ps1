@@ -1087,7 +1087,7 @@ try {
                 $startupRecoveryState -in @("prepared", "cleanup_pending") -and
                 [string]$lastOperation.state -eq "succeeded" -and
                 [string]$lastOperation.stage -eq "complete" -and
-                [string]$activeRecoveryRevision -eq "2" -and
+                [string]$activeRecoveryRevision -in @("2", "3") -and
                 [IO.Directory]::Exists("\\?\$activeHost") -and
                 [IO.Directory]::Exists("\\?\$activeComponent") -and
                 [IO.File]::Exists($activeMarker)

@@ -135,7 +135,7 @@ if ($manifest.schema -ne "anticodex-host-manifest-v2") {
 if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
     throw "Anti-Codex candidate marker patch profile is invalid."
 }
-if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "2") {
+if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "3") {
     throw "Anti-Codex candidate marker patch revision is invalid."
 }
 $expectedFixedShellCriticalPatches = @(
@@ -233,11 +233,15 @@ $alternateTraySelectorCount = [regex]::Matches($asarText, 'icon-agent\.ico|chatg
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0) {
     throw "Anti-Codex candidate still selects a ChatGPT-branded Windows tray icon."
 }
+$primaryDeferredRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
 $primaryFocusRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\),\3\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
 $legacyPrimaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\);this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)\}'
 $anyPrimaryWindowRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.webContents\.invalidate(?:\?\.)?\(\)'
-if ([regex]::Matches($asarText, $primaryFocusRestoreRepaintPattern).Count -ne 1) {
-    throw "Anti-Codex candidate is missing the single complete primary-window focus/restore repaint."
+if ([regex]::Matches($asarText, $primaryDeferredRestoreRepaintPattern).Count -ne 1) {
+    throw "Anti-Codex candidate is missing the single deferred primary-window restore repaint."
+}
+if ([regex]::Matches($asarText, $primaryFocusRestoreRepaintPattern).Count -ne 0) {
+    throw "Anti-Codex candidate still contains the revision-2 focus repaint."
 }
 if ([regex]::Matches($asarText, $anyPrimaryWindowRepaintPattern).Count -ne 1) {
     throw "Anti-Codex candidate contains an unexpected primary-window repaint shape."

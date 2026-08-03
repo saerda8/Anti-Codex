@@ -195,8 +195,11 @@ function runRollbackHostPatchMatrix() {
   ].includes(name));
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
-    ["current", current, true, 2],
+    ["current", current, true, 3],
+    ["revision2Current", current, true, 2],
     ["legacyCurrent", current, true],
+    ["revisionOne", current, true, 1],
+    ["revisionFour", current, true, 4],
     ["previous", previous, true],
     ["legacy", legacy, false],
     ["previousMissingBridge", previous, false],
@@ -271,14 +274,22 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$PatchProfile,
         [Parameter(Mandatory = $true)][int]$ExpectedConfigWriteBridgeCount,
+        [Parameter(Mandatory = $true)][int]$ExpectedPrimaryWindowDeferredRestoreRepaintCount,
         [Parameter(Mandatory = $true)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
         [Parameter(Mandatory = $true)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
         [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
-    if ($actualConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -or
-        $ExpectedPrimaryWindowFocusRestoreRepaintCount -ne 1 -or
-        $ExpectedLegacyPrimaryWindowRestoreRepaintCount -ne 0) {
+    $shapeMatches = if ($ExpectedHostPatchRevision -eq 3) {
+        $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 1 -and
+        $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 0 -and
+        $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
+    } else {
+        $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 0 -and
+        $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 1 -and
+        $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
+    }
+    if ($actualConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -or -not $shapeMatches) {
         throw "fixture ASAR contract mismatch"
     }
 }
@@ -536,10 +547,12 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.doesNotMatch(previousCriticalPatches, /app-server-managed-session-flags|settings-external-links/);
   assert.doesNotMatch(legacyWithoutConfigWriteCriticalPatches, /expectedCriticalPatches|Where-Object|config-write|app-server-managed-session-flags|settings-external-links/);
   assert.match(validator, /currentManifestCompatible/);
+  assert.match(validator, /revision2ManifestCompatible/);
   assert.match(validator, /previousManifestCompatible/);
   assert.match(validator, /legacyWithoutConfigWriteManifestCompatible/);
   assert.doesNotMatch(validator, /legacyCurrentManifestCompatible/);
-  assert.match(validator, /if\s*\(\$currentManifestCompatible\s+-or\s+\$previousManifestCompatible\)/);
+  assert.match(validator, /if\s*\(\$currentManifestCompatible\)\s*\{/);
+  assert.match(validator, /elseif\s*\(\$revision2ManifestCompatible\)\s*\{/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   for (const marker of [
@@ -575,14 +588,17 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   ]) {
     assert.match(validator, new RegExp(`"${patchName}"`));
   }
+  assert.match(asarValidator, /\[int\]\$ExpectedPrimaryWindowDeferredRestoreRepaintCount/);
   assert.match(asarValidator, /\[int\]\$ExpectedPrimaryWindowFocusRestoreRepaintCount/);
   assert.match(asarValidator, /\[int\]\$ExpectedLegacyPrimaryWindowRestoreRepaintCount/);
   assert.match(asarValidator, /primaryFocusRestoreRepaintPattern/);
+  assert.match(asarValidator, /primaryDeferredRestoreRepaintPattern/);
+  assert.match(asarValidator, /\$primaryDeferredRestoreRepaintPattern\)\.Count -ne \$ExpectedPrimaryWindowDeferredRestoreRepaintCount/);
   assert.match(asarValidator, /\$primaryFocusRestoreRepaintPattern\)\.Count -ne \$ExpectedPrimaryWindowFocusRestoreRepaintCount/);
   assert.match(asarValidator, /anyPrimaryWindowRepaintPattern/);
-  assert.match(asarValidator, /\$anyPrimaryWindowRepaintPattern\)\.Count -ne \(\$ExpectedPrimaryWindowFocusRestoreRepaintCount \+ \$ExpectedLegacyPrimaryWindowRestoreRepaintCount\)/);
-  assert.match(validator, /-ExpectedPrimaryWindowFocusRestoreRepaintCount 1[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 0/);
-  assert.match(validator, /-ExpectedPrimaryWindowFocusRestoreRepaintCount 0[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 1/);
+  assert.match(asarValidator, /\$anyPrimaryWindowRepaintPattern\)\.Count -ne \(\$ExpectedPrimaryWindowDeferredRestoreRepaintCount \+ \$ExpectedPrimaryWindowFocusRestoreRepaintCount \+ \$ExpectedLegacyPrimaryWindowRestoreRepaintCount\)/);
+  assert.match(validator, /-ExpectedPrimaryWindowDeferredRestoreRepaintCount 1[\s\S]*?-ExpectedPrimaryWindowFocusRestoreRepaintCount 0[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 0/);
+  assert.match(validator, /-ExpectedPrimaryWindowDeferredRestoreRepaintCount 0[\s\S]*?-ExpectedPrimaryWindowFocusRestoreRepaintCount 1[\s\S]*?-ExpectedLegacyPrimaryWindowRestoreRepaintCount 0/);
   assert.match(validator, /resources\\codex-tray\.ico/);
   assert.match(validator, /trayIcon/);
   assert.match(validator, /Get-AntiCodexSha256/);
@@ -619,15 +635,15 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const missingAccountMessagePatch = currentSettingsPatch.replace("message:m.account", "missing:m.account");
     const missingSecurityMessagePatch = currentSettingsPatch.replace("message:m.securitySettings", "missing:m.securitySettings");
     const previousSettingsPatch = 'q={/*anticodex-local-settings-only*/};Z.securitySettings.message';
-    const hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
-    const restoreOnlyHook = hook.replace(",n()", "");
-    const focusOnlyHook = hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
+    const revision2Hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
+    const hook = revision2Hook.replace(",n()", "");
+    const focusOnlyHook = revision2Hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
     const legacyRestoreOnlyHook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
     const paths = {
       zero: join(fixture, "zero.asar"),
       one: join(fixture, "one.asar"),
       two: join(fixture, "two.asar"),
-      restoreOnly: join(fixture, "restore-only.asar"),
+      revision2: join(fixture, "revision2.asar"),
       focusOnly: join(fixture, "focus-only.asar"),
       splitCross: join(fixture, "split-cross.asar"),
       legacyRestoreOnly: join(fixture, "legacy-restore-only.asar"),
@@ -640,13 +656,13 @@ test("rollback patch compatibility accepts the current and supported predecessor
       previousSettings: join(fixture, "previous-settings.asar"),
     };
     writeFileSync(paths.zero, patchedBase);
-    writeFileSync(paths.one, `${patchedBase};${hook}`);
+    writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch}`);
     writeFileSync(paths.two, `${patchedBase};${hook};${hook}`);
-    writeFileSync(paths.restoreOnly, `${patchedBase};${restoreOnlyHook}`);
+    writeFileSync(paths.revision2, `${patchedBase};${revision2Hook};${currentSettingsPatch}`);
     writeFileSync(paths.focusOnly, `${patchedBase};${focusOnlyHook}`);
-    writeFileSync(paths.splitCross, `${patchedBase};${focusOnlyHook};${restoreOnlyHook}`);
+    writeFileSync(paths.splitCross, `${patchedBase};${focusOnlyHook};${hook}`);
     writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
-    writeFileSync(paths.missingConfigBridge, `${base};${hook}`);
+    writeFileSync(paths.missingConfigBridge, `${base};${revision2Hook}`);
     writeFileSync(paths.duplicateConfigBridge, `${patchedBase};${configWriteBridge};${hook}`);
     writeFileSync(paths.currentSettings, `${patchedBase};${hook};${currentSettingsPatch}`);
     writeFileSync(paths.paddedCurrentSettings, `${patchedBase};${hook};${paddedCurrentSettingsPatch}`);
@@ -658,9 +674,9 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
 ${asarValidator}
 ${patchSetValidator}
-function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedCurrent, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
+function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDeferred, [int]$ExpectedFocusRestore, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
     try {
-        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedCurrent -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore -ExpectedHostPatchRevision $ExpectedHostPatchRevision
+        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowDeferredRestoreRepaintCount $ExpectedDeferred -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedFocusRestore -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore -ExpectedHostPatchRevision $ExpectedHostPatchRevision
         return $true
     } catch {
         return $false
@@ -670,25 +686,27 @@ $current = @("package-json","webview-html-title","app-name","app-user-model-id",
 $previous = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
 $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
 [pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0
-    currentRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 1 1 0
-    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0
-    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0
-    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0
-    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0
-    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 2
-    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 2
-    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 2
-    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 2
-    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 2
-    legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 1 0
-    predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 1 0
-    previousNoHook = Accept-Asar ${quote(paths.zero)} 0 1 0
-    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 1 0
-    previousUnexpectedRestoreOnlyHook = Accept-Asar ${quote(paths.restoreOnly)} 0 1 0
-    previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 1 0
+    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0 0 3
+    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 3
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0 0 3
+    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 1 0 0 3
+    revision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 1 0 2
+    revision2RejectsCurrent = Accept-Asar ${quote(paths.one)} 1 0 1 0 2
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0 0 3
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0 0 3
+    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0 0 3
+    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0 0 3
+    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 0 3
+    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 0 3
+    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 0 3
+    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 0 3
+    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 0 3
+    legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 0 1 0
+    predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 0 1 0
+    previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0 1 0
+    previousUnexpectedHook = Accept-Asar ${quote(paths.one)} 0 0 1 0
+    previousUnexpectedRevision2Hook = Accept-Asar ${quote(paths.revision2)} 0 0 1 0
+    previousUnexpectedFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 0 0 1 0
     currentManifest = Test-AntiCodexCriticalPatchSet -Recorded $current -Expected $current
     previousManifest = Test-AntiCodexCriticalPatchSet -Recorded $previous -Expected $previous
     legacyWithoutConfigWriteManifest = Test-AntiCodexCriticalPatchSet -Recorded $legacyWithoutConfigWrite -Expected $legacyWithoutConfigWrite
@@ -705,7 +723,9 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-
       currentHook: true,
       currentMissingHook: false,
       currentDuplicateHook: false,
-      currentRestoreOnlyHook: false,
+      currentRevision2Hook: false,
+      revision2Hook: true,
+      revision2RejectsCurrent: false,
       currentFocusOnlyHook: false,
       currentSplitCrossHook: false,
       currentMissingConfigBridge: false,
@@ -719,7 +739,7 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-
       predecessorRejectsCurrent: false,
       previousNoHook: false,
       previousUnexpectedHook: false,
-      previousUnexpectedRestoreOnlyHook: false,
+      previousUnexpectedRevision2Hook: false,
       previousUnexpectedFocusOnlyHook: false,
       currentManifest: true,
       previousManifest: true,
@@ -739,7 +759,10 @@ test("complete rollback host validation maps immutable predecessor matrices to t
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
       current: true,
+      revision2Current: true,
       legacyCurrent: false,
+      revisionOne: false,
+      revisionFour: false,
       previous: true,
       legacy: true,
       previousMissingBridge: false,

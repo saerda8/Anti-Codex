@@ -326,7 +326,7 @@ test("keeps Codex's official primary BrowserWindow throttling policy", () => {
   assert.doesNotMatch(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
 });
 
-test("repaints the primary window on focus before restore without changing bundle size", () => {
+test("defers the primary-window repaint until restore without changing bundle size", () => {
   const method = "trackPrimaryWindow(e){this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
   const source = `before:${method}:after`;
 
@@ -338,7 +338,7 @@ test("repaints the primary window on focus before restore without changing bundl
   assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(patched), true);
   assert.equal((patchedMethod.match(/on\(`restore`/g) || []).length, 1);
   assert.match(patchedMethod, /let t=.*?,n=\(\)=>\{try\{e\.webContents\.invalidate\(\)\}catch\{\}\};/);
-  assert.match(patchedMethod, /on\(`focus`,\(\)=>\{[^}]*n\(\)\}\)/);
+  assert.doesNotMatch(patchedMethod, /on\(`focus`,\(\)=>\{[^}]*n\(\)\}\)/);
   assert.match(patchedMethod, /on\(`restore`,\(\)=>setImmediate\(n\)\)/);
   assert.equal((patchedMethod.match(/webContents\.invalidate/g) ?? []).length, 1);
   assert.doesNotMatch(patchedMethod, /on\(`(?:show|hide)`[^}]*invalidate/);

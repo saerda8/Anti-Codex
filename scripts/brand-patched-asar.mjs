@@ -26,7 +26,7 @@ import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.m
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 2;
+const hostPatchRevision = 3;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
