@@ -12,6 +12,19 @@ function Normalize-AntiCodexPath {
     return [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
+function Get-AntiCodexSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
+}
+
 $installRootFull = Normalize-AntiCodexPath -Path $InstallRoot
 $stateRootFull = Normalize-AntiCodexPath -Path $StateRoot
 $expectedInstallRoot = Normalize-AntiCodexPath -Path (Join-Path $env:LOCALAPPDATA "Anti-Codex")
@@ -42,8 +55,8 @@ $runtimeRoot = Join-Path $stateRootFull "runtime"
 $targetPath = Join-Path $stateRootFull "anticodex_mcp_leak_guard.py"
 [IO.Directory]::CreateDirectory($runtimeRoot) | Out-Null
 Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
-$sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
-$targetHash = (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$sourceHash = Get-AntiCodexSha256 -Path $sourcePath
+$targetHash = Get-AntiCodexSha256 -Path $targetPath
 if ($sourceHash -ne $targetHash) {
     throw "Anti-Codex MCP leak guard copy verification failed"
 }
