@@ -1,835 +1,1045 @@
 {
-  "schema": "anticodex-codexplusplus-runtime-isolation-v1",
-  "runId": "r1784901731768-1c39cd43",
-  "generatedAtUtc": "2026-07-24T14:02:38.3239104Z",
-  "startedAtUtc": "2026-07-24T14:02:11.7681930Z",
-  "finishedAtUtc": "2026-07-24T14:02:38.3248916Z",
-  "ok": true,
-  "noModelTraffic": true,
-  "launcher": {
-    "path": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\components\\codexplusplus\\codex-plus-plus.exe",
-    "sha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-    "patchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a"
-  },
-  "candidate": {
-    "root": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate",
-    "appDir": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app",
-    "executable": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe"
-  },
-  "ports": {
-    "debug": 59171,
-    "helper": 59172,
-    "protocolProxy": 59173,
-    "launcherGuard": 59174,
-    "managerGuard": 59175
-  },
-  "isolatedPaths": {
-    "root": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch",
-    "state": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\codex-plus-state",
-    "codexHome": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\codex-home",
-    "appData": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\appdata",
-    "localAppData": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\localappdata",
-    "userData": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\electron-user-data",
-    "temp": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\temp",
-    "antiCodexState": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\anticodex-state"
-  },
-  "invalidSelectorExitCode": 1,
-  "checks": [
-    {
-      "id": "current_release_binding_available",
-      "ok": true,
-      "evidence": {
-        "schema": "anticodex-release-binding-v1",
-        "valid": true,
-        "officialShellVersion": "26.721.3996.0",
-        "activeShellVersion": "26.721.3996.0",
-        "codexPlusPlusVersion": "1.2.39",
-        "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-        "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-        "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-        "codexPlusPlusPatchCount": 9,
-        "syncReadinessSha256": "63a90a52668558e601d6859c2eda5848a73592ef56c314c933cf95ea7092f0db"
-      }
-    },
-    {
-      "id": "candidate_not_running_before_test",
-      "ok": true,
-      "evidence": []
-    },
-    {
-      "id": "original_codex_detected",
-      "ok": true,
-      "evidence": [
-        {
-          "processId": 23124,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-        },
-        {
-          "processId": 24664,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-        },
-        {
-          "processId": 30180,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-        },
-        {
-          "processId": 31368,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-        },
-        {
-          "processId": 33196,
-          "parentProcessId": 8452,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-        },
-        {
-          "processId": 35976,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-        },
-        {
-          "processId": 36296,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-        },
-        {
-          "processId": 38088,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-        },
-        {
-          "processId": 34972,
-          "parentProcessId": 33196,
-          "name": "codex.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-          "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-        }
-      ]
-    },
-    {
-      "id": "invalid_executable_rejected",
-      "ok": true,
-      "evidence": {
-        "exited": true,
-        "exitCode": 1
-      }
-    },
-    {
-      "id": "invalid_probe_original_processes_unchanged",
-      "ok": true,
-      "evidence": null
-    },
-    {
-      "id": "launcher_remained_running",
-      "ok": true,
-      "evidence": {
-        "processId": 20840
-      }
-    },
-    {
-      "id": "candidate_process_exact_path",
-      "ok": true,
-      "evidence": [
-        {
-          "processId": 8428,
-          "parentProcessId": 39608,
-          "name": "Anti-Codex.exe",
-          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-          "createdAtUtc": "2026-07-24T14:02:20.4855572Z"
-        },
-        {
-          "processId": 39608,
-          "parentProcessId": 20840,
-          "name": "Anti-Codex.exe",
-          "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-          "createdAtUtc": "2026-07-24T14:02:15.3797218Z"
-        }
-      ]
-    },
-    {
-      "id": "candidate_parent_is_launcher",
-      "ok": true,
-      "evidence": {
-        "launcherProcessId": 20840
-      }
-    },
-    {
-      "id": "isolated_status_path",
-      "ok": true,
-      "evidence": {
-        "status": "running",
-        "message": "Codex++ launcher ready",
-        "started_at_ms": 1784901740475,
-        "debug_port": 59171,
-        "helper_port": 59172,
-        "codex_app": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app"
-      }
-    },
-    {
-      "id": "isolated_user_data_written",
-      "ok": true,
-      "evidence": {
-        "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\electron-user-data",
-        "exists": true,
-        "fileCount": 116,
-        "totalBytes": 6371974,
-        "samples": [
-          {
-            "relativePath": "BrowserMetrics\\BrowserMetrics-6A63706C-9AB8.pma",
-            "length": 4194304,
-            "lastWriteTimeUtc": "2026-07-24T14:02:20.9503396Z"
-          },
-          {
-            "relativePath": "Crashpad\\settings.dat",
-            "length": 40,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.4136427Z"
-          },
-          {
-            "relativePath": "Default\\Account Web Data",
-            "length": 77824,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.5021388Z"
-          },
-          {
-            "relativePath": "Default\\Account Web Data-journal",
-            "length": 0,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.5041380Z"
-          },
-          {
-            "relativePath": "Default\\Affiliation Database",
-            "length": 53248,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.4991378Z"
-          },
-          {
-            "relativePath": "Default\\Affiliation Database-journal",
-            "length": 0,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.5011380Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\Cache_Data\\data_0",
-            "length": 45056,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.7915215Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\Cache_Data\\data_1",
-            "length": 270336,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.7909575Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\Cache_Data\\data_2",
-            "length": 8192,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.7817758Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\Cache_Data\\data_3",
-            "length": 8192,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.7850400Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\Cache_Data\\index",
-            "length": 524656,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.7671963Z"
-          },
-          {
-            "relativePath": "Default\\Cache\\No_Vary_Search\\journal.baj",
-            "length": 0,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.8002423Z"
-          }
-        ]
-      }
-    },
-    {
-      "id": "isolated_codex_home_written",
-      "ok": true,
-      "evidence": {
-        "path": "C:\\Users\\XD\\AppData\\Local\\Temp\\AntiCodex-CodexPlusPlus-Isolation\\r1784901731768-1c39cd43\\valid-launch\\codex-home",
-        "exists": true,
-        "fileCount": 3,
-        "totalBytes": 99318,
-        "samples": [
-          {
-            "relativePath": ".codex-global-state.json",
-            "length": 507,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.8424663Z"
-          },
-          {
-            "relativePath": ".codex-global-state.json.bak",
-            "length": 507,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.8444654Z"
-          },
-          {
-            "relativePath": "sqlite\\codex-dev.db",
-            "length": 98304,
-            "lastWriteTimeUtc": "2026-07-24T14:02:21.6081930Z"
-          }
-        ]
-      }
-    },
-    {
-      "id": "original_processes_unchanged",
-      "ok": true,
-      "evidence": {
-        "before": [
-          {
-            "processId": 23124,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-          },
-          {
-            "processId": 24664,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-          },
-          {
-            "processId": 30180,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-          },
-          {
-            "processId": 31368,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-          },
-          {
-            "processId": 33196,
-            "parentProcessId": 8452,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-          },
-          {
-            "processId": 35976,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-          },
-          {
-            "processId": 36296,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-          },
-          {
-            "processId": 38088,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-          },
-          {
-            "processId": 34972,
-            "parentProcessId": 33196,
-            "name": "codex.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-            "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-          }
-        ],
-        "during": [
-          {
-            "processId": 23124,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-          },
-          {
-            "processId": 24664,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-          },
-          {
-            "processId": 30180,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-          },
-          {
-            "processId": 31368,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-          },
-          {
-            "processId": 33196,
-            "parentProcessId": 8452,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-          },
-          {
-            "processId": 35976,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-          },
-          {
-            "processId": 36296,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-          },
-          {
-            "processId": 38088,
-            "parentProcessId": 33196,
-            "name": "ChatGPT.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-            "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-          },
-          {
-            "processId": 34972,
-            "parentProcessId": 33196,
-            "name": "codex.exe",
-            "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-            "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-          }
-        ]
-      }
-    },
-    {
-      "id": "existing_anticodex_processes_unchanged",
-      "ok": true,
-      "evidence": {
-        "before": [],
-        "during": []
-      }
-    },
-    {
-      "id": "original_files_unchanged",
-      "ok": true,
-      "evidence": null
-    },
-    {
-      "id": "default_codexplus_state_unchanged",
-      "ok": true,
-      "evidence": {
-        "path": "C:\\Users\\XD\\.codex-session-delete",
-        "exists": true,
-        "files": [
-          {
-            "relativePath": "codex-plus.log",
-            "length": 182433,
-            "lastWriteTimeUtc": "2026-07-20T01:09:47.4392106Z"
-          },
-          {
-            "relativePath": "latest-status.json",
-            "length": 307,
-            "lastWriteTimeUtc": "2026-07-18T03:04:33.3326232Z"
-          },
-          {
-            "relativePath": "locks\\loopback-port-57476.lock",
-            "length": 0,
-            "lastWriteTimeUtc": "2026-07-14T18:55:49.0067166Z"
-          }
-        ]
-      }
-    },
-    {
-      "id": "global_watcher_unchanged",
-      "ok": true,
-      "evidence": {
-        "registryValue": null,
-        "startupShortcut": {
-          "path": "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexPlusPlusWatcher.lnk",
-          "exists": false,
-          "metadataOnly": true
-        }
-      }
-    },
-    {
-      "id": "persistent_environment_unchanged",
-      "ok": true,
-      "evidence": [
-        {
-          "name": "CODEX_PLUS_STATE_DIR",
-          "user": null,
-          "machine": null
-        },
-        {
-          "name": "CODEX_PLUS_APP_EXECUTABLE",
-          "user": null,
-          "machine": null
-        },
-        {
-          "name": "CODEX_PLUS_PROTOCOL_PROXY_PORT",
-          "user": null,
-          "machine": null
-        },
-        {
-          "name": "CODEX_PLUS_LAUNCHER_GUARD_PORT",
-          "user": null,
-          "machine": null
-        },
-        {
-          "name": "CODEX_PLUS_MANAGER_GUARD_PORT",
-          "user": null,
-          "machine": null
-        },
-        {
-          "name": "CODEX_HOME",
-          "user": null,
-          "machine": null
-        }
-      ]
-    },
-    {
-      "id": "test_processes_cleaned",
-      "ok": true,
-      "evidence": {
-        "remaining": [],
-        "error": ""
-      }
-    },
-    {
-      "id": "original_processes_unchanged_after_cleanup",
-      "ok": true,
-      "evidence": [
-        {
-          "processId": 23124,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-        },
-        {
-          "processId": 24664,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-        },
-        {
-          "processId": 30180,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-        },
-        {
-          "processId": 31368,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-        },
-        {
-          "processId": 33196,
-          "parentProcessId": 8452,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-        },
-        {
-          "processId": 35976,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-        },
-        {
-          "processId": 36296,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-        },
-        {
-          "processId": 38088,
-          "parentProcessId": 33196,
-          "name": "ChatGPT.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-          "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-        },
-        {
-          "processId": 34972,
-          "parentProcessId": 33196,
-          "name": "codex.exe",
-          "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-          "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-        }
-      ]
-    },
-    {
-      "id": "existing_anticodex_unchanged_after_cleanup",
-      "ok": true,
-      "evidence": []
-    },
-    {
-      "id": "stable_original_state_unchanged_after_cleanup",
-      "ok": true,
-      "evidence": null
-    },
-    {
-      "id": "run_artifacts_cleaned",
-      "ok": true,
-      "evidence": {
-        "removed": true,
-        "attempts": 1,
-        "lastError": ""
-      }
-    }
-  ],
-  "failedCheckIds": [],
-  "failure": null,
-  "releaseBinding": {
-    "schema": "anticodex-release-binding-v1",
-    "valid": true,
-    "officialShellVersion": "26.721.3996.0",
-    "activeShellVersion": "26.721.3996.0",
-    "codexPlusPlusVersion": "1.2.39",
-    "codexPlusPlusPatchCommit": "36068438997136b8ebe3de1b8fc56a410b72977a",
-    "codexPlusPlusBinarySha256": "b54f634bb77294c1a931fd283daee47822ec21c75354edc2bba13d4ac3033136",
-    "codexPlusPlusPatchTreeSha256": "7e2c022aa3a723c373fab88393312e8bb3f61c31071e0a7e4c57944e91e34063",
-    "codexPlusPlusPatchCount": 9,
-    "syncReadinessSha256": "63a90a52668558e601d6859c2eda5848a73592ef56c314c933cf95ea7092f0db"
-  },
-  "processEvidence": {
-    "originalBefore": [
-      {
-        "processId": 23124,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-      },
-      {
-        "processId": 24664,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-      },
-      {
-        "processId": 30180,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-      },
-      {
-        "processId": 31368,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-      },
-      {
-        "processId": 33196,
-        "parentProcessId": 8452,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-      },
-      {
-        "processId": 35976,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-      },
-      {
-        "processId": 36296,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-      },
-      {
-        "processId": 38088,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-      },
-      {
-        "processId": 34972,
-        "parentProcessId": 33196,
-        "name": "codex.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-        "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-      }
-    ],
-    "originalDuring": [
-      {
-        "processId": 23124,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-      },
-      {
-        "processId": 24664,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-      },
-      {
-        "processId": 30180,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-      },
-      {
-        "processId": 31368,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-      },
-      {
-        "processId": 33196,
-        "parentProcessId": 8452,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-      },
-      {
-        "processId": 35976,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-      },
-      {
-        "processId": 36296,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-      },
-      {
-        "processId": 38088,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-      },
-      {
-        "processId": 34972,
-        "parentProcessId": 33196,
-        "name": "codex.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-        "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-      }
-    ],
-    "originalAfter": [
-      {
-        "processId": 23124,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6753139Z"
-      },
-      {
-        "processId": 24664,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:50.7786614Z"
-      },
-      {
-        "processId": 30180,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:46.6746571Z"
-      },
-      {
-        "processId": 31368,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7560152Z"
-      },
-      {
-        "processId": 33196,
-        "parentProcessId": 8452,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:40.8426050Z"
-      },
-      {
-        "processId": 35976,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7382580Z"
-      },
-      {
-        "processId": 36296,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.7329523Z"
-      },
-      {
-        "processId": 38088,
-        "parentProcessId": 33196,
-        "name": "ChatGPT.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
-        "createdAtUtc": "2026-07-24T13:11:41.0070500Z"
-      },
-      {
-        "processId": 34972,
-        "parentProcessId": 33196,
-        "name": "codex.exe",
-        "executablePath": "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
-        "createdAtUtc": "2026-07-24T13:11:43.5870576Z"
-      }
-    ],
-    "existingAntiBefore": [],
-    "existingAntiDuring": [],
-    "existingAntiAfter": [],
-    "candidateDuring": [
-      {
-        "processId": 8428,
-        "parentProcessId": 39608,
-        "name": "Anti-Codex.exe",
-        "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-        "createdAtUtc": "2026-07-24T14:02:20.4855572Z"
-      },
-      {
-        "processId": 39608,
-        "parentProcessId": 20840,
-        "name": "Anti-Codex.exe",
-        "executablePath": "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
-        "createdAtUtc": "2026-07-24T14:02:15.3797218Z"
-      }
-    ]
-  }
+    "schema":  "anticodex-codexplusplus-runtime-isolation-v1",
+    "runId":  "r1785793421335-8efadb8e",
+    "generatedAtUtc":  "2026-08-03T21:45:08.1196772Z",
+    "startedAtUtc":  "2026-08-03T21:43:41.3351133Z",
+    "finishedAtUtc":  "2026-08-03T21:45:08.1212972Z",
+    "ok":  true,
+    "noModelTraffic":  true,
+    "launcher":  {
+                     "path":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\components\\codexplusplus\\codex-plus-plus.exe",
+                     "sha256":  "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+                     "patchCommit":  "762340c825c64d2e6fffb4f41067fcf117dcd372"
+                 },
+    "candidate":  {
+                      "root":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate",
+                      "appDir":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app",
+                      "executable":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe"
+                  },
+    "ports":  {
+                  "debug":  52656,
+                  "helper":  52657,
+                  "protocolProxy":  52658,
+                  "launcherGuard":  52659,
+                  "managerGuard":  52660
+              },
+    "isolatedPaths":  {
+                          "root":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch",
+                          "state":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-plus-state",
+                          "codexHome":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-home",
+                          "appData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\appdata",
+                          "localAppData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\localappdata",
+                          "userData":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\electron-user-data",
+                          "temp":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\temp",
+                          "antiCodexState":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\anticodex-state"
+                      },
+    "invalidSelectorExitCode":  1,
+    "checks":  [
+                   {
+                       "id":  "current_release_binding_available",
+                       "ok":  true,
+                       "evidence":  {
+                                        "schema":  "anticodex-release-binding-v1",
+                                        "valid":  true,
+                                        "officialShellVersion":  "26.727.6591.0",
+                                        "activeShellVersion":  "26.727.6591.0",
+                                        "codexPlusPlusVersion":  "1.2.44",
+                                        "codexPlusPlusPatchCommit":  "762340c825c64d2e6fffb4f41067fcf117dcd372",
+                                        "codexPlusPlusBinarySha256":  "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+                                        "codexPlusPlusPatchTreeSha256":  "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+                                        "codexPlusPlusPatchCount":  11,
+                                        "syncReadinessSha256":  "94efce46be0c315561cbfe929ac4802d69b5155fb73d4aebd369d739a15cd2e7"
+                                    }
+                   },
+                   {
+                       "id":  "candidate_not_running_before_test",
+                       "ok":  true,
+                       "evidence":  [
+
+                                    ]
+                   },
+                   {
+                       "id":  "original_codex_detected",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "processId":  9028,
+                                            "parentProcessId":  1668,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                        },
+                                        {
+                                            "processId":  9532,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                        },
+                                        {
+                                            "processId":  20820,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                        },
+                                        {
+                                            "processId":  31740,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                        },
+                                        {
+                                            "processId":  33152,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                        },
+                                        {
+                                            "processId":  35704,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                        },
+                                        {
+                                            "processId":  37468,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                        },
+                                        {
+                                            "processId":  40644,
+                                            "parentProcessId":  33152,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                        },
+                                        {
+                                            "processId":  40812,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                        },
+                                        {
+                                            "processId":  26112,
+                                            "parentProcessId":  9028,
+                                            "name":  "codex.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "invalid_executable_rejected",
+                       "ok":  true,
+                       "evidence":  {
+                                        "exited":  true,
+                                        "exitCode":  1
+                                    }
+                   },
+                   {
+                       "id":  "invalid_probe_original_processes_unchanged",
+                       "ok":  true,
+                       "evidence":  null
+                   },
+                   {
+                       "id":  "launcher_remained_running",
+                       "ok":  true,
+                       "evidence":  {
+                                        "processId":  17584
+                                    }
+                   },
+                   {
+                       "id":  "candidate_process_exact_path",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "processId":  3792,
+                                            "parentProcessId":  36372,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:05.4169067Z"
+                                        },
+                                        {
+                                            "processId":  26300,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:06.0333112Z"
+                                        },
+                                        {
+                                            "processId":  29380,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:07.9815199Z"
+                                        },
+                                        {
+                                            "processId":  29796,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:06.0983245Z"
+                                        },
+                                        {
+                                            "processId":  31440,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:07.9826924Z"
+                                        },
+                                        {
+                                            "processId":  35760,
+                                            "parentProcessId":  17584,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:05.3367778Z"
+                                        },
+                                        {
+                                            "processId":  36372,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:05.3746520Z"
+                                        },
+                                        {
+                                            "processId":  36828,
+                                            "parentProcessId":  35760,
+                                            "name":  "Anti-Codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:06.0402410Z"
+                                        },
+                                        {
+                                            "processId":  31388,
+                                            "parentProcessId":  35760,
+                                            "name":  "codex.exe",
+                                            "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe",
+                                            "createdAtUtc":  "2026-08-03T21:44:07.0062467Z"
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "candidate_parent_is_launcher",
+                       "ok":  true,
+                       "evidence":  {
+                                        "launcherProcessId":  17584
+                                    }
+                   },
+                   {
+                       "id":  "isolated_status_path",
+                       "ok":  true,
+                       "evidence":  {
+                                        "status":  "running",
+                                        "message":  "Codex++ launcher ready",
+                                        "started_at_ms":  1785793445365,
+                                        "debug_port":  52656,
+                                        "helper_port":  52657,
+                                        "codex_app":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app"
+                                    }
+                   },
+                   {
+                       "id":  "isolated_user_data_written",
+                       "ok":  true,
+                       "evidence":  {
+                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\electron-user-data",
+                                        "exists":  true,
+                                        "fileCount":  324,
+                                        "totalBytes":  30554153,
+                                        "samples":  [
+                                                        {
+                                                            "relativePath":  "BrowserMetrics\\BrowserMetrics-6A710BA5-8BB0.pma",
+                                                            "length":  4194304,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:05.5265815Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Crashpad\\settings.dat",
+                                                            "length":  40,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.0380461Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Account Web Data",
+                                                            "length":  77824,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2713800Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Account Web Data-journal",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2785036Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Affiliation Database",
+                                                            "length":  53248,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2460880Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\Affiliation Database-journal",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:06.2498409Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\AutofillAiModelCache\\LOCK",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5513807Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\AutofillAiModelCache\\LOG",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5503815Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\AutofillStrikeDatabase\\LOCK",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5553805Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\AutofillStrikeDatabase\\LOG",
+                                                            "length":  0,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5543797Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\BookmarkMergedSurfaceOrdering",
+                                                            "length":  6,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5292276Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  "Default\\BrowsingTopicsSiteData",
+                                                            "length":  28672,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:11.5643785Z"
+                                                        }
+                                                    ]
+                                    }
+                   },
+                   {
+                       "id":  "isolated_codex_home_written",
+                       "ok":  true,
+                       "evidence":  {
+                                        "path":  "C:\\Users\\XD\\AppData\\Local\\Temp\\ac-g1\\r1785793421335-8efadb8e\\valid-launch\\codex-home",
+                                        "exists":  true,
+                                        "fileCount":  4041,
+                                        "totalBytes":  547664799,
+                                        "samples":  [
+                                                        {
+                                                            "relativePath":  ".codex-global-state.json",
+                                                            "length":  939,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.2967862Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".codex-global-state.json.bak",
+                                                            "length":  939,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.2989965Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\.agents\\plugins\\marketplace.json",
+                                                            "length":  1443,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:13.3355953Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\.materialization-key",
+                                                            "length":  429,
+                                                            "lastWriteTimeUtc":  "2026-08-03T21:44:15.3862369Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\.codex-plugin\\plugin.json",
+                                                            "length":  2193,
+                                                            "lastWriteTimeUtc":  "2026-08-01T02:11:30.9795265Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\browser.png",
+                                                            "length":  9692,
+                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7883983Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\composer-icon.png",
+                                                            "length":  624,
+                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7889219Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\google-chrome.png",
+                                                            "length":  113744,
+                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.9522591Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\assets\\microsoft-edge.svg",
+                                                            "length":  4450,
+                                                            "lastWriteTimeUtc":  "2026-08-01T02:11:30.9795265Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\all-tabs-cleanup.md",
+                                                            "length":  282,
+                                                            "lastWriteTimeUtc":  "2026-07-10T15:53:36.7889219Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\api.json",
+                                                            "length":  53368,
+                                                            "lastWriteTimeUtc":  "2026-07-23T22:27:17.8722050Z"
+                                                        },
+                                                        {
+                                                            "relativePath":  ".tmp\\bundled-marketplaces\\openai-bundled\\plugins\\browser\\docs\\api-use-behavior.md",
+                                                            "length":  3730,
+                                                            "lastWriteTimeUtc":  "2026-07-23T22:27:17.8716749Z"
+                                                        }
+                                                    ]
+                                    }
+                   },
+                   {
+                       "id":  "original_processes_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+                                                       {
+                                                           "processId":  9028,
+                                                           "parentProcessId":  1668,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                                       },
+                                                       {
+                                                           "processId":  9532,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                                       },
+                                                       {
+                                                           "processId":  20820,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                                       },
+                                                       {
+                                                           "processId":  31740,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                                       },
+                                                       {
+                                                           "processId":  33152,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                                       },
+                                                       {
+                                                           "processId":  35704,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                                       },
+                                                       {
+                                                           "processId":  37468,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                                       },
+                                                       {
+                                                           "processId":  40644,
+                                                           "parentProcessId":  33152,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                                       },
+                                                       {
+                                                           "processId":  40812,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                                       },
+                                                       {
+                                                           "processId":  26112,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "codex.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                                       }
+                                                   ],
+                                        "during":  [
+                                                       {
+                                                           "processId":  9028,
+                                                           "parentProcessId":  1668,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                                       },
+                                                       {
+                                                           "processId":  9532,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                                       },
+                                                       {
+                                                           "processId":  20820,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                                       },
+                                                       {
+                                                           "processId":  31740,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                                       },
+                                                       {
+                                                           "processId":  33152,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                                       },
+                                                       {
+                                                           "processId":  35704,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                                       },
+                                                       {
+                                                           "processId":  37468,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                                       },
+                                                       {
+                                                           "processId":  40644,
+                                                           "parentProcessId":  33152,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                                       },
+                                                       {
+                                                           "processId":  40812,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "ChatGPT.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                                       },
+                                                       {
+                                                           "processId":  26112,
+                                                           "parentProcessId":  9028,
+                                                           "name":  "codex.exe",
+                                                           "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                           "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                                       }
+                                                   ]
+                                    }
+                   },
+                   {
+                       "id":  "existing_anticodex_processes_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "before":  [
+
+                                                   ],
+                                        "during":  [
+
+                                                   ]
+                                    }
+                   },
+                   {
+                       "id":  "original_files_unchanged",
+                       "ok":  true,
+                       "evidence":  null
+                   },
+                   {
+                       "id":  "default_codexplus_state_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "path":  "C:\\Users\\XD\\.codex-session-delete",
+                                        "exists":  true,
+                                        "files":  [
+                                                      {
+                                                          "relativePath":  "codex-plus.log",
+                                                          "length":  182433,
+                                                          "lastWriteTimeUtc":  "2026-07-20T01:09:47.4392106Z"
+                                                      },
+                                                      {
+                                                          "relativePath":  "latest-status.json",
+                                                          "length":  307,
+                                                          "lastWriteTimeUtc":  "2026-07-18T03:04:33.3326232Z"
+                                                      },
+                                                      {
+                                                          "relativePath":  "locks\\loopback-port-57476.lock",
+                                                          "length":  0,
+                                                          "lastWriteTimeUtc":  "2026-07-14T18:55:49.0067166Z"
+                                                      }
+                                                  ]
+                                    }
+                   },
+                   {
+                       "id":  "global_watcher_unchanged",
+                       "ok":  true,
+                       "evidence":  {
+                                        "registryValue":  null,
+                                        "startupShortcut":  {
+                                                                "path":  "C:\\Users\\XD\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexPlusPlusWatcher.lnk",
+                                                                "exists":  false,
+                                                                "metadataOnly":  true
+                                                            }
+                                    }
+                   },
+                   {
+                       "id":  "persistent_environment_unchanged",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "name":  "CODEX_PLUS_STATE_DIR",
+                                            "user":  null,
+                                            "machine":  null
+                                        },
+                                        {
+                                            "name":  "CODEX_PLUS_APP_EXECUTABLE",
+                                            "user":  null,
+                                            "machine":  null
+                                        },
+                                        {
+                                            "name":  "CODEX_PLUS_PROTOCOL_PROXY_PORT",
+                                            "user":  null,
+                                            "machine":  null
+                                        },
+                                        {
+                                            "name":  "CODEX_PLUS_LAUNCHER_GUARD_PORT",
+                                            "user":  null,
+                                            "machine":  null
+                                        },
+                                        {
+                                            "name":  "CODEX_PLUS_MANAGER_GUARD_PORT",
+                                            "user":  null,
+                                            "machine":  null
+                                        },
+                                        {
+                                            "name":  "CODEX_HOME",
+                                            "user":  null,
+                                            "machine":  null
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "test_processes_cleaned",
+                       "ok":  true,
+                       "evidence":  {
+                                        "remaining":  [
+
+                                                      ],
+                                        "error":  ""
+                                    }
+                   },
+                   {
+                       "id":  "original_processes_unchanged_after_cleanup",
+                       "ok":  true,
+                       "evidence":  [
+                                        {
+                                            "processId":  9028,
+                                            "parentProcessId":  1668,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                        },
+                                        {
+                                            "processId":  9532,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                        },
+                                        {
+                                            "processId":  20820,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                        },
+                                        {
+                                            "processId":  31740,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                        },
+                                        {
+                                            "processId":  33152,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                        },
+                                        {
+                                            "processId":  35704,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                        },
+                                        {
+                                            "processId":  37468,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                        },
+                                        {
+                                            "processId":  40644,
+                                            "parentProcessId":  33152,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                        },
+                                        {
+                                            "processId":  40812,
+                                            "parentProcessId":  9028,
+                                            "name":  "ChatGPT.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                        },
+                                        {
+                                            "processId":  26112,
+                                            "parentProcessId":  9028,
+                                            "name":  "codex.exe",
+                                            "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                            "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                        }
+                                    ]
+                   },
+                   {
+                       "id":  "existing_anticodex_unchanged_after_cleanup",
+                       "ok":  true,
+                       "evidence":  [
+
+                                    ]
+                   },
+                   {
+                       "id":  "stable_original_state_unchanged_after_cleanup",
+                       "ok":  true,
+                       "evidence":  null
+                   },
+                   {
+                       "id":  "run_artifacts_cleaned",
+                       "ok":  true,
+                       "evidence":  {
+                                        "removed":  true,
+                                        "attempts":  1,
+                                        "lastError":  ""
+                                    }
+                   }
+               ],
+    "failedCheckIds":  [
+
+                       ],
+    "failure":  null,
+    "releaseBinding":  {
+                           "schema":  "anticodex-release-binding-v1",
+                           "valid":  true,
+                           "officialShellVersion":  "26.727.6591.0",
+                           "activeShellVersion":  "26.727.6591.0",
+                           "codexPlusPlusVersion":  "1.2.44",
+                           "codexPlusPlusPatchCommit":  "762340c825c64d2e6fffb4f41067fcf117dcd372",
+                           "codexPlusPlusBinarySha256":  "4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+                           "codexPlusPlusPatchTreeSha256":  "895b279b951ae444a4e43fd3eca3c25d7b6aca6d08fb302d3f9d26d61b00629d",
+                           "codexPlusPlusPatchCount":  11,
+                           "syncReadinessSha256":  "94efce46be0c315561cbfe929ac4802d69b5155fb73d4aebd369d739a15cd2e7"
+                       },
+    "processEvidence":  {
+                            "originalBefore":  [
+                                                   {
+                                                       "processId":  9028,
+                                                       "parentProcessId":  1668,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                                   },
+                                                   {
+                                                       "processId":  9532,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                                   },
+                                                   {
+                                                       "processId":  20820,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                                   },
+                                                   {
+                                                       "processId":  31740,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                                   },
+                                                   {
+                                                       "processId":  33152,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                                   },
+                                                   {
+                                                       "processId":  35704,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                                   },
+                                                   {
+                                                       "processId":  37468,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                                   },
+                                                   {
+                                                       "processId":  40644,
+                                                       "parentProcessId":  33152,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                                   },
+                                                   {
+                                                       "processId":  40812,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                                   },
+                                                   {
+                                                       "processId":  26112,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "codex.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                                   }
+                                               ],
+                            "originalDuring":  [
+                                                   {
+                                                       "processId":  9028,
+                                                       "parentProcessId":  1668,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                                   },
+                                                   {
+                                                       "processId":  9532,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                                   },
+                                                   {
+                                                       "processId":  20820,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                                   },
+                                                   {
+                                                       "processId":  31740,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                                   },
+                                                   {
+                                                       "processId":  33152,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                                   },
+                                                   {
+                                                       "processId":  35704,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                                   },
+                                                   {
+                                                       "processId":  37468,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                                   },
+                                                   {
+                                                       "processId":  40644,
+                                                       "parentProcessId":  33152,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                                   },
+                                                   {
+                                                       "processId":  40812,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "ChatGPT.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                                   },
+                                                   {
+                                                       "processId":  26112,
+                                                       "parentProcessId":  9028,
+                                                       "name":  "codex.exe",
+                                                       "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                       "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                                   }
+                                               ],
+                            "originalAfter":  [
+                                                  {
+                                                      "processId":  9028,
+                                                      "parentProcessId":  1668,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:11.2022557Z"
+                                                  },
+                                                  {
+                                                      "processId":  9532,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:21.4666718Z"
+                                                  },
+                                                  {
+                                                      "processId":  20820,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:15.4291535Z"
+                                                  },
+                                                  {
+                                                      "processId":  31740,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:12.0595246Z"
+                                                  },
+                                                  {
+                                                      "processId":  33152,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:11.2888679Z"
+                                                  },
+                                                  {
+                                                      "processId":  35704,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:12.0948363Z"
+                                                  },
+                                                  {
+                                                      "processId":  37468,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:15.4299291Z"
+                                                  },
+                                                  {
+                                                      "processId":  40644,
+                                                      "parentProcessId":  33152,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:11.3185596Z"
+                                                  },
+                                                  {
+                                                      "processId":  40812,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "ChatGPT.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:12.0512332Z"
+                                                  },
+                                                  {
+                                                      "processId":  26112,
+                                                      "parentProcessId":  9028,
+                                                      "name":  "codex.exe",
+                                                      "executablePath":  "C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe",
+                                                      "createdAtUtc":  "2026-08-03T20:24:14.5384077Z"
+                                                  }
+                                              ],
+                            "existingAntiBefore":  [
+
+                                                   ],
+                            "existingAntiDuring":  [
+
+                                                   ],
+                            "existingAntiAfter":  [
+
+                                                  ],
+                            "candidateDuring":  [
+                                                    {
+                                                        "processId":  3792,
+                                                        "parentProcessId":  36372,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:05.4169067Z"
+                                                    },
+                                                    {
+                                                        "processId":  26300,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:06.0333112Z"
+                                                    },
+                                                    {
+                                                        "processId":  29380,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:07.9815199Z"
+                                                    },
+                                                    {
+                                                        "processId":  29796,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:06.0983245Z"
+                                                    },
+                                                    {
+                                                        "processId":  31440,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:07.9826924Z"
+                                                    },
+                                                    {
+                                                        "processId":  35760,
+                                                        "parentProcessId":  17584,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:05.3367778Z"
+                                                    },
+                                                    {
+                                                        "processId":  36372,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:05.3746520Z"
+                                                    },
+                                                    {
+                                                        "processId":  36828,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "Anti-Codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\Anti-Codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:06.0402410Z"
+                                                    },
+                                                    {
+                                                        "processId":  31388,
+                                                        "parentProcessId":  35760,
+                                                        "name":  "codex.exe",
+                                                        "executablePath":  "C:\\Users\\XD\\AppData\\Local\\Anti-Codex\\update-candidate\\codex-patched-app\\resources\\codex.exe",
+                                                        "createdAtUtc":  "2026-08-03T21:44:07.0062467Z"
+                                                    }
+                                                ]
+                        }
 }
