@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v113";
+  const VERSION = "native-panel-v114";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -2134,6 +2134,8 @@
         defaultContent: nativePromptSnapshot.defaultContent,
         effectiveContent: nativePromptSnapshot.effectiveContent,
       } : null);
+      const developer = editor("codexDeveloper", "Codex 开发者提示词");
+      developer.node.append(el("div", { className: "anticodex-result anticodex-warn", text: "只有上方完整合并提示词沿用当前运行时内容时，此层才单独生效；若上方整体被替换或关闭，以整体设置为准。AGENTS.md、环境和真实用户消息不受影响。" }));
       const nativeInstructions = payload.nativeCustomInstructions || { content: "", defaultContent: "" };
       const nativeInstructionsText = el("textarea", {
         style: fieldStyle,
@@ -2167,7 +2169,7 @@
       saveButton.onclick = () => save({
         schema: payload.schema,
         codexSystem: system.value(),
-        codexDeveloper: policy.codexDeveloper || defaults.codexDeveloper,
+        codexDeveloper: developer.value(),
         user: { enabled: userEnabled.checked, content: userText.value },
         nativeCustomInstructions: { content: nativeInstructionsText.value },
       });
@@ -2185,7 +2187,7 @@
       grid.replaceChildren(
         system.node,
         card("本地快照说明", el("div", { className: "anticodex-result anticodex-warn", text: "完整提示词快照只保存在 Anti-Codex 隔离目录；只采集 system/developer 层，不采集 user 消息、AGENTS.md、工具参数或请求密钥。内容可能包含你的个性化和项目规则。" })),
-        card("Codex 开发者提示词", el("div", { className: "anticodex-result anticodex-warn", text: "系统和开发者文案会按实际发送顺序合并为上方一层，不能单独控制；AGENTS.md、环境和真实用户消息是独立 user 项，不受关闭或替换影响。" })),
+        developer.node,
         card("Codex 原生自定义指令 (AGENTS.md)", el("div", { style: "display:grid;gap:9px" }, [
           nativeInstructionsText,
           el("div", { className: "anticodex-result", text: "Gemini、Claude 和第三方模型都沿用这一份隔离配置；留空即关闭。" }),

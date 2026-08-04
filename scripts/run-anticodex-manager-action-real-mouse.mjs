@@ -599,7 +599,8 @@ try {
       "Anti-Codex 附加提示词（Gemini / Claude / 第三方）",
       "模型提供方隐藏提示词",
     ].every((label) => value?.text?.includes(label))
-      && ["保存", "恢复默认", "返回状态"].every((label) => value?.buttons?.includes(label)));
+      && ["保存", "恢复默认", "返回状态"].every((label) => value?.buttons?.includes(label))
+      && value?.textareaCount === 4);
 
     const panelPoint = await evaluate(`(() => {
       const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
@@ -674,7 +675,7 @@ try {
           ? closeScroll.scrollTop > 0 && closeScroll.scrollTop < maxScroll
           : closeScroll.scrollTop >= maxScroll;
       result = {
-        ok: positionOk && promptView.version === "native-panel-v113",
+        ok: positionOk && promptView.version === "native-panel-v114" && promptView.textareaCount === 4,
         port,
         target: { id: target.id, title: target.title, url: target.url },
         profileEntry: settledManagerEntryPoint.text,
@@ -830,7 +831,7 @@ try {
     result = {
       ok: (promptSettingsSaveRestore || (middleScrollTop > initialScrollTop
         && bottomState.scrollTop >= middleScrollTop
-        )) && promptView.version === "native-panel-v113",
+        )) && promptView.version === "native-panel-v114" && promptView.textareaCount === 4,
       port,
       target: { id: target.id, title: target.title, url: target.url },
       profileEntry: settledManagerEntryPoint.text,

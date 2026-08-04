@@ -1675,8 +1675,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v113"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v113"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v114"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v114"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
@@ -1722,12 +1722,14 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(promptSettingsBlock, /只采集 system\/developer 层|只采集 system\/developer 层/);
   assert.match(managerInject, /\u7559\u7a7a\u5373\u5173\u95ed|留空即关闭/);
   assert.match(promptSettingsBlock, /Codex.*\u5b8c\u6574\u5408\u5e76\u63d0\u793a\u8bcd|Codex.*完整合并提示词/);
-  assert.match(managerInject, /\u4e0d\u80fd\u5355\u72ec\u63a7\u5236|不能单独控制/);
-  assert.doesNotMatch(managerInject, /const developer = editor\("codexDeveloper"/);
+  assert.match(promptSettingsBlock, /const developer = editor\("codexDeveloper", "Codex 开发者提示词"\)/);
+  assert.match(promptSettingsBlock, /codexDeveloper: developer\.value\(\)/);
+  assert.match(promptSettingsBlock, /上方完整合并提示词.*沿用当前运行时内容.*此层才单独生效/);
   assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
   assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
   assert.match(managerRealMouseAction, /promptSettingsSaveRestore/);
   assert.match(managerRealMouseAction, /promptClosePosition/);
+  assert.match(managerRealMouseAction, /textareaCount === 4/);
   assert.match(managerRealMouseAction, /\["top", "middle", "bottom"\]/);
   assert.match(managerRealMouseAction, /await sleep\(3_000\)/);
 });

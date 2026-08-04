@@ -318,3 +318,10 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - 当前证据仍与该哈希一致：无提示 ASR 通过，准确率 `0.984127`；五个真实嘴部窗口全部通过；媒体 QA 全通过；事实文件 schema 为 `anticodex-autonomous-video-deliverable-facts-v1`。Gate 8 关闭。
 - 产品收口也已通过：源码总回归 `855/855`，安装态总门、同步准备度、源码/安装态旧架构零命中全部通过；Manager v111 冷启动自动注入，20/20 实鼠标控件通过，真实“检查更新”和“检查安装/同步”返回明确结果。
 - 当前官方 Codex 与 Anti-Codex 均为 `26.721.4979.0`，CodexPlusPlus 项目/安装/远端均为 `1.2.43`。一个可见 Anti-Codex、原生 Codex 存活、Docker 零残留、无 `R:` 映射。按本项目既定验收范围，当前整体达到 **100%**；未来上游更新仍必须重新经过候选、检查、受控同步和回滚验证。
+
+## 2026-08-04 current product re-audit supersedes the older 100% label
+
+- The autonomous long-task artifact above remains accepted and frozen; no new prompt or provider traffic is authorized for this product-repair lane.
+- Later current-shell re-audit found product gaps outside that artifact: the Manager hid an already-supported developer prompt layer, common action results can be delayed behind a second full snapshot, and the Explorer/Start/tray startup-entry matrix lacks real external-input evidence.
+- The developer editor source repair is now focused-green (`67/67`, combined Manager `95/95`) as `native-panel-v114`, but it is not accepted until clean no-traffic preflight, guarded activation and physical four-editor proof pass.
+- Therefore the older project-wide 100% statement is historical, not current. Current completion remains open without changing the accepted Gate 8 long-task result.
