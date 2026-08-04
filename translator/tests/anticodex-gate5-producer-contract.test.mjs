@@ -62,7 +62,7 @@ test("Manager 20-button wrapper signs the same timestamp and runtime session ide
 });
 
 test("shortcut restore writes signed timestamped PID and CDP-session evidence and still emits stdout", () => {
-  assert.match(shortcutRestore, /\[ValidateSet\("DesktopShortcut",\s*"TaskbarButton"\)\]/);
+  assert.match(shortcutRestore, /\[ValidateSet\("DesktopShortcut",\s*"TaskbarButton",\s*"ExternalObserved"\)\]/);
   assert.match(shortcutRestore, /function Get-ExactAntiCodexTaskbarButton/);
   assert.match(shortcutRestore, /AccessibleObjectFromWindow/);
   assert.match(shortcutRestore, /\$windowCountSuffix = -join \(\[char\[\]\]@\(0x4E2A, 0x8FD0, 0x884C, 0x7A97, 0x53E3\)\)/);

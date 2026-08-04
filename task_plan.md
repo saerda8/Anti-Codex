@@ -3538,3 +3538,5 @@ The independent Anti-Codex MCP guard is already installed and running, so no dup
 - [ ] Record fresh user-driven Desktop, Start-menu and tray activations. The chosen entry is operator-declared rather than machine-proven, so these receipts cannot close the four-entry/three-state matrix by themselves; stopped/cold and already-visible cases still require truthful classification.
 
 No runtime sync, restart, model/provider request, Docker action or mouse input was used for this source change.
+
+The first full preflight on clean commit `590fb68` exposed one stale Gate 5 test that still required exactly two activation modes. The implementation and focused observer test remained green; the one-line contract expectation is corrected and passes the two adjacent suites `32/32`. A fresh clean full preflight is required before this source checkpoint is accepted.
