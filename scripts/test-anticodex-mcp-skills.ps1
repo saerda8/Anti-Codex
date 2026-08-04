@@ -762,9 +762,6 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
                     Add-Failure "node_repl $($entry.Key) is not isolated to Anti-Codex"
                 }
             }
-            if ($nodeReplEnv -match "(?m)^\s*SKY_CUA_NATIVE_PIPE(?:_DIRECTORY)?\s*=") {
-                Add-Failure "node_repl config must not inherit the native Codex computer-use pipe"
-            }
         }
     } catch {
         Add-Failure "config.toml read failed: $($_.Exception.Message)"
@@ -984,6 +981,22 @@ if ($configText) {
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
             $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
             $unexpectedLocalDevelopmentMcpNames = @($mcpNames | Where-Object { $developmentWorkerMcpNames -contains $_ })
+            $localNodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
+            $sharedNodeReplEnv = Get-McpNestedSectionText $sharedConfigText "node_repl" "env"
+            $localNativePipe = Get-TomlQuotedFieldValue $localNodeReplEnv "SKY_CUA_NATIVE_PIPE"
+            $localNativePipeDirectory = Get-TomlQuotedFieldValue $localNodeReplEnv "SKY_CUA_NATIVE_PIPE_DIRECTORY"
+            $sharedNativePipeDirectory = Get-TomlQuotedFieldValue $sharedNodeReplEnv "SKY_CUA_NATIVE_PIPE_DIRECTORY"
+            if ($localNativePipe -or $localNativePipeDirectory) {
+                if (-not $localNativePipe -or -not $localNativePipeDirectory) {
+                    Add-Failure "node_repl runtime computer-use pipe config is incomplete"
+                } elseif ($sharedNativePipeDirectory -and $localNativePipeDirectory -ieq $sharedNativePipeDirectory) {
+                    Add-Failure "node_repl config must not inherit the native Codex computer-use pipe"
+                } elseif ($localNativePipeDirectory -notmatch '^\\\\[.?]\\pipe\\') {
+                    Add-Failure "node_repl runtime computer-use pipe is not a named-pipe path"
+                } elseif (-not (Test-Path -LiteralPath $localNativePipeDirectory)) {
+                    Add-Failure "node_repl runtime computer-use pipe is unavailable"
+                }
+            }
             foreach ($mcpName in $missingSharedMcpNames) {
                 Add-Failure "shared MCP server '$mcpName' exists but Anti-Codex local config is missing it"
             }

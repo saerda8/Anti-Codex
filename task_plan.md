@@ -3490,3 +3490,13 @@ This is a bounded insurance layer, not an upstream leak fix and not a new task c
 - [ ] Checkpoint and activate the summary-only product repair, then prove the installed Manager shows the truthful MCP result without rerunning local-feature refresh. Do not close the full Manager gate until that installed text is visible.
 
 No model/provider request, Docker action, development-worker dispatch or native-Codex change occurred. The one Anti-Codex restart was the guarded runtime activation described above; the local-feature action was not repeated.
+
+### 2026-08-04 post-restart MCP pipe classification
+
+- [x] Activate the compact-summary fix from clean head `bb10c02a`. Transaction `20260804T001443183Z-fe3ddffbd8954f3380ad301d6961f97b` verified 123 files, restored one Anti-Codex, and left official Codex PIDs `9028/26112` alive.
+- [x] Re-run the installed `检查 MCP/Skill` action once. The visible summary is now truthful, but report SHA-256 `9e9cce3c19011110ee783af7ad415cb7ffb6661e8d53ec546b849bbe12b72430` is red only for `node_repl config must not inherit the native Codex computer-use pipe`.
+- [x] Classify the runtime state before editing: sync removed both shared pipe keys; Anti-Codex then created a live named-pipe directory after startup. Its directory is not equal to the live official Codex pipe directory, while command, runtime paths, real MCP call, Skills and worker exclusion all remain isolated and green.
+- [x] Replace the verifier's blanket "pipe key exists" failure with the narrow invariant: reject a missing/malformed/stale pipe or a pipe directory equal to the shared official one; accept a live, distinct Anti-Codex runtime pipe. Focused RED/GREEN coverage passes, related source contracts pass `34/34`, PowerShell syntax is green, and a full live no-model source verifier passed with report SHA-256 `2c98b6eddb68737d33da76e5d12e53d10401cee78c7e3366b4fb229747187217`.
+- [ ] Checkpoint, run the clean no-traffic preflight, activate once, and execute exactly one installed Manager MCP/Skill action. Close only this red light if the installed report is green and official Codex remains untouched.
+
+This item remains open and is not 100%. Do not repeat refresh, restart, provider traffic or physical button clicks until the verifier root fix is green in source.

@@ -160,6 +160,16 @@ test("shared config sync localizes node_repl and removes the native Codex pipe",
   assert.doesNotMatch(next, /C:\\\\Users\\\\XD\\\\\.codex|Coexconfig|OpenAI\\\\Codex\\\\runtimes/);
 });
 
+test("MCP verification accepts only a live Anti-Codex pipe distinct from the shared Codex pipe", () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+
+  assert.doesNotMatch(verifier, /if \(\$nodeReplEnv -match [^\n]+SKY_CUA_NATIVE_PIPE[\s\S]*?must not inherit the native Codex computer-use pipe/);
+  assert.match(verifier, /\$localNativePipeDirectory\s*=\s*Get-TomlQuotedFieldValue/);
+  assert.match(verifier, /\$sharedNativePipeDirectory\s*=\s*Get-TomlQuotedFieldValue/);
+  assert.match(verifier, /\$localNativePipeDirectory\s*-ieq\s*\$sharedNativePipeDirectory/);
+  assert.match(verifier, /Test-Path -LiteralPath \$localNativePipeDirectory/);
+});
+
 test("shared config sync excludes Anti-Codex development workers by default", () => {
   const dir = tempDir();
   const source = path.join(dir, "global.toml");
