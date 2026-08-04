@@ -3478,6 +3478,12 @@ This is a bounded insurance layer, not an upstream leak fix and not a new task c
 
 Re-entry audit after runtime transaction `20260804T010136498Z-e9e8293848304eaa8e2d81966b06d86f` found the guard already durably installed, so no duplicate install or second startup entry was created. The live Anti guard PID is `9300`, the separate official guard PID is `38496`, focused tests remain `8/8`, and the current exact Anti core has zero direct MCP candidates / 0 MiB. Both core hashes remain `ecd7a3eaff5e42723dbba03b5c91514b3986b5db5cbca8f34619620b5356f31f` with valid OpenAI signatures; one Anti root and official Codex remain alive.
 
+### 2026-08-04 fallback Manager update-result repair
+
+- [x] Reproduce the fallback-page defect offline: `syncHost` returns its background handoff inside `payload.result.background`, while the page checked only the top level and therefore printed the launch receipt instead of waiting for the final update report. Focused RED was `66/67`.
+- [x] Add only the missing nested-result check and keep the existing final-report poller. Focused GREEN is `67/67`; adjacent Manager service and bridge coverage is `95/95`, with syntax and whitespace checks green. No real update, restart or model request was run.
+- [ ] Activate only after a clean source checkpoint/preflight, then verify the installed fallback page with a harmless simulated/offline background receipt; do not rerun a real Codex update merely to test this display path.
+
 ### 2026-08-04 Manager MCP/Skill real-action repair
 
 - [x] Physically run the installed Manager `检查 MCP/Skill` action once. The button completed with a real red terminal result instead of silently failing; signed report `latest-mcp-skills.json` has SHA-256 `87b0879b4130390023493e2e9a0660820c93d029f20877cccf8e6974088b3c83`.

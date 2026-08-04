@@ -1890,7 +1890,7 @@ async function runFallbackManagerAction(button) {
   result.textContent = "正在执行：" + button.textContent.trim();
   try {
     const payload = await postFallbackManagerAction(action);
-    if (payload.background === true || managerActions[action]?.background === true) {
+    if (payload?.background === true || payload?.result?.background === true || managerActions[action]?.background === true) {
       result.textContent = payload.message || "后台任务已启动，正在等待真实报告……";
       const outcome = await waitForFallbackBackgroundAction(action, actionStartedAt, result);
       if (outcome.state === "reported") {

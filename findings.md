@@ -3795,6 +3795,11 @@ Re-entry audit after the later prompt-policy activation found the independent gu
 
 Operator-only failures during the re-entry audit: two read-only PowerShell projections piped directly from `foreach` and hit the known empty-pipe parser rule; assigning the collection before piping fixed both. A read-only hash batch also tried to hash the live rotating guard log and hit its expected sharing lock; immutable source/state files were then hashed separately. These failures changed no process, client, startup entry or model state. Test-created `.pytest_cache` and `scripts/__pycache__` were removed after exact workspace containment checks.
 
+## 2026-08-04 fallback Manager missed nested update handoff
+
+- The fallback Manager's `syncHost` button did not recognize the built-in updater's real return shape. `runManagerAction()` wraps script JSON as `payload.result`, but the fallback page inspected only `payload.background`; bootstrap also truthfully marks `syncHost` as a foreground launcher, so the existing final-report wait was skipped.
+- The root fix is one additional `payload?.result?.background === true` predicate before the existing poller. TDD failed only the new contract at `66/67`, then passes `67/67`; combined Manager service/bridge coverage passes `95/95`. This is source-only and used no update, restart or provider traffic.
+
 ## 2026-08-04 Manager UI-only matrix and guard installer follow-up
 
 - The installed v113 Manager UI-only verifier initially failed before any click because it replaced the complete historical body of `managerActionContinuesInBackground`; the current implementation had legitimately changed. The verifier now replaces the function by stable declaration boundaries. The installed matrix passes `20/20`, report SHA-256 `daa456771037f91017ccfd60a293d05aeacce63269f69566c43aebc6642ecc64`, zero layout failures, zero bridge action/request/non-health deltas and zero provider traffic. This is clickability evidence only, not backend-action acceptance.

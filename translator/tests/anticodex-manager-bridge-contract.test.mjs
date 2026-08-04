@@ -354,7 +354,7 @@ test("fallback Manager waits for the same background action's fresh report and s
   assert.match(waitBlock, /catch \(error\)[\s\S]*?managerActionToken = ""[\s\S]*?bootstrap\(\)/);
   assert.match(waitBlock, /FALLBACK_BACKGROUND_POLL_TIMEOUT_MS/);
   assert.match(runBlock, /const actionStartedAt = Date\.now\(\)/);
-  assert.match(runBlock, /payload\.background === true \|\| managerActions\[action\]\?\.background === true/);
+  assert.match(runBlock, /payload\?\.background === true \|\| payload\?\.result\?\.background === true \|\| managerActions\[action\]\?\.background === true/);
   assert.match(runBlock, /waitForFallbackBackgroundAction\(action, actionStartedAt, result\)/);
 });
 
