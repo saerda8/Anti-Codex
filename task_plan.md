@@ -3476,6 +3476,8 @@ No model/provider request, Docker action, native-Codex modification/stop/restart
 
 This is a bounded insurance layer, not an upstream leak fix and not a new task controller. No normal process was stopped, no client was restarted, no model/provider request or Docker action occurred, and the test caches were removed.
 
+Re-entry audit after runtime transaction `20260804T010136498Z-e9e8293848304eaa8e2d81966b06d86f` found the guard already durably installed, so no duplicate install or second startup entry was created. The live Anti guard PID is `9300`, the separate official guard PID is `38496`, focused tests remain `8/8`, and the current exact Anti core has zero direct MCP candidates / 0 MiB. Both core hashes remain `ecd7a3eaff5e42723dbba03b5c91514b3986b5db5cbca8f34619620b5356f31f` with valid OpenAI signatures; one Anti root and official Codex remain alive.
+
 ### 2026-08-04 Manager MCP/Skill real-action repair
 
 - [x] Physically run the installed Manager `检查 MCP/Skill` action once. The button completed with a real red terminal result instead of silently failing; signed report `latest-mcp-skills.json` has SHA-256 `87b0879b4130390023493e2e9a0660820c93d029f20877cccf8e6974088b3c83`.

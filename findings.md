@@ -3791,6 +3791,10 @@
 
 The guard intentionally does not claim that any observed node copy is leaked. It acts only after the count, age, stable-second-scan and full revalidation gates all agree; upstream lifecycle diagnosis remains open.
 
+Re-entry audit after the later prompt-policy activation found the independent guard still healthy and correctly avoided a duplicate install. Source/installed guard hash remains `9c48374cadb6878a5c51ab150c26e07c6c0489b86dc5ff37c8e4d0dbddd14834`; pytest passes `8/8`; Anti guard PID `9300` and official guard PID `38496` use distinct script trees. The current exact Anti app/core chain is alive with zero direct MCP candidates / 0 MiB, so the guard reports zero excess, confirmation and termination. Anti and official core hashes remain identical at `ecd7a3eaff5e42723dbba03b5c91514b3986b5db5cbca8f34619620b5356f31f`, both Authenticode signatures are valid OpenAI signatures, and one Anti root remains.
+
+Operator-only failures during the re-entry audit: two read-only PowerShell projections piped directly from `foreach` and hit the known empty-pipe parser rule; assigning the collection before piping fixed both. A read-only hash batch also tried to hash the live rotating guard log and hit its expected sharing lock; immutable source/state files were then hashed separately. These failures changed no process, client, startup entry or model state. Test-created `.pytest_cache` and `scripts/__pycache__` were removed after exact workspace containment checks.
+
 ## 2026-08-04 Manager UI-only matrix and guard installer follow-up
 
 - The installed v113 Manager UI-only verifier initially failed before any click because it replaced the complete historical body of `managerActionContinuesInBackground`; the current implementation had legitimately changed. The verifier now replaces the function by stable declaration boundaries. The installed matrix passes `20/20`, report SHA-256 `daa456771037f91017ccfd60a293d05aeacce63269f69566c43aebc6642ecc64`, zero layout failures, zero bridge action/request/non-health deltas and zero provider traffic. This is clickability evidence only, not backend-action acceptance.
