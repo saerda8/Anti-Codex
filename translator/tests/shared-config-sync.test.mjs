@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,9 +12,18 @@ const syncSharedConfig = path.join(repoRoot, "scripts", "sync-shared-codex-confi
 const syncRegistrations = path.join(repoRoot, "scripts", "sync-deepcodex-plugin-registrations.mjs");
 const mcpSkillsVerifier = path.join(repoRoot, "scripts", "test-anticodex-mcp-skills.ps1");
 
+const tempDirs = new Set();
+
 function tempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-config-sync-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deepcodex-config-sync-"));
+  tempDirs.add(dir);
+  return dir;
 }
+
+afterEach(() => {
+  for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+  tempDirs.clear();
+});
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
