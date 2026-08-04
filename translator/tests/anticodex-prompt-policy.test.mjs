@@ -42,7 +42,9 @@ test("prompt policy preserves defaults, saves explicit edits, and restores from 
     const original = [
       { title: "Codex system instructions", content: "system default" },
       { title: "Codex developer instructions", content: "developer default" },
-      { title: "Prior messages", content: "history" },
+      { title: "Prior Chat Completions messages", content: "private-history-sentinel" },
+      { title: "Chat Completions structured output contract", content: "private-schema-sentinel" },
+      { title: "Codex native custom instructions (AGENTS.md)", content: "private-agents-sentinel" },
     ];
     assert.deepEqual(promptPolicyPayload(root).policy, defaultPromptPolicy());
 
@@ -67,7 +69,41 @@ test("prompt policy preserves defaults, saves explicit edits, and restores from 
     assert.equal(payload.capabilities.mergedPromptPolicy.independentDeveloper, false);
     assert.equal(payload.snapshot.layers.at(-1).required, true);
     assert.equal(payload.snapshot.layers[0].defaultContent, "system default");
+    assert.deepEqual(payload.snapshot.layers.map((layer) => layer.title), [
+      "Codex system instructions",
+      "Codex developer instructions",
+      "Anti-Codex Antigravity tool compatibility",
+    ]);
+    assert.doesNotMatch(readFileSync(join(root, "prompt-snapshot.json"), "utf8"), /private-(?:history|schema|agents)-sentinel/);
     assert.equal(JSON.parse(readFileSync(join(root, "prompt-policy.json"), "utf8")).schema, "anticodex-prompt-policy-v1");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("prompt payload migrates legacy snapshots without retaining transcript or request-only layers", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-snapshot-migration-"));
+  const snapshotPath = join(root, "prompt-snapshot.json");
+  try {
+    writeFileSync(snapshotPath, JSON.stringify({
+      schema: "anticodex-prompt-snapshot-v1",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+      layers: [
+        { id: "codexSystem", title: "Codex system instructions", defaultContent: "system", effectiveContent: "system" },
+        { id: "history", title: "Prior Chat Completions messages", defaultContent: "legacy-private-history", effectiveContent: "legacy-private-history" },
+        { id: "schema", title: "Chat Completions structured output contract", defaultContent: "legacy-private-schema", effectiveContent: "legacy-private-schema" },
+        { id: "agents", title: "Codex native custom instructions (AGENTS.md)", defaultContent: "legacy-private-agents", effectiveContent: "legacy-private-agents" },
+        { id: "compat", title: "Anti-Codex Antigravity text-only compatibility", defaultContent: null, effectiveContent: "required" },
+      ],
+    }), "utf8");
+
+    const payload = promptPolicyPayload(root);
+    assert.deepEqual(payload.snapshot.layers.map((layer) => layer.title), [
+      "Codex system instructions",
+      "Anti-Codex Antigravity text-only compatibility",
+    ]);
+    const migrated = readFileSync(snapshotPath, "utf8");
+    assert.doesNotMatch(migrated, /legacy-private-(?:history|schema|agents)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

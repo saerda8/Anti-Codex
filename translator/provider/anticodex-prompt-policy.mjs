@@ -10,6 +10,15 @@ const EDITABLE_LAYERS = Object.freeze({
   "Codex system instructions": "codexSystem",
   "Codex developer instructions": "codexDeveloper",
 });
+const REQUIRED_SNAPSHOT_LAYERS = new Set([
+  "Anti-Codex Antigravity tool compatibility",
+  "Anti-Codex Antigravity text-only compatibility",
+]);
+const AUDITABLE_SNAPSHOT_LAYERS = new Set([
+  ...Object.keys(EDITABLE_LAYERS),
+  "Anti-Codex user instructions",
+  ...REQUIRED_SNAPSHOT_LAYERS,
+]);
 
 export function defaultPromptPolicy() {
   return {
@@ -94,8 +103,7 @@ export function recordPromptSnapshot(stateRoot, originalSections, effectiveSecti
 }
 
 export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoot), "codex-home-deepseek-app")) {
-  let snapshot = null;
-  try { snapshot = JSON.parse(readFileSync(snapshotPath(stateRoot), "utf8")); } catch {}
+  const snapshot = readPromptSnapshot(stateRoot);
   const nativePromptSnapshot = readNativePromptSnapshot(stateRoot);
   const nativeContent = readNativeCustomInstructions(codexHome);
   return {
@@ -175,7 +183,7 @@ function normalizeLayer(value, fallback, nullable) {
 
 function snapshotLayers(originalSections, effectiveSections) {
   const originals = new Map((originalSections || []).map((section) => [String(section?.title || ""), section]));
-  return (effectiveSections || []).map((section) => {
+  return (effectiveSections || []).filter((section) => AUDITABLE_SNAPSHOT_LAYERS.has(String(section?.title || ""))).map((section) => {
     const title = String(section?.title || "");
     const content = String(section?.content || "");
     const original = originals.get(title);
@@ -185,12 +193,35 @@ function snapshotLayers(originalSections, effectiveSections) {
       title,
       source: title.startsWith("Codex ") ? "Codex" : "Anti-Codex",
       editable: Boolean(EDITABLE_LAYERS[title] || title === "Anti-Codex user instructions"),
-      required: title.includes("tool compatibility") || title.includes("text-only compatibility"),
+      required: REQUIRED_SNAPSHOT_LAYERS.has(title),
       defaultContent: originalContent,
       effectiveContent: content,
       sha256: createHash("sha256").update(content, "utf8").digest("hex"),
     };
   });
+}
+
+function readPromptSnapshot(stateRoot) {
+  const target = snapshotPath(stateRoot);
+  let value;
+  try {
+    value = JSON.parse(readFileSync(target, "utf8"));
+  } catch {
+    return null;
+  }
+  if (value?.schema !== "anticodex-prompt-snapshot-v1" || !Array.isArray(value.layers)) return null;
+  const layers = value.layers.filter((layer) => AUDITABLE_SNAPSHOT_LAYERS.has(String(layer?.title || "")));
+  if (layers.length !== value.layers.length) {
+    value = { ...value, layers };
+    const temporary = `${target}.${process.pid}.tmp`;
+    try {
+      writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+      renameSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  }
+  return value;
 }
 
 function policyPath(stateRoot) { return join(resolve(stateRoot), "prompt-policy.json"); }

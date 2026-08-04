@@ -3500,3 +3500,12 @@ No model/provider request, Docker action, development-worker dispatch or native-
 - [x] Checkpoint as `f16bab56`, pass clean no-traffic preflight (SHA-256 `21a383468b77a29c4f76c6a1c609e9e30d3cd77413c36427bd7a331cd9851b44`), activate transaction `20260804T003620458Z-0d74bcb4be0544b5b5efb3dc0d6adc0c`, and execute exactly one installed Manager MCP/Skill action. The physical click and backend report are green; report SHA-256 is `699a7e5ed7de99625d1fc31fed2d67365ea17b84267f24a905d6e4a04ba860fb`, one Anti-Codex root remains, and official Codex PIDs `9028/26112` remain alive.
 
 This specific runtime-pipe false positive is closed. It does not close the broader Manager, entrypoint, prompt/settings or Gate 8 items and does not make the project 100%.
+
+### 2026-08-04 prompt snapshot privacy repair
+
+- [x] Read the installed prompt-policy payload without model traffic. The active CodexPlusPlus component is v1.2.44 with source/active patch commit `762340c825c64d2e6fffb4f41067fcf117dcd372` and binary SHA-256 `4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab`; policy capabilities truthfully cover Antigravity and third-party, while provider-owned hidden prompts remain read-only.
+- [x] Physically exercise all 16 native Settings pages and the native Personalization editor. A random sentinel was saved to the isolated `AGENTS.md`, read back, and restored to the original empty value; approval/sandbox stayed disabled and administrator-managed, ChatGPT Account/web Security remained hidden, one Anti-Codex remained, and official Codex survived.
+- [x] Confirm a new privacy defect before editing: installed `prompt-snapshot.json` SHA-256 `519064ee4a0eac88bad69e71783d860a22061044afd1b479c14f536d40c1f0a0` contains full `Prior Chat Completions messages` and a structured-output contract even though Manager says the snapshot does not collect user messages or tool/request data.
+- [x] Restrict the shared prompt snapshot writer to the explicit editable Codex/Anti-Codex text layers and the two static protected compatibility layers. The common writer now excludes chat history, structured contracts and native AGENTS content; local reads atomically migrate legacy snapshots. Focused RED was 3/5 and GREEN is 5/5; related adapter/Manager/security regression is 156/156, with no model traffic.
+
+Do not solve this by hiding the UI warning or deleting the whole prompt feature. The storage predicate is the root bug; user messages, AGENTS.md, structured schemas, tool arguments and credentials must never enter the editable prompt snapshot.
