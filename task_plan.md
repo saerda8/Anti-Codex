@@ -3530,3 +3530,11 @@ Do not solve this by hiding the UI warning or deleting the whole prompt feature.
 - [ ] Keep the four-entry/three-state startup matrix open. Existing evidence covers taskbar real-mouse behavior but not Explorer double-click for Desktop/Start or an actual tray click; missing entries must be observed, not simulated.
 
 The independent Anti-Codex MCP guard is already installed and running, so no duplicate guard, startup entry or process action is needed. The product is not being relabeled 100% while these current acceptance gaps remain.
+
+### 2026-08-04 external startup-entry observer
+
+- [x] Extend the existing shortcut-restore verifier with a source-only `ExternalObserved` mode. It reuses the exact PID/HWND/CDP and topology/frame watchers, arms a TEMP receipt, and only observes a user-restored foreground window; it never launches, focuses, clicks, moves the cursor, or repairs the window state.
+- [x] Fail closed unless Anti-Codex is already minimized and all watchers are ready before input. Focused contract coverage passes `27/27`, PowerShell parsing and whitespace checks are green, and a live visible-window self-test rejected before arming while preserving the same Anti-Codex and official Codex processes.
+- [ ] Record fresh user-driven Desktop, Start-menu and tray activations. The chosen entry is operator-declared rather than machine-proven, so these receipts cannot close the four-entry/three-state matrix by themselves; stopped/cold and already-visible cases still require truthful classification.
+
+No runtime sync, restart, model/provider request, Docker action or mouse input was used for this source change.

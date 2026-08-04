@@ -138,6 +138,26 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
 });
 
+test("external shortcut observation arms existing watchers without driving user input", () => {
+  assert.match(shortcutRestoreAcceptance, /ValidateSet\("DesktopShortcut", "TaskbarButton", "ExternalObserved"\)/);
+  assert.match(shortcutRestoreAcceptance, /ValidateSet\("Desktop", "StartMenu", "Tray"\)/);
+  assert.match(shortcutRestoreAcceptance, /\[string\]\$ExternalReadyPath/);
+  const observer = shortcutRestoreAcceptance.match(/function Wait-AntiCodexExternalActivation[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(observer, /WriteAllText/);
+  assert.match(observer, /IsWindowVisible/);
+  assert.match(observer, /IsIconic/);
+  assert.match(observer, /GetForegroundWindow/);
+  assert.doesNotMatch(observer, /Start-Process|SendLeftClick|SetCursorPos|SetForegroundWindow|ShowWindowAsync/);
+  assert.match(shortcutRestoreAcceptance, /\$ActivationMode -eq "ExternalObserved"[\s\S]*?Wait-AntiCodexExternalActivation/);
+  assert.match(shortcutRestoreAcceptance, /ExternalObserved requires Anti-Codex to be minimized before the observer is armed/);
+  assert.match(shortcutRestoreAcceptance, /\$deadlineMinimized -and \$ActivationMode -ne "ExternalObserved"/);
+  assert.match(shortcutRestoreAcceptance, /inputOwner = \$inputOwner/);
+  assert.match(shortcutRestoreAcceptance, /observerOnly = \$observerOnly/);
+  assert.match(shortcutRestoreAcceptance, /entrySurface = \$entrySurface/);
+  assert.match(shortcutRestoreAcceptance, /observerReadyBeforeInput = \$observerReadyBeforeInput/);
+  assert.match(shortcutRestoreAcceptance, /externalActivationObserved = \$externalActivationObserved/);
+});
+
 test("taskbar restore keeps the cursor off hover-activated apps until the sampling deadline", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);

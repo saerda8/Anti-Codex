@@ -5,10 +5,15 @@ param(
     [int]$ExpectedMainPid,
     [Parameter(Mandatory = $true)]
     [int]$ExpectedOriginalCodexPid,
-    [ValidateSet("DesktopShortcut", "TaskbarButton")]
+    [ValidateSet("DesktopShortcut", "TaskbarButton", "ExternalObserved")]
     [string]$ActivationMode = "DesktopShortcut",
     [ValidateNotNullOrEmpty()]
     [string]$TaskbarButtonAutomationName = "Anti-Codex",
+    [ValidateSet("Desktop", "StartMenu", "Tray")]
+    [string]$ExternalEntrySurface = "Desktop",
+    [ValidateRange(5, 120)]
+    [int]$ExternalActivationTimeoutSec = 45,
+    [string]$ExternalReadyPath = "",
     [ValidateRange(1000, 5000)]
     [int]$SampleDurationMs = 3000,
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
@@ -662,11 +667,73 @@ function Get-FrameMetric {
     }
 }
 
+function Wait-AntiCodexExternalActivation {
+    param(
+        [Parameter(Mandatory = $true)][IntPtr]$WindowHandle,
+        [Parameter(Mandatory = $true)][Diagnostics.Stopwatch]$Stopwatch,
+        [Parameter(Mandatory = $true)][int]$TimeoutSec,
+        [Parameter(Mandatory = $true)][string]$ReadyPath,
+        [Parameter(Mandatory = $true)][string]$EntrySurface,
+        [Parameter(Mandatory = $true)][int]$ExpectedMainPid,
+        [Parameter(Mandatory = $true)][hashtable]$Evidence
+    )
+
+    $readyAt = [DateTime]::UtcNow.ToString("o")
+    $ready = [ordered]@{
+        schema = "anticodex-external-activation-ready-v1"
+        ready = $true
+        entrySurface = $EntrySurface
+        expectedMainPid = $ExpectedMainPid
+        expectedWindowHandle = [int64]$WindowHandle
+        readyAt = $readyAt
+    }
+    [IO.File]::WriteAllText(
+        $ReadyPath,
+        ($ready | ConvertTo-Json -Depth 4 -Compress),
+        [Text.UTF8Encoding]::new($false)
+    )
+    $Evidence.readyBeforeInput = $true
+    $Evidence.readyAt = $readyAt
+
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
+    do {
+        $foregroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
+        if (
+            [AntiCodexShortcutRestoreProbe]::IsWindowVisible($WindowHandle) -and
+            -not [AntiCodexShortcutRestoreProbe]::IsIconic($WindowHandle) -and
+            [int64]$foregroundWindowHandle -eq [int64]$WindowHandle
+        ) {
+            return [pscustomobject]@{
+                observed = $true
+                observedAtMs = [int]$Stopwatch.ElapsedMilliseconds
+                waitMs = [int]$Stopwatch.ElapsedMilliseconds
+            }
+        }
+        Start-Sleep -Milliseconds 10
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    throw "Timed out waiting for external $EntrySurface activation of Anti-Codex."
+}
+
 if (-not (Test-Path -LiteralPath $expectedExecutable -PathType Leaf)) {
     throw "Installed Anti-Codex executable is missing: $expectedExecutable"
 }
 if ($ActivationMode -eq "DesktopShortcut" -and -not (Test-Path -LiteralPath $desktopShortcut -PathType Leaf)) {
     throw "Desktop Anti-Codex shortcut is missing: $desktopShortcut"
+}
+$externalReadyPathFull = ""
+if ($ActivationMode -eq "ExternalObserved") {
+    if ([string]::IsNullOrWhiteSpace($ExternalReadyPath)) {
+        throw "ExternalObserved requires -ExternalReadyPath."
+    }
+    $externalReadyPathFull = [IO.Path]::GetFullPath($ExternalReadyPath)
+    $tempPrefix = [IO.Path]::GetFullPath($env:TEMP).TrimEnd("\") + "\"
+    if (-not $externalReadyPathFull.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "External activation ready file must stay under the current TEMP directory."
+    }
+    if (Test-Path -LiteralPath $externalReadyPathFull) {
+        throw "External activation ready file already exists: $externalReadyPathFull"
+    }
 }
 
 $mainProcess = Get-Process -Id $ExpectedMainPid -ErrorAction Stop
@@ -711,8 +778,19 @@ $restoredAtMs = $null
 $firstVisibleAtMs = $null
 $minimizedObserved = $false
 $probeError = $null
-$activationModeReport = if ($ActivationMode -eq "TaskbarButton") { "taskbar-button" } else { "desktop-shortcut" }
+$activationModeReport = switch ($ActivationMode) {
+    "TaskbarButton" { "taskbar-button" }
+    "ExternalObserved" { "external-observed" }
+    default { "desktop-shortcut" }
+}
 $actualMouse = $false
+$observerOnly = $ActivationMode -eq "ExternalObserved"
+$inputOwner = if ($observerOnly) { "external-user" } else { "verifier" }
+$entrySurface = if ($observerOnly) { $ExternalEntrySurface } else { $activationModeReport }
+$observerReadyBeforeInput = $false
+$externalActivationObserved = $false
+$externalActivationWaitMs = $null
+$externalObserverEvidence = @{ readyBeforeInput = $false; readyAt = "" }
 $taskbarElementEvidence = $null
 $taskbarRectangle = $null
 $taskbarClickPoint = $null
@@ -953,13 +1031,18 @@ try {
     }
     $appPageWatcherReadyBeforeActivation = $true
 
-    [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)
-    $minimizeDeadline = [DateTime]::UtcNow.AddSeconds(2)
-    while (-not [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle) -and [DateTime]::UtcNow -lt $minimizeDeadline) {
-        Start-Sleep -Milliseconds 20
+    if ($ActivationMode -eq "ExternalObserved") {
+        $minimizedObserved = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
+        if (-not $minimizedObserved) { throw "ExternalObserved requires Anti-Codex to be minimized before the observer is armed" }
+    } else {
+        [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 6)
+        $minimizeDeadline = [DateTime]::UtcNow.AddSeconds(2)
+        while (-not [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle) -and [DateTime]::UtcNow -lt $minimizeDeadline) {
+            Start-Sleep -Milliseconds 20
+        }
+        $minimizedObserved = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
+        if (-not $minimizedObserved) { throw "Anti-Codex did not enter the minimized state" }
     }
-    $minimizedObserved = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
-    if (-not $minimizedObserved) { throw "Anti-Codex did not enter the minimized state" }
     if ($ActivationMode -eq "TaskbarButton") { Start-Sleep -Milliseconds 200 }
 
     $taskbarTarget = $null
@@ -986,6 +1069,19 @@ try {
         $taskbarCursorHeld = $true
         $actualMouse = $true
         $activationSentAtMs = [int]$taskbarClickSentAtMs
+    } elseif ($ActivationMode -eq "ExternalObserved") {
+        $externalActivation = Wait-AntiCodexExternalActivation `
+            -WindowHandle $windowHandle `
+            -Stopwatch $stopwatch `
+            -TimeoutSec $ExternalActivationTimeoutSec `
+            -ReadyPath $externalReadyPathFull `
+            -EntrySurface $ExternalEntrySurface `
+            -ExpectedMainPid $ExpectedMainPid `
+            -Evidence $externalObserverEvidence
+        $observerReadyBeforeInput = [bool]$externalObserverEvidence.readyBeforeInput
+        $externalActivationObserved = [bool]$externalActivation.observed
+        $externalActivationWaitMs = [int]$externalActivation.waitMs
+        $activationSentAtMs = [int]$externalActivation.observedAtMs
     } else {
         $activationSentAtMs = [int]$stopwatch.ElapsedMilliseconds
         Start-Process -FilePath $desktopShortcut | Out-Null
@@ -1060,6 +1156,10 @@ try {
 } catch {
     $probeError = $_.Exception.Message
 } finally {
+    $observerReadyBeforeInput = [bool]$externalObserverEvidence.readyBeforeInput
+    if ($externalReadyPathFull -and (Test-Path -LiteralPath $externalReadyPathFull)) {
+        Remove-Item -LiteralPath $externalReadyPathFull -Force -ErrorAction SilentlyContinue
+    }
     $deadlineForegroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()
     $deadlineForegroundProcessId = Get-ForegroundProcessId -ForegroundWindowHandle $deadlineForegroundWindowHandle
     $deadlineVisible = [AntiCodexShortcutRestoreProbe]::IsWindowVisible($windowHandle)
@@ -1076,7 +1176,7 @@ try {
         [void][AntiCodexShortcutRestoreProbe]::SetCursorPos($savedTaskbarCursorX, $savedTaskbarCursorY)
         $taskbarCursorHeld = $false
     }
-    if ($deadlineMinimized) {
+    if ($deadlineMinimized -and $ActivationMode -ne "ExternalObserved") {
         $probeRecoveryApplied = $true
         [void][AntiCodexShortcutRestoreProbe]::ShowWindowAsync($windowHandle, 9)
         [void][AntiCodexShortcutRestoreProbe]::SetForegroundWindow($windowHandle)
@@ -1387,6 +1487,8 @@ if ($earlyFrameCount -lt $minimumEarlyFrameCount) { $failures.Add("fewer than $m
 if ($blankFrames.Count -gt 0) { $failures.Add("a blank or near-blank restored frame was observed") | Out-Null }
 if ($ActivationMode -eq "TaskbarButton" -and -not $actualMouse) { $failures.Add("taskbar button was not activated with a real mouse click") | Out-Null }
 if ($ActivationMode -eq "TaskbarButton" -and -not $taskbarActivationObserved) { $failures.Add("taskbar button click did not foreground the restored Anti-Codex window while the cursor was held") | Out-Null }
+if ($ActivationMode -eq "ExternalObserved" -and -not $observerReadyBeforeInput) { $failures.Add("external activation observer was not ready before input") | Out-Null }
+if ($ActivationMode -eq "ExternalObserved" -and -not $externalActivationObserved) { $failures.Add("external activation did not restore the exact Anti-Codex window") | Out-Null }
 if (-not $originalCodexAlive) { $failures.Add("original Codex exited during shortcut restore") | Out-Null }
 
 $checkedAt = [DateTime]::UtcNow.ToString("o")
@@ -1407,6 +1509,14 @@ $result = [ordered]@{
     expectedOriginalCodexPid = $ExpectedOriginalCodexPid
     activationMode = $activationModeReport
     actualMouse = $actualMouse
+    inputOwner = $inputOwner
+    observerOnly = $observerOnly
+    entrySurface = $entrySurface
+    entrySurfaceProvenance = if ($observerOnly) { "operator-declared" } else { "machine-selected" }
+    observerReadyBeforeInput = $observerReadyBeforeInput
+    externalObserverReadyAt = [string]$externalObserverEvidence.readyAt
+    externalActivationObserved = $externalActivationObserved
+    externalActivationWaitMs = $externalActivationWaitMs
     taskbarElement = $taskbarElementEvidence
     taskbarRectangle = $taskbarRectangle
     taskbarClickPoint = $taskbarClickPoint

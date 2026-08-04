@@ -229,3 +229,11 @@
 - [x] Clean commit `a3c34b9b` passed source preflight `929/929`; transaction `20260804T010136498Z-e9e8293848304eaa8e2d81966b06d86f` activated 123 files after one authenticated Anti-only shutdown. Installed migration leaves one allowed layer and zero forbidden layers, installed/source policy hashes match, the visible prompt page passes real-mouse open/scroll/close, and official Codex remains alive.
 
 已知快照隐私红灯已在源码和安装态关闭；提供方隐藏基底与三路独立运行账本仍是后续透明度验收项，不能据此扩大为“所有提示词均可读取”。
+
+## 2026-08-04 外部启动入口观察状态卡
+
+- [x] 复用现有窗口恢复验收器增加只观察模式：先绑定当前精确 PID/HWND/CDP 和拓扑/帧观察器，再写 TEMP 就绪收据；不启动、不聚焦、不点鼠标、不移动光标、不恢复窗口。
+- [x] 未预先最小化、观察器未先就绪或不是同一窗口恢复到前台时一律失败。聚焦合同 `27/27`、PowerShell 解析和空白检查通过；可见窗口自测按预期失败且未改变客户端状态。
+- [ ] 桌面、开始菜单和托盘仍需用户在观察器就绪后各做一次新鲜真实操作。入口名称只能记为用户声明，不能伪装成机器识别；未运行和已有可见窗口两类状态仍未关闭。
+
+该能力目前仅在源码验收器中，不需要为了它同步或重启产品。四入口三状态矩阵与整体 100% 继续保持未完成。
