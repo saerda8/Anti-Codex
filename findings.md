@@ -3799,6 +3799,8 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 
 - The fallback Manager's `syncHost` button did not recognize the built-in updater's real return shape. `runManagerAction()` wraps script JSON as `payload.result`, but the fallback page inspected only `payload.background`; bootstrap also truthfully marks `syncHost` as a foreground launcher, so the existing final-report wait was skipped.
 - The root fix is one additional `payload?.result?.background === true` predicate before the existing poller. TDD failed only the new contract at `66/67`, then passes `67/67`; combined Manager service/bridge coverage passes `95/95`. This is source-only and used no update, restart or provider traffic.
+- Clean commit `1201dbdc` passes the complete no-traffic preflight `929/929`. Runtime transaction `20260804T012142415Z-4c1edb6acd454a96ba2d316bc3d06f2a` activated all 123 files; installed/source service SHA-256 is `1cf1e02cae6f92846a1462b1890f0f4e24ce85067cdef13de53c4fef0e91abc4`. A local read of the running fallback page proves the nested predicate and existing final-report waiter are loaded. One Anti root, official Codex PIDs `9028/26112`, and guard PIDs `9300/38496` remain alive; no real update or provider request was sent.
+- Operator-only note: the pre-activation read-only PID inventory used an unescaped Windows path inside a regex and emitted repeated `Unrecognized escape sequence \\U` diagnostics. Exact-path rows still captured the owned tree, authenticated shutdown returned HTTP 202, all captured Anti PIDs exited, and official/guard PID identity remained unchanged. Future inventories should use exact string comparison or `[Regex]::Escape()`.
 
 ## 2026-08-04 Manager UI-only matrix and guard installer follow-up
 

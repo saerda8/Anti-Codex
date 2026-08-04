@@ -3482,7 +3482,7 @@ Re-entry audit after runtime transaction `20260804T010136498Z-e9e8293848304eaa8e
 
 - [x] Reproduce the fallback-page defect offline: `syncHost` returns its background handoff inside `payload.result.background`, while the page checked only the top level and therefore printed the launch receipt instead of waiting for the final update report. Focused RED was `66/67`.
 - [x] Add only the missing nested-result check and keep the existing final-report poller. Focused GREEN is `67/67`; adjacent Manager service and bridge coverage is `95/95`, with syntax and whitespace checks green. No real update, restart or model request was run.
-- [ ] Activate only after a clean source checkpoint/preflight, then verify the installed fallback page with a harmless simulated/offline background receipt; do not rerun a real Codex update merely to test this display path.
+- [x] Clean commit `1201dbdc` passed full no-traffic preflight `929/929`. Transaction `20260804T012142415Z-4c1edb6acd454a96ba2d316bc3d06f2a` activated 123 files after one authenticated Anti-only shutdown. Installed/source service SHA-256 is `1cf1e02cae6f92846a1462b1890f0f4e24ce85067cdef13de53c4fef0e91abc4`; the live fallback page contains both the nested-background predicate and existing final-report waiter. No real Codex update was rerun.
 
 ### 2026-08-04 Manager MCP/Skill real-action repair
 
