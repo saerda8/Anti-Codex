@@ -719,10 +719,12 @@ function realBridgeSource(enabled = !uiOnlyMode) {
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[id];
     entry.resolve(payload);
   };
-  const testActionBridge = (requestedAction) => new Promise((resolve) => {
+  const testActionBridge = (requestedAction, actionToken = "") => new Promise((resolve) => {
     const requestId = Date.now() + ":" + Math.random().toString(36).slice(2);
-    window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[requestId] = { resolve, action: requestedAction };
-    window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.push({ id: requestId, action: requestedAction });
+    const silent = requestedAction === "refreshStatus"
+      && window.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true;
+    window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__[requestId] = { resolve, action: requestedAction, actionToken, silent };
+    window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.push({ id: requestId, action: requestedAction, actionToken, silent });
   });
   testActionBridge.__ANTICODEX_MANAGER_BUTTON_TEST_BRIDGE__ = true;
   window.__ANTICODEX_RUN_MANAGER_ACTION__ = testActionBridge;
@@ -2166,23 +2168,27 @@ async function drainManagerActionQueue() {
     } catch (error) {
       payload = { ok: false, action: item.action, message: error?.message || String(error) };
     }
-    drainedPayloads[item.action] = payload;
+    const silent = item.silent === true;
+    if (!silent) drainedPayloads[item.action] = payload;
     const managerSummary = managerSummaryFromActionPayload(item.action, payload);
     await evaluate(`(() => {
       window.__ANTICODEX_RESOLVE_MANAGER_BUTTON_ACTION__?.(${JSON.stringify(item.id)}, ${JSON.stringify(payload)});
-      window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
-        ...${JSON.stringify(payload)},
-        action: ${JSON.stringify(item.action)},
-        managerSummary: ${JSON.stringify(managerSummary)},
-        pending: false,
-      };
-      const result = document.querySelector('[data-anticodex-result="action"]');
-      if (result) {
-        result.removeAttribute('data-anticodex-running');
-        result.textContent = ${JSON.stringify(managerSummary)};
+      const silent = ${JSON.stringify(silent)};
+      if (!silent) {
+        window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ = {
+          ...${JSON.stringify(payload)},
+          action: ${JSON.stringify(item.action)},
+          managerSummary: ${JSON.stringify(managerSummary)},
+          pending: false,
+        };
+        const result = document.querySelector('[data-anticodex-result="action"]');
+        if (result) {
+          result.removeAttribute('data-anticodex-running');
+          result.textContent = ${JSON.stringify(managerSummary)};
+        }
+        document.querySelector('.anticodex-actions')?.removeAttribute('data-anticodex-busy');
+        for (const button of document.querySelectorAll('button[data-action]')) button.disabled = false;
       }
-      document.querySelector('.anticodex-actions')?.removeAttribute('data-anticodex-busy');
-      for (const button of document.querySelectorAll('button[data-action]')) button.disabled = false;
       return true;
     })()`, 2500).catch(() => {});
   }

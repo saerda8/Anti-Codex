@@ -1229,6 +1229,17 @@ test("Manager high-impact real-mouse helper requires dispatch evidence instead o
   assert.doesNotMatch(managerRealMouseAction, /accepted:[^\n]*data-anticodex-busy/);
 });
 
+test("Manager real-button harness keeps silent snapshot refresh from replacing the action result", () => {
+  const bridge = extractNamedFunction(managerButtonTest, "realBridgeSource");
+  const drain = extractNamedFunction(managerButtonTest, "drainManagerActionQueue");
+  assert.match(bridge, /const testActionBridge = \(requestedAction, actionToken = ""\)/);
+  assert.match(bridge, /const silent = requestedAction === "refreshStatus"\s*&&\s*window\.__ANTICODEX_MANAGER_SUPPRESS_REFRESH_STATUS_RESULT__ === true/);
+  assert.match(bridge, /actionToken/);
+  assert.match(drain, /const silent = item\.silent === true/);
+  assert.match(drain, /if \(!silent\) drainedPayloads\[item\.action\] = payload/);
+  assert.match(drain, /if \(!silent\) \{[\s\S]*?__ANTICODEX_MANAGER_LAST_ACTION_RESULT__/);
+});
+
 test("Manager ui-only matrix shortens account observation without editing product constants", () => {
   const setup = managerButtonTest.slice(0, managerButtonTest.indexOf("async function acquireManagerButtonLock"));
   assert.match(setup, /if \(uiOnlyMode\) \{/);

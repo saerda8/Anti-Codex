@@ -194,7 +194,9 @@
 - [x] 当前安装版已真实点击一次 `检查 MCP/Skill`；按钮有明确终态而非无反应，但后台验收为红色。签名报告 `latest-mcp-skills.json` 的 SHA-256 为 `87b0879b4130390023493e2e9a0660820c93d029f20877cccf8e6974088b3c83`。
 - [x] 当前 128 个 Skill 内容匹配；本地 MCP 只有 `node_repl`。失败仅有两项：该配置仍继承原生 computer-use pipe，以及校验器把开发用 `deepseek-external` 错判为产品应同步 MCP。
 - [x] 源码已按同一精确排除名单补上 `deepseek-external`，同步器和校验器共用同一分类结果；聚焦测试先红 `4/6`、后绿 `6/6`。
-- [ ] 该修复尚未进入安装态。必须先建立干净检查点并通过无流量预检，再一次性激活；随后只通过 Manager 执行一次 `刷新本地功能`，验证 computer-use pipe 被移除且所有开发 worker 仍为零注入。
+- [x] 修复已由干净提交 `511f0dec` 通过无流量预检，并通过事务 `20260803T234736513Z-3b74abda39cf47fa9bdc5da68c96efa8` 激活 123 个校验文件；只重启 Anti-Codex，原生 Codex PID `9028/26112` 保持存活。
+- [x] Manager `刷新本地功能` 只执行一次且后台报告绿色，SHA-256 为 `96e2ed0a376f5cf1c23f9079e7ccbf6b8ba720b789eeccfeb8bdcbb625d9c73e`；隔离配置现仅有产品 `node_repl`、无 `SKY_CUA_NATIVE_PIPE*`，Skill 为 129。
+- [x] 真实按钮验收器曾因自己的临时桥丢失 silent/action-token 语义，把成功结果覆盖成“状态刷新：完成”。这不是产品刷新失败；验收器已按生产桥语义做最小修复，聚焦 `1/1`、Manager 全组 `66/66`。
 - [ ] 同一安装指纹下重新真实点击 `检查 MCP/Skill` 与 `检查插件/应用`，两者均取得绿色终态报告后，才能关闭第 4 节与第 6 节对应检查项。
 
 当前不能宣称 Manager 或插件/MCP/Skill 隔离已 100%。本轮未发送模型/第三方请求，未调度开发 worker，未操作 Docker，未修改或重启原生 Codex。
