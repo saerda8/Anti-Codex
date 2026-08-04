@@ -220,5 +220,6 @@
 - [x] 当前安装版 CodexPlusPlus v1.2.44 已包含共同请求入口的提示词策略补丁；活动二进制 SHA-256 `4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab`，Gemini/Claude/第三方适用范围与提供方隐藏层的只读说明一致。
 - [x] 用真实鼠标遍历 16 个原生 Settings 页面并在“个性化 → 自定义指令”完成随机值保存、独立 `AGENTS.md` 读回和原值恢复；无崩溃，ChatGPT Account/web Security 隐藏，审批/沙箱受管理且不可编辑。
 - [x] 共同快照写入点只允许明确可审计的提示词层；本地读取会原子迁移并清除旧聊天、结构化合同和 AGENTS 污染。聚焦测试 5/5、相邻回归 156/156，且未发送模型流量。安装态迁移与可见页面复验留到这笔源码提交后的单次激活。
+- [x] Clean commit `a3c34b9b` passed source preflight `929/929`; transaction `20260804T010136498Z-e9e8293848304eaa8e2d81966b06d86f` activated 123 files after one authenticated Anti-only shutdown. Installed migration leaves one allowed layer and zero forbidden layers, installed/source policy hashes match, the visible prompt page passes real-mouse open/scroll/close, and official Codex remains alive.
 
-源码红灯已关闭；安装态迁移复验前仍不能宣称“所有提示词已透明且纯净”。
+已知快照隐私红灯已在源码和安装态关闭；提供方隐藏基底与三路独立运行账本仍是后续透明度验收项，不能据此扩大为“所有提示词均可读取”。
