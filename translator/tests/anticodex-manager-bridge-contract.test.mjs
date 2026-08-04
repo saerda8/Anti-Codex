@@ -354,7 +354,8 @@ test("fallback Manager waits for the same background action's fresh report and s
   assert.match(waitBlock, /catch \(error\)[\s\S]*?managerActionToken = ""[\s\S]*?bootstrap\(\)/);
   assert.match(waitBlock, /FALLBACK_BACKGROUND_POLL_TIMEOUT_MS/);
   assert.match(runBlock, /const actionStartedAt = Date\.now\(\)/);
-  assert.match(runBlock, /payload\?\.background === true \|\| payload\?\.result\?\.background === true \|\| managerActions\[action\]\?\.background === true/);
+  assert.match(runBlock, /payload\?\.background === true \|\| payload\?\.result\?\.background === true/);
+  assert.doesNotMatch(runBlock, /managerActions\[action\]\?\.background === true/);
   assert.match(runBlock, /waitForFallbackBackgroundAction\(action, actionStartedAt, result\)/);
 });
 
@@ -1363,10 +1364,14 @@ test("only an explicit refresh status action performs the slow snapshot source v
   assert.match(snapshotBlock, /snapshotFreshness=refresh/);
   assert.match(runActionBlock, /managerSnapshot\(\{ verifySnapshotFreshness \}\)/);
   assert.match(deliveryBlock, /request\.silent !== true/);
-  assert.match(deliveryBlock, /completedPayload\.snapshot \|\|= await managerSnapshot\(\)/);
+  const completedActionStart = deliveryBlock.indexOf("completedPayload = await runAction(action");
+  const completedActionEnd = deliveryBlock.indexOf("completedPayload.managerSummary = managerSummary", completedActionStart);
+  assert.doesNotMatch(deliveryBlock.slice(completedActionStart, completedActionEnd), /await managerSnapshot\(/);
+  assert.doesNotMatch(deliveryBlock, /snapshot: await managerSnapshot\(\)\.catch/);
   assert.match(managerInject, /snapshotStatus\?\.state === "unverified"/);
   assert.match(managerInject, /snapshotStatus\?\.state === "check_failed"/);
-  assert.match(actionUiTimeoutBlock, /action === "refreshStatus"[\s\S]*?SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS/);
+  assert.match(actionUiTimeoutBlock, /return actionTransportTimeoutMs\(action\) \+ 1000/);
+  assert.match(managerButtonTest, /replace\("return actionTransportTimeoutMs\(action\) \+ 1000;", "return 120;"\)/);
 });
 
 test("Manager long actions enter pending UI without losing their late bridge result", () => {
@@ -1376,6 +1381,7 @@ test("Manager long actions enter pending UI without losing their late bridge res
   const installActionsEnd = managerInject.indexOf("installActions();", installActionsStart);
   const installActionsBlock = managerInject.slice(installActionsStart, installActionsEnd);
   const bridgeRunActionBlock = extractNamedFunction(source, "runAction");
+  const actionUiTimeoutBlock = extractNamedFunction(managerInject, "actionUiTimeoutMs");
   const uiTransportMs = Number(managerInject.match(/const MANAGER_ACTION_TRANSPORT_TIMEOUT_MS = (\d+);/)?.[1]);
   const bridgeTransportMs = Number(source.match(/const MANAGER_ACTION_HTTP_TIMEOUT_MS = (\d+);/)?.[1]);
   const longestForegroundMs = Number(
@@ -1393,6 +1399,7 @@ test("Manager long actions enter pending UI without losing their late bridge res
   assert.match(installActionsBlock, /actionPromise\.then\(async \(lateOutcome\) =>/);
   assert.match(installActionsBlock, /lateOutcome\.type === "error"[\s\S]*?result\.textContent = "\\u8fd0\\u884c\\u5931\\u8d25/);
   assert.match(bridgeRunActionBlock, /managerActionHttpTimeoutMs\(action\)/);
+  assert.match(actionUiTimeoutBlock, /return actionTransportTimeoutMs\(action\) \+ 1000/);
   assert.equal(longestForegroundMs, 240000);
   assert.equal(refreshFeaturesMs, 300000);
   assert.ok(bridgeTransportMs > longestForegroundMs);
@@ -1413,20 +1420,52 @@ test("Manager update checks wait past the service budget and never fabricate bac
   const serviceBudgetMs = Number(
     managerService.match(/updateCheck:\s*\{[\s\S]*?timeoutMs:\s*(\d+),/)?.[1],
   );
-  const uiBudgetMs = Number(
-    managerInject.match(/const UPDATE_CHECK_ACTION_UI_TIMEOUT_MS = (\d+);/)?.[1],
-  );
+  const actionUiTimeout = vm.runInNewContext(`(${timeoutMsBlock})`, {
+    actionTransportTimeoutMs: () => 340000,
+  });
 
   assert.equal(serviceBudgetMs, 30000);
-  assert.ok(uiBudgetMs >= serviceBudgetMs + 10000, "the UI must leave transport margin after the local check budget");
-  assert.match(timeoutMsBlock, /action === "updateCheck"[\s\S]*?UPDATE_CHECK_ACTION_UI_TIMEOUT_MS/);
+  assert.equal(actionUiTimeout("updateCheck"), 341000);
+  assert.match(timeoutMsBlock, /return actionTransportTimeoutMs\(action\) \+ 1000/);
   assert.match(timeoutBlock, /action === "updateCheck"[\s\S]*?\\u7ed3\\u679c\\u672a\\u77e5/);
   assert.match(timeoutBlock, /action === "updateCheck"[\s\S]*?\\u4ecd\\u7b49\\u5f85\\u672c\\u5730\\u68c0\\u67e5/);
   assert.doesNotMatch(timeoutBlock, /action === "updateCheck"[^\n]*\\u540e\\u53f0/);
+  const timeoutText = vm.runInNewContext(`(${timeoutBlock})`);
+  const positiveBackground = /已提交后台|已开始后台|已在后台/;
+  for (const action of ["refreshModels", "refreshFeatures", "syncHost", "stabilitySoak", "coldRelaunch", "postVerificationFull"]) {
+    const text = timeoutText(action, action);
+    assert.doesNotMatch(text, positiveBackground, action);
+    assert.match(text, /结果未返回|结果未知|仍在等待/, action);
+  }
   assert.match(timeoutBranch, /const pendingStartedAt = actionStartedAt/);
   assert.match(timeoutBranch, /ok:\s*null/);
   assert.doesNotMatch(timeoutBranch, /ok:\s*true/);
   assert.match(timeoutBranch, /__ANTICODEX_MANAGER_CURRENT_ACTION_TOKEN__ === actionToken/);
+});
+
+test("Manager summaries require an explicit background receipt", () => {
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`, {
+    managerActionResult: (payload) => {
+      let result = payload && typeof payload === "object" ? payload : {};
+      while (result?.result && typeof result.result === "object" && result.result !== result) result = result.result;
+      return result;
+    },
+    sourceSnapshotLine: () => "",
+    failureSummaryLine: () => "",
+  });
+  const bridgeSummarize = vm.runInNewContext(`(${extractNamedFunction(source, "managerSummary")})`, {
+    sourceSnapshotLine: () => "",
+    failureSummaryLine: () => "",
+  });
+  const positiveBackground = /已提交后台|已开始后台|已在后台/;
+  const noReceipt = { ok: true, result: { result: { ok: true, background: false } } };
+  const receipt = { ok: true, result: { result: { ok: true, background: true } } };
+  for (const action of ["syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch", "postVerificationFull"]) {
+    assert.doesNotMatch(summarize(action, noReceipt), positiveBackground, action);
+    assert.doesNotMatch(bridgeSummarize(action, noReceipt), positiveBackground, `bridge ${action}`);
+    assert.match(summarize(action, receipt), /后台/, `${action} receipt`);
+    assert.match(bridgeSummarize(action, receipt), /后台/, `bridge ${action} receipt`);
+  }
 });
 
 test("Manager keeps structured verifier failures available for readable UI summaries", () => {
@@ -1513,6 +1552,11 @@ test("Manager late action delivery is gated by the exact action generation token
       < lateOutcomeBlock.indexOf("window.__ANTICODEX_MANAGER_LAST_ACTION_RESULT__ ="),
     "a stale late action must be rejected before it becomes the preserved Manager result",
   );
+  assert.ok(
+    installActionsBlock.lastIndexOf("delete window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__")
+      < installActionsBlock.lastIndexOf('if (action !== "refreshStatus") void refreshManagerSnapshot()'),
+    "the silent post-action snapshot must start only after the action in-flight token is cleared",
+  );
 });
 
 test("Manager repeated full verification and quota retry failures have truthful visible feedback", () => {
@@ -1522,8 +1566,8 @@ test("Manager repeated full verification and quota retry failures have truthful 
   const noticeEnd = managerInject.indexOf("notice.addEventListener", noticeStart);
   const noticeBlock = managerInject.slice(noticeStart, noticeEnd);
 
-  assert.match(injectSummary, /action === "postVerificationFull"[\s\S]*?unwrapped\?\.alreadyRunning/);
-  assert.match(bridgeSummary, /action === "postVerificationFull"[\s\S]*?payload\?\.alreadyRunning/);
+  assert.match(injectSummary, /action === "postVerificationFull"[\s\S]*?unwrapped\?\.background !== true[\s\S]*?unwrapped\?\.alreadyRunning/);
+  assert.match(bridgeSummary, /action === "postVerificationFull"[\s\S]*?unwrappedResult\?\.background !== true[\s\S]*?unwrappedResult\?\.alreadyRunning/);
   for (const summary of [injectSummary, bridgeSummary]) assert.match(summary, /\\u5b8c\\u6574\\u9a8c\\u8bc1\\u5df2\\u5728\\u540e\\u53f0\\u8fd0\\u884c/);
   assert.match(noticeBlock, /catch \(error\)/);
   assert.match(noticeBlock, /\\u91cd\\u65b0\\u68c0\\u67e5\\u5931\\u8d25/);
@@ -1675,8 +1719,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v114"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v114"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v115"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v115"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,

@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v114";
+  const VERSION = "native-panel-v115";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -99,11 +99,6 @@
   const MANAGER_PENDING_TRANSPORT_GRACE_MS = 120000;
   const MANAGER_PENDING_REPORT_GRACE_MS = 30000;
   const MANAGER_PENDING_STORAGE_KEY = "anticodex.manager.pending-actions.v1";
-  const ACTION_UI_TIMEOUT_MS = 5000;
-  const EXTENDED_ACTION_UI_TIMEOUT_MS = 28000;
-  const UPDATE_CHECK_ACTION_UI_TIMEOUT_MS = 45000;
-  const SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS = 50000;
-  const LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS = 190000;
   const MCP_SKILLS_ACTION_UI_TIMEOUT_MS = 440000;
   const HIGH_IMPACT_CONFIRMATION_MS = 15000;
   const LOAD_FETCH_TIMEOUT_MS = 2500;
@@ -1377,18 +1372,21 @@
       "\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u4ecd\u9700\u5355\u72ec smoke \u9a8c\u8bc1",
     ].filter(Boolean).join("\n");
     if (action === "stabilitySoak") {
+      if (unwrapped?.background !== true) return "\u7a33\u5b9a\u6027\u5de1\u68c0\uff1a\u672a\u6536\u5230\u540e\u53f0\u542f\u52a8\u56de\u6267\u3002";
       if (unwrapped.alreadyRunning) return "\u7a33\u5b9a\u6027\u5de1\u68c0\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
       return `${unwrapped.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u7a33\u5b9a\u6027\u5de1\u68c0\u3002" : "\u542f\u52a8\u7a33\u5b9a\u6027\u5de1\u68c0\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u6d88\u8017\u771f\u5b9e Antigravity \u6d41\u91cf\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-stability-soak.json\u3002`;
     }
     if (action === "coldRelaunch") {
+      if (unwrapped?.background !== true) return "\u51b7\u542f\u52a8\u9a8c\u8bc1\uff1a\u672a\u6536\u5230\u540e\u53f0\u542f\u52a8\u56de\u6267\u3002";
       if (unwrapped.alreadyRunning) return "\u51b7\u542f\u52a8\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c\u3002\n\u5b83\u4f1a\u91cd\u542f Anti-Codex\uff1b\u8bf7\u7a0d\u540e\u70b9\u201c\u67e5\u770b\u6700\u65b0\u62a5\u544a\u201d\u786e\u8ba4\u7ed3\u679c\u3002";
       return `${unwrapped.ok ? "\u5df2\u5728\u540e\u53f0\u5f00\u59cb\u51b7\u542f\u52a8\u9a8c\u8bc1\u3002" : "\u542f\u52a8\u51b7\u542f\u52a8\u9a8c\u8bc1\u5931\u8d25\u3002"}\n\u8fd9\u4f1a\u91cd\u542f Anti-Codex\uff0c\u5b8c\u6210\u540e\u4f1a\u5199\u5165 latest-cold-relaunch.json\u3002`;
     }
     if (action === "syncHost") {
       const failed = payload?.ok === false || r?.ok === false || unwrapped?.ok === false;
+      const background = unwrapped?.background === true;
       const detail = unwrapped?.error || unwrapped?.message || r?.error || r?.message || payload?.error || payload?.message || "";
       return [
-        failed ? "\u540c\u6b65\u542f\u52a8\u5931\u8d25" : (unwrapped?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0"),
+        failed ? "\u540c\u6b65\u542f\u52a8\u5931\u8d25" : (!background ? "\u540c\u6b65\u542f\u52a8\u7ed3\u679c\u672a\u786e\u8ba4" : (unwrapped?.alreadyRunning ? "\u540c\u6b65\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u540c\u6b65 Codex \u66f4\u65b0")),
         unwrapped?.operationId ? `\u4efb\u52a1\uff1a${unwrapped.operationId}` : "",
         unwrapped?.stage ? `\u9636\u6bb5\uff1a${unwrapped.stage}` : "",
         detail ? `\u8bf4\u660e\uff1a${detail}` : "",
@@ -1419,30 +1417,20 @@
       ...reportSummaryLines(r),
       failureSummaryLine(r),
     ].filter(Boolean).join("\n");
-    if (action === "postVerificationFull") return unwrapped?.alreadyRunning
-      ? "\u5b8c\u6574\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c"
-      : "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1";
+    if (action === "postVerificationFull") return unwrapped?.background !== true
+      ? "\u5b8c\u6574\u9a8c\u8bc1\uff1a\u672a\u6536\u5230\u540e\u53f0\u542f\u52a8\u56de\u6267"
+      : (unwrapped?.alreadyRunning ? "\u5b8c\u6574\u9a8c\u8bc1\u5df2\u5728\u540e\u53f0\u8fd0\u884c" : "\u5df2\u5f00\u59cb\u540e\u53f0\u5b8c\u6574\u9a8c\u8bc1");
     return JSON.stringify(r, null, 2);
   }
 
   function timeoutText(action, label) {
     if (action === "accountSwitch") return "\u6253\u5f00 Antigravity \u8d85\u65f6\u3002\n\u8bf7\u624b\u52a8\u6253\u5f00 Antigravity\uff0c\u5207\u6362\u8d26\u53f7\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002";
     if (action === "updateCheck") return "\u68c0\u67e5\u5168\u90e8\u66f4\u65b0\uff1a\u7ed3\u679c\u672a\u77e5\uff0c\u4ecd\u7b49\u5f85\u672c\u5730\u68c0\u67e5\u8fd4\u56de\uff1b\u8bf7\u52ff\u91cd\u590d\u70b9\u51fb\uff0c\u5b8c\u6210\u540e\u9762\u677f\u4f1a\u81ea\u52a8\u66f4\u65b0\u3002";
-    if (action === "refreshModels") return "\u6a21\u578b\u5237\u65b0\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002";
-    if (action === "refreshFeatures") return "\u672c\u5730\u529f\u80fd\u5237\u65b0\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002\n\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a\u5237\u65b0\u540e\u7528 MCP/Skill \u548c\u63d2\u4ef6/\u5e94\u7528\u6309\u94ae\u590d\u6838";
-    if (action === "syncHost" || action === "postVerificationFull" || action === "stabilitySoak" || action === "coldRelaunch") return `${label}\uff1a\u5df2\u63d0\u4ea4\u540e\u53f0\u6267\u884c\u3002\n\u8bf7\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u67e5\u770b\u6700\u65b0\u8fdb\u5ea6\uff0c\u4e0d\u8981\u91cd\u590d\u542f\u52a8\u540c\u4e00\u4e2a\u957f\u4efb\u52a1\u3002`;
-    return `${label}\uff1a\u4ecd\u5728\u8fd0\u884c\u6216\u672c\u673a\u811a\u672c\u6b63\u5728\u6536\u5c3e\u3002\n\u5b8c\u6210\u540e\u9762\u677f\u4f1a\u81ea\u52a8\u66f4\u65b0\uff1b\u4e5f\u53ef\u4ee5\u7a0d\u540e\u70b9\u201c\u5237\u65b0\u72b6\u6001\u201d\u67e5\u770b\u6700\u65b0\u7ed3\u679c\u3002`;
+    return `${label}\uff1a\u7ed3\u679c\u672a\u8fd4\u56de\uff0c\u4ecd\u5728\u7b49\u5f85\u672c\u5730\u64cd\u4f5c\uff1b\u8bf7\u52ff\u91cd\u590d\u70b9\u51fb\uff0c\u5b8c\u6210\u540e\u9762\u677f\u4f1a\u81ea\u52a8\u66f4\u65b0\u3002`;
   }
 
   function actionUiTimeoutMs(action) {
-    if (action === "refreshStatus") return SNAPSHOT_REFRESH_ACTION_UI_TIMEOUT_MS;
-    if (action === "accountSwitch") return 65000;
-    if (action === "fastOverallNoTraffic") return 90000;
-    if (action === "mcpSkills") return MCP_SKILLS_ACTION_UI_TIMEOUT_MS;
-    if (action === "pluginCapabilities") return LOCAL_VERIFIER_ACTION_UI_TIMEOUT_MS;
-    if (action === "updateCheck") return UPDATE_CHECK_ACTION_UI_TIMEOUT_MS;
-    if (action === "sourcePreflight" || action === "syncReadiness" || action === "diagnosticsBundle") return EXTENDED_ACTION_UI_TIMEOUT_MS;
-    return ACTION_UI_TIMEOUT_MS;
+    return actionTransportTimeoutMs(action) + 1000;
   }
 
   function actionTransportTimeoutMs(action) {
@@ -2597,6 +2585,7 @@
             }
             result.removeAttribute("data-anticodex-running");
             setActionButtonsDisabled(false);
+            if (action !== "refreshStatus") void refreshManagerSnapshot().then(() => load({ updateResult: false }));
             if ((window.__ANTICODEX_MANAGER_ACTION_QUEUE__?.length || 0) === 0) {
               window.__ANTICODEX_MANAGER_ACTION_PROMISES__ = {};
             }

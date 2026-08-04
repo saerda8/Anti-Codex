@@ -101,7 +101,7 @@ const fixedRouteHealthUrl = String(args.get("--fixed-route-health-url")
 const CDP_INPUT_EVENT_TIMEOUT_MS = 12_000;
 let managerInjectSource = readFileSync(new URL("./anticodex-manager-inject.js", import.meta.url), "utf8");
 if (simulatePendingReopen) {
-  managerInjectSource = managerInjectSource.replace("const ACTION_UI_TIMEOUT_MS = 5000;", "const ACTION_UI_TIMEOUT_MS = 120;");
+  managerInjectSource = managerInjectSource.replace("return actionTransportTimeoutMs(action) + 1000;", "return 120;");
 }
 if (uiOnlyMode) {
   managerInjectSource = managerInjectSource

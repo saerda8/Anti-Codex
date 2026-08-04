@@ -675,7 +675,7 @@ try {
           ? closeScroll.scrollTop > 0 && closeScroll.scrollTop < maxScroll
           : closeScroll.scrollTop >= maxScroll;
       result = {
-        ok: positionOk && promptView.version === "native-panel-v114" && promptView.textareaCount === 4,
+        ok: positionOk && promptView.version === "native-panel-v115" && promptView.textareaCount === 4,
         port,
         target: { id: target.id, title: target.title, url: target.url },
         profileEntry: settledManagerEntryPoint.text,
@@ -831,7 +831,7 @@ try {
     result = {
       ok: (promptSettingsSaveRestore || (middleScrollTop > initialScrollTop
         && bottomState.scrollTop >= middleScrollTop
-        )) && promptView.version === "native-panel-v114" && promptView.textareaCount === 4,
+        )) && promptView.version === "native-panel-v115" && promptView.textareaCount === 4,
       port,
       target: { id: target.id, title: target.title, url: target.url },
       profileEntry: settledManagerEntryPoint.text,
