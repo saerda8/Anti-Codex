@@ -1434,6 +1434,28 @@ test("Manager keeps structured verifier failures available for readable UI summa
   assert.match(bridgeActionBlock, /payload\?\.ok !== false \|\| \(payload\?\.result && typeof payload\.result === "object"\)/);
 });
 
+test("Manager MCP summaries read the compact console evidence without false warnings", () => {
+  const payload = {
+    ok: true,
+    result: {
+      ok: true,
+      mcp: { count: 1, realCallPassed: true, realListCount: 0 },
+      skills: { count: 128, smokeReadable: true },
+    },
+  };
+  const summary = vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`, {
+    managerActionResult: (value) => value?.result || value || {},
+  })("mcpSkills", payload);
+  const bridgeSummary = vm.runInNewContext(`(${extractNamedFunction(source, "managerSummary")})`, {})("mcpSkills", payload);
+
+  for (const text of [summary, bridgeSummary]) {
+    assert.match(text, /node_repl 通过/);
+    assert.match(text, /worker list 未执行（开发 worker 不注入）/);
+    assert.match(text, /Skill 文件 可读/);
+    assert.doesNotMatch(text, /需要处理|未知/);
+  }
+});
+
 test("Manager script fallback rejects failed receipts unless they include structured verifier output", () => {
   const scriptActionBlock = extractNamedFunction(managerInject, "runActionViaScript");
   assert.match(scriptActionBlock, /payload\?\.ok !== false \|\| \(payload\?\.result && typeof payload\.result === "object"\)/);

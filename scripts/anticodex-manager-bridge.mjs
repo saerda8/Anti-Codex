@@ -767,11 +767,20 @@ function managerSummary(action, payload) {
     `\u5df2\u4fee\u590d\uff1a${result.repairedCount ?? result.shortcuts?.length ?? "\u672a\u77e5"}`,
     failureSummaryLine(result),
   ].filter(Boolean).join("\n");
-  if (action === "mcpSkills") return [
-    `MCP/Skill \u6e05\u5355\u53ef\u89c1\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
-    `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
-    `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${result.mcp?.smoke?.realCall?.passed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.filter((entry) => entry && entry.passed === true).length : "\u672a\u77e5"}/${Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList.length : "\u672a\u77e5"}\uff0cSkill \u6587\u4ef6 ${result.skills?.smoke?.readable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
-  ].join("\n");
+  if (action === "mcpSkills") {
+    const realList = Array.isArray(result.mcp?.smoke?.realList) ? result.mcp.smoke.realList : null;
+    const realListCount = Number(result.mcp?.realListCount);
+    const workerListSummary = realList
+      ? `${realList.filter((entry) => entry && entry.passed === true).length}/${realList.length}`
+      : (realListCount === 0 ? "\u672a\u6267\u884c\uff08\u5f00\u53d1 worker \u4e0d\u6ce8\u5165\uff09" : (Number.isFinite(realListCount) ? `\u5df2\u68c0\u67e5 ${realListCount}` : "\u672a\u68c0\u67e5"));
+    const realCallPassed = result.mcp?.smoke?.realCall?.passed === true || result.mcp?.realCallPassed === true;
+    const skillReadable = result.skills?.smoke?.readable === true || result.skills?.smokeReadable === true;
+    return [
+      `MCP/Skill \u6e05\u5355\u53ef\u89c1\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
+      `MCP ${result.mcp?.count ?? "\u672a\u77e5"} / Skill ${result.skills?.count ?? "\u672a\u77e5"}`,
+      `\u771f\u5b9e\u5de5\u5177\u8c03\u7528\uff1anode_repl ${realCallPassed ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}\uff0cworker list ${workerListSummary}\uff0cSkill \u6587\u4ef6 ${skillReadable ? "\u53ef\u8bfb" : "\u672a\u8bfb\u5230"}`,
+    ].join("\n");
+  }
   if (action === "pluginCapabilities") {
     const capabilities = result.capabilities || {};
     const appTools = capabilities.appToolCount ?? 0;
