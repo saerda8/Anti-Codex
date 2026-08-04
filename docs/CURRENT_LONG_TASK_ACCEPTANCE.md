@@ -323,5 +323,5 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 
 - The autonomous long-task artifact above remains accepted and frozen; no new prompt or provider traffic is authorized for this product-repair lane.
 - Later current-shell re-audit found product gaps outside that artifact: the Manager hid an already-supported developer prompt layer, common action results can be delayed behind a second full snapshot, and the Explorer/Start/tray startup-entry matrix lacks real external-input evidence.
-- The developer editor source repair is now focused-green (`67/67`, combined Manager `95/95`) as `native-panel-v114`, but it is not accepted until clean no-traffic preflight, guarded activation and physical four-editor proof pass.
+- The developer editor repair is accepted as `native-panel-v114`: commit `64de7cbc`, clean no-traffic preflight `929/929`, guarded transaction `20260804T014839081Z-48e51fe1ccf64cec827674904c3c1fc8`, matching source/installed hashes and physical four-editor proof at top/middle/bottom scroll positions all pass. No setting was saved and no model request was sent.
 - Therefore the older project-wide 100% statement is historical, not current. Current completion remains open without changing the accepted Gate 8 long-task result.

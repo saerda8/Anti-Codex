@@ -3524,7 +3524,7 @@ Do not solve this by hiding the UI warning or deleting the whole prompt feature.
 
 - [x] Prove that `codexDeveloper` is already supported by the common CodexPlusPlus request policy for both reserved routes and that only the Manager UI hid it. Do not rebuild or redesign the translation layer.
 - [x] Add the existing editor control to Manager `native-panel-v114`, save its real value, preserve restore-default, and state the existing precedence truth: it is independently effective only while the complete merged prompt follows the runtime default. Focused RED/GREEN and adjacent Manager coverage pass `67/67` and `95/95`.
-- [ ] Commit the source-only UI repair, pass one clean full no-traffic preflight, activate it through the guarded Anti-Codex transaction, then physically prove four text editors and top/middle/bottom close behavior without saving or sending a model request.
+- [x] Commit the source-only UI repair as `64de7cbc`, pass the clean full no-traffic preflight `929/929`, activate transaction `20260804T014839081Z-48e51fe1ccf64cec827674904c3c1fc8`, then physically prove four text editors and top/middle/bottom close behavior without saving or sending a model request.
 - [ ] Repair the shared Manager response path so a completed action result is not blocked behind a second full snapshot. Do not patch the many individual button timeouts or claim a background launch without a real receipt.
 - [ ] Keep the four-entry/three-state startup matrix open. Existing evidence covers taskbar real-mouse behavior but not Explorer double-click for Desktop/Start or an actual tray click; missing entries must be observed, not simulated.
 
