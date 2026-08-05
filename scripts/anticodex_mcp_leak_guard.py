@@ -59,6 +59,13 @@ class McpProcess:
     working_set_bytes: int
 
 
+@dataclass(frozen=True, slots=True)
+class McpSnapshot:
+    app_pids: tuple[int, ...]
+    root_pids: tuple[int, ...]
+    processes: tuple[McpProcess, ...]
+
+
 class _ProcessEntry32W(ctypes.Structure):
     _fields_ = [
         ("dwSize", wintypes.DWORD),
@@ -351,7 +358,7 @@ def _read_process_stats(pid: int) -> tuple[float, int] | None:
         close_handle(handle)
 
 
-def collect_mcp_processes(
+def collect_mcp_snapshot(
     *,
     expected_app_path: Path | str = DEFAULT_APP_PATH,
     expected_core_path: Path | str = DEFAULT_CORE_PATH,
@@ -360,11 +367,11 @@ def collect_mcp_processes(
     path_reader: Callable[[int], str | None] = _query_process_path,
     command_line_reader: Callable[[int], str | None] = _query_process_command_line,
     stats_reader: Callable[[int], tuple[float, int] | None] = _read_process_stats,
-) -> list[McpProcess]:
+) -> McpSnapshot:
     try:
         rows = list(process_rows_provider())
     except OSError:
-        return []
+        return McpSnapshot((), (), ())
 
     apps: dict[int, float] = {}
     for pid, _parent_pid, executable_name in rows:
@@ -423,7 +430,45 @@ def collect_mcp_processes(
                 working_set_bytes=max(0, stats[1]),
             )
         )
-    return sorted(processes, key=lambda process: (process.app_pid, process.root_pid, process.created_at))
+    return McpSnapshot(
+        tuple(sorted(apps)),
+        tuple(sorted(roots)),
+        tuple(sorted(processes, key=lambda process: (process.app_pid, process.root_pid, process.created_at))),
+    )
+
+
+def collect_mcp_processes(
+    *,
+    expected_app_path: Path | str = DEFAULT_APP_PATH,
+    expected_core_path: Path | str = DEFAULT_CORE_PATH,
+    expected_user_data_path: Path | str = DEFAULT_USER_DATA_PATH,
+    process_rows_provider: Callable[[], Iterable[tuple[int, int, str]]] = _toolhelp_process_rows,
+    path_reader: Callable[[int], str | None] = _query_process_path,
+    command_line_reader: Callable[[int], str | None] = _query_process_command_line,
+    stats_reader: Callable[[int], tuple[float, int] | None] = _read_process_stats,
+) -> list[McpProcess]:
+    return list(
+        collect_mcp_snapshot(
+            expected_app_path=expected_app_path,
+            expected_core_path=expected_core_path,
+            expected_user_data_path=expected_user_data_path,
+            process_rows_provider=process_rows_provider,
+            path_reader=path_reader,
+            command_line_reader=command_line_reader,
+            stats_reader=stats_reader,
+        ).processes
+    )
+
+
+def _coerce_mcp_snapshot(value: McpSnapshot | Iterable[McpProcess]) -> McpSnapshot:
+    if isinstance(value, McpSnapshot):
+        return value
+    processes = tuple(value)
+    return McpSnapshot(
+        tuple(sorted({process.app_pid for process in processes})),
+        tuple(sorted({process.root_pid for process in processes})),
+        processes,
+    )
 
 
 def select_excess_processes(
@@ -568,7 +613,7 @@ class McpLeakGuard:
         self,
         *,
         runtime_dir: Path = DEFAULT_RUNTIME_DIR,
-        snapshot_provider: Callable[[], list[McpProcess]] = collect_mcp_processes,
+        snapshot_provider: Callable[[], McpSnapshot | Iterable[McpProcess]] = collect_mcp_snapshot,
         terminator: Callable[[int], bool] = _terminate_process_tree,
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -581,7 +626,8 @@ class McpLeakGuard:
 
     def run_once(self, *, enforce: bool) -> dict[str, object]:
         now = self.clock()
-        snapshot = self.snapshot_provider()
+        scan = _coerce_mcp_snapshot(self.snapshot_provider())
+        snapshot = list(scan.processes)
         excess = select_excess_processes(snapshot, now=now)
         confirmed = self.limiter.confirm(excess, now=now)
         killed: list[int] = []
@@ -589,11 +635,14 @@ class McpLeakGuard:
             for process in confirmed:
                 if revalidate_and_terminate(
                     process,
-                    snapshot_provider=self.snapshot_provider,
+                    snapshot_provider=lambda: _coerce_mcp_snapshot(
+                        self.snapshot_provider()
+                    ).processes,
                     terminator=self.terminator,
                 ):
                     killed.append(process.pid)
-        post_snapshot = self.snapshot_provider() if killed else snapshot
+        post_scan = _coerce_mcp_snapshot(self.snapshot_provider()) if killed else scan
+        post_snapshot = list(post_scan.processes)
         total_working_set = sum(process.working_set_bytes for process in snapshot)
         post_working_set = sum(process.working_set_bytes for process in post_snapshot)
         report: dict[str, object] = {
@@ -618,8 +667,8 @@ class McpLeakGuard:
             "max_per_signature": MAX_PER_SIGNATURE,
             "minimum_age_seconds": int(MINIMUM_AGE_SECONDS),
             "confirm_seconds": int(CONFIRM_SECONDS),
-            "app_pids": sorted({process.app_pid for process in snapshot}),
-            "root_pids": sorted({process.root_pid for process in snapshot}),
+            "app_pids": list(scan.app_pids),
+            "root_pids": list(scan.root_pids),
             "groups": _group_report(snapshot),
             "excess": [
                 {

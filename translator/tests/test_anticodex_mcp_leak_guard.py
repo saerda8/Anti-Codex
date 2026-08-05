@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
@@ -110,6 +111,70 @@ def test_snapshot_requires_exact_app_core_and_direct_node_ancestry() -> None:
     assert [process.pid for process in processes] == [21]
     assert processes[0].app_pid == 10
     assert processes[0].root_pid == 20
+
+
+def test_reports_exact_anticodex_roots_without_candidates_and_excludes_official(
+    tmp_path: Path,
+) -> None:
+    guard = load_guard()
+    app = r"C:\Users\XD\AppData\Local\Anti-Codex\codex-patched-app\Anti-Codex.exe"
+    core = r"C:\Users\XD\AppData\Local\Anti-Codex\codex-patched-app\resources\codex.exe"
+    user_data = r"C:\Users\XD\AppData\Roaming\anticodex\codex-home-deepseek-app\electron-user-data-adaptive"
+    official_app = r"C:\Program Files\WindowsApps\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\app\ChatGPT.exe"
+    official_core = r"C:\Program Files\WindowsApps\OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0\app\resources\codex.exe"
+    paths = {
+        10: app,
+        20: core,
+        100: official_app,
+        110: official_core,
+        111: r"C:\Program Files\nodejs\node.exe",
+    }
+    commands = {
+        10: f'"{app}" --user-data-dir="{user_data}" --lang=zh-CN',
+        20: f'"{core}" -c features.code_mode_host=true app-server',
+        100: f'"{official_app}" --user-data-dir="{user_data}"',
+        110: f'"{official_core}" -c features.code_mode_host=true app-server',
+        111: "node official-worker.mjs",
+    }
+
+    snapshot = guard.collect_mcp_snapshot(
+        expected_app_path=app,
+        expected_core_path=core,
+        expected_user_data_path=user_data,
+        process_rows_provider=lambda: [
+            (10, 1, "Anti-Codex.exe"),
+            (20, 10, "codex.exe"),
+            (100, 1, "Anti-Codex.exe"),
+            (110, 100, "codex.exe"),
+            (111, 110, "node.exe"),
+        ],
+        path_reader=paths.get,
+        command_line_reader=commands.get,
+        stats_reader=lambda pid: (float(pid), pid),
+    )
+
+    assert snapshot.app_pids == (10,)
+    assert snapshot.root_pids == (20,)
+    assert snapshot.processes == ()
+
+    report = guard.McpLeakGuard(
+        runtime_dir=tmp_path,
+        snapshot_provider=lambda: snapshot,
+        clock=lambda: 1000.0,
+    ).run_once(enforce=False)
+
+    assert report["candidate_count"] == 0
+    assert report["app_pids"] == [10]
+    assert report["root_pids"] == [20]
+
+
+def test_reads_current_process_command_line_on_windows() -> None:
+    if os.name != "nt":
+        return
+    guard = load_guard()
+    command_line = guard._query_process_command_line(os.getpid())
+    assert command_line
+    assert "python" in command_line.casefold()
 
 
 def test_selects_only_old_excess_and_keeps_four_newest() -> None:
