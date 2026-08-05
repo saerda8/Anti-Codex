@@ -225,22 +225,6 @@ $missingSharedMcpNames = @()
 $extraLocalMcpNames = @()
 $changedSharedMcpNames = @()
 $changedSharedMcpDetails = @()
-$developmentWorkerMcpNames = @(
-    "deepseek-code-worker",
-    "deepseek-external",
-    "mimo-claude-coworker",
-    "mimocode-worker",
-    "deveco-code-worker",
-    "opencode-worker",
-    "kilo-worker",
-    "codebuddy-worker",
-    "agnes-worker",
-    "antigravity-code-worker",
-    "xiaoqiang1",
-    "xiaoqiang2",
-    "xiaoqiang3",
-    "xiaoqiang4"
-)
 $excludedSharedDevelopmentMcpNames = @()
 $unexpectedLocalDevelopmentMcpNames = @()
 $mcpSmokeChecks = @()
@@ -377,6 +361,35 @@ function Get-TomlQuotedFieldValue {
         try { return ($raw | ConvertFrom-Json -ErrorAction Stop) } catch {}
     }
     return $raw
+}
+
+function Get-WorkerMcpNamesFromToml {
+    param([string]$Text, [switch]$AllowGeneratedHttp)
+    if (-not $Text) { return @() }
+    $workers = New-Object System.Collections.Generic.List[string]
+    foreach ($name in @(Get-McpServerNamesFromToml $Text)) {
+        if ($name -eq "node_repl") { continue }
+        $section = Get-McpSectionText $Text $name
+        if ((Get-TomlFieldRaw $section "enabled") -match '^false(?:\s|$)') { continue }
+        $command = Get-TomlQuotedFieldValue $section "command"
+        $url = Get-TomlQuotedFieldValue $section "url"
+        $local = (-not [string]::IsNullOrWhiteSpace($command)) -and [string]::IsNullOrWhiteSpace($url)
+        $generated = $AllowGeneratedHttp -and ($url -match '^http://127\.0\.0\.1:\d+/servers/[^/]+/mcp$')
+        if (-not $local -and -not $generated) { continue }
+
+        $namePattern = Get-McpTomlKeyPattern $name
+        $toolNames = @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.$namePattern\.tools\.([^\]]+)\]\s*$") |
+            ForEach-Object { Normalize-McpServerName $_.Groups[1].Value } |
+            Where-Object {
+                $toolSection = Get-McpNestedSectionText $Text $name "tools.$_"
+                (Get-TomlFieldRaw $toolSection "enabled") -notmatch '^false(?:\s|$)'
+            } |
+            Sort-Object -Unique)
+        if (@($toolNames | Where-Object { $_.EndsWith("_start_implementation", [StringComparison]::Ordinal) }).Count) {
+            $workers.Add($name) | Out-Null
+        }
+    }
+    return @($workers | Sort-Object -Unique)
 }
 
 function Normalize-McpCommandCompareValue {
@@ -976,11 +989,11 @@ if ($configText) {
         try {
             $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw -Encoding UTF8
             $sharedMcpNamesAll = @(Get-McpServerNamesFromToml $sharedConfigText)
-            $excludedSharedDevelopmentMcpNames = @($sharedMcpNamesAll | Where-Object { $developmentWorkerMcpNames -contains $_ })
-            $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $developmentWorkerMcpNames -notcontains $_ })
+            $excludedSharedDevelopmentMcpNames = @(Get-WorkerMcpNamesFromToml $sharedConfigText -AllowGeneratedHttp)
+            $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $excludedSharedDevelopmentMcpNames -notcontains $_ })
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
             $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
-            $unexpectedLocalDevelopmentMcpNames = @($mcpNames | Where-Object { $developmentWorkerMcpNames -contains $_ })
+            $unexpectedLocalDevelopmentMcpNames = @(Get-WorkerMcpNamesFromToml $configText)
             $localNodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
             $sharedNodeReplEnv = Get-McpNestedSectionText $sharedConfigText "node_repl" "env"
             $localNativePipe = Get-TomlQuotedFieldValue $localNodeReplEnv "SKY_CUA_NATIVE_PIPE"
@@ -1033,13 +1046,17 @@ if ($configText) {
         $section = Get-McpSectionText $configText $mcpName
         $argsMatch = [regex]::Match($section, "(?m)^\s*args\s*=\s*\[(.*?)\]")
         $commandValue = Get-TomlQuotedFieldValue $section "command"
+        $urlValue = Get-TomlQuotedFieldValue $section "url"
+        $httpHeaders = Get-TomlFieldRaw $section "http_headers"
+        $sharedWorkerHttp = $urlValue -match '^http://127\.0\.0\.1:\d+/servers/[^/]+/mcp$' -and
+            $httpHeaders -match 'Authorization\s*=\s*["'']Bearer\s+[A-Za-z0-9_-]{32,}["'']'
         $firstArg = ""
         if ($argsMatch.Success) {
             $argMatch = [regex]::Match($argsMatch.Groups[1].Value, "['""]([^'""]+)['""]")
             if ($argMatch.Success) { $firstArg = $argMatch.Groups[1].Value }
         }
-        $commandResolvable = Resolve-McpCommand $commandValue
-        $firstArgExists = if ($firstArg -and [IO.Path]::IsPathRooted($firstArg)) { Test-Path -LiteralPath $firstArg -PathType Leaf } elseif ($firstArg) { $true } else { $null }
+        $commandResolvable = if ($sharedWorkerHttp) { $true } else { Resolve-McpCommand $commandValue }
+        $firstArgExists = if ($sharedWorkerHttp) { $null } elseif ($firstArg -and [IO.Path]::IsPathRooted($firstArg)) { Test-Path -LiteralPath $firstArg -PathType Leaf } elseif ($firstArg) { $true } else { $null }
         if (-not $commandResolvable) { Add-Failure "MCP '$mcpName' command is not resolvable: $commandValue" }
         if ($firstArgExists -eq $false) { Add-Failure "MCP '$mcpName' first arg file is missing: $firstArg" }
         $mcpSmokeChecks += [pscustomobject]@{

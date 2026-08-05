@@ -19,7 +19,6 @@ from typing import Callable, Iterable, Mapping
 
 
 POLL_SECONDS = 60.0
-MAX_PER_SIGNATURE = 4
 MINIMUM_AGE_SECONDS = 15 * 60.0
 CONFIRM_SECONDS = 60.0
 MEMORY_HIGH_WATER_BYTES = 3 * 1024**3
@@ -471,29 +470,6 @@ def _coerce_mcp_snapshot(value: McpSnapshot | Iterable[McpProcess]) -> McpSnapsh
     )
 
 
-def select_excess_processes(
-    processes: Iterable[McpProcess],
-    *,
-    now: float | None = None,
-    max_per_signature: int = MAX_PER_SIGNATURE,
-    minimum_age_seconds: float = MINIMUM_AGE_SECONDS,
-) -> list[McpProcess]:
-    observed_at = time.time() if now is None else now
-    groups: dict[tuple[int, int, str], list[McpProcess]] = defaultdict(list)
-    for process in processes:
-        groups[(process.app_pid, process.root_pid, process.signature)].append(process)
-    selected: list[McpProcess] = []
-    for group in groups.values():
-        ordered = sorted(group, key=lambda process: process.created_at)
-        excess = ordered[: max(0, len(ordered) - max_per_signature)]
-        selected.extend(
-            process
-            for process in excess
-            if observed_at - process.created_at >= minimum_age_seconds
-        )
-    return sorted(selected, key=lambda process: process.created_at)
-
-
 def _identity(process: McpProcess) -> tuple[int, int, int, str, float, float, float]:
     return (
         process.app_pid,
@@ -538,17 +514,65 @@ def _terminate_process_tree(pid: int) -> bool:
     return completed.returncode == 0
 
 
-def revalidate_and_terminate(
+def probe_tracked_process(
+    process: McpProcess,
+    *,
+    expected_app_path: Path | str = DEFAULT_APP_PATH,
+    expected_core_path: Path | str = DEFAULT_CORE_PATH,
+    expected_user_data_path: Path | str = DEFAULT_USER_DATA_PATH,
+    path_reader: Callable[[int], str | None] = _query_process_path,
+    command_line_reader: Callable[[int], str | None] = _query_process_command_line,
+    stats_reader: Callable[[int], tuple[float, int] | None] = _read_process_stats,
+) -> str:
+    try:
+        worker_path = path_reader(process.pid)
+        worker_command = command_line_reader(process.pid)
+        worker_stats = stats_reader(process.pid)
+    except Exception:
+        return "gone"
+    if (
+        not worker_path
+        or not worker_command
+        or worker_stats is None
+        or worker_stats[0] != process.created_at
+        or _signature(worker_path, worker_command) != process.signature
+    ):
+        return "gone"
+
+    app_alive = False
+    root_alive = False
+    try:
+        app_stats = stats_reader(process.app_pid)
+        app_alive = (
+            app_stats is not None
+            and app_stats[0] == process.app_created_at
+            and is_exact_windows_path(path_reader(process.app_pid), expected_app_path)
+            and _is_anticodex_main_command(
+                command_line_reader(process.app_pid), expected_user_data_path
+            )
+        )
+    except Exception:
+        pass
+    try:
+        root_stats = stats_reader(process.root_pid)
+        root_alive = (
+            root_stats is not None
+            and root_stats[0] == process.root_created_at
+            and is_exact_windows_path(path_reader(process.root_pid), expected_core_path)
+            and _is_anticodex_core_command(command_line_reader(process.root_pid))
+        )
+    except Exception:
+        pass
+    return "live" if app_alive or root_alive else "orphan"
+
+
+def revalidate_and_terminate_orphan(
     selected: McpProcess,
     *,
-    snapshot_provider: Callable[[], Iterable[McpProcess]] = collect_mcp_processes,
+    orphan_probe: Callable[[McpProcess], str] = probe_tracked_process,
     terminator: Callable[[int], bool] = _terminate_process_tree,
 ) -> bool:
-    selected_identity = _identity(selected)
-    for current in snapshot_provider():
-        if _identity(current) == selected_identity:
-            return terminator(selected.pid)
-    return False
+    return orphan_probe(selected) == "orphan" and terminator(selected.pid)
 
 
 def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
@@ -614,37 +638,54 @@ class McpLeakGuard:
         *,
         runtime_dir: Path = DEFAULT_RUNTIME_DIR,
         snapshot_provider: Callable[[], McpSnapshot | Iterable[McpProcess]] = collect_mcp_snapshot,
+        orphan_probe: Callable[[McpProcess], str] = probe_tracked_process,
         terminator: Callable[[int], bool] = _terminate_process_tree,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.runtime_dir = runtime_dir
         self.snapshot_provider = snapshot_provider
+        self.orphan_probe = orphan_probe
         self.terminator = terminator
         self.clock = clock
         self.limiter = HighWaterLimiter()
+        self.tracked: dict[tuple[int, int, int, str, float, float, float], McpProcess] = {}
         self.logger = configure_logging(runtime_dir / "anticodex_mcp_leak_guard.log")
 
     def run_once(self, *, enforce: bool) -> dict[str, object]:
         now = self.clock()
         scan = _coerce_mcp_snapshot(self.snapshot_provider())
-        snapshot = list(scan.processes)
-        excess = select_excess_processes(snapshot, now=now)
-        confirmed = self.limiter.confirm(excess, now=now)
+        live = list(scan.processes)
+        live_identities = {_identity(process) for process in live}
+        for process in live:
+            self.tracked[_identity(process)] = process
+        orphan_candidates: list[McpProcess] = []
+        retained = dict(self.tracked)
+        for identity, process in tuple(self.tracked.items()):
+            if identity in live_identities:
+                continue
+            state = self.orphan_probe(process)
+            if state == "gone":
+                retained.pop(identity, None)
+            elif state == "orphan" and now - process.created_at >= MINIMUM_AGE_SECONDS:
+                orphan_candidates.append(process)
+        self.tracked = retained
+        orphan_candidates.sort(key=lambda process: process.created_at)
+        confirmed = self.limiter.confirm(orphan_candidates, now=now)
         killed: list[int] = []
         if enforce:
             for process in confirmed:
-                if revalidate_and_terminate(
+                if revalidate_and_terminate_orphan(
                     process,
-                    snapshot_provider=lambda: _coerce_mcp_snapshot(
-                        self.snapshot_provider()
-                    ).processes,
+                    orphan_probe=self.orphan_probe,
                     terminator=self.terminator,
                 ):
                     killed.append(process.pid)
-        post_scan = _coerce_mcp_snapshot(self.snapshot_provider()) if killed else scan
-        post_snapshot = list(post_scan.processes)
-        total_working_set = sum(process.working_set_bytes for process in snapshot)
-        post_working_set = sum(process.working_set_bytes for process in post_snapshot)
+                    self.tracked.pop(_identity(process), None)
+        observed = list({process.pid: process for process in [*live, *orphan_candidates]}.values())
+        total_working_set = sum(process.working_set_bytes for process in observed)
+        post_working_set = sum(
+            process.working_set_bytes for process in observed if process.pid not in killed
+        )
         report: dict[str, object] = {
             "schema": "anticodex-mcp-leak-guard-state-v1",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -654,9 +695,12 @@ class McpLeakGuard:
                 "core_path": str(DEFAULT_CORE_PATH),
                 "user_data_path": str(DEFAULT_USER_DATA_PATH),
             },
-            "candidate_count": len(snapshot),
-            "post_candidate_count": len(post_snapshot),
-            "excess_count": len(excess),
+            "selection_policy": "true-orphan-only",
+            "candidate_count": len(live),
+            "live_candidate_count": len(live),
+            "post_candidate_count": len(live),
+            "orphan_candidate_count": len(orphan_candidates),
+            "excess_count": len(orphan_candidates),
             "confirmed_count": len(confirmed),
             "killed_count": len(killed),
             "killed_pids": killed,
@@ -664,12 +708,11 @@ class McpLeakGuard:
             "post_working_set_mib": round(post_working_set / 1024**2, 1),
             "memory_high_water_mib": MEMORY_HIGH_WATER_BYTES // 1024**2,
             "memory_over_high_water": total_working_set > MEMORY_HIGH_WATER_BYTES,
-            "max_per_signature": MAX_PER_SIGNATURE,
             "minimum_age_seconds": int(MINIMUM_AGE_SECONDS),
             "confirm_seconds": int(CONFIRM_SECONDS),
             "app_pids": list(scan.app_pids),
             "root_pids": list(scan.root_pids),
-            "groups": _group_report(snapshot),
+            "groups": _group_report(observed),
             "excess": [
                 {
                     "pid": process.pid,
@@ -678,15 +721,15 @@ class McpLeakGuard:
                     "signature": process.signature,
                     "age_seconds": int(max(0.0, now - process.created_at)),
                 }
-                for process in excess
+                for process in orphan_candidates
             ],
         }
         atomic_write_json(self.runtime_dir / "anticodex_mcp_leak_guard_state.json", report)
         self.logger.info(
-            "event=scan mode=%s candidates=%d excess=%d confirmed=%d killed=%d working_set_mib=%.1f",
+            "event=scan mode=%s live=%d orphans=%d confirmed=%d killed=%d working_set_mib=%.1f",
             report["mode"],
-            len(snapshot),
-            len(excess),
+            len(live),
+            len(orphan_candidates),
             len(confirmed),
             len(killed),
             report["working_set_mib"],
@@ -695,8 +738,8 @@ class McpLeakGuard:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bound excess Anti-Codex MCP process copies")
-    parser.add_argument("--enforce", action="store_true", help="terminate confirmed excess")
+    parser = argparse.ArgumentParser(description="Clean only confirmed orphaned Anti-Codex MCP processes")
+    parser.add_argument("--enforce", action="store_true", help="terminate confirmed true orphans")
     parser.add_argument("--once", action="store_true", help="run one scan and exit")
     args = parser.parse_args()
     guard = McpLeakGuard()

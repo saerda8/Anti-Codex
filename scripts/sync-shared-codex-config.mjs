@@ -17,22 +17,7 @@ function optionValue(name) {
 const installRoot = optionValue("--install-root");
 const codexHome = optionValue("--codex-home") || path.dirname(path.resolve(targetPath));
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
-const developmentWorkerServers = new Set([
-  "deepseek-code-worker",
-  "deepseek-external",
-  "mimo-claude-coworker",
-  "mimocode-worker",
-  "deveco-code-worker",
-  "opencode-worker",
-  "kilo-worker",
-  "codebuddy-worker",
-  "agnes-worker",
-  "antigravity-code-worker",
-  "xiaoqiang1",
-  "xiaoqiang2",
-  "xiaoqiang3",
-  "xiaoqiang4",
-]);
+const workerToolSuffix = "_start_implementation";
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
 
@@ -67,8 +52,50 @@ function mcpServerName(block) {
   return String(match?.[1] || match?.[2] || match?.[3] || "");
 }
 
-function isDevelopmentWorkerBlock(block) {
-  return isMcpBlock(block) && developmentWorkerServers.has(mcpServerName(block));
+function mcpBlockSuffix(block) {
+  const match = block.header?.match(/^\[mcp_servers\.(?:"[^"]+"|'[^']+'|[^\.\]]+)(?:\.([^\]]+))?\]/);
+  return String(match?.[1] || "");
+}
+
+function blockHasAssignment(block, key, expected) {
+  const pattern = new RegExp(`^${key}\\s*=\\s*${expected}`, "i");
+  return block.lines.some((line) => pattern.test(line.trim()));
+}
+
+function workerServerNames(blocks, { allowGeneratedHttp = false } = {}) {
+  const records = new Map();
+  const recordFor = (name) => {
+    if (!records.has(name)) records.set(name, { local: false, hasStartTool: false });
+    return records.get(name);
+  };
+  for (const block of blocks) {
+    if (!isMcpBlock(block)) continue;
+    const name = mcpServerName(block);
+    const suffix = mcpBlockSuffix(block);
+    if (!name) continue;
+    const record = recordFor(name);
+    if (!suffix) {
+      const disabled = blockHasAssignment(block, "enabled", "false(?:\\s|$)");
+      const local = blockHasAssignment(block, "command", "['\"]")
+        && !blockHasAssignment(block, "url", "['\"]");
+      const generated = allowGeneratedHttp && block.lines.some((line) =>
+        /^url\s*=\s*["']http:\/\/127\.0\.0\.1:\d+\/servers\//i.test(line.trim()));
+      record.local = !disabled && (local || generated);
+      continue;
+    }
+    if (!suffix.startsWith("tools.") || blockHasAssignment(block, "enabled", "false(?:\\s|$)")) continue;
+    const tool = suffix.slice("tools.".length);
+    if (tool.endsWith(workerToolSuffix)) record.hasStartTool = true;
+  }
+  return new Set(
+    [...records]
+      .filter(([, record]) => record.local && record.hasStartTool)
+      .map(([name]) => name),
+  );
+}
+
+function isWorkerBlock(block, names) {
+  return isMcpBlock(block) && names.has(mcpServerName(block));
 }
 
 function parseTomlStringArray(value) {
@@ -203,17 +230,20 @@ function render(blocks) {
 }
 
 function mergeSharedBlocks(targetBlocks, sourceBlocks) {
+  const sourceWorkerNames = workerServerNames(sourceBlocks, { allowGeneratedHttp: true });
+  const targetWorkerNames = workerServerNames(targetBlocks, { allowGeneratedHttp: true });
   const sourceShared = sourceBlocks
     .filter(isShared)
-    .filter((block) => !isDevelopmentWorkerBlock(block))
+    .filter((block) => !isWorkerBlock(block, sourceWorkerNames))
+    .filter((block) => !isWorkerBlock(block, targetWorkerNames))
     .map(normalizeWindowsMcpShim)
     .map(normalizeMissingWindowsMcpCommand)
     .map(localizeNodeRepl);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
   const keptTargetBlocks = targetBlocks.filter(
-    (block) => !isDevelopmentWorkerBlock(block)
-      && (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
+    (block) => isWorkerBlock(block, targetWorkerNames)
+      || (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
   );
   return [...keptTargetBlocks, ...sourceShared];
 }

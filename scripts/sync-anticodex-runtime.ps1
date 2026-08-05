@@ -279,6 +279,8 @@ $requiredSourceFiles = @(
     "scripts\build-anticodex-gate5-evidence.mjs",
     "scripts\build-anticodex-gate8-autonomous-video-evidence.mjs",
     "scripts\install-codexplusplus-component.ps1",
+    "scripts\install-anticodex-shared-mcp.ps1",
+    "scripts\anticodex_shared_mcp_proxy.py",
     "third_party\codexplusplus\upstream.json",
     "third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch",
     "third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch",
@@ -1559,6 +1561,14 @@ try {
         })
         if ($runtimeHashMismatches.Count -gt 0) {
             throw "Anti-Codex activated runtime hash verification failed: $($runtimeHashMismatches -join ', ')"
+        }
+
+        $sharedMcpInstaller = Join-Path $targetRuntimeFull "scripts\install-anticodex-shared-mcp.ps1"
+        $sharedMcpSource = Join-Path $targetRuntimeFull "scripts\anticodex_shared_mcp_proxy.py"
+        $sharedMcpInstallJson = (@(& $sharedMcpInstaller -InstallRoot $installRootFull -SourceScript $sharedMcpSource) -join [Environment]::NewLine)
+        $sharedMcpInstallResult = $sharedMcpInstallJson | ConvertFrom-Json
+        if (-not $sharedMcpInstallResult.ok) {
+            throw "Anti-Codex shared MCP component could not be installed after runtime sync."
         }
 
         $shortcutRepairScript = Join-Path $targetRuntimeFull "scripts\repair-anticodex-shortcuts.ps1"

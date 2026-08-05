@@ -43,6 +43,7 @@ import {
 const COMPONENT_SCHEMA = "codexplusplus-component-manifest-v1";
 const STATUS_SCHEMA = "anticodex-fixed-route-status-v1";
 const DEFAULT_THIRD_PARTY_CONTEXT_WINDOW = 272_000;
+const DEFAULT_SHARED_MCP_PORT = 47_631;
 const CLIENT_EXIT_GRACE_MS = 10_000;
 const CLIENT_RECOVERY_BACKOFF_MS = 1_000;
 const OWNED_PROCESS_STOP_WAIT_MS = 5_000;
@@ -450,6 +451,81 @@ export function sanitizeFixedRoutePlan(plan) {
   };
 }
 
+async function startSharedMcp(plan) {
+  const componentRoot = join(plan.paths.installRoot, "shared-mcp");
+  const stateRoot = join(plan.paths.stateRoot, "shared-mcp");
+  const python = join(componentRoot, ".venv", "Scripts", "python.exe");
+  const proxyScript = join(componentRoot, "anticodex_shared_mcp_proxy.py");
+  const configPath = join(plan.paths.codexHome, "config.toml");
+  for (const requiredPath of [python, proxyScript, configPath]) {
+    if (!existsSync(requiredPath)) throw new Error(`Anti-Codex shared MCP component is missing: ${requiredPath}`);
+  }
+
+  const env = buildSupervisorChildEnvironment(plan, process.env);
+  const prepared = JSON.parse(execFileSync(python, [
+    "-B",
+    proxyScript,
+    "prepare",
+    "--config",
+    configPath,
+    "--state",
+    stateRoot,
+    "--port",
+    String(DEFAULT_SHARED_MCP_PORT),
+  ], { encoding: "utf8", env, windowsHide: true }).trim());
+  const workerNames = Array.isArray(prepared.worker_names) ? prepared.worker_names : [];
+  if (!workerNames.length) {
+    return { children: [], identities: [], logs: [], errorLogs: [], workerNames, failures: [] };
+  }
+
+  const children = [];
+  const identities = [];
+  const logs = [];
+  const errorLogs = [];
+  const failures = [];
+  for (const [index, name] of workerNames.entries()) {
+    const workerRuntimePath = prepared.runtime_paths?.[name];
+    const workerPort = Number(prepared.server_ports?.[name]);
+    if (!workerRuntimePath || !Number.isInteger(workerPort)) {
+      throw new Error(`Anti-Codex shared MCP runtime is incomplete for ${name}.`);
+    }
+    const log = openSync(join(stateRoot, `proxy-${String(index + 1).padStart(2, "0")}.log`), "a");
+    const errorLog = openSync(join(stateRoot, `proxy-${String(index + 1).padStart(2, "0")}.err.log`), "a");
+    const startedAtMs = Date.now();
+    const sharedMcp = spawn(python, ["-B", proxyScript, "run", "--runtime", workerRuntimePath], {
+      cwd: componentRoot,
+      env,
+      windowsHide: true,
+      stdio: ["ignore", log, errorLog],
+    });
+    let identity = null;
+    try {
+      identity = await captureSpawnedProcessIdentity(sharedMcp, {
+        expectedExecutablePath: python,
+        expectedParentProcessId: process.pid,
+        startedAtMs,
+      });
+      await waitFor(async () => {
+        if (sharedMcp.exitCode !== null) {
+          throw new Error(`proxy exited before readiness: ${sharedMcp.exitCode}`);
+        }
+        return tcpReady(workerPort);
+      }, { timeoutMs: 30_000, intervalMs: 250, description: `Anti-Codex shared MCP Worker ${name}` });
+      children.push(sharedMcp);
+      identities.push(identity);
+      logs.push(log);
+      errorLogs.push(errorLog);
+    } catch (error) {
+      stopOwnedProcess(sharedMcp, identity);
+      await waitForOwnedProcessExit([sharedMcp.pid]);
+      closeSync(log);
+      closeSync(errorLog);
+      failures.push({ name, error: String(error?.message ?? error) });
+    }
+  }
+  return { children, identities, logs, errorLogs, workerNames, failures };
+}
+
 async function runSupervisor(plan) {
   assertProductionRoots(plan);
   const startupProcessScan = assertNoExistingClient();
@@ -497,10 +573,12 @@ async function runSupervisor(plan) {
   let managerService = null;
   let managerWatcher = null;
   let managerBridge = null;
+  let sharedMcp = [];
   let launcherIdentity = null;
   let copiedClientIdentity = null;
   let managerWatcherIdentity = null;
   let managerBridgeIdentity = null;
+  let sharedMcpIdentity = [];
   let refreshModelsInFlight = null;
   let refreshModelsCallback = async () => {
     const error = new Error("Anti-Codex model refresh is not ready.");
@@ -514,6 +592,8 @@ async function runSupervisor(plan) {
   let shutdownReason = "unknown";
   let launcherLog = null;
   let launcherErrorLog = null;
+  let sharedMcpLog = [];
+  let sharedMcpErrorLog = [];
 
   const refreshOwnedClientIdentities = () => {
     const processScan = scanClientProcessTableSafely();
@@ -588,6 +668,7 @@ async function runSupervisor(plan) {
     const shutdownPids = [...new Set([
       managerWatcher?.pid,
       managerBridge?.pid,
+      ...sharedMcp.map((child) => child.pid),
       launcher?.pid,
     ].map(Number).filter((pid) => Number.isInteger(pid) && pid > 0))];
     status = {
@@ -604,6 +685,7 @@ async function runSupervisor(plan) {
     const clientStop = options.stopClient === true
       ? await stopOwnedClientSession()
       : { survivors: [], scanError: null };
+    sharedMcp.forEach((child, index) => stopOwnedProcess(child, sharedMcpIdentity[index]));
     stopOwnedProcess(launcher, launcherIdentity);
     await managerService?.close?.().catch(() => {});
     const shutdownSurvivors = [...new Set([
@@ -612,6 +694,8 @@ async function runSupervisor(plan) {
     ])];
     if (launcherLog !== null) closeSync(launcherLog);
     if (launcherErrorLog !== null) closeSync(launcherErrorLog);
+    sharedMcpLog.forEach((handle) => closeSync(handle));
+    sharedMcpErrorLog.forEach((handle) => closeSync(handle));
     const fullyStopped = shutdownSurvivors.length === 0 && !clientStop.scanError;
     status = {
       ...status,
@@ -716,15 +800,26 @@ async function runSupervisor(plan) {
     const configPath = join(plan.paths.codexHome, "config.toml");
     const existingConfig = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
     const mergedConfig = mergeCodexRouteConfig(existingConfig, runtimeRoute);
+    writeTextAtomic(configPath, mergedConfig);
+    writeTextAtomic(join(plan.paths.codexHome, "auth.json"), runtimeRoute.authContents);
+    const sharedMcpSupport = await startSharedMcp(plan);
+    sharedMcp = sharedMcpSupport.children;
+    sharedMcpIdentity = sharedMcpSupport.identities;
+    sharedMcpLog = sharedMcpSupport.logs;
+    sharedMcpErrorLog = sharedMcpSupport.errorLogs;
+    const effectiveConfig = readFileSync(configPath, "utf8");
     const settings = buildCodexPlusPlusSettings({
-      route: { ...runtimeRoute, config: mergedConfig },
-      relayRoutes: runtimeRelayRoutes.map((entry) => ({ ...entry, config: mergedConfig })),
+      route: { ...runtimeRoute, config: effectiveConfig },
+      relayRoutes: runtimeRelayRoutes.map((entry) => ({ ...entry, config: effectiveConfig })),
       userDataDir: plan.paths.electronUserData,
       disableGpu: truthy(plan.args.disableGpu ?? process.env.ANTICODEX_DISABLE_GPU),
     });
-    writeTextAtomic(configPath, mergedConfig);
-    writeTextAtomic(join(plan.paths.codexHome, "auth.json"), runtimeRoute.authContents);
     writeTextAtomic(join(plan.paths.codexPlusPlusState, "settings.json"), `${JSON.stringify(settings, null, 2)}\n`);
+    status.sharedMcpWorkerCount = sharedMcpSupport.workerNames.length;
+    status.sharedMcpReadyWorkerCount = sharedMcp.length;
+    status.sharedMcpFailures = sharedMcpSupport.failures;
+    status.processes.sharedMcp = sharedMcp.map((child) => child.pid);
+    writeStatus(plan.paths.statusFile, status);
 
     refreshModelsCallback = async () => {
       if (refreshModelsInFlight) return refreshModelsInFlight;
@@ -835,6 +930,7 @@ async function runSupervisor(plan) {
         processes: {
           managerService: process.pid,
           codexPlusPlus: launcher.pid,
+          sharedMcp: sharedMcp.map((child) => child.pid),
           copiedClient: [],
           managerWatcher: null,
           managerBridge: null,
@@ -936,6 +1032,7 @@ async function runSupervisor(plan) {
       processes: {
         managerService: process.pid,
         codexPlusPlus: launcher.pid,
+        sharedMcp: sharedMcp.map((child) => child.pid),
         copiedClient: [...ownedClients],
         managerWatcher: managerWatcher?.pid ?? null,
         managerBridge: managerBridge?.pid ?? null,

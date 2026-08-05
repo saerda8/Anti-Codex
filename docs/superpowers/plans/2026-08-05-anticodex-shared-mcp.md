@@ -37,13 +37,13 @@
 ### Task 3: Startup integration without hot restart
 
 **Files:**
-- Modify: `scripts/start-anticodex.ps1`
+- Modify: `scripts/start-anticodex-fixed-route.mjs`
 - Modify: `scripts/sync-anticodex-runtime.ps1`
-- Modify: `translator/tests/anticodex-fixed-route.test.mjs`
+- Modify: `translator/tests/anticodex-fixed-route-supervisor.test.mjs`
 
-- [ ] Add source-contract tests proving the shared layer is invoked only after the existing-client early exit and before the fixed-route client starts.
+- [ ] Add source-contract tests proving the shared layer is an identity-bound supervisor child, starts before the copied client, and is stopped by normal cleanup.
 - [ ] Run the focused Node test and confirm it fails.
-- [ ] Add the minimal launcher call and include the new runtime files in sync validation; never install dependencies or restart a live client from the launcher.
+- [ ] Add the minimal supervisor child lifecycle and include the new runtime files in sync validation; never install dependencies or restart a live client from the launcher.
 - [ ] Re-run the focused Node test and PowerShell parser checks.
 
 ### Task 4: Remove fixed Worker-name assumptions

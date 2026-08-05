@@ -443,6 +443,13 @@ if (-not $HostOnly) {
         throw "Anti-Codex CodexPlusPlus component installer is missing: $codexPlusPlusInstaller"
     }
     & $codexPlusPlusInstaller -InstallRoot $resolvedTarget | Out-Null
+    $sharedMcpInstaller = Join-Path $ROOT "scripts\install-anticodex-shared-mcp.ps1"
+    $sharedMcpSource = Join-Path $ROOT "scripts\anticodex_shared_mcp_proxy.py"
+    if (-not (Test-Path -LiteralPath $sharedMcpInstaller -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $sharedMcpSource -PathType Leaf)) {
+        throw "Anti-Codex shared MCP component source is incomplete."
+    }
+    & $sharedMcpInstaller -InstallRoot $resolvedTarget -SourceScript $sharedMcpSource | Out-Null
     foreach ($requiredRuntimePath in @(
         (Join-Path $runtime "scripts\antigravity-desktop.ps1"),
         (Join-Path $runtime "scripts\apply-anticodex-upstream.ps1"),
@@ -456,6 +463,8 @@ if (-not $HostOnly) {
         (Join-Path $runtime "scripts\build-anticodex-gate5-evidence.mjs"),
         (Join-Path $runtime "scripts\build-anticodex-gate8-autonomous-video-evidence.mjs"),
         (Join-Path $runtime "scripts\install-codexplusplus-component.ps1"),
+        (Join-Path $runtime "scripts\install-anticodex-shared-mcp.ps1"),
+        (Join-Path $runtime "scripts\anticodex_shared_mcp_proxy.py"),
         (Join-Path $runtime "scripts\test-codexplusplus-antigravity-route-switch.mjs"),
         (Join-Path $runtime "scripts\test-anticodex-gate8-autonomous-video.mjs"),
         (Join-Path $runtime "scripts\test-anticodex-shortcut-restore.ps1"),

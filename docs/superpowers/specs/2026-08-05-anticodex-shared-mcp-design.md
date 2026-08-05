@@ -20,9 +20,9 @@ Read Anti-Codex's effective `config.toml`; never use a fixed list of Worker name
 1. it is enabled;
 2. it is local stdio (`command` and string `args`, no `url`);
 3. it is not the built-in `node_repl`;
-4. its enabled tool permissions contain the Worker lifecycle contract: one `*_start_implementation`, plus `*_get_job`, `*_wait_for_job`, and `*_cancel_job` tool.
+4. its enabled tool permissions contain at least one `*_start_implementation` tool. Other lifecycle tools may remain enabled by default and therefore need not appear explicitly in TOML.
 
-This rule excludes remote MCPs, built-ins, ordinary local MCPs, and disabled Workers. `deepseek-external` is only a compatibility sample because its tool contract matches; its name is never special-cased. Adding or removing any same-contract Worker changes the discovered set on the next normal Anti-Codex start without proxy source edits.
+This rule excludes remote MCPs, built-ins, local MCPs without the Worker lifecycle tool, and disabled Workers. It does not depend on a server name or entry-script filename. `deepseek-external` is only a compatibility sample because its tool contract matches; its name is never special-cased. Adding or removing any same-contract Worker changes the discovered set on the next normal Anti-Codex start without proxy source edits.
 
 ### Runtime and configuration
 
@@ -32,7 +32,7 @@ The proxy binds only `127.0.0.1`, uses a random private bearer token, a dedicate
 
 ### Startup boundary
 
-The normal Anti-Codex launcher prepares and starts the shared layer only after proving no Anti-Codex client is already running and before starting the copied client. No file watcher restarts a live client. A config change therefore takes effect on the next normal start.
+The fixed-route supervisor prepares and starts the shared layer only after proving no Anti-Codex client is already running and before starting the copied client. The proxy is an identity-bound owned child and is stopped with the supervisor, so a disabled Worker cannot survive into the next launch. No file watcher restarts a live client. A config change therefore takes effect on the next normal start.
 
 ### Orphan guard
 
@@ -41,6 +41,7 @@ The guard never selects a process merely because several identical commands exis
 ## Acceptance
 
 - Unit tests cover dynamic discovery, remote/built-in/non-Worker exclusion, new Worker addition, deletion/disable, config preservation, auth, and rollback safety.
+- One isolated proxy process is started per discovered Worker, so every channel shares one Worker instance while a failed Worker cannot terminate its peers.
 - An isolated integration test connects four simulated channels to every discovered dummy Worker, proves one process per service, HTTP 401 without the Anti token, idempotent duplicate start, and healthy-worker isolation from a failed Worker.
 - A read-only compatibility check classifies the real `deepseek-external` definition without invoking a model.
 - Guard tests prove live-core duplicates are never selected and only previously observed Anti-owned orphans can be confirmed; official samples remain excluded.

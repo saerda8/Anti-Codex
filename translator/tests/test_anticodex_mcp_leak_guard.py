@@ -177,30 +177,23 @@ def test_reads_current_process_command_line_on_windows() -> None:
     assert "python" in command_line.casefold()
 
 
-def test_selects_only_old_excess_and_keeps_four_newest() -> None:
+def test_live_core_duplicates_are_report_only_and_never_selected(tmp_path: Path) -> None:
     guard = load_guard()
     processes = [sample(guard, pid, created_at=float(pid)) for pid in range(1, 7)]
-    processes.append(sample(guard, 7, created_at=995.0, signature="other"))
-
-    selected = guard.select_excess_processes(
-        processes,
-        now=1000.0,
-        max_per_signature=4,
-        minimum_age_seconds=900.0,
+    terminated: list[int] = []
+    instance = guard.McpLeakGuard(
+        runtime_dir=tmp_path,
+        snapshot_provider=lambda: guard.McpSnapshot((10,), (20,), tuple(processes)),
+        orphan_probe=lambda process: "live",
+        terminator=lambda pid: terminated.append(pid) or True,
+        clock=lambda: 2000.0,
     )
-
-    assert [process.pid for process in selected] == [1, 2]
-
-
-def test_never_mixes_different_anticodex_roots() -> None:
-    guard = load_guard()
-    first = [sample(guard, pid, created_at=0.0) for pid in range(1, 5)]
-    second = [
-        sample(guard, pid, created_at=0.0, app_pid=100, root_pid=200)
-        for pid in range(5, 9)
-    ]
-
-    assert guard.select_excess_processes(first + second, now=2000.0) == []
+    report = instance.run_once(enforce=True)
+    assert report["live_candidate_count"] == 6
+    assert report["orphan_candidate_count"] == 0
+    assert report["killed_count"] == 0
+    assert terminated == []
+    assert "MAX_PER_SIGNATURE" not in MODULE_PATH.read_text(encoding="utf-8")
 
 
 def test_requires_two_stable_scans_sixty_seconds_apart() -> None:
@@ -214,56 +207,56 @@ def test_requires_two_stable_scans_sixty_seconds_apart() -> None:
     assert limiter.confirm([], now=161.0) == []
 
 
-def test_revalidates_full_anticodex_identity_before_termination() -> None:
+def test_revalidates_orphan_state_immediately_before_termination() -> None:
     guard = load_guard()
     selected = sample(guard, 10, created_at=1.0)
     terminated: list[int] = []
 
-    changed_root = sample(guard, 10, created_at=1.0, root_created_at=3.0)
-    assert not guard.revalidate_and_terminate(
+    assert not guard.revalidate_and_terminate_orphan(
         selected,
-        snapshot_provider=lambda: [changed_root],
+        orphan_probe=lambda process: "live",
         terminator=lambda pid: terminated.append(pid) or True,
     )
     assert terminated == []
 
-    assert guard.revalidate_and_terminate(
+    assert guard.revalidate_and_terminate_orphan(
         selected,
-        snapshot_provider=lambda: [selected],
+        orphan_probe=lambda process: "orphan",
         terminator=lambda pid: terminated.append(pid) or True,
     )
     assert terminated == [10]
 
 
-def test_dry_run_reports_groups_without_terminating(tmp_path: Path) -> None:
+def test_only_previously_observed_anticodex_children_become_orphans(tmp_path: Path) -> None:
     guard = load_guard()
-    snapshot = [sample(guard, pid, created_at=float(pid)) for pid in range(1, 6)]
+    live = [sample(guard, pid, created_at=0.0) for pid in range(1, 3)]
+    scans = iter(
+        [
+            guard.McpSnapshot((10,), (20,), tuple(live)),
+            guard.McpSnapshot((), (), ()),
+            guard.McpSnapshot((), (), ()),
+        ]
+    )
+    times = iter([1000.0, 1060.0, 1120.0])
     terminated: list[int] = []
-    limiter = guard.McpLeakGuard(
+    instance = guard.McpLeakGuard(
         runtime_dir=tmp_path,
-        snapshot_provider=lambda: snapshot,
+        snapshot_provider=lambda: next(scans),
+        orphan_probe=lambda process: "orphan",
         terminator=lambda pid: terminated.append(pid) or True,
-        clock=lambda: 1000.0,
+        clock=lambda: next(times),
     )
 
-    report = limiter.run_once(enforce=False)
+    first = instance.run_once(enforce=True)
+    second = instance.run_once(enforce=True)
+    third = instance.run_once(enforce=True)
 
-    assert report["schema"] == "anticodex-mcp-leak-guard-state-v1"
-    assert report["mode"] == "dry-run"
-    assert report["candidate_count"] == 5
-    assert report["excess_count"] == 1
-    assert report["confirmed_count"] == 0
-    assert report["killed_count"] == 0
-    assert report["groups"] == [
-        {
-            "app_pid": 10,
-            "root_pid": 20,
-            "signature": "worker",
-            "count": 5,
-            "working_set_mib": 320.0,
-        }
-    ]
-    assert terminated == []
+    assert first["orphan_candidate_count"] == 0
+    assert second["orphan_candidate_count"] == 2
+    assert second["confirmed_count"] == 0
+    assert third["confirmed_count"] == 2
+    assert third["killed_count"] == 2
+    assert terminated == [1, 2]
     assert (tmp_path / "anticodex_mcp_leak_guard_state.json").exists()
 
 

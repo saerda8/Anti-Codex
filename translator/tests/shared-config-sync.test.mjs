@@ -183,35 +183,32 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   const dir = tempDir();
   const source = path.join(dir, "global.toml");
   const target = path.join(dir, "anticodex.toml");
-  const includeTarget = path.join(dir, "include-workers.toml");
   const developmentWorkers = [
-    "deepseek-code-worker",
     "deepseek-external",
-    "mimo-claude-coworker",
-    "mimocode-worker",
-    "deveco-code-worker",
-    "opencode-worker",
-    "kilo-worker",
-    "codebuddy-worker",
-    "agnes-worker",
-    "antigravity-code-worker",
-    "xiaoqiang1",
-    "xiaoqiang2",
-    "xiaoqiang3",
-    "xiaoqiang4",
+    "future-autonomous-worker",
   ];
 
   const sourceLines = ['model = "gpt"', ""];
   for (const worker of developmentWorkers) {
+    const prefix = worker.replaceAll("-", "_");
+    sourceLines.push(`[mcp_servers.${worker}]`);
+    if (worker === "deepseek-external") {
+      sourceLines.push(
+        `url = "http://127.0.0.1:47622/servers/${worker}/mcp"`,
+        'http_headers = { Authorization = "Bearer test-token" }',
+      );
+    } else {
+      sourceLines.push(
+        'command = "node"',
+        'args = ["arbitrary-entrypoint.mjs"]',
+        "",
+        `[mcp_servers.${worker}.env]`,
+        'WORKER_TEST = "1"',
+      );
+    }
     sourceLines.push(
-      `[mcp_servers.${worker}]`,
-      'command = "node"',
-      `args = ["${worker}.mjs"]`,
       "",
-      `[mcp_servers.${worker}.env]`,
-      'WORKER_TEST = "1"',
-      "",
-      `[mcp_servers.${worker}.tools.start]`,
+      `[mcp_servers.${worker}.tools.${prefix}_start_implementation]`,
       "enabled = true",
       "",
     );
@@ -228,7 +225,6 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   );
   fs.writeFileSync(source, sourceLines.join("\n"));
   fs.writeFileSync(target, 'model = "anticodex"\n');
-  fs.writeFileSync(includeTarget, 'model = "anticodex"\n');
 
   execFileSync(process.execPath, [syncSharedConfig, source, target]);
   const next = fs.readFileSync(target, "utf8");
@@ -237,35 +233,18 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   }
   assert.match(next, /\[mcp_servers\.node_repl\]\ncommand = "node_repl\.exe"/);
   assert.match(next, /\[mcp_servers\.customer-mcp\]\ncommand = "customer\.exe"/);
-
-  execFileSync(process.execPath, [syncSharedConfig, source, includeTarget, "--include-development-workers"]);
-  const included = fs.readFileSync(includeTarget, "utf8");
-  for (const worker of developmentWorkers) {
-    assert.doesNotMatch(included, new RegExp(`\\[mcp_servers\\.${worker.replaceAll("-", "\\-")}([.\\]])`));
-  }
+  const synchronizer = fs.readFileSync(syncSharedConfig, "utf8");
+  assert.doesNotMatch(synchronizer, /"deepseek-external"/);
+  assert.match(synchronizer, /start_implementation/);
 });
 
 test("MCP verifier rejects development workers inside the Anti-Codex product config", () => {
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
-  for (const worker of [
-    "deepseek-code-worker",
-    "deepseek-external",
-    "mimo-claude-coworker",
-    "mimocode-worker",
-    "deveco-code-worker",
-    "opencode-worker",
-    "kilo-worker",
-    "codebuddy-worker",
-    "agnes-worker",
-    "antigravity-code-worker",
-    "xiaoqiang1",
-    "xiaoqiang2",
-    "xiaoqiang3",
-    "xiaoqiang4",
-  ]) {
-    assert.equal(verifier.includes(worker), true, `verifier must classify ${worker}`);
-  }
-  assert.match(verifier, /excludedSharedDevelopmentMcpNames/);
+  assert.doesNotMatch(verifier, /deepseek-external/);
+  assert.match(verifier, /Get-WorkerMcpNamesFromToml/);
+  assert.match(verifier, /AllowGeneratedHttp/);
+  assert.match(verifier, /start_implementation/);
+  assert.doesNotMatch(verifier, /worker\[-_\]mcp/);
   assert.match(verifier, /must not include development MCP worker/);
 });
 

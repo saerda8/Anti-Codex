@@ -67,6 +67,23 @@ test("fixed-route supervisor keeps CodexPlusPlus as a helper-only proxy and owns
   assert.doesNotMatch(source, /taskkill[^\n]+\/IM/i);
 });
 
+test("shared MCP is an Anti-only owned child started before the copied client", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const sharedStart = source.indexOf("const sharedMcpSupport = await startSharedMcp(plan)");
+  const clientStart = source.indexOf("const initialClient = await spawnCopiedClient()");
+  const cleanupStart = source.indexOf("const cleanup = async");
+  const cleanupEnd = source.indexOf("requestShutdown =", cleanupStart);
+  const cleanup = source.slice(cleanupStart, cleanupEnd);
+
+  assert.ok(sharedStart >= 0 && clientStart > sharedStart);
+  assert.match(source, /Local\\AntiCodexSharedMcpProxyV1|anticodex_shared_mcp_proxy\.py/);
+  assert.match(source, /join\(plan\.paths\.installRoot, "shared-mcp"/);
+  assert.match(source, /join\(plan\.paths\.stateRoot, "shared-mcp"/);
+  assert.match(source, /captureSpawnedProcessIdentity\(sharedMcp/);
+  assert.match(cleanup, /sharedMcp\.forEach\([^\n]+stopOwnedProcess\(child,\s*sharedMcpIdentity\[index\]\)/);
+  assert.doesNotMatch(source, /\.codex[\\/]mcp[\\/]shared-proxy/);
+});
+
 test("cold Antigravity startup gets the existing desktop warmup budget without delaying third-party startup", () => {
   const source = readFileSync(supervisorPath, "utf8");
   const start = source.indexOf("const antigravityClient = createAntigravityCascadeClient()");
