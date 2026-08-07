@@ -322,6 +322,17 @@ test("Manager injected UI owns third-party setup while the fallback page omits t
   assert.doesNotMatch(managerService, /<input[^>]+(?:apiKey|type="password")/i);
 });
 
+test("embedded and fallback Manager use the same labels for shared actions", () => {
+  const actionsStart = managerInject.indexOf("[", managerInject.indexOf("const ACTIONS ="));
+  const embeddedActions = new Map(vm.runInNewContext(extractBalanced(managerInject, actionsStart, "[", "]")));
+  const serviceStart = managerService.indexOf("{", managerService.indexOf("const MANAGER_ACTIONS ="));
+  const serviceActions = vm.runInNewContext(`(${extractBalanced(managerService, serviceStart, "{", "}")})`);
+
+  for (const [action, definition] of Object.entries(serviceActions)) {
+    assert.equal(embeddedActions.get(action), definition.label, `${action} label differs between Manager pages`);
+  }
+});
+
 test("fallback Manager waits for the same background action's fresh report and survives a short service restart", () => {
   const reportBlock = extractNamedFunction(managerService, "fallbackBackgroundReport");
   const reportFor = vm.runInNewContext(`(${reportBlock})`);
