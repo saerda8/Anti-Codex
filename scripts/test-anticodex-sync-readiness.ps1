@@ -230,7 +230,6 @@ $managerOpenInjectScript = Join-Path $scriptsRoot "anticodex-manager-open-inject
 $managerBridgeScript = Join-Path $scriptsRoot "anticodex-manager-bridge.mjs"
 $cdpInjectScript = Join-Path $scriptsRoot "deepcodex-cdp-inject.mjs"
 $updateCheckScript = Join-Path $scriptsRoot "check-anticodex-update.ps1"
-$updateStatusPath = Join-Path (Join-Path $env:APPDATA "anticodex") "update-status.json"
 $installScript = Join-Path $scriptsRoot "install-anticodex.ps1"
 $validatorScript = Join-Path $scriptsRoot "test-anticodex-host-candidate.ps1"
 $syncFailureSafetyScript = Join-Path $scriptsRoot "test-anticodex-sync-failure-safety.ps1"
@@ -1145,14 +1144,8 @@ try {
     Add-Failure "rollback host inspection failed: $($_.Exception.Message)"
 }
 try {
-    if ($Fast -and (Test-Path -LiteralPath $updateStatusPath -PathType Leaf)) {
-        $updateStatus = Get-Content -LiteralPath $updateStatusPath -Raw | ConvertFrom-Json
-        $updateStatusSource = "fast_cached_update_status"
-    } else {
-        $updateCheckArgs = if ($Fast) { @{ InstallRoot = $installRoot } } else { @{ InstallRoot = $installRoot; NoPersist = $true } }
-        $updateStatus = & $updateCheckScript @updateCheckArgs | ConvertFrom-Json
-        $updateStatusSource = if ($Fast) { "fast_live_update_check" } else { "full_live_update_check" }
-    }
+    $updateStatus = & $updateCheckScript -InstallRoot $installRoot -NoPersist | ConvertFrom-Json
+    $updateStatusSource = if ($Fast) { "fast_live_update_check" } else { "full_live_update_check" }
     if ($updateStatus.ok -ne $true) { Add-Failure "Codex update status is not comparable: $($updateStatus.reason)" }
     if ($updateStatus.updateNeeded -eq $true) { Add-Failure "installed Codex changed; Anti-Codex sync is required" }
     if ($updateStatus.sync.available -ne $true) { Add-Failure "Codex update status cannot find the safe sync launcher" }

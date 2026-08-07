@@ -12,6 +12,7 @@ const updateChecker = resolve(projectRoot, "scripts", "check-anticodex-update.ps
 const installer = resolve(projectRoot, "scripts", "install-anticodex.ps1");
 const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
 const runtimeSync = resolve(projectRoot, "scripts", "sync-anticodex-runtime.ps1");
+const syncReadiness = resolve(projectRoot, "scripts", "test-anticodex-sync-readiness.ps1");
 const POWERSHELL_TIMEOUT_MS = 30_000;
 
 test("Windows maintenance scripts delegate to Windows PowerShell when hosted by PowerShell Core", () => {
@@ -80,6 +81,14 @@ test("checker, installer and sync use the same newest official package root", ()
   assert.match(sync, /\$sourceSelection\s*=\s*&\s*\$updateChecker\s+-InstallRoot\s+\$installRoot\s+-StateRoot\s+\$stateRoot\s+-NoPersist/);
   assert.match(sync, /\$selectedSourceRoot\s*=\s*\[IO\.Path\]::GetFullPath\(\[string\]\$sourceSelection\.source\.root\)/);
   assert.match(sync, /&\s*\$installer\s+-InstallTarget\s+\$candidateRoot\s+-SourceRoot\s+\$selectedSourceRoot\s+-HostOnly/);
+});
+
+test("fast sync readiness checks the live installed Codex version instead of trusting cached status", () => {
+  const readiness = fs.readFileSync(syncReadiness, "utf8");
+
+  assert.doesNotMatch(readiness, /fast_cached_update_status|\$updateStatusPath/);
+  assert.match(readiness, /&\s*\$updateCheckScript\s+-InstallRoot\s+\$installRoot\s+-NoPersist\s*\|\s*ConvertFrom-Json/);
+  assert.match(readiness, /if\s*\(\$Fast\)\s*\{\s*"fast_live_update_check"\s*\}\s*else\s*\{\s*"full_live_update_check"\s*\}/);
 });
 
 function sha256(value) {
