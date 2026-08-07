@@ -22,7 +22,14 @@ function Test-PathInsideRoot {
 
 function Get-Sha256 {
     param([string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
 }
 
 function Write-Result {
