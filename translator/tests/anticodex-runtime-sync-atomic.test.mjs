@@ -171,6 +171,14 @@ function createFixture({ repairOk = true } = {}) {
     ].join("\n"),
   );
   writeFixture(
+    join(sourceRoot, "scripts", "install-anticodex-shared-mcp.ps1"),
+    [
+      "param([string]$InstallRoot, [string]$SourceScript)",
+      "[pscustomobject]@{ ok = $true; changed = $false; action = 'fixture'; target = $InstallRoot; source = $SourceScript } | ConvertTo-Json -Compress",
+      "",
+    ].join("\n"),
+  );
+  writeFixture(
     join(sourceRoot, "scripts", "resolve-anticodex-base-url.ps1"),
     "'http://127.0.0.1:19999'\n",
   );
