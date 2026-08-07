@@ -3542,3 +3542,12 @@ No runtime sync, restart, model/provider request, Docker action or mouse input w
 The first full preflight on clean commit `590fb68` exposed one stale Gate 5 test that still required exactly two activation modes. The implementation and focused observer test remained green; the one-line contract expectation is corrected and passes the two adjacent suites `32/32`. A fresh clean full preflight is required before this source checkpoint is accepted.
 
 Clean follow-up commit `c429489` passes the complete no-traffic source preflight `931/931`, with zero failures/warnings and `usedRealTraffic:false`. Report `20260804-105659-source-preflight.json` has SHA-256 `081d958c04235f9fbb9074e5208ddfbcf01ccecb08b9df3f310af1d9f5193364`. One Anti-Codex root PID `32720`, official Codex root/core PIDs `9028/26112`, and independent guard PIDs `9300/38496` remained alive.
+
+### 2026-08-07 shared MCP runtime closure
+
+- [x] Commit the dynamically discovered, Anti-only shared Worker layer and true-orphan guard (`fd1c027b`).
+- [x] Repair the atomic runtime-sync fixture and prove the complete file `12/12` (`84d3ea4`).
+- [x] Remove the installer's Utility-module hash dependency and pass shared/host focused coverage (`9c55d1d`).
+- [x] Pass the clean complete source preflight `932/932`, zero warning/failure and zero real traffic; report SHA-256 `6cad6f776715831f822fda48cd88f3b595c55d3f81bacd8b4cc788ddac9dec9d`.
+- [x] Activate 125 runtime files through no-restart transaction `20260807T053305680Z-a51d577a21644d819570936688f37456`; prove shared component `already-current`, matching hashes, green sync-readiness/legacy-zero-hit and unchanged official Codex PIDs.
+- [ ] Run the next-start live shared-Worker acceptance only after a product-local Worker is intentionally enabled. Current product Worker count is zero, and host development Workers must not be injected merely to manufacture this evidence.
