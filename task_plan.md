@@ -3551,3 +3551,12 @@ Clean follow-up commit `c429489` passes the complete no-traffic source preflight
 - [x] Pass the clean complete source preflight `932/932`, zero warning/failure and zero real traffic; report SHA-256 `6cad6f776715831f822fda48cd88f3b595c55d3f81bacd8b4cc788ddac9dec9d`.
 - [x] Activate 125 runtime files through no-restart transaction `20260807T053305680Z-a51d577a21644d819570936688f37456`; prove shared component `already-current`, matching hashes, green sync-readiness/legacy-zero-hit and unchanged official Codex PIDs.
 - [ ] Run the next-start live shared-Worker acceptance only after a product-local Worker is intentionally enabled. Current product Worker count is zero, and host development Workers must not be injected merely to manufacture this evidence.
+
+### 2026-08-07 Manager labels and current Codex update
+
+- [x] Align all shared action labels between the embedded and fallback Manager pages; keep third-party configuration embedded-only with the existing explicit fallback explanation (`569cff2`, Manager coverage `103/103`).
+- [x] Update the isolated Anti-Codex host from official Codex `26.727.6591.0` to `26.730.8199.0` through the installed guarded updater in `NoRestart` mode. Candidate validation passed, the active CLI is `0.147.0-alpha.1.2`, rollback is available, Anti-Codex stayed stopped and the official Codex PID set was unchanged.
+- [x] Remove the fast readiness cache shortcut that falsely reported the old `26.727` status after official Codex had reached `26.730`. Fast readiness now performs a live local no-persist check in about 8 seconds (`dffdc7e`, focused update coverage `27/27`).
+- [x] Pass the clean full no-traffic source preflight `934/934`; report SHA-256 `5dcc17cd825757dba078d0e087f0726e70c491d05cfb85fd6e9f58a7f484f275`.
+- [x] Activate the final 125-file runtime through no-restart transaction `20260807T060047924Z-6d0d81d2ff6248bb947b485d0bcdf60f`; installed fast readiness reports `fast_live_update_check`, source/runtime hashes match, and the report SHA-256 is `2cb877f939c13ab256581b8c440d28c45790b68975bf23a258dcdefff6a50fd5`.
+- [ ] Keep physical Manager button terminal-state acceptance, native Settings, external startup entries, prompt-route evidence and Gate 8 long-task acceptance open. Anti-Codex was deliberately not launched for this offline closure.
