@@ -620,7 +620,7 @@ function Test-TranslatorRegression {
         Add-Failure "No translator test files found"
         return [pscustomobject]@{ ok = $false; testFiles = 0 }
     }
-    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=4") + $testFiles) -TimeoutSec $SubcheckTimeoutSec
+    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=2") + $testFiles) -TimeoutSec $SubcheckTimeoutSec
     if (-not $result.ok) { Add-Failure "Translator source regression failed" }
     $summary = ($result.stdoutTail + $result.stderrTail) -join "`n"
     return [pscustomobject]@{

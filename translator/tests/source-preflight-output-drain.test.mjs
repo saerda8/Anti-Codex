@@ -11,10 +11,10 @@ test("source preflight drains redirected process output before reading report ta
   assert.ok(readStdout > waitForExit, "redirected output is read before WaitForExit drains it");
 });
 
-test("source preflight bounds translator test concurrency on Windows", async () => {
+test("source preflight keeps translator test concurrency below the Windows process-init failure threshold", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url), "utf8");
 
-  assert.match(source, /@\("--test",\s*"--test-concurrency=4"\)\s*\+\s*\$testFiles/);
+  assert.match(source, /@\("--test",\s*"--test-concurrency=2"\)\s*\+\s*\$testFiles/);
 });
 
 test("source preflight leaves patch-format whitespace to hash and replay verification", async () => {
