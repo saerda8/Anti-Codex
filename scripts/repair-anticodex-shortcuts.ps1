@@ -23,11 +23,6 @@ $managerScript = Join-Path $runtimeRoot "scripts\manage-anticodex.ps1"
 $hostIcon = Join-Path $hostRoot "resources\icon.ico"
 $desktopIcon = Join-Path $runtimeRoot "assets\anticodex-desktop.ico"
 $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
-$interactivePowerShell = $powershell
-$interactivePowerShellCandidate = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe" } else { "" }
-if ($interactivePowerShellCandidate -and (Test-Path -LiteralPath $interactivePowerShellCandidate -PathType Leaf)) {
-    $interactivePowerShell = [IO.Path]::GetFullPath($interactivePowerShellCandidate)
-}
 $schtasks = Join-Path ([Environment]::SystemDirectory) "schtasks.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
@@ -78,7 +73,7 @@ function New-AntiCodexShortcutSpec {
         path = $Path
         displayName = $displayName
         expectedDisplayName = $displayName
-        expectedTarget = if ($UseLaunchTask) { $interactivePowerShell } else { $powershell }
+        expectedTarget = $powershell
         expectedScript = $Script
         expectedLauncherTarget = $Script
         expectedArguments = $expectedArguments

@@ -358,12 +358,11 @@ test("scheduled tasks create Node inside the native headless console host", () =
   assert.doesNotMatch(repairScript, /start-anticodex-scheduled-node\.ps1/);
 });
 
-test("interactive restore shortcuts prefer the stable PowerShell 7 alias with a Windows PowerShell fallback", () => {
+test("interactive restore shortcuts never depend on WindowsApps aliases", () => {
   for (const source of [repairScript, syncReadiness]) {
-    assert.match(source, /Microsoft[\\/]WindowsApps[\\/]pwsh\.exe/);
-    assert.match(source, /Test-Path\s+-LiteralPath\s+\$interactivePowerShellCandidate/);
-    assert.match(source, /\$interactivePowerShell\s*=\s*\$powershell/);
-    assert.match(source, /expectedTarget\s*=\s*if \(\$UseLaunchTask\) \{ \$interactivePowerShell \} else \{ \$powershell \}/);
+    assert.match(source, /\$powershell\s*=\s*Join-Path \(\[Environment\]::SystemDirectory\) "WindowsPowerShell\\v1\.0\\powershell\.exe"/);
+    assert.doesNotMatch(source, /Microsoft[\\/]WindowsApps|\$interactivePowerShell/);
+    assert.match(source, /expectedTarget\s*=\s*\$powershell/);
   }
 });
 
@@ -490,7 +489,7 @@ test("sync readiness verifies the short focus broker and isolated launch task", 
   assert.doesNotMatch(syncReadiness, /\.Run\(`\$null\)/);
   assert.doesNotMatch(syncReadiness, /Start-ScheduledTask -TaskName/);
   assert.match(syncReadiness, /\$actualExecute\s+-ieq\s+\$conhost/);
-  assert.match(syncReadiness, /expectedTarget = if \(\$UseLaunchTask\) \{ \$interactivePowerShell \} else \{ \$powershell \}/);
+  assert.match(syncReadiness, /expectedTarget = \$powershell/);
   assert.match(syncReadiness, /\$shortcutBrokerScript\s*=\s*Join-Path \$scriptsRoot "start-anticodex-shortcut-broker\.ps1"/);
   assert.match(syncReadiness, /launchMode = if \(\$UseLaunchTask\) \{ "shortcut-broker" \}/);
   assert.match(syncReadiness, /expectedLauncherTarget = \$ExpectedScript/);

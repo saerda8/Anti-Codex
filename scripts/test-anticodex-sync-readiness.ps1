@@ -238,11 +238,6 @@ $postSyncVerifier = Join-Path $scriptsRoot "test-anticodex-installed-overall.ps1
 $startScript = Join-Path $scriptsRoot "start-anticodex.ps1"
 $fixedRouteSupervisorScript = Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"
 $powershell = Join-Path ([Environment]::SystemDirectory) "WindowsPowerShell\v1.0\powershell.exe"
-$interactivePowerShell = $powershell
-$interactivePowerShellCandidate = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe" } else { "" }
-if ($interactivePowerShellCandidate -and (Test-Path -LiteralPath $interactivePowerShellCandidate -PathType Leaf)) {
-    $interactivePowerShell = [IO.Path]::GetFullPath($interactivePowerShellCandidate)
-}
 $schtasks = Join-Path ([Environment]::SystemDirectory) "schtasks.exe"
 $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
 if (-not $nodeCommand) { $nodeCommand = Get-Command node -ErrorAction SilentlyContinue }
@@ -756,7 +751,7 @@ function New-AntiCodexShortcutSpec {
         path = $Path
         displayName = $displayName
         expectedDisplayName = $displayName
-        expectedTarget = if ($UseLaunchTask) { $interactivePowerShell } else { $powershell }
+        expectedTarget = $powershell
         expectedScript = $ExpectedScript
         expectedLauncherTarget = $ExpectedScript
         expectedArguments = $expectedArguments
@@ -871,7 +866,7 @@ if (-not $startMenuMainShortcutExists) {
         $startMenuMainShortcutTarget = [string]$mainShortcut.TargetPath
         $startMenuMainShortcutArguments = [string]$mainShortcut.Arguments
         $startMenuMainShortcutIconLocation = [string]$mainShortcut.IconLocation
-        if ($startMenuMainShortcutTarget -ine $interactivePowerShell) {
+        if ($startMenuMainShortcutTarget -ine $powershell) {
             Add-Failure "Start Menu Anti-Codex shortcut target is not the Windows launch broker: $startMenuMainShortcutTarget"
         }
         $startMenuLauncherTarget = Get-AntiCodexShortcutLauncherTarget $startMenuMainShortcutArguments
@@ -897,7 +892,7 @@ if (-not $desktopMainShortcutExists) {
         $desktopMainShortcutTarget = [string]$desktopShortcut.TargetPath
         $desktopMainShortcutArguments = [string]$desktopShortcut.Arguments
         $desktopMainShortcutIconLocation = [string]$desktopShortcut.IconLocation
-        if ($desktopMainShortcutTarget -ine $interactivePowerShell) {
+        if ($desktopMainShortcutTarget -ine $powershell) {
             Add-Failure "Desktop Anti-Codex shortcut target is not the Windows launch broker: $desktopMainShortcutTarget"
         }
         $desktopLauncherTarget = Get-AntiCodexShortcutLauncherTarget $desktopMainShortcutArguments
