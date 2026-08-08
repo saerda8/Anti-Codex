@@ -10,6 +10,8 @@ const patch2 = readFileSync(join(root, "third_party", "codexplusplus", "patches"
 const patch10 = readFileSync(join(root, "third_party", "codexplusplus", "patches", "0010-fix-estimate-missing-chat-usage-for-native-compaction.patch"), "utf8");
 const patch11Path = join(root, "third_party", "codexplusplus", "patches", "0011-apply-anticodex-prompt-policy-at-common-request-entry.patch");
 const patch11 = existsSync(patch11Path) ? readFileSync(patch11Path, "utf8") : "";
+const patch12Path = join(root, "third_party", "codexplusplus", "patches", "0012-fix-format-relay-auth-fallback-chain.patch");
+const patch12 = existsSync(patch12Path) ? readFileSync(patch12Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -23,7 +25,11 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 11);
+  assert.equal(metadata.patches.length, 12);
+  assert.equal(
+    metadata.patches.at(-1).file,
+    "patches/0012-fix-format-relay-auth-fallback-chain.patch",
+  );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
       .update(readFileSync(join(componentRoot, patch.file)))
@@ -33,6 +39,31 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("v1.2.45 rustfmt compatibility patch changes indentation only", () => {
+  assert.match(patch12, /^From [0-9a-f]{40} /m);
+  assert.match(patch12, /^Subject: \[PATCH 12\/12\] fix: format relay auth fallback chain$/m);
+  assert.deepEqual(
+    [...patch12.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
+    [[
+      "crates/codex-plus-core/src/relay_config.rs",
+      "crates/codex-plus-core/src/relay_config.rs",
+    ]],
+  );
+  const added = patch12
+    .split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+    .map((line) => line.slice(1));
+  const removed = patch12
+    .split("\n")
+    .filter((line) => line.startsWith("-") && !line.startsWith("---") && line !== "-- ")
+    .map((line) => line.slice(1));
+  assert.equal(added.length, 3);
+  assert.equal(removed.length, 3);
+  assert.deepEqual(added.map((line) => line.trimStart()), removed.map((line) => line.trimStart()));
+  assert.ok(added.every((line) => line.startsWith("            .")));
+  assert.ok(removed.every((line) => line.startsWith("        .")));
 });
 
 test("Anti-Codex prompt policy is confined to both reserved relays at the common request entry", () => {

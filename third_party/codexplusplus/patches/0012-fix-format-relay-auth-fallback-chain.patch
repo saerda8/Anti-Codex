@@ -1,0 +1,28 @@
+From c68620374873ca94041b72b5c3b4ea8ad44dbf97 Mon Sep 17 00:00:00 2001
+From: Anti-Codex Project <anticodex-project@example.invalid>
+Date: Sat, 8 Aug 2026 12:25:00 +0000
+Subject: [PATCH 12/12] fix: format relay auth fallback chain
+
+---
+ crates/codex-plus-core/src/relay_config.rs | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
+index 9e9e3de..86b6d1d 100644
+--- a/crates/codex-plus-core/src/relay_config.rs
++++ b/crates/codex-plus-core/src/relay_config.rs
+@@ -2231,9 +2231,9 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
+     }
+     if profile.relay_mode != crate::settings::RelayMode::PureApi
+         && provider
+-        .get("requires_openai_auth")
+-        .and_then(Item::as_bool)
+-        .is_none()
++            .get("requires_openai_auth")
++            .and_then(Item::as_bool)
++            .is_none()
+     {
+         provider["requires_openai_auth"] = toml_edit::value(true);
+     }
+-- 
+2.55.0.windows.3

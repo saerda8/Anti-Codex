@@ -2,11 +2,11 @@
     "component":  "CodexPlusPlus",
     "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
     "license":  "AGPL-3.0-only",
-    "version":  "1.2.44",
-    "tag":  "v1.2.44",
-    "upstreamCommit":  "77091ccaee4423f35a1b2c51c4ecd703e6201092",
-    "isolationPatchCommit":  "66ff2ec29e30901c4adc05f8c8c8a197d6038649",
-    "patchCommit":  "762340c825c64d2e6fffb4f41067fcf117dcd372",
+    "version":  "1.2.45",
+    "tag":  "v1.2.45",
+    "upstreamCommit":  "055302664af09e6e3bb76a00b36d318132094ee3",
+    "isolationPatchCommit":  "f842229bfe3b16753e0775e9f5e968cbb967eda5",
+    "patchCommit":  "65cbc08be3dc7390bdd61f9236d6c266b61d3f40",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -62,16 +62,21 @@
                         "file":  "patches/0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
                         "sha256":  "1c2dd4a4984b947ee60d85fb175d25a76b1352bde02b7a663b0e4725daea9d2e",
                         "scope":  "apply the isolated prompt policy only to the exact reserved Anti-Codex relays before the Responses/Chat branch; default and invalid policy input preserve request JSON, disabled/custom modes replace only system/developer carriers, user messages and AGENTS remain intact, the optional user instruction is added once, and a no-secret native prompt snapshot is written atomically"
+                    },
+                    {
+                        "file":  "patches/0012-fix-format-relay-auth-fallback-chain.patch",
+                        "sha256":  "33f59c274019d4ec9a84c06e4770ce63e8b6ed87ea050c35ffdb5ff24f202f9e",
+                        "scope":  "normalize only the upstream v1.2.45 relay authentication fallback method-chain indentation required by stable rustfmt; runtime behavior is unchanged"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "11 project patches replayed without automatic conflict resolution; head 762340c825c64d2e6fffb4f41067fcf117dcd372; tree 0c00227e79930b7d7a917f0867594f6569bb6673",
+                         "patchReplay":  "12 project patches replayed without automatic conflict resolution; head 65cbc08be3dc7390bdd61f9236d6c266b61d3f40; tree 359271c6a0c807a8914be9d1a0bdc25e1430212c",
                          "sourceIsolationAudit":  "passed",
-                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; clean project source preflight passed 908/908 at commit 8c8af908baf6c3c803f6fa3ccfa8e2bcf18b907f with no traffic, failures, skips or warnings.",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before activation.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:4e851bd88b526d3ac21ec47d3f890f1031e4cfaef3fe638af493f287bd7ca1ab",
+                         "launcherReleaseBuild":  "sha256:da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }
