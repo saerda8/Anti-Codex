@@ -339,4 +339,5 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 
 - The frozen autonomous media task, accepted package hash and Gate 8 result remain unchanged; no prompt or provider traffic was sent.
 - Source commit `51708a02` adds host patch revision 5 for both inherited desktop error pages. It removes the upstream update action, uses Anti-Codex branding, and preserves only the isolated Config, true Restart and true Retry actions. Focused crash/candidate/rollback coverage passes `56/56`, Manager bridge passes `75/75`, and the current active renderer bundle passes a read-only equal-length/idempotence check.
+- Clean checkpoint `87c46a0` passes the complete source gate: 13/13 aggregate checks and `962/962` translator tests, zero failures/warnings/skips, with no provider traffic. Report `20260809-074422-source-preflight.json` SHA-256 is `7f0182fe06a449d9df309c8099283a5702a934bf5514e77060bb082f82f650e2`.
 - This checkpoint is not installed acceptance. The active marker remains revision 4, so current project completion stays open until a fresh post-exit transaction is activated and the installed recovery UI plus outstanding external startup entries are physically verified.
