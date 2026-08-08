@@ -583,6 +583,61 @@ function Test-AntiCodexCommandLineHasExactPath {
     return [regex]::IsMatch($CommandLine, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
 }
 
+function Test-AntiCodexCommandLineReferencesPathRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $fullPath = [IO.Path]::GetFullPath($Path).TrimEnd("\")
+    $pattern = '(^|[\s"''=])' + [regex]::Escape($fullPath) + '(?=$|[\\/\s"''])'
+    return [regex]::IsMatch($CommandLine, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+}
+
+function Get-AntiCodexRuntimeVersionProcessSnapshot {
+    if (Test-AntiCodexRuntimeSyncNoProcessFixture) {
+        return [pscustomobject]@{ QuerySucceeded = $true; Processes = @() }
+    }
+    try {
+        $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object {
+            $processId = [int]$_.ProcessId
+            if ($processId -le 0 -or $processId -eq $PID) { return }
+            $executablePath = ""
+            try {
+                if ($_.ExecutablePath) { $executablePath = [IO.Path]::GetFullPath([string]$_.ExecutablePath) }
+            } catch {}
+            if ($executablePath -and (Test-AntiCodexNativeCodexPath -Path $executablePath)) { return }
+            [pscustomobject]@{
+                ExecutablePath = $executablePath
+                CommandLine = [string]$_.CommandLine
+            }
+        })
+        return [pscustomobject]@{ QuerySucceeded = $true; Processes = $processes }
+    } catch {
+        return [pscustomobject]@{ QuerySucceeded = $false; Processes = @() }
+    }
+}
+
+function Test-AntiCodexRuntimeVersionInUse {
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)]$Snapshot
+    )
+    if (-not $Snapshot.QuerySucceeded) { return $true }
+    $directoryFull = [IO.Path]::GetFullPath($Directory).TrimEnd("\")
+    foreach ($process in @($Snapshot.Processes)) {
+        $executablePath = [string]$process.ExecutablePath
+        if ($executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $directoryFull)) {
+            return $true
+        }
+        $commandLine = [string]$process.CommandLine
+        if ($commandLine -and
+            (Test-AntiCodexCommandLineReferencesPathRoot -CommandLine $commandLine -Path $directoryFull)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Write-AntiCodexJsonAtomic {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -854,9 +909,10 @@ function Get-AntiCodexTrustedRuntimeVersion {
         $parentFull = [IO.Path]::GetFullPath((Split-Path -Parent $directoryFull)).TrimEnd("\")
         if (-not $parentFull.Equals($versionRootFull, [StringComparison]::OrdinalIgnoreCase)) { return $null }
         $directoryItem = Get-Item -LiteralPath $directoryFull -Force -ErrorAction Stop
+        $generationNamePattern = "^$Kind-[0-9]{8}T[0-9]{9}Z-[a-f0-9]{32}$"
         if (-not $directoryItem.PSIsContainer -or
             (($directoryItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
-            -not $directoryItem.Name.StartsWith("$Kind-", [StringComparison]::Ordinal)) {
+            [string]$directoryItem.Name -cnotmatch $generationNamePattern) {
             return $null
         }
         $manifestPath = Join-Path $directoryFull ".anticodex-runtime-manifest.json"
@@ -965,12 +1021,19 @@ function Invoke-AntiCodexRuntimeVersionCleanup {
 
     $trustedStages = @()
     $trustedRollbacks = @()
+    $classificationProcessSnapshot = Get-AntiCodexRuntimeVersionProcessSnapshot
     foreach ($directory in @(Get-ChildItem -LiteralPath $runtimeVersionsRoot -Directory -Force -ErrorAction SilentlyContinue)) {
         $kind = if ($directory.Name.StartsWith("staged-", [StringComparison]::Ordinal)) {
             "staged"
         } elseif ($directory.Name.StartsWith("rollback-", [StringComparison]::Ordinal)) {
             "rollback"
         } else {
+            continue
+        }
+        if (Test-AntiCodexRuntimeVersionInUse `
+            -Directory $directory.FullName `
+            -Snapshot $classificationProcessSnapshot) {
+            $skipped += [IO.Path]::GetFullPath($directory.FullName).TrimEnd("\")
             continue
         }
         $trusted = Get-AntiCodexTrustedRuntimeVersion `
@@ -1008,6 +1071,12 @@ function Invoke-AntiCodexRuntimeVersionCleanup {
             -Directory $candidate.Directory `
             -Kind $candidate.Kind `
             -AllowHistoricalContract)) {
+            $skipped += $candidate.Directory
+            continue
+        }
+        if (Test-AntiCodexRuntimeVersionInUse `
+            -Directory $candidate.Directory `
+            -Snapshot (Get-AntiCodexRuntimeVersionProcessSnapshot)) {
             $skipped += $candidate.Directory
             continue
         }

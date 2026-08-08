@@ -106,11 +106,15 @@ function functionSource(name) {
   return syncSource.slice(start, next === -1 ? syncSource.length : next);
 }
 
+function generationName(kind, timestamp, hexDigit) {
+  return `${kind}-${timestamp}-${hexDigit.repeat(32)}`;
+}
+
 function createTrustedRuntimeVersion(
   fixture,
   name,
   createdAt,
-  { manifestFiles = requiredFiles } = {},
+  { manifestFiles = requiredFiles, extraFiles = {} } = {},
 ) {
   const directory = join(fixture.installRoot, "runtime-versions", name);
   const files = {};
@@ -120,6 +124,9 @@ function createTrustedRuntimeVersion(
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(source, destination);
     files[relative] = createHash("sha256").update(readFileSync(destination)).digest("hex");
+  }
+  for (const [relative, content] of Object.entries(extraFiles)) {
+    writeFixture(join(directory, ...relative.split("\\")), content);
   }
   const transactionId = name.startsWith("staged-")
     ? name.slice("staged-".length)
@@ -145,7 +152,7 @@ function createTrustedRuntimeVersion(
 }
 
 function createFixture({ repairOk = true } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "anticodex-runtime-sync-test-"));
+  const root = mkdtempSync(join(tmpdir(), "acrt-"));
   const localAppData = join(root, "Local");
   const appData = join(root, "Roaming");
   const sourceRoot = join(root, "source");
@@ -352,6 +359,15 @@ test("release process snapshots use native creation identity instead of lossy CI
   }
 });
 
+test("runtime generation use checks bind exact paths and exclude official Codex executables", () => {
+  const snapshot = functionSource("Get-AntiCodexRuntimeVersionProcessSnapshot");
+  const inUse = functionSource("Test-AntiCodexRuntimeVersionInUse");
+  assert.match(snapshot, /Test-AntiCodexNativeCodexPath/);
+  assert.match(inUse, /Test-AntiCodexPathInsideRoot/);
+  assert.match(inUse, /Test-AntiCodexCommandLineReferencesPathRoot/);
+  assert.doesNotMatch(`${snapshot}\n${inUse}`, /Name[^\r\n]*Anti-Codex|Anti-Codex[^\r\n]*Name/i);
+});
+
 test("verified process handle terminates only a disposable process through the bound handle", async () => {
   const classMatch = syncSource.match(/Add-Type -TypeDefinition @'\r?\n([\s\S]*?)\r?\n'@/);
   assert.ok(classMatch, "missing VerifiedProcessHandle type source");
@@ -459,22 +475,22 @@ test("NoRestart with a live runtime process validates a versioned stage but leav
   const fixture = createFixture();
   const obsoleteStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-obsolete",
+    generationName("staged", "20260720T000000000Z", "1"),
     "2026-07-20T00:00:00.000Z",
   );
   const olderRollback = createTrustedRuntimeVersion(
     fixture,
-    "rollback-older",
+    generationName("rollback", "20260719T000000000Z", "2"),
     "2026-07-19T00:00:00.000Z",
   );
   const newestRollback = createTrustedRuntimeVersion(
     fixture,
-    "rollback-newest",
+    generationName("rollback", "20260721T000000000Z", "3"),
     "2026-07-21T00:00:00.000Z",
   );
   const contaminatedStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-contaminated",
+    generationName("staged", "20260718T000000000Z", "4"),
     "2026-07-18T00:00:00.000Z",
   );
   writeFixture(join(contaminatedStage, "do-not-delete-extra.txt"), "unknown-extra\n");
@@ -526,25 +542,25 @@ test("deferred cleanup prunes self-verified historical runtimes without trusting
   assert.ok(historicalFiles.length > 0);
   const obsoleteStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-historical-obsolete",
+    generationName("staged", "20260720T000000000Z", "a"),
     "2026-07-20T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
   const olderRollback = createTrustedRuntimeVersion(
     fixture,
-    "rollback-historical-older",
+    generationName("rollback", "20260719T000000000Z", "b"),
     "2026-07-19T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
   const newestRollback = createTrustedRuntimeVersion(
     fixture,
-    "rollback-historical-newest",
+    generationName("rollback", "20260721T000000000Z", "c"),
     "2026-07-21T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
   const damagedStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-historical-damaged",
+    generationName("staged", "20260718T000000000Z", "d"),
     "2026-07-18T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
@@ -554,7 +570,7 @@ test("deferred cleanup prunes self-verified historical runtimes without trusting
   );
   const escapingStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-historical-escape",
+    generationName("staged", "20260717T000000000Z", "e"),
     "2026-07-17T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
@@ -565,8 +581,30 @@ test("deferred cleanup prunes self-verified historical runtimes without trusting
   writeFixture(escapingManifestPath, `${JSON.stringify(escapingManifest, null, 2)}\n`);
   const reparseStage = createTrustedRuntimeVersion(
     fixture,
-    "staged-historical-reparse",
+    generationName("staged", "20260716T000000000Z", "f"),
     "2026-07-16T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const inUseScriptRelative = "scripts\\historical-live.mjs";
+  const inUseStage = createTrustedRuntimeVersion(
+    fixture,
+    generationName("staged", "20260715T000000000Z", "5"),
+    "2026-07-15T00:00:00.000Z",
+    {
+      manifestFiles: historicalFiles,
+      extraFiles: { [inUseScriptRelative]: "setTimeout(() => {}, 30000);\n" },
+    },
+  );
+  const arbitraryStage = createTrustedRuntimeVersion(
+    fixture,
+    "staged-arbitrary",
+    "2026-07-14T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const bareRollback = createTrustedRuntimeVersion(
+    fixture,
+    "rollback-",
+    "2026-07-13T00:00:00.000Z",
     { manifestFiles: historicalFiles },
   );
   const unknownStage = join(fixture.installRoot, "runtime-versions", "staged-unknown");
@@ -575,6 +613,11 @@ test("deferred cleanup prunes self-verified historical runtimes without trusting
   writeFixture(liveScript, "setTimeout(() => {}, 30000);\n");
   const activeBefore = snapshotTree(fixture.activeRuntime);
   const live = spawn(process.execPath, [liveScript], { windowsHide: true });
+  const historicalLive = spawn(
+    process.execPath,
+    [join(inUseStage, ...inUseScriptRelative.split("\\"))],
+    { windowsHide: true },
+  );
   const wrapperPrelude = [String.raw`
 function Get-Item {
     [CmdletBinding()]
@@ -608,12 +651,15 @@ function Get-Item {
     const receipt = lastJson(result.stdout);
     assert.equal(receipt.mode, "staged_deferred_running");
     assert.deepEqual(snapshotTree(fixture.activeRuntime), activeBefore);
-    assert.equal(existsSync(obsoleteStage), false);
-    assert.equal(existsSync(olderRollback), false);
+    assert.equal(existsSync(obsoleteStage), false, JSON.stringify(receipt.cleanup));
+    assert.equal(existsSync(olderRollback), false, JSON.stringify(receipt.cleanup));
     assert.equal(existsSync(newestRollback), true);
     assert.equal(existsSync(damagedStage), true);
     assert.equal(existsSync(escapingStage), true);
     assert.equal(existsSync(reparseStage), true);
+    assert.equal(existsSync(inUseStage), true);
+    assert.equal(existsSync(arbitraryStage), true);
+    assert.equal(existsSync(bareRollback), true);
     assert.equal(existsSync(unknownStage), true);
     assert.equal(existsSync(receipt.stagedRuntime), true);
     assert.ok(receipt.cleanup.removed.includes(obsoleteStage));
@@ -623,9 +669,13 @@ function Get-Item {
     assert.ok(receipt.cleanup.skipped.includes(damagedStage));
     assert.ok(receipt.cleanup.skipped.includes(escapingStage));
     assert.ok(receipt.cleanup.skipped.includes(reparseStage));
+    assert.ok(receipt.cleanup.skipped.includes(inUseStage));
+    assert.ok(receipt.cleanup.skipped.includes(arbitraryStage));
+    assert.ok(receipt.cleanup.skipped.includes(bareRollback));
     assert.ok(receipt.cleanup.skipped.includes(unknownStage));
   } finally {
     stopChild(live);
+    stopChild(historicalLive);
     rmSync(fixture.root, { recursive: true, force: true });
   }
 });
