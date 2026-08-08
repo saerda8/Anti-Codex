@@ -47,8 +47,9 @@ const DEFAULT_SHARED_MCP_PORT = 47_631;
 const CLIENT_EXIT_GRACE_MS = 10_000;
 const CLIENT_RECOVERY_BACKOFF_MS = 1_000;
 const OWNED_PROCESS_STOP_WAIT_MS = 5_000;
-const FATAL_CLIENT_HEADING_PATTERN = /^(?:ChatGPT\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed)|(?:quit|stopped|closed)\s+unexpectedly)[.!。！]?$/i;
-const FATAL_CLIENT_RECOVERY_BUTTON_PATTERN = /(?:重试|重新加载|重新启动|重启|再试一次|retry|reload|restart)/i;
+const FATAL_CLIENT_HEADING_PATTERN = /^(?:(?:ChatGPT|Anti-Codex)\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed)|(?:quit|stopped|closed)\s+unexpectedly)[.!。！]?$/i;
+const FATAL_CLIENT_RECOVERY_BUTTON_PATTERN = /(?:重试|重新加载|重新启动|重启|再试一次|try again|retry|reload|restart)/i;
+const FATAL_CLIENT_GENERIC_ERROR_PATTERN = /(?:^|\s)(?:糟糕[，,]\s*出错了|Oops,?\s+an error has occurred|Something went wrong)[.!。！]?(?:\s|$)/i;
 const FATAL_CLIENT_MAX_TEXT_LENGTH = 1_600;
 const WINDOWS_EXACT_PROCESS_TERMINATOR = String.raw`
 $ErrorActionPreference = "Stop"
@@ -2356,13 +2357,15 @@ export function classifyCdpRendererSnapshot(snapshot) {
     ? snapshot.buttonLabels.map((value) => String(value ?? "").replace(/\s+/g, " ").trim()).filter(Boolean)
     : [];
   const hasDocument = snapshot?.readyState !== "loading" && snapshot?.hasBody === true;
+  const fatalSurface = (primaryHeading.length > 0
+    && primaryHeading.length <= 160
+    && FATAL_CLIENT_HEADING_PATTERN.test(primaryHeading))
+    || FATAL_CLIENT_GENERIC_ERROR_PATTERN.test(text.replace(/\s+/g, " "));
   const fatal = hasDocument
     && snapshot?.hasComposer === false
     && text.length > 0
     && text.length <= FATAL_CLIENT_MAX_TEXT_LENGTH
-    && primaryHeading.length > 0
-    && primaryHeading.length <= 160
-    && FATAL_CLIENT_HEADING_PATTERN.test(primaryHeading)
+    && fatalSurface
     && buttonLabels.some((label) => FATAL_CLIENT_RECOVERY_BUTTON_PATTERN.test(label));
   return {
     ready: hasDocument && !fatal && text.length >= 8 && snapshot?.hasInteractive === true,

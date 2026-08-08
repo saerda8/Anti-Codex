@@ -46,6 +46,7 @@ $fixedShellCriticalPatches = @(
     "app-route-gate",
     "profile-dropdown-settings",
     "settings-external-links",
+    "crash-recovery-page",
     "browser-window-icon",
     "primary-window-restore-repaint",
     "windows-tray-icon",
@@ -539,7 +540,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
 }
 $brandResult = try { (($brandOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex compatibility patch receipt is invalid." }
-if ([string]$brandResult.hostPatchRevision -ne "4") {
+if ([string]$brandResult.hostPatchRevision -ne "5") {
     throw "Anti-Codex compatibility patch revision is invalid."
 }
 if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path $antiCodexHost)) {

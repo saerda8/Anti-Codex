@@ -10,6 +10,143 @@ const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asa
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+const crashRecoveryBundle = [
+  'function U(e){if(e===`idle`)return A.appUpdates?.checkForUpdates(),j(Z,{id:`appUpdate.recovery.updateCodex`,defaultMessage:`Update {appName}`,description:`Button label shown on the full-screen error page to install a desktop app update`,values:{appName:P}});if(e===`ready`)return A.appUpdates?.installUpdate()}',
+  'function C(e){let {fatalError:n,onReset:R}=e;let c;c=j(`h1`,{children:j(Z,{id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`Title shown when the Codex app-server process crashes`,values:{appName:P}})});let l;l=jsxs(`div`,{children:[c,j(`p`,{children:j(Z,{id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`,description:`Recovery guidance shown when the Codex app-server process crashes`,values:{appName:P,documentationLink:j(`button`,{onClick:D,children:`documentation`})}})})]});let u;u=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let d;d=j(B,{onClick:O,children:j(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`,description:`Button label to open the Config.toml file`})});let f;f=j(Z,{id:`appServerCrash.restart`,defaultMessage:`Restart`,description:`Button label that restarts the Codex app-server after a crash`});let p;p=j(B,{onClick:R,children:f});let m;m=jsxs(`div`,{children:[u,d,p]});return jsxs(`main`,{children:[s,l,m,h]})}',
+  'function O(){return A.dispatchMessage(`open-config-toml`,{})}',
+  'function G(e){let {resetError:n}=e,r=M();let a;a=(0,j.jsx)(Z,{id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`});let q;q=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let s;s=()=>{n(),r(`/`)};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`});let l;return l=(0,j.jsxs)(`div`,{children:[a,(0,j.jsxs)(`div`,{children:[q,(0,j.jsx)(B,{onClick:s,children:c})]})]}),l}var R,z,J;',
+].join("");
+
+test("brands and narrows the crash recovery page atomically without changing bundle length", () => {
+  const patched = brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle);
+
+  assert.equal(patched.length, crashRecoveryBundle.length);
+  assert.equal([...patched.matchAll(/values:\{appName:`Anti-Codex`/g)].length, 2);
+  assert.match(patched, /\/\*anticodex-crash-recovery-actions\*\/children:\[d,p\]/);
+  assert.doesNotMatch(patched, /children:\[u,d,p\]/);
+  assert.match(patched, /\/\*anticodex-generic-error-actions\*\/children:\[\(0,j\.jsx\)\(B,\{onClick:s,children:c\}\)\]/);
+  assert.doesNotMatch(patched, /children:\[q,\(0,j\.jsx\)\(B,\{onClick:s,children:c\}\)\]/);
+  assert.match(patched, /appUpdate\.recovery\.updateCodex/);
+  assert.match(patched, /appUpdates\?\.checkForUpdates\(\)/);
+  assert.match(patched, /appUpdates\?\.installUpdate\(\)/);
+  assert.match(patched, /documentationLink:j\(`/);
+  assert.match(patched, /dispatchMessage\(`open-config-toml`,\{\}\)/);
+  assert.match(patched, /id:`appServerCrash\.restart`/);
+  assert.equal(brandPatchCompat.patchCrashRecoveryPage(patched), patched);
+});
+
+test("fails closed on missing, repeated, or partially patched crash recovery anchors", () => {
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle.replace(/function O\(\)[\s\S]+$/, "")),
+    /exactly one supported Anti-Codex crash recovery page/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle.repeat(2)),
+    /exactly one supported Anti-Codex crash recovery page/i,
+  );
+  const patched = brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle);
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace("values:{appName:`Anti-Codex`}", "values:{appName:P}             ")),
+    /partially patched Anti-Codex crash recovery page/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace("children:[d,p]", "children:[u,p]")),
+    /action row|partially patched/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace("onClick:s,children:c", "onClick:U,children:c")),
+    /retry|partially patched/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace("onClick:R,children:f", "onClick:U,children:f")),
+    /restart|partially patched/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(
+      "/*anticodex-crash-recovery-actions*/children:[d,p]",
+      "d=j(B,{onClick:U,children:j(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});/*anticodex-crash-recovery-actions*/children:[d,p]",
+    )),
+    /config|assignment|partially patched/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(
+      "/*anticodex-crash-recovery-actions*/children:[d,p]",
+      "p=j(B,{onClick:U,children:f});/*anticodex-crash-recovery-actions*/children:[d,p]",
+    )),
+    /restart|assignment|partially patched/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(
+      "/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]",
+      "s=U;/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]",
+    )),
+    /retry|assignment|partially patched/i,
+  );
+  for (const [variable, marker] of [
+    ["d", "/*anticodex-crash-recovery-actions*/children:[d,p]"],
+    ["p", "/*anticodex-crash-recovery-actions*/children:[d,p]"],
+    ["s", "/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]"],
+  ]) {
+    assert.throws(
+      () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(marker, `${variable}=t[99];t[99]=${variable};${marker}`)),
+      /cache|assignment|reassigned|partially patched/i,
+    );
+    assert.throws(
+      () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(marker, `${variable}&&=U;${marker}`)),
+      /assignment|reassigned|partially patched/i,
+    );
+    assert.throws(
+      () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(marker, `[${variable}]=[U];${marker}`)),
+      /reference|assignment|reassigned|partially patched/i,
+    );
+    assert.throws(
+      () => brandPatchCompat.patchCrashRecoveryPage(patched.replace(marker, `for(${variable} of q){}${marker}`)),
+      /reference|assignment|reassigned|partially patched/i,
+    );
+  }
+  for (const nestedThunk of [
+    patched.replace(/let d;d=(?<control>[\s\S]*?);(?=let f;)/, "let d;x?d=t[99]:(()=>{d=$<control>;t[99]=d});"),
+    patched.replace(/let p;p=(?<control>[\s\S]*?);(?=let m;)/, "let p;x?p=t[99]:(()=>{p=$<control>;t[99]=p});"),
+    patched.replace(/let s;s=(?<handler>[\s\S]*?);(?=let c;)/, "let s;x?s=t[99]:(()=>{s=$<handler>;t[99]=s});"),
+  ]) {
+    assert.throws(
+      () => brandPatchCompat.patchCrashRecoveryPage(nestedThunk),
+      /cache|assignment|retry|restart|config|partially patched/i,
+    );
+  }
+});
+
+test("wires the crash recovery page as one fixed-shell critical patch", () => {
+  assert.match(brandPatcherSource, /\["crash-recovery-page",\s*\(\)\s*=>\s*findCrashRecoveryPagePatch/);
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+  assert.equal((criticalBlock.match(/"crash-recovery-page"/g) ?? []).length, 1);
+  assert.match(brandPatcherSource, /const hostPatchRevision = 5;/);
+});
+
+test("selects exactly one signed crash bundle and never hides a partial second bundle", () => {
+  const unrelated = "function ordinary(){return true}";
+  assert.equal(brandPatchCompat.hasCrashRecoveryPageSignature(crashRecoveryBundle), true);
+  assert.equal(brandPatchCompat.hasCrashRecoveryPageSignature(unrelated), false);
+  assert.deepEqual(
+    brandPatchCompat.selectCrashRecoveryBundleCandidate([
+      { rel: "webview/assets/ordinary.js", text: unrelated },
+      { rel: "webview/assets/app.js", text: crashRecoveryBundle },
+    ]),
+    { rel: "webview/assets/app.js", text: crashRecoveryBundle },
+  );
+  const partial = crashRecoveryBundle.replace("children:[u,d,p]", "children:[u,p]");
+  assert.throws(
+    () => brandPatchCompat.selectCrashRecoveryBundleCandidate([
+      { rel: "webview/assets/app.js", text: crashRecoveryBundle },
+      { rel: "webview/assets/partial.js", text: partial },
+    ]),
+    /exactly one.*signature/i,
+  );
+  const finder = brandPatcherSource.match(/function findCrashRecoveryPagePatch[\s\S]*?(?=function findPrimaryWindowRestoreRepaintPatch)/)?.[0] ?? "";
+  assert.match(finder, /hasCrashRecoveryPageSignature\(text\)/);
+  assert.match(finder, /if\s*\(hasCrashRecoveryPageSignature\(text\)\)\s*\{\s*bundles\.push/);
+});
+
 test("rebuilds every ASAR integrity block after patching a large renderer bundle", () => {
   const payload = Buffer.from("abcdefghij");
   assert.deepEqual(brandPatchCompat.buildAsarIntegrity(payload, 4), {

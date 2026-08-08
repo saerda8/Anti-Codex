@@ -171,7 +171,7 @@ function runRollbackRepair(options) {
 
 function runRollbackHostPatchMatrix() {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-host-matrix-"));
-  const current = [
+  const revision4 = [
     "package-json",
     "webview-html-title",
     "app-name",
@@ -189,17 +189,18 @@ function runRollbackHostPatchMatrix() {
     "windows-tray-icon",
     "local-model-availability",
   ];
-  const previous = current.filter((name) => ![
+  const current = [...revision4, "crash-recovery-page"];
+  const previous = revision4.filter((name) => ![
     "app-server-managed-session-flags",
     "settings-external-links",
   ].includes(name));
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
-    ["current", current, true, 3],
-    ["revision2Current", current, true, 2],
+    ["current", current, true, 5],
+    ["revision2Current", revision4, true, 2],
     ["legacyCurrent", current, true],
     ["revisionOne", current, true, 1],
-    ["revisionFour", current, true, 4],
+    ["revisionFour", revision4, true, 4],
     ["previous", previous, true],
     ["legacy", legacy, false],
     ["previousMissingBridge", previous, false],
@@ -280,7 +281,7 @@ function Test-AntiCodexAsarPatches {
         [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
-    $shapeMatches = if ($ExpectedHostPatchRevision -in @(3, 4)) {
+    $shapeMatches = if ($ExpectedHostPatchRevision -in @(3, 4, 5)) {
         $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 1 -and
         $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 0 -and
         $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
@@ -547,12 +548,12 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.doesNotMatch(previousCriticalPatches, /app-server-managed-session-flags|settings-external-links/);
   assert.doesNotMatch(legacyWithoutConfigWriteCriticalPatches, /expectedCriticalPatches|Where-Object|config-write|app-server-managed-session-flags|settings-external-links/);
   assert.match(validator, /currentManifestCompatible/);
-  assert.match(validator, /revision2ManifestCompatible/);
+  assert.match(validator, /revision2To4ManifestCompatible/);
   assert.match(validator, /previousManifestCompatible/);
   assert.match(validator, /legacyWithoutConfigWriteManifestCompatible/);
   assert.doesNotMatch(validator, /legacyCurrentManifestCompatible/);
   assert.match(validator, /if\s*\(\$currentManifestCompatible\)\s*\{/);
-  assert.match(validator, /elseif\s*\(\$revision2ManifestCompatible\)\s*\{/);
+  assert.match(validator, /elseif\s*\(\$revision2To4ManifestCompatible\)\s*\{/);
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   for (const marker of [
@@ -635,6 +636,30 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const missingAccountMessagePatch = currentSettingsPatch.replace("message:m.account", "missing:m.account");
     const missingSecurityMessagePatch = currentSettingsPatch.replace("message:m.securitySettings", "missing:m.securitySettings");
     const previousSettingsPatch = 'q={/*anticodex-local-settings-only*/};Z.securitySettings.message';
+    const genericErrorOriginal = 'id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`};id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`}';
+    const crashRecoveryPatch = `function C(e){let {fatalError:n,onReset:R}=e;id:\`appServerCrash.title\`,defaultMessage:\`{appName} stopped unexpectedly\`,values:{appName:\`Anti-Codex\`};id:\`appServerCrash.description\`,defaultMessage:\`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}\`,values:{appName:\`Anti-Codex\`,documentationLink:x};let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:\`loadingPage.openConfigToml\`,defaultMessage:\`Open Config.toml\`})});let f;f=(0,j.jsx)(Z,{id:\`appServerCrash.restart\`,defaultMessage:\`Restart\`});let p;p=(0,j.jsx)(B,{onClick:R,children:f});/*anticodex-crash-recovery-actions*/children:[d,p]}function O(){return D.dispatchMessage(\`open-config-toml\`,{})}function G(e){let {resetError:n}=e,r=M();id:\`codex.errorBoundary.genericError\`,defaultMessage:\`Oops, an error has occurred\`};let s;s=()=>{n(),r(\`/\`)};let c;c=(0,j.jsx)(Z,{id:\`codex.errorBoundary.goHome\`,defaultMessage:\`Try again\`});/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]}var R,z,J;${genericErrorOriginal}`;
+    const crashRecoveryConfigHandlerSwap = crashRecoveryPatch.replace("onClick:O,children:", "onClick:U,children:");
+    const crashRecoveryMemoPatch = crashRecoveryPatch
+      .replace('let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});', 'let d;t[6]===n.hostId?d=t[7]:(d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})}),t[6]=n.hostId,t[7]=d);')
+      .replace('let p;p=(0,j.jsx)(B,{onClick:R,children:f});', 'let p;t[9]===R?p=t[10]:(p=(0,j.jsx)(B,{onClick:R,children:f}),t[9]=R,t[10]=p);')
+      .replace('let s;s=()=>{n(),r(`/`)};', 'let s;t[3]!==r||t[4]!==n?(s=()=>{n(),r(`/`)},t[3]=r,t[4]=n,t[5]=s):s=t[5];');
+    const crashRecoveryRestartHandlerSwap = crashRecoveryPatch.replace("onClick:R,children:f", "onClick:U,children:f");
+    const genericRetryHandlerSwap = crashRecoveryPatch.replace("onClick:s,children:c", "onClick:U,children:c");
+    const crashRecoveryConfigHandlerReassign = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "d=(0,j.jsx)(B,{onClick:U,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});/*anticodex-crash-recovery-actions*/");
+    const crashRecoveryRestartHandlerReassign = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "p=(0,j.jsx)(B,{onClick:U,children:f});/*anticodex-crash-recovery-actions*/");
+    const genericRetryHandlerReassign = crashRecoveryPatch.replace("/*anticodex-generic-error-actions*/", "s=U;/*anticodex-generic-error-actions*/");
+    const crashRecoveryConfigCacheDecoy = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "d=t[99];t[99]=d;/*anticodex-crash-recovery-actions*/");
+    const crashRecoveryRestartCacheDecoy = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "p=t[99];t[99]=p;/*anticodex-crash-recovery-actions*/");
+    const genericRetryCacheDecoy = crashRecoveryPatch.replace("/*anticodex-generic-error-actions*/", "s=t[99];t[99]=s;/*anticodex-generic-error-actions*/");
+    const crashRecoveryConfigCompoundWriteDecoy = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "d&&=U;/*anticodex-crash-recovery-actions*/");
+    const crashRecoveryRestartCompoundWriteDecoy = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "p&&=U;/*anticodex-crash-recovery-actions*/");
+    const genericRetryCompoundWriteDecoy = crashRecoveryPatch.replace("/*anticodex-generic-error-actions*/", "s&&=U;/*anticodex-generic-error-actions*/");
+    const crashRecoveryConfigDestructureWriteDecoy = crashRecoveryPatch.replace("/*anticodex-crash-recovery-actions*/", "[d]=[U];/*anticodex-crash-recovery-actions*/");
+    const genericRetryForOfWriteDecoy = crashRecoveryPatch.replace("/*anticodex-generic-error-actions*/", "for(s of q){}/*anticodex-generic-error-actions*/");
+    const crashRecoveryConfigThunkDecoy = crashRecoveryPatch.replace('let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});', 'let d;x?d=t[99]:(()=>{d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});t[99]=d});');
+    const crashRecoveryRestartThunkDecoy = crashRecoveryPatch.replace('let p;p=(0,j.jsx)(B,{onClick:R,children:f});', 'let p;x?p=t[99]:(()=>{p=(0,j.jsx)(B,{onClick:R,children:f});t[99]=p});');
+    const genericRetryThunkDecoy = crashRecoveryPatch.replace('let s;s=()=>{n(),r(`/`)};', 'let s;x?s=t[99]:(()=>{s=()=>{n(),r(`/`)};t[99]=s});');
+    const crashRecoveryOriginal = `id:\`appServerCrash.title\`,defaultMessage:\`{appName} stopped unexpectedly\`,description:\`title\`,values:{appName:X};id:\`appServerCrash.description\`,defaultMessage:\`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}\`,description:\`description\`,values:{appName:X,documentationLink:x};${genericErrorOriginal};${genericErrorOriginal}`;
     const revision2Hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
     const hook = revision2Hook.replace(",n()", "");
     const focusOnlyHook = revision2Hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
@@ -654,21 +679,63 @@ test("rollback patch compatibility accepts the current and supported predecessor
       missingAccountMessage: join(fixture, "missing-account-message.asar"),
       missingSecurityMessage: join(fixture, "missing-security-message.asar"),
       previousSettings: join(fixture, "previous-settings.asar"),
+      currentMissingCrash: join(fixture, "current-missing-crash.asar"),
+      currentWithOriginalCrash: join(fixture, "current-with-original-crash.asar"),
+      revision4PartialCrash: join(fixture, "revision4-partial-crash.asar"),
+      currentConfigHandlerSwap: join(fixture, "current-config-handler-swap.asar"),
+      currentMemoHandlers: join(fixture, "current-memo-handlers.asar"),
+      currentRestartHandlerSwap: join(fixture, "current-restart-handler-swap.asar"),
+      currentGenericRetryHandlerSwap: join(fixture, "current-generic-retry-handler-swap.asar"),
+      currentConfigHandlerReassign: join(fixture, "current-config-handler-reassign.asar"),
+      currentRestartHandlerReassign: join(fixture, "current-restart-handler-reassign.asar"),
+      currentGenericRetryHandlerReassign: join(fixture, "current-generic-retry-handler-reassign.asar"),
+      currentConfigCacheDecoy: join(fixture, "current-config-cache-decoy.asar"),
+      currentRestartCacheDecoy: join(fixture, "current-restart-cache-decoy.asar"),
+      currentGenericRetryCacheDecoy: join(fixture, "current-generic-retry-cache-decoy.asar"),
+      currentConfigCompoundWriteDecoy: join(fixture, "current-config-compound-write-decoy.asar"),
+      currentRestartCompoundWriteDecoy: join(fixture, "current-restart-compound-write-decoy.asar"),
+      currentGenericRetryCompoundWriteDecoy: join(fixture, "current-generic-retry-compound-write-decoy.asar"),
+      currentConfigDestructureWriteDecoy: join(fixture, "current-config-destructure-write-decoy.asar"),
+      currentGenericRetryForOfWriteDecoy: join(fixture, "current-generic-retry-for-of-write-decoy.asar"),
+      currentConfigThunkDecoy: join(fixture, "current-config-thunk-decoy.asar"),
+      currentRestartThunkDecoy: join(fixture, "current-restart-thunk-decoy.asar"),
+      currentGenericRetryThunkDecoy: join(fixture, "current-generic-retry-thunk-decoy.asar"),
     };
     writeFileSync(paths.zero, patchedBase);
-    writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch}`);
-    writeFileSync(paths.two, `${patchedBase};${hook};${hook}`);
-    writeFileSync(paths.revision2, `${patchedBase};${revision2Hook};${currentSettingsPatch}`);
+    writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.two, `${patchedBase};${hook};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.revision2, `${patchedBase};${revision2Hook};${currentSettingsPatch};${crashRecoveryOriginal}`);
     writeFileSync(paths.focusOnly, `${patchedBase};${focusOnlyHook}`);
     writeFileSync(paths.splitCross, `${patchedBase};${focusOnlyHook};${hook}`);
     writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
     writeFileSync(paths.missingConfigBridge, `${base};${revision2Hook}`);
     writeFileSync(paths.duplicateConfigBridge, `${patchedBase};${configWriteBridge};${hook}`);
-    writeFileSync(paths.currentSettings, `${patchedBase};${hook};${currentSettingsPatch}`);
-    writeFileSync(paths.paddedCurrentSettings, `${patchedBase};${hook};${paddedCurrentSettingsPatch}`);
-    writeFileSync(paths.missingAccountMessage, `${patchedBase};${hook};${missingAccountMessagePatch}`);
-    writeFileSync(paths.missingSecurityMessage, `${patchedBase};${hook};${missingSecurityMessagePatch}`);
-    writeFileSync(paths.previousSettings, `${patchedBase};${hook};${previousSettingsPatch}`);
+    writeFileSync(paths.currentSettings, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.paddedCurrentSettings, `${patchedBase};${hook};${paddedCurrentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.missingAccountMessage, `${patchedBase};${hook};${missingAccountMessagePatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.missingSecurityMessage, `${patchedBase};${hook};${missingSecurityMessagePatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.previousSettings, `${patchedBase};${hook};${previousSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentMissingCrash, `${patchedBase};${hook};${currentSettingsPatch}`);
+    writeFileSync(paths.currentWithOriginalCrash, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch};${crashRecoveryOriginal}`);
+    writeFileSync(paths.revision4PartialCrash, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryOriginal.replace('id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`title`,values:{appName:X}', 'id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,values:{appName:`Anti-Codex`}')}`);
+    writeFileSync(paths.currentConfigHandlerSwap, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigHandlerSwap}`);
+    writeFileSync(paths.currentMemoHandlers, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryMemoPatch}`);
+    writeFileSync(paths.currentRestartHandlerSwap, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartHandlerSwap}`);
+    writeFileSync(paths.currentGenericRetryHandlerSwap, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryHandlerSwap}`);
+    writeFileSync(paths.currentConfigHandlerReassign, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigHandlerReassign}`);
+    writeFileSync(paths.currentRestartHandlerReassign, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartHandlerReassign}`);
+    writeFileSync(paths.currentGenericRetryHandlerReassign, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryHandlerReassign}`);
+    writeFileSync(paths.currentConfigCacheDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigCacheDecoy}`);
+    writeFileSync(paths.currentRestartCacheDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartCacheDecoy}`);
+    writeFileSync(paths.currentGenericRetryCacheDecoy, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryCacheDecoy}`);
+    writeFileSync(paths.currentConfigCompoundWriteDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigCompoundWriteDecoy}`);
+    writeFileSync(paths.currentRestartCompoundWriteDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartCompoundWriteDecoy}`);
+    writeFileSync(paths.currentGenericRetryCompoundWriteDecoy, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryCompoundWriteDecoy}`);
+    writeFileSync(paths.currentConfigDestructureWriteDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigDestructureWriteDecoy}`);
+    writeFileSync(paths.currentGenericRetryForOfWriteDecoy, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryForOfWriteDecoy}`);
+    writeFileSync(paths.currentConfigThunkDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigThunkDecoy}`);
+    writeFileSync(paths.currentRestartThunkDecoy, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartThunkDecoy}`);
+    writeFileSync(paths.currentGenericRetryThunkDecoy, `${patchedBase};${hook};${currentSettingsPatch};${genericRetryThunkDecoy}`);
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
@@ -682,25 +749,47 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDef
         return $false
     }
 }
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
-$previous = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
-$legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
+$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","primary-window-restore-repaint","windows-tray-icon","local-model-availability")
+$revision4 = @($current | Where-Object { $_ -ne "crash-recovery-page" })
+$previous = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
+$legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
 [pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0 0 3
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 3
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0 0 3
-    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 1 0 0 3
+    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0 0 5
+    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 5
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0 0 5
+    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 1 0 0 5
+    currentMissingCrash = Accept-Asar ${quote(paths.currentMissingCrash)} 1 1 0 0 5
+    currentWithOriginalCrash = Accept-Asar ${quote(paths.currentWithOriginalCrash)} 1 1 0 0 5
+    revision4PartialCrash = Accept-Asar ${quote(paths.revision4PartialCrash)} 1 1 0 0 4
+    currentConfigHandlerSwap = Accept-Asar ${quote(paths.currentConfigHandlerSwap)} 1 1 0 0 5
+    currentMemoHandlers = Accept-Asar ${quote(paths.currentMemoHandlers)} 1 1 0 0 5
+    currentRestartHandlerSwap = Accept-Asar ${quote(paths.currentRestartHandlerSwap)} 1 1 0 0 5
+    currentGenericRetryHandlerSwap = Accept-Asar ${quote(paths.currentGenericRetryHandlerSwap)} 1 1 0 0 5
+    currentConfigHandlerReassign = Accept-Asar ${quote(paths.currentConfigHandlerReassign)} 1 1 0 0 5
+    currentRestartHandlerReassign = Accept-Asar ${quote(paths.currentRestartHandlerReassign)} 1 1 0 0 5
+    currentGenericRetryHandlerReassign = Accept-Asar ${quote(paths.currentGenericRetryHandlerReassign)} 1 1 0 0 5
+    currentConfigCacheDecoy = Accept-Asar ${quote(paths.currentConfigCacheDecoy)} 1 1 0 0 5
+    currentRestartCacheDecoy = Accept-Asar ${quote(paths.currentRestartCacheDecoy)} 1 1 0 0 5
+    currentGenericRetryCacheDecoy = Accept-Asar ${quote(paths.currentGenericRetryCacheDecoy)} 1 1 0 0 5
+    currentConfigCompoundWriteDecoy = Accept-Asar ${quote(paths.currentConfigCompoundWriteDecoy)} 1 1 0 0 5
+    currentRestartCompoundWriteDecoy = Accept-Asar ${quote(paths.currentRestartCompoundWriteDecoy)} 1 1 0 0 5
+    currentGenericRetryCompoundWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryCompoundWriteDecoy)} 1 1 0 0 5
+    currentConfigDestructureWriteDecoy = Accept-Asar ${quote(paths.currentConfigDestructureWriteDecoy)} 1 1 0 0 5
+    currentGenericRetryForOfWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryForOfWriteDecoy)} 1 1 0 0 5
+    currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 1 0 0 5
+    currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 1 0 0 5
+    currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 1 0 0 5
     revision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 1 0 2
     revision2RejectsCurrent = Accept-Asar ${quote(paths.one)} 1 0 1 0 2
-    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0 0 3
-    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0 0 3
-    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0 0 3
-    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0 0 3
-    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 0 3
-    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 0 3
-    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 0 3
-    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 0 3
-    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 0 3
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0 0 5
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0 0 5
+    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0 0 5
+    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0 0 5
+    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 0 5
+    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 0 5
+    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 0 5
+    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 0 5
+    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 0 5
     legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 0 1 0
     predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 0 1 0
     previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0 1 0
@@ -724,6 +813,27 @@ $legacyWithoutConfigWrite = @($current | Where-Object { $_ -notin @("app-server-
       currentMissingHook: false,
       currentDuplicateHook: false,
       currentRevision2Hook: false,
+      currentMissingCrash: false,
+      currentWithOriginalCrash: false,
+      revision4PartialCrash: false,
+      currentConfigHandlerSwap: false,
+      currentMemoHandlers: true,
+      currentRestartHandlerSwap: false,
+      currentGenericRetryHandlerSwap: false,
+      currentConfigHandlerReassign: false,
+      currentRestartHandlerReassign: false,
+      currentGenericRetryHandlerReassign: false,
+      currentConfigCacheDecoy: false,
+      currentRestartCacheDecoy: false,
+      currentGenericRetryCacheDecoy: false,
+      currentConfigCompoundWriteDecoy: false,
+      currentRestartCompoundWriteDecoy: false,
+      currentGenericRetryCompoundWriteDecoy: false,
+      currentConfigDestructureWriteDecoy: false,
+      currentGenericRetryForOfWriteDecoy: false,
+      currentConfigThunkDecoy: false,
+      currentRestartThunkDecoy: false,
+      currentGenericRetryThunkDecoy: false,
       revision2Hook: true,
       revision2RejectsCurrent: false,
       currentFocusOnlyHook: false,

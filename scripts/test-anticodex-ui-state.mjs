@@ -8,7 +8,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { classifyCdpRendererSnapshot } from "./start-anticodex-fixed-route.mjs";
 
-const fatalClientPhrasePattern = /(?:ChatGPT\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed))/i;
+const fatalClientPhrasePattern = /(?:(?:(?:ChatGPT|Anti-Codex)\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed))|(?:糟糕[，,]\s*出错了|Oops,?\s+an error has occurred|Something went wrong))/i;
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -120,9 +120,13 @@ const pageStateProbeExpression = `(() => {
     }
     return chunks.join("\n").slice(0, 6000);
   };
-  const text = shortUiText();
-  const fatalClientTextPattern = /(?:ChatGPT\\s*)?(?:已意外停止|unexpectedly\\s+(?:stopped|quit|closed)|has\\s+unexpectedly\\s+(?:stopped|crashed))/i;
   const composer = document.querySelector('[data-codex-composer], .ProseMirror');
+  const text = shortUiText();
+  const bodyText = String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim();
+  const textForFatalClassification = !composer && bodyText.length > 0 && bodyText.length <= 1600
+    ? [text, bodyText].filter(Boolean).join('\n')
+    : text;
+  const fatalClientTextPattern = /(?:(?:(?:ChatGPT|Anti-Codex)\\s*)?(?:已意外停止|unexpectedly\\s+(?:stopped|quit|closed)|has\\s+unexpectedly\\s+(?:stopped|crashed))|(?:糟糕[，,]\\s*出错了|Oops,?\\s+an error has occurred|Something went wrong))/i;
   const isVisible = (element) => {
     const rect = element?.getBoundingClientRect?.();
     const style = element ? getComputedStyle(element) : null;
@@ -156,10 +160,10 @@ const pageStateProbeExpression = `(() => {
   return {
     title: document.title,
     href: location.href,
-    textLength: text.length,
-    textSample: text.slice(0, 6000),
+    textLength: textForFatalClassification.length,
+    textSample: textForFatalClassification.slice(0, 6000),
     hasLoginText: !!document.querySelector("a[href*='auth/login'], form[action*='auth/login']"),
-    hasFatalText: fatalClientTextPattern.test(text),
+    hasFatalText: fatalClientTextPattern.test(textForFatalClassification),
     hasComposer: Boolean(composer),
     primaryHeading,
     buttonLabels,

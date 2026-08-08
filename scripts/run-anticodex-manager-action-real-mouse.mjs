@@ -3,7 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { classifyUnsupportedExternalSettingsTarget } from "./anticodex-native-settings-contract.mjs";
+import {
+  classifyNativeSettingsCrashSnapshot,
+  classifyUnsupportedExternalSettingsTarget,
+} from "./anticodex-native-settings-contract.mjs";
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -290,7 +293,26 @@ async function openNativeSettingsSection(slug) {
     const panel = ${nativeSettingsPanelExpression};
     const panelText = String(panel?.innerText || '').replace(/\\s+/g, ' ').trim();
     const bodyText = String(document.body?.innerText || '');
-    const crash = /(ChatGPT 已意外停止|unexpectedly stopped|Something went wrong|出了点问题|崩溃)/i.test(bodyText);
+    const isVisible = (entry) => {
+      const rect = entry?.getBoundingClientRect?.();
+      const style = entry ? getComputedStyle(entry) : null;
+      return Boolean(rect && rect.width > 0 && rect.height > 0 && style?.display !== 'none' && style?.visibility !== 'hidden');
+    };
+    const headings = Array.from(document.querySelectorAll('main h1, main h2, h1, h2, [role="heading"]'))
+      .filter(isVisible)
+      .map((entry) => String(entry.textContent || '').replace(/\\s+/g, ' ').trim())
+      .filter(Boolean);
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"]'))
+      .filter(isVisible)
+      .map((entry) => String(entry.textContent || entry.getAttribute?.('aria-label') || '').replace(/\\s+/g, ' ').trim())
+      .filter(Boolean);
+    const classifyNativeSettingsCrashSnapshot = ${classifyNativeSettingsCrashSnapshot.toString()};
+    const crash = classifyNativeSettingsCrashSnapshot({
+      headings,
+      buttons,
+      bodyText,
+      hasComposer: Boolean(document.querySelector('[data-codex-composer], .ProseMirror')),
+    });
     const loading = /^(Loading settings…?|正在加载设置…?)$/i.test(panelText);
     const selected = active?.getAttribute('aria-current') === 'page';
     const controlCount = panel?.querySelectorAll?.('button,input,textarea,select,a').length || 0;

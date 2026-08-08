@@ -15,6 +15,7 @@ import {
 const root = resolve(import.meta.dirname, "..", "..");
 const fixedRouteSource = readFileSync(resolve(root, "scripts", "start-anticodex-fixed-route.mjs"), "utf8");
 const uiStateSource = readFileSync(resolve(root, "scripts", "test-anticodex-ui-state.mjs"), "utf8");
+const managerRealMouseSource = readFileSync(resolve(root, "scripts", "run-anticodex-manager-action-real-mouse.mjs"), "utf8");
 
 function targetResponse(targets) {
   return {
@@ -162,6 +163,33 @@ test("a fatal copied-client page is never renderer-ready even when it has a retr
     primaryHeading: "ChatGPT 已意外停止",
     buttonLabels: ["更新 ChatGPT", "打开 Config.toml", "重启"],
   }), false);
+  assert.deepEqual(fixedRoute.classifyCdpRendererSnapshot({
+    readyState: "complete",
+    hasBody: true,
+    text: "Anti-Codex 已意外停止 打开 Config.toml 重启",
+    hasInteractive: true,
+    hasComposer: false,
+    primaryHeading: "Anti-Codex 已意外停止",
+    buttonLabels: ["打开 Config.toml", "重启"],
+  }), { ready: false, fatal: true });
+  assert.deepEqual(fixedRoute.classifyCdpRendererSnapshot({
+    readyState: "complete",
+    hasBody: true,
+    text: "糟糕，出错了 重试",
+    hasInteractive: true,
+    hasComposer: false,
+    primaryHeading: "",
+    buttonLabels: ["重试"],
+  }), { ready: false, fatal: true });
+  assert.deepEqual(fixedRoute.classifyCdpRendererSnapshot({
+    readyState: "complete",
+    hasBody: true,
+    text: "Oops, an error has occurred Try again",
+    hasInteractive: true,
+    hasComposer: false,
+    primaryHeading: "",
+    buttonLabels: ["Try again"],
+  }), { ready: false, fatal: true });
   assert.equal(fixedRoute.isCdpRendererSnapshotReady({
     readyState: "complete",
     hasBody: true,
@@ -199,6 +227,12 @@ test("fatal-page probes accept a visible h2 heading and exclude hidden recovery 
     assert.match(source, /getBoundingClientRect/);
     assert.match(source, /visibility\s*!==\s*['"]hidden['"]/);
   }
+  for (const source of [fixedRouteSource, uiStateSource]) {
+    assert.match(source, /ChatGPT\|Anti-Codex/);
+  }
+  assert.match(managerRealMouseSource, /classifyNativeSettingsCrashSnapshot/);
+  assert.match(uiStateSource, /document\.body\?\.innerText/);
+  assert.match(uiStateSource, /textForFatalClassification/);
 });
 
 test("installed UI verifier rejects a fatal-page fixture", () => {
@@ -227,6 +261,67 @@ test("installed UI verifier rejects a fatal-page fixture", () => {
   const output = JSON.parse(String(result.stdout || "{}").trim());
   assert.equal(output.ok, false);
   assert.ok(output.failures.some((failure) => /fatal client page/i.test(failure)));
+
+  const antiFixture = {
+    ...fixture,
+    textSample: "Anti-Codex 已意外停止 打开 Config.toml 重启",
+    primaryHeading: "Anti-Codex 已意外停止",
+    buttonLabels: ["打开 Config.toml", "重启"],
+  };
+  const antiResult = spawnSync(process.execPath, [
+    resolve(root, "scripts", "test-anticodex-ui-state.mjs"),
+    "--page-state-json", JSON.stringify(antiFixture),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 15_000,
+    windowsHide: true,
+  });
+  assert.equal(antiResult.error, undefined);
+  assert.equal(antiResult.status, 1);
+  const antiOutput = JSON.parse(String(antiResult.stdout || "{}").trim());
+  assert.equal(antiOutput.ok, false);
+  assert.ok(antiOutput.failures.some((failure) => /fatal client page/i.test(failure)));
+
+  const genericResult = spawnSync(process.execPath, [
+    resolve(root, "scripts", "test-anticodex-ui-state.mjs"),
+    "--page-state-json", JSON.stringify({
+      ...fixture,
+      textSample: "糟糕，出错了 重试",
+      primaryHeading: "",
+      buttonLabels: ["重试"],
+    }),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 15_000,
+    windowsHide: true,
+  });
+  assert.equal(genericResult.error, undefined);
+  assert.equal(genericResult.status, 1);
+  const genericOutput = JSON.parse(String(genericResult.stdout || "{}").trim());
+  assert.equal(genericOutput.ok, false);
+  assert.ok(genericOutput.failures.some((failure) => /fatal client page/i.test(failure)));
+
+  const englishGenericResult = spawnSync(process.execPath, [
+    resolve(root, "scripts", "test-anticodex-ui-state.mjs"),
+    "--page-state-json", JSON.stringify({
+      ...fixture,
+      textSample: "Oops, an error has occurred Try again",
+      primaryHeading: "",
+      buttonLabels: ["Try again"],
+    }),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 15_000,
+    windowsHide: true,
+  });
+  assert.equal(englishGenericResult.error, undefined);
+  assert.equal(englishGenericResult.status, 1);
+  const englishGenericOutput = JSON.parse(String(englishGenericResult.stdout || "{}").trim());
+  assert.equal(englishGenericOutput.ok, false);
+  assert.ok(englishGenericOutput.failures.some((failure) => /fatal client page/i.test(failure)));
 
   const ordinaryChat = spawnSync(process.execPath, [
     resolve(root, "scripts", "test-anticodex-ui-state.mjs"),

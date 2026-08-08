@@ -349,7 +349,7 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowDeferredRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
-        [ValidateSet(0, 2, 3, 4)][int]$ExpectedHostPatchRevision = 0
+        [ValidateSet(0, 2, 3, 4, 5)][int]$ExpectedHostPatchRevision = 0
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -365,7 +365,7 @@ function Test-AntiCodexAsarPatches {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
         }
     }
-    if ($ExpectedHostPatchRevision -in @(2, 3, 4)) {
+    if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5)) {
         $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
         if ([regex]::Matches($text, $settingsDefinitionPattern).Count -ne 1 -or
             [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count -ne 1 -or
@@ -374,6 +374,100 @@ function Test-AntiCodexAsarPatches {
             [regex]::Matches($text, '\.securitySettings\.message').Count -lt 1 -or
             [regex]::Matches($text, '/\*anticodex-local-settings-only\*/\s*\}').Count -ne 0) {
             throw "Anti-Codex host app.asar Settings compatibility patch is invalid."
+        }
+    }
+    $crashTitleOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.title`,defaultMessage:`\{appName\} stopped unexpectedly`,description:`[^`]+`,values:\{appName:[A-Za-z_$][\w$]*\}').Count
+    $crashDescriptionOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,description:`[^`]+`,values:\{appName:[A-Za-z_$][\w$]*,documentationLink:').Count
+    $crashTitlePatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.title`,defaultMessage:`\{appName\} stopped unexpectedly`,values:\{appName:`Anti-Codex`\}').Count
+    $crashDescriptionPatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,values:\{appName:`Anti-Codex`,documentationLink:').Count
+    $crashRecoveryMarkerCount = [regex]::Matches($text, '/\*anticodex-crash-recovery-actions\*/children:\[[A-Za-z_$][\w$]*,[A-Za-z_$][\w$]*\]').Count
+    $genericErrorOriginalCount = [regex]::Matches($text, 'id:`codex\.errorBoundary\.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`').Count
+    $genericRetryOriginalCount = [regex]::Matches($text, 'id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`').Count
+    $genericErrorPatchedCount = [regex]::Matches($text, 'id:`codex\.errorBoundary\.genericError`,defaultMessage:`Oops, an error has occurred`(?=\})').Count
+    $genericRetryPatchedCount = [regex]::Matches($text, 'id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`(?=\})').Count
+    $genericErrorMarkerCount = [regex]::Matches($text, '/\*anticodex-generic-error-actions\*/children:\[\(0,[A-Za-z_$][\w$]*\.jsx\)\([A-Za-z_$][\w$]*,\{onClick:[A-Za-z_$][\w$]*,children:[A-Za-z_$][\w$]*\}\)\]').Count
+    $identifier = '[A-Za-z_$][\w$]*'
+    function Test-SupportedControlAssignments {
+        param([string]$Region, [string]$Variable, [string]$MemoPattern)
+        $name = [regex]::Escape($Variable)
+        $declarations = [regex]::Matches($Region, "\blet $name;")
+        if ($declarations.Count -ne 1) { return $false }
+        $afterDeclaration = $declarations[0].Index + $declarations[0].Length
+        $statementTerminator = $Region.IndexOf(";", $afterDeclaration)
+        $nextDeclaration = [regex]::Match($Region.Substring($afterDeclaration), "\blet [A-Za-z_$][\w$]*;")
+        $segmentEnd = if ($statementTerminator -ge 0) { $statementTerminator + 1 } elseif ($nextDeclaration.Success) { $afterDeclaration + $nextDeclaration.Index } else { $Region.Length }
+        $segment = $Region.Substring($declarations[0].Index, $segmentEnd - $declarations[0].Index)
+        $identifierPattern = "(?<![.\w`$])$name(?![\w`$])"
+        $writePattern = "(?:$identifierPattern\s*(?:\+\+|--|\*\*=|>>>=|<<=|>>=|&&=|\|\|=|\?\?=|[+\-*/%&|^]=|=(?!=|>))|(?:\+\+|--)\s*$identifierPattern|(?<![.\w`$])\[[^\[\];]{0,800}?$identifierPattern[^\[\];]{0,800}?\]\s*=|(?<![.\w`$])\{[^{};]{0,800}?$identifierPattern[^{};]{0,800}?\}\s*=|\bfor\s*\([^;)]{0,500}?$identifierPattern[^;)]{0,500}?\s+(?:of|in)\b)"
+        $writes = [regex]::Matches($Region, $writePattern)
+        $segmentWrites = [regex]::Matches($segment, $writePattern)
+        if ($writes.Count -eq 1 -and $segmentWrites.Count -eq 1) { return $true }
+        return $writes.Count -eq 2 -and $segmentWrites.Count -eq 2 -and
+            -not [string]::IsNullOrWhiteSpace($MemoPattern) -and
+            [regex]::Matches($segment, $MemoPattern).Count -eq 1
+    }
+    $appCrashConfigBindingValid = $false
+    $appCrashHandlerBindingValid = $false
+    $appRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,2500}?id:``appServerCrash\.title``,defaultMessage:``\{appName\} stopped unexpectedly``,values:\{appName:``Anti-Codex``\}(?:(?!function $identifier\()[\s\S]){0,2500}?id:``appServerCrash\.description``,defaultMessage:``Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}``,values:\{appName:``Anti-Codex``,documentationLink:(?:(?!function $identifier\()[\s\S]){0,8000}?id:``appServerCrash\.restart``,defaultMessage:``Restart``(?:(?!function $identifier\()[\s\S]){0,3000}?/\*anticodex-crash-recovery-actions\*/children:\[(?<config>$identifier),(?<restart>$identifier)\]"
+    $appRegions = [regex]::Matches($text, $appRegionPattern)
+    if ($appRegions.Count -eq 1) {
+        $appRegion = $appRegions[0].Value
+        $appProps = [regex]::Escape($appRegions[0].Groups['props'].Value)
+        $configVariable = $appRegions[0].Groups['config'].Value
+        $restartVariable = $appRegions[0].Groups['restart'].Value
+        $config = [regex]::Escape($configVariable)
+        $restart = [regex]::Escape($restartVariable)
+        $configBindings = [regex]::Matches($appRegion, "\b$config=[^;]{0,700}?onClick:(?<handler>$identifier)[^;]{0,500}?id:``loadingPage\.openConfigToml``")
+        if ($configBindings.Count -eq 1) {
+            $configHandler = [regex]::Escape($configBindings[0].Groups['handler'].Value)
+            $dependency = "$identifier(?:\.$identifier)*"
+            $configMemoPattern = "^let $config;(?<cache>$identifier)\[(?<dependencyIndex>\d+)\]===(?<dependency>$dependency)\?$config=\k<cache>\[(?<valueIndex>\d+)\]:\($config=(?:(?!=>|function)[\s\S]){1,900}?onClick:$configHandler(?:(?!=>|function)[\s\S]){1,700}?id:``loadingPage\.openConfigToml``(?:(?!=>|function)[\s\S]){0,400}?,\k<cache>\[\k<dependencyIndex>\]=\k<dependency>,\k<cache>\[\k<valueIndex>\]=$config\);?$"
+            $appCrashConfigBindingValid = [regex]::Matches($text, "function $configHandler\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}").Count -eq 1 -and
+                (Test-SupportedControlAssignments -Region $appRegion -Variable $configVariable -MemoPattern $configMemoPattern)
+        }
+        $restartBindings = [regex]::Matches($appRegion, "\{fatalError:$identifier,onReset:(?<handler>$identifier)\}=$appProps(?:[,;])")
+        if ($restartBindings.Count -eq 1) {
+            $restartHandler = [regex]::Escape($restartBindings[0].Groups['handler'].Value)
+            $restartPattern = "(?s)let (?<label>$identifier);[\s\S]{0,450}?\b\k<label>=[\s\S]{0,300}?id:``appServerCrash\.restart``,defaultMessage:``Restart``[\s\S]{0,250}?let $restart;[\s\S]{0,350}?\b$restart=[\s\S]{0,180}?onClick:$restartHandler,children:\k<label>"
+            $restartMatches = [regex]::Matches($appRegion, $restartPattern)
+            $restartLabel = if ($restartMatches.Count -eq 1) { [regex]::Escape($restartMatches[0].Groups['label'].Value) } else { "" }
+            $restartMemoPattern = "^let $restart;(?<cache>$identifier)\[(?<dependencyIndex>\d+)\]===$restartHandler\?$restart=\k<cache>\[(?<valueIndex>\d+)\]:\($restart=(?:(?!=>|function)[\s\S]){1,600}?onClick:$restartHandler,children:$restartLabel(?:(?!=>|function)[\s\S]){0,150}?,\k<cache>\[\k<dependencyIndex>\]=$restartHandler,\k<cache>\[\k<valueIndex>\]=$restart\);?$"
+            $appCrashHandlerBindingValid = $restartMatches.Count -eq 1 -and
+                (Test-SupportedControlAssignments -Region $appRegion -Variable $restartVariable -MemoPattern $restartMemoPattern)
+        }
+    }
+    $genericRetryHandlerBindingValid = $false
+    $genericRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,1800}?id:``codex\.errorBoundary\.genericError``,defaultMessage:``Oops, an error has occurred``(?=\})(?:(?!function $identifier\()[\s\S]){0,1800}?id:``codex\.errorBoundary\.goHome``,defaultMessage:``Try again``(?=\})(?:(?!function $identifier\()[\s\S]){0,1800}?/\*anticodex-generic-error-actions\*/children:\[\(0,$identifier\.jsx\)\($identifier,\{onClick:(?<retryHandler>$identifier),children:(?<retryLabel>$identifier)\}\)\](?:(?!function $identifier\()[\s\S]){0,1800}?\}var $identifier(?:,$identifier){2,}"
+    $genericRegions = [regex]::Matches($text, $genericRegionPattern)
+    if ($genericRegions.Count -eq 1) {
+        $genericRegion = $genericRegions[0].Value
+        $genericProps = [regex]::Escape($genericRegions[0].Groups['props'].Value)
+        $retryHandlerVariable = $genericRegions[0].Groups['retryHandler'].Value
+        $retryHandler = [regex]::Escape($retryHandlerVariable)
+        $retryLabel = [regex]::Escape($genericRegions[0].Groups['retryLabel'].Value)
+        $resetBindings = [regex]::Matches($genericRegion, "\{resetError:(?<handler>$identifier)\}=$genericProps(?:[,;])")
+        if ($resetBindings.Count -eq 1 -and
+            [regex]::Matches($genericRegion, "\b$retryLabel=\(0,$identifier\.jsx\)\($identifier,\{id:``codex\.errorBoundary\.goHome``,defaultMessage:``Try again``\}\)").Count -eq 1) {
+            $resetHandler = [regex]::Escape($resetBindings[0].Groups['handler'].Value)
+            $retryMemoPattern = "^let $retryHandler;(?<cache>$identifier)\[(?<routeIndex>\d+)\]!==?(?<route>$identifier)\|\|\k<cache>\[(?<resetIndex>\d+)\]!==?$resetHandler\?\($retryHandler=\(\)=>\{$resetHandler\(\),\k<route>\(``/``\)\},\k<cache>\[\k<routeIndex>\]=\k<route>,\k<cache>\[\k<resetIndex>\]=$resetHandler,\k<cache>\[(?<valueIndex>\d+)\]=$retryHandler\):$retryHandler=\k<cache>\[\k<valueIndex>\];?$"
+            $genericRetryHandlerBindingValid = [regex]::Matches($genericRegion, "\b$retryHandler=\(\)=>\{?$resetHandler\(\)(?:[,;}])").Count -eq 1 -and
+                (Test-SupportedControlAssignments -Region $genericRegion -Variable $retryHandlerVariable -MemoPattern $retryMemoPattern)
+        }
+    }
+    if ($ExpectedHostPatchRevision -eq 5) {
+        if ($crashTitleOriginalCount -ne 0 -or $crashDescriptionOriginalCount -ne 0 -or
+            $crashTitlePatchedCount -ne 1 -or $crashDescriptionPatchedCount -ne 1 -or $crashRecoveryMarkerCount -ne 1 -or
+            $genericErrorOriginalCount -ne 1 -or $genericRetryOriginalCount -ne 1 -or
+            $genericErrorPatchedCount -ne 1 -or $genericRetryPatchedCount -ne 1 -or $genericErrorMarkerCount -ne 1 -or
+            -not $appCrashConfigBindingValid -or -not $appCrashHandlerBindingValid -or -not $genericRetryHandlerBindingValid) {
+            throw "Anti-Codex host app.asar crash recovery page patch is invalid."
+        }
+    } elseif ($ExpectedHostPatchRevision -in @(2, 3, 4)) {
+        if ($crashTitleOriginalCount -ne 1 -or $crashDescriptionOriginalCount -ne 1 -or
+            $crashTitlePatchedCount -ne 0 -or $crashDescriptionPatchedCount -ne 0 -or $crashRecoveryMarkerCount -ne 0 -or
+            $genericErrorOriginalCount -ne 2 -or $genericRetryOriginalCount -ne 2 -or
+            $genericErrorPatchedCount -ne 0 -or $genericRetryPatchedCount -ne 0 -or $genericErrorMarkerCount -ne 0) {
+            throw "Anti-Codex predecessor host unexpectedly contains a partial revision-5 crash recovery page patch."
         }
     }
     $retiredFeaturePatchPatterns = @(
@@ -443,6 +537,7 @@ function Test-AntiCodexHost {
         "app-route-gate",
         "profile-dropdown-settings",
         "settings-external-links",
+        "crash-recovery-page",
         "browser-window-icon",
         "primary-window-restore-repaint",
         "windows-tray-icon",
@@ -458,15 +553,33 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host marker patch profile is invalid: $MarkerPath"
     }
     $patchProfile = "fixed-shell-v1"
-    $currentHostPatchRevision = 4
+    $currentHostPatchRevision = 5
     $hostPatchRevisionProperty = $manifest.PSObject.Properties["hostPatchRevision"]
     $legacyHostPatchRevision = $null -eq $hostPatchRevisionProperty
     $hostPatchRevisionText = if ($legacyHostPatchRevision) { "0" } else { [string]$hostPatchRevisionProperty.Value }
-    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", "3", [string]$currentHostPatchRevision)) {
+    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", "3", "4", [string]$currentHostPatchRevision)) {
         throw "Anti-Codex host marker patch revision is invalid: $MarkerPath"
     }
     $hostPatchRevision = [int]$hostPatchRevisionText
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
+    $revision4CriticalPatches = @(
+        "package-json",
+        "webview-html-title",
+        "app-name",
+        "app-user-model-id",
+        "session-title",
+        "startup-mcp-config-reload",
+        "app-server-managed-session-flags",
+        "config-write",
+        "auth-requirement",
+        "app-route-gate",
+        "profile-dropdown-settings",
+        "settings-external-links",
+        "browser-window-icon",
+        "primary-window-restore-repaint",
+        "windows-tray-icon",
+        "local-model-availability"
+    )
     $previousCriticalPatches = @(
         "package-json",
         "webview-html-title",
@@ -525,10 +638,10 @@ function Test-AntiCodexHost {
     $recordedCriticalPatches = @($manifest.criticalPatches)
     $currentManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $expectedCriticalPatches) -and $hostPatchRevision -in @(3, $currentHostPatchRevision)
-    $revision2ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
+        -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq $currentHostPatchRevision
+    $revision2To4ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq 2
+        -Expected $revision4CriticalPatches) -and $hostPatchRevision -in @(2, 3, 4)
     $previousManifestCompatible = $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $previousCriticalPatches)
@@ -536,7 +649,7 @@ function Test-AntiCodexHost {
         -Recorded $recordedCriticalPatches `
         -Expected $legacyWithoutConfigWriteCriticalPatches)
     if (-not $currentManifestCompatible -and
-        -not $revision2ManifestCompatible -and
+        -not $revision2To4ManifestCompatible -and
         -not $previousManifestCompatible -and
         -not $legacyWithoutConfigWriteManifestCompatible) {
         throw "Anti-Codex host marker is missing critical compatibility patches."
@@ -588,13 +701,22 @@ function Test-AntiCodexHost {
             -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
             -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
             -ExpectedHostPatchRevision $hostPatchRevision
-    } elseif ($revision2ManifestCompatible) {
+    } elseif ($revision2To4ManifestCompatible -and $hostPatchRevision -eq 2) {
         Test-AntiCodexAsarPatches `
             -Path $required.appAsar `
             -PatchProfile $patchProfile `
             -ExpectedConfigWriteBridgeCount 1 `
             -ExpectedPrimaryWindowDeferredRestoreRepaintCount 0 `
             -ExpectedPrimaryWindowFocusRestoreRepaintCount 1 `
+            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
+            -ExpectedHostPatchRevision $hostPatchRevision
+    } elseif ($revision2To4ManifestCompatible) {
+        Test-AntiCodexAsarPatches `
+            -Path $required.appAsar `
+            -PatchProfile $patchProfile `
+            -ExpectedConfigWriteBridgeCount 1 `
+            -ExpectedPrimaryWindowDeferredRestoreRepaintCount 1 `
+            -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
             -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
             -ExpectedHostPatchRevision $hostPatchRevision
     } elseif ($previousManifestCompatible) {

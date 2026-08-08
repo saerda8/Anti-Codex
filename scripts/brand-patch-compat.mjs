@@ -25,6 +25,39 @@ const APP_SERVER_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN =
   /spawnProcess\(\)\{let [\w$]+=this\.options,[\s\S]{0,600}?approval_policy="never"[\s\S]{0,200}?sandbox_mode="danger-full-access"[\s\S]{0,600}?Error`Codex CLI spawn failed`;/g;
+const IDENTIFIER_SOURCE = String.raw`[A-Za-z_$][\w$]*`;
+const CRASH_RECOVERY_REGION_PATTERN = new RegExp(
+  String.raw`function ${IDENTIFIER_SOURCE}\(${IDENTIFIER_SOURCE}\)\{[\s\S]{0,2500}?id:\`appServerCrash\.title\`,defaultMessage:\`\{appName\} stopped unexpectedly\`[\s\S]{0,2500}?id:\`appServerCrash\.description\`,defaultMessage:\`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}\`[\s\S]{0,5000}?id:\`appServerCrash\.restart\`,defaultMessage:\`Restart\`[\s\S]{0,3000}?\}function ${IDENTIFIER_SOURCE}\(\)\{return ${IDENTIFIER_SOURCE}\.dispatchMessage\(\`open-config-toml\`,\{\}\)\}`,
+  "g",
+);
+const CRASH_TITLE_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.title`,defaultMessage:`\{appName\} stopped unexpectedly`,description:`[^`]+`,values:\{appName:[A-Za-z_$][\w$]*\}/g;
+const CRASH_TITLE_PATCHED_PATTERN =
+  /id:`appServerCrash\.title`,defaultMessage:`\{appName\} stopped unexpectedly`,values:\{appName:`Anti-Codex`\}/g;
+const CRASH_DESCRIPTION_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,description:`[^`]+`,values:\{appName:[A-Za-z_$][\w$]*,documentationLink:/g;
+const CRASH_DESCRIPTION_PATCHED_PATTERN =
+  /id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,values:\{appName:`Anti-Codex`,documentationLink:/g;
+const CRASH_UPDATE_SLOT_PATTERN = new RegExp(
+  String.raw`let (?<slot>${IDENTIFIER_SOURCE});[\s\S]{0,260}?\b\k<slot>=\(0,(?<jsx>${IDENTIFIER_SOURCE})\.jsx\)\(\k<jsx>\.Fragment,\{children:\(0,\k<jsx>\.jsx\)\((?<updateFn>${IDENTIFIER_SOURCE}),\{\}\)\}\)`,
+  "g",
+);
+const CRASH_ACTIONS_PATTERN = new RegExp(
+  String.raw`(?<marker>/\*anticodex-crash-recovery-actions\*/)?children:\[(?<items>${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){1,2})\]`,
+  "g",
+);
+const GENERIC_ERROR_REGION_PATTERN = new RegExp(
+  String.raw`function ${IDENTIFIER_SOURCE}\(${IDENTIFIER_SOURCE}\)\{(?:(?!function ${IDENTIFIER_SOURCE}\()[\s\S]){0,1800}?id:\`codex\.errorBoundary\.genericError\`,defaultMessage:\`Oops, an error has occurred\`(?:(?!function ${IDENTIFIER_SOURCE}\()[\s\S]){0,1800}?id:\`codex\.errorBoundary\.goHome\`,defaultMessage:\`Try again\`(?:(?!function ${IDENTIFIER_SOURCE}\()[\s\S]){0,1800}?\}var ${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2,}`,
+  "g",
+);
+const GENERIC_ERROR_TITLE_ORIGINAL_PATTERN =
+  /id:`codex\.errorBoundary\.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`/g;
+const GENERIC_ERROR_TITLE_PATCHED_PATTERN =
+  /id:`codex\.errorBoundary\.genericError`,defaultMessage:`Oops, an error has occurred`(?=\})/g;
+const GENERIC_ERROR_RETRY_ORIGINAL_PATTERN =
+  /id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`/g;
+const GENERIC_ERROR_RETRY_PATCHED_PATTERN =
+  /id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`(?=\})/g;
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -37,6 +70,323 @@ function padReplacement(match, replacement) {
     );
   }
   return replacement + " ".repeat(match.length - replacement.length);
+}
+
+function exactlyOne(source, pattern) {
+  const matches = allMatches(source, pattern);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function requireSupportedControlAssignments(region, variable, role, memoPattern) {
+  const name = escapeRegExp(variable);
+  const declaration = exactlyOne(region, new RegExp(String.raw`\blet ${name};`, "g"));
+  if (!declaration) {
+    throw new Error(`Anti-Codex ${role} control declaration is missing or ambiguous`);
+  }
+  const afterDeclaration = declaration.index + declaration[0].length;
+  const statementTerminator = region.indexOf(";", afterDeclaration);
+  const nextDeclarationPattern = new RegExp(String.raw`\blet ${IDENTIFIER_SOURCE};`, "g");
+  nextDeclarationPattern.lastIndex = afterDeclaration;
+  const nextDeclaration = nextDeclarationPattern.exec(region);
+  const segmentEnd = statementTerminator >= 0
+    ? statementTerminator + 1
+    : (nextDeclaration?.index ?? region.length);
+  const segment = region.slice(declaration.index, segmentEnd);
+  const target = String.raw`(?<![.\w$])${name}(?![\w$])`;
+  const writePattern = new RegExp(
+    String.raw`(?:${target}\s*(?:\+\+|--|\*\*=|>>>=|<<=|>>=|&&=|\|\|=|\?\?=|[+\-*/%&|^]=|=(?!=|>))|(?:\+\+|--)\s*${target}|(?<![.\w$])\[[^\[\];]{0,800}?${target}[^\[\];]{0,800}?\]\s*=|(?<![.\w$])\{[^{};]{0,800}?${target}[^{};]{0,800}?\}\s*=|\bfor\s*\([^;)]{0,500}?${target}[^;)]{0,500}?\s+(?:of|in)\b)`,
+    "g",
+  );
+  const writes = allMatches(region, writePattern);
+  const segmentWrites = allMatches(segment, writePattern);
+  if (writes.length === 1 && segmentWrites.length === 1) return;
+  if (writes.length !== 2 || segmentWrites.length !== 2) {
+    throw new Error(`Anti-Codex ${role} control has an unsupported assignment count`);
+  }
+  if (!(memoPattern instanceof RegExp) || !exactlyOne(segment, memoPattern)) {
+    throw new Error(`Anti-Codex ${role} control cache binding is not the supported memo branch`);
+  }
+}
+
+function requireSupportedUpdaterComponent(source, updateFunctionName) {
+  const updateFunctionPattern = new RegExp(`function ${escapeRegExp(updateFunctionName)}\\(`, "g");
+  const updateFunctionMatches = allMatches(source, updateFunctionPattern);
+  if (updateFunctionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex crash recovery updater component");
+  }
+  const updateStart = updateFunctionMatches[0].index;
+  const nextFunction = new RegExp(`function ${IDENTIFIER_SOURCE}\\(`, "g");
+  nextFunction.lastIndex = updateStart + updateFunctionMatches[0][0].length;
+  const nextFunctionMatch = nextFunction.exec(source);
+  const updateRegion = source.slice(updateStart, nextFunctionMatch?.index ?? source.length);
+  if ((updateRegion.match(/appUpdate\.recovery\.updateCodex/g) ?? []).length < 1
+      || (updateRegion.match(/appUpdates\?\.checkForUpdates\(\)/g) ?? []).length !== 1
+      || (updateRegion.match(/appUpdates\?\.installUpdate\(\)/g) ?? []).length !== 1) {
+    throw new Error("Anti-Codex crash recovery update slot is not backed by the supported upstream updater");
+  }
+}
+
+function requireAppCrashActionRoles(source, region, updateSlot, actionMatch) {
+  const items = actionMatch.groups.items.split(",");
+  const markerPresent = Boolean(actionMatch.groups.marker);
+  const originalActions = !markerPresent && items.length === 3 && items[0] === updateSlot;
+  const patchedActions = markerPresent && items.length === 2;
+  if (!originalActions && !patchedActions) {
+    throw new Error("Anti-Codex crash recovery action row has an unsupported shape");
+  }
+  const configVariable = items.at(-2);
+  const restartVariable = items.at(-1);
+  const configPattern = new RegExp(
+    String.raw`\b${escapeRegExp(configVariable)}=[^;]{0,700}?onClick:(?<openConfig>${IDENTIFIER_SOURCE})[^;]{0,500}?id:\`loadingPage\.openConfigToml\``,
+    "g",
+  );
+  const configMatch = exactlyOne(region, configPattern);
+  if (!configMatch) {
+    throw new Error("Anti-Codex crash recovery action row does not retain the config control");
+  }
+  const openConfigFunction = escapeRegExp(configMatch.groups.openConfig);
+  const configName = escapeRegExp(configVariable);
+  const dependencySource = String.raw`${IDENTIFIER_SOURCE}(?:\.${IDENTIFIER_SOURCE})*`;
+  const configMemoPattern = new RegExp(
+    String.raw`^let ${configName};(?<cache>${IDENTIFIER_SOURCE})\[(?<dependencyIndex>\d+)\]===(?<dependency>${dependencySource})\?${configName}=\k<cache>\[(?<valueIndex>\d+)\]:\(${configName}=(?:(?!=>|function)[\s\S]){1,900}?onClick:${openConfigFunction}(?:(?!=>|function)[\s\S]){1,700}?id:\`loadingPage\.openConfigToml\`(?:(?!=>|function)[\s\S]){0,400}?,\k<cache>\[\k<dependencyIndex>\]=\k<dependency>,\k<cache>\[\k<valueIndex>\]=${configName}\);?$`,
+    "g",
+  );
+  requireSupportedControlAssignments(region, configVariable, "config", configMemoPattern);
+  const dispatcherPattern = new RegExp(
+    String.raw`function ${openConfigFunction}\(\)\{return ${IDENTIFIER_SOURCE}\.dispatchMessage\(\`open-config-toml\`,\{\}\)\}`,
+    "g",
+  );
+  if (!exactlyOne(source, dispatcherPattern)) {
+    throw new Error("Anti-Codex crash recovery config control is not bound to the isolated config dispatcher");
+  }
+  const componentBindingPattern = new RegExp(
+    String.raw`function ${IDENTIFIER_SOURCE}\((?<props>${IDENTIFIER_SOURCE})\)\{(?:(?!function ${IDENTIFIER_SOURCE}\()[\s\S]){0,700}?\{fatalError:${IDENTIFIER_SOURCE},onReset:(?<restartHandler>${IDENTIFIER_SOURCE})\}=\k<props>[,;]`,
+    "g",
+  );
+  const componentBinding = exactlyOne(region, componentBindingPattern);
+  if (!componentBinding) {
+    throw new Error("Anti-Codex crash recovery restart control is not bound to the component onReset handler");
+  }
+  const restartHandler = escapeRegExp(componentBinding.groups.restartHandler);
+  const restartPattern = new RegExp(
+    String.raw`let (?<label>${IDENTIFIER_SOURCE});[\s\S]{0,450}?\b\k<label>=[\s\S]{0,300}?id:\`appServerCrash\.restart\`,defaultMessage:\`Restart\`[\s\S]{0,250}?let ${escapeRegExp(restartVariable)};[\s\S]{0,350}?\b${escapeRegExp(restartVariable)}=[\s\S]{0,180}?onClick:${restartHandler},children:\k<label>`,
+    "g",
+  );
+  const restartMatch = exactlyOne(region, restartPattern);
+  if (!restartMatch) {
+    throw new Error("Anti-Codex crash recovery action row does not retain the restart control");
+  }
+  const restartName = escapeRegExp(restartVariable);
+  const restartLabel = escapeRegExp(restartMatch.groups.label);
+  const restartMemoPattern = new RegExp(
+    String.raw`^let ${restartName};(?<cache>${IDENTIFIER_SOURCE})\[(?<dependencyIndex>\d+)\]===${restartHandler}\?${restartName}=\k<cache>\[(?<valueIndex>\d+)\]:\(${restartName}=(?:(?!=>|function)[\s\S]){1,600}?onClick:${restartHandler},children:${restartLabel}(?:(?!=>|function)[\s\S]){0,150}?,\k<cache>\[\k<dependencyIndex>\]=${restartHandler},\k<cache>\[\k<valueIndex>\]=${restartName}\);?$`,
+    "g",
+  );
+  requireSupportedControlAssignments(region, restartVariable, "restart", restartMemoPattern);
+  return { configVariable, restartVariable, originalActions, patchedActions };
+}
+
+function genericErrorState(source) {
+  const regionMatches = allMatches(source, GENERIC_ERROR_REGION_PATTERN);
+  if (regionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex generic error page");
+  }
+  const regionMatch = regionMatches[0];
+  const region = regionMatch[0];
+  const updateSlot = exactlyOne(region, CRASH_UPDATE_SLOT_PATTERN);
+  if (!updateSlot) {
+    throw new Error("Expected exactly one supported Anti-Codex generic error update slot");
+  }
+  requireSupportedUpdaterComponent(source, updateSlot.groups.updateFn);
+  const retryAssignmentPattern = new RegExp(
+    String.raw`(?<retryLabel>${IDENTIFIER_SOURCE})=\(0,${IDENTIFIER_SOURCE}\.jsx\)\(${IDENTIFIER_SOURCE},\{id:\`codex\.errorBoundary\.goHome\`,defaultMessage:\`Try again\`(?:,description:\`Button label to navigate to the home page after an error\`)?\}\)`,
+    "g",
+  );
+  const retryAssignment = exactlyOne(region, retryAssignmentPattern);
+  if (!retryAssignment) {
+    throw new Error("Expected exactly one supported Anti-Codex generic error retry label");
+  }
+  const resetBindingPattern = new RegExp(
+    String.raw`^function ${IDENTIFIER_SOURCE}\((?<props>${IDENTIFIER_SOURCE})\)\{(?:(?!function ${IDENTIFIER_SOURCE}\()[\s\S]){0,700}?\{resetError:(?<resetHandler>${IDENTIFIER_SOURCE})\}=\k<props>[,;]`,
+    "g",
+  );
+  const resetBinding = exactlyOne(region, resetBindingPattern);
+  if (!resetBinding) {
+    throw new Error("Anti-Codex generic error retry control is not bound to the error boundary reset handler");
+  }
+  const retryLabel = escapeRegExp(retryAssignment.groups.retryLabel);
+  const retryActionSource = String.raw`\(0,${IDENTIFIER_SOURCE}\.jsx\)\(${IDENTIFIER_SOURCE},\{onClick:(?<retryHandler>${IDENTIFIER_SOURCE}),children:${retryLabel}\}\)`;
+  const originalActionPattern = new RegExp(
+    String.raw`children:\[${escapeRegExp(updateSlot.groups.slot)},(?<retry>${retryActionSource})\]`,
+    "g",
+  );
+  const patchedActionPattern = new RegExp(
+    String.raw`/\*anticodex-generic-error-actions\*/children:\[(?<retry>${retryActionSource})\]`,
+    "g",
+  );
+  const originalAction = exactlyOne(region, originalActionPattern);
+  const patchedAction = exactlyOne(region, patchedActionPattern);
+  const retryAction = originalAction ?? patchedAction;
+  const retryHandler = retryAction?.groups.retryHandler;
+  const resetHandler = escapeRegExp(resetBinding.groups.resetHandler);
+  const retryHandlerPattern = retryHandler
+    ? new RegExp(String.raw`\b${escapeRegExp(retryHandler)}=\(\)=>\{?${resetHandler}\(\)(?:[,;}])`, "g")
+    : null;
+  if (!retryHandlerPattern || !exactlyOne(region, retryHandlerPattern)) {
+    throw new Error("Anti-Codex generic error retry control does not invoke the error boundary reset handler");
+  }
+  const retryName = escapeRegExp(retryHandler);
+  const retryMemoPattern = new RegExp(
+    String.raw`^let ${retryName};(?<cache>${IDENTIFIER_SOURCE})\[(?<routeIndex>\d+)\]!==?(?<route>${IDENTIFIER_SOURCE})\|\|\k<cache>\[(?<resetIndex>\d+)\]!==?${resetHandler}\?\(${retryName}=\(\)=>\{${resetHandler}\(\),\k<route>\(\`/\`\)\},\k<cache>\[\k<routeIndex>\]=\k<route>,\k<cache>\[\k<resetIndex>\]=${resetHandler},\k<cache>\[(?<valueIndex>\d+)\]=${retryName}\):${retryName}=\k<cache>\[\k<valueIndex>\];?$`,
+    "g",
+  );
+  requireSupportedControlAssignments(region, retryHandler, "retry", retryMemoPattern);
+  const counts = {
+    titleOriginal: allMatches(region, GENERIC_ERROR_TITLE_ORIGINAL_PATTERN).length,
+    titlePatched: allMatches(region, GENERIC_ERROR_TITLE_PATCHED_PATTERN).length,
+    retryOriginal: allMatches(region, GENERIC_ERROR_RETRY_ORIGINAL_PATTERN).length,
+    retryPatched: allMatches(region, GENERIC_ERROR_RETRY_PATCHED_PATTERN).length,
+  };
+  const original = counts.titleOriginal === 1 && counts.titlePatched === 0
+    && counts.retryOriginal === 1 && counts.retryPatched === 0
+    && Boolean(originalAction) && !patchedAction;
+  const patched = counts.titleOriginal === 0 && counts.titlePatched === 1
+    && counts.retryOriginal === 0 && counts.retryPatched === 1
+    && !originalAction && Boolean(patchedAction);
+  if (!original && !patched) {
+    throw new Error("Detected a partially patched Anti-Codex generic error page");
+  }
+  return {
+    region,
+    regionIndex: regionMatch.index,
+    originalAction,
+    patchedAction,
+    state: patched ? "patched" : "original",
+  };
+}
+
+function crashRecoveryState(text) {
+  const source = String(text ?? "");
+  const regionMatches = allMatches(source, CRASH_RECOVERY_REGION_PATTERN);
+  if (regionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex crash recovery page");
+  }
+  const regionMatch = regionMatches[0];
+  const region = regionMatch[0];
+  const updateSlot = exactlyOne(region, CRASH_UPDATE_SLOT_PATTERN);
+  if (!updateSlot) {
+    throw new Error("Expected exactly one supported Anti-Codex crash recovery page update slot");
+  }
+
+  requireSupportedUpdaterComponent(source, updateSlot.groups.updateFn);
+
+  const restartIndex = region.indexOf("id:`appServerCrash.restart`");
+  const afterRestart = region.slice(restartIndex);
+  const actionMatches = allMatches(afterRestart, CRASH_ACTIONS_PATTERN);
+  if (actionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex crash recovery action row");
+  }
+  const actionMatch = actionMatches[0];
+  const actionRoles = requireAppCrashActionRoles(source, region, updateSlot.groups.slot, actionMatch);
+
+  const counts = {
+    titleOriginal: allMatches(region, CRASH_TITLE_ORIGINAL_PATTERN).length,
+    titlePatched: allMatches(region, CRASH_TITLE_PATCHED_PATTERN).length,
+    descriptionOriginal: allMatches(region, CRASH_DESCRIPTION_ORIGINAL_PATTERN).length,
+    descriptionPatched: allMatches(region, CRASH_DESCRIPTION_PATCHED_PATTERN).length,
+  };
+  const appOriginal = counts.titleOriginal === 1
+    && counts.descriptionOriginal === 1
+    && counts.titlePatched === 0
+    && counts.descriptionPatched === 0
+    && actionRoles.originalActions;
+  const appPatched = counts.titleOriginal === 0
+    && counts.descriptionOriginal === 0
+    && counts.titlePatched === 1
+    && counts.descriptionPatched === 1
+    && actionRoles.patchedActions;
+  if (!appOriginal && !appPatched) {
+    throw new Error("Detected a partially patched Anti-Codex crash recovery page");
+  }
+  const generic = genericErrorState(source);
+  const original = appOriginal && generic.state === "original";
+  const patched = appPatched && generic.state === "patched";
+  if (!original && !patched) {
+    throw new Error("Detected mixed Anti-Codex crash recovery page states");
+  }
+  return {
+    source,
+    region,
+    regionIndex: regionMatch.index,
+    updateSlot: updateSlot.groups.slot,
+    configVariable: actionRoles.configVariable,
+    restartVariable: actionRoles.restartVariable,
+    generic,
+    state: patched ? "patched" : "original",
+  };
+}
+
+export function hasCrashRecoveryPagePatch(text) {
+  try {
+    return crashRecoveryState(text).state === "patched";
+  } catch {
+    return false;
+  }
+}
+
+export function hasCrashRecoveryPageSignature(text) {
+  const source = String(text ?? "");
+  return [
+    "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
+    "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
+    "id:`appServerCrash.restart`,defaultMessage:`Restart`",
+    "id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`",
+    "id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`",
+  ].every((anchor) => source.includes(anchor));
+}
+
+export function selectCrashRecoveryBundleCandidate(candidates) {
+  const signed = Array.from(candidates ?? []).filter((candidate) => hasCrashRecoveryPageSignature(candidate?.text));
+  if (signed.length !== 1) {
+    throw new Error(`Expected exactly one Anti-Codex crash recovery signature bundle, found ${signed.length}`);
+  }
+  patchCrashRecoveryPage(signed[0].text);
+  return signed[0];
+}
+
+export function patchCrashRecoveryPage(text) {
+  const state = crashRecoveryState(text);
+  if (state.state === "patched") return state.source;
+
+  let replacement = state.region.replace(CRASH_TITLE_ORIGINAL_PATTERN, (match) => match
+    .replace(/description:`[^`]+`,/, "")
+    .replace(/values:\{appName:[A-Za-z_$][\w$]*\}/, "values:{appName:`Anti-Codex`}"));
+  replacement = replacement.replace(CRASH_DESCRIPTION_ORIGINAL_PATTERN, (match) => match
+    .replace(/description:`[^`]+`,/, "")
+    .replace(/values:\{appName:[A-Za-z_$][\w$]*,documentationLink:/, "values:{appName:`Anti-Codex`,documentationLink:"));
+  replacement = replacement.replace(
+    `children:[${state.updateSlot},${state.configVariable},${state.restartVariable}]`,
+    `/*anticodex-crash-recovery-actions*/children:[${state.configVariable},${state.restartVariable}]`,
+  );
+  const appPadded = padReplacement(state.region, replacement);
+  let genericReplacement = state.generic.region
+    .replace(GENERIC_ERROR_TITLE_ORIGINAL_PATTERN, "id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`")
+    .replace(GENERIC_ERROR_RETRY_ORIGINAL_PATTERN, "id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`");
+  genericReplacement = genericReplacement.replace(
+    state.generic.originalAction[0],
+    `/*anticodex-generic-error-actions*/children:[${state.generic.originalAction.groups.retry}]`,
+  );
+  const genericPadded = padReplacement(state.generic.region, genericReplacement);
+  let patched = state.source.slice(0, state.regionIndex)
+    + appPadded
+    + state.source.slice(state.regionIndex + state.region.length);
+  patched = patched.slice(0, state.generic.regionIndex)
+    + genericPadded
+    + patched.slice(state.generic.regionIndex + state.generic.region.length);
+  if (patched.length !== state.source.length || crashRecoveryState(patched).state !== "patched") {
+    throw new Error("Anti-Codex crash recovery page patch validation failed");
+  }
+  return patched;
 }
 
 export function buildAsarIntegrity(value, blockSize) {

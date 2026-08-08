@@ -23,6 +23,7 @@ function extractFunction(source, name) {
   const candidates = [
     source.indexOf("\nfunction ", start + 1),
     source.indexOf("\n$syncMutex", start + 1),
+    source.indexOf("\n$candidate", start + 1),
   ].filter((value) => value !== -1);
   const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
   return source.slice(start, end);
@@ -72,19 +73,118 @@ test("candidate validation requires one complete deferred restore repaint", () =
 });
 
 test("host patch revision is release-bound without changing the fixed-shell profile", () => {
-  assert.match(brandPatcher, /const hostPatchRevision = 4/);
+  assert.match(brandPatcher, /const hostPatchRevision = 5/);
   assert.match(brandPatcher, /hostPatchRevision,/);
   assert.match(installer, /hostPatchRevision\s*=\s*\$HostPatchRevision/);
-  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"4"/);
-  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*4/);
+  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"5"/);
+  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*5/);
   assert.match(updateChecker, /active host patch revision is not current/);
   assert.match(updateChecker, /\$sourceFingerprint[\s\S]{0,260}hostPatchRevision=/);
-  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"4"/);
+  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"5"/);
   assert.match(candidateValidator, /anticodex-local-settings-only/);
   assert.match(candidateValidator, /securitySettingsEnabled:0/);
-  assert.match(rollback, /hostPatchRevision/);
+  assert.match(candidateValidator, /anticodex-crash-recovery-actions/);
+  assert.match(candidateValidator, /appServerCrash\\\.title/);
+  assert.match(installer, /"crash-recovery-page"/);
+  assert.match(rollback, /\$currentHostPatchRevision\s*=\s*5/);
+  assert.match(rollback, /\$revision4CriticalPatches/);
   for (const source of [brandPatcher, installer, candidateValidator, updateChecker, rollback]) {
     assert.match(source, /fixed-shell-v1/);
+  }
+});
+
+test("candidate crash-page validation binds both error surfaces to their safe actions", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-candidate-crash-"));
+  try {
+    const validator = extractFunction(candidateValidator, "Test-AntiCodexCrashRecoveryPage");
+    const fallback = 'id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`};id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`}';
+    const app = 'function C(e){let {fatalError:n,onReset:R}=e;id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,values:{appName:`Anti-Codex`};id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`,values:{appName:`Anti-Codex`,documentationLink:x};let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})});let f;f=(0,j.jsx)(Z,{id:`appServerCrash.restart`,defaultMessage:`Restart`});let p;p=(0,j.jsx)(B,{onClick:R,children:f});/*anticodex-crash-recovery-actions*/children:[d,p]}function O(){return A.dispatchMessage(`open-config-toml`,{})}';
+    const generic = 'function G(e){let {resetError:n}=e,r=M();let s;s=()=>{n(),r(`/`)};id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`});/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]}var R,z,J;';
+    const valid = `${app}${generic}${fallback}`;
+    const memoValid = `${app
+      .replace('let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})});', 'let d;t[6]===n.hostId?d=t[7]:(d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})}),t[6]=n.hostId,t[7]=d);')
+      .replace('let p;p=(0,j.jsx)(B,{onClick:R,children:f});', 'let p;t[9]===R?p=t[10]:(p=(0,j.jsx)(B,{onClick:R,children:f}),t[9]=R,t[10]=p);')}${generic
+      .replace('let s;s=()=>{n(),r(`/`)};', 'let s;t[3]!==r||t[4]!==n?(s=()=>{n(),r(`/`)},t[3]=r,t[4]=n,t[5]=s):s=t[5];')}${fallback}`;
+    const roleSwap = valid.replace("children:[d,p]", "children:[u,p]");
+    const restartHandlerSwap = valid.replace("onClick:R,children:f", "onClick:U,children:f");
+    const genericHandlerSwap = valid.replace("onClick:s,children:c", "onClick:U,children:c");
+    const configHandlerReassign = valid.replace("/*anticodex-crash-recovery-actions*/", "d=(0,j.jsx)(B,{onClick:U,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})});/*anticodex-crash-recovery-actions*/");
+    const restartHandlerReassign = valid.replace("/*anticodex-crash-recovery-actions*/", "p=(0,j.jsx)(B,{onClick:U,children:f});/*anticodex-crash-recovery-actions*/");
+    const genericHandlerReassign = valid.replace("/*anticodex-generic-error-actions*/", "s=U;/*anticodex-generic-error-actions*/");
+    const configCacheDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "d=t[99];t[99]=d;/*anticodex-crash-recovery-actions*/");
+    const restartCacheDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "p=t[99];t[99]=p;/*anticodex-crash-recovery-actions*/");
+    const genericCacheDecoy = valid.replace("/*anticodex-generic-error-actions*/", "s=t[99];t[99]=s;/*anticodex-generic-error-actions*/");
+    const configCompoundWriteDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "d&&=U;/*anticodex-crash-recovery-actions*/");
+    const restartCompoundWriteDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "p&&=U;/*anticodex-crash-recovery-actions*/");
+    const genericCompoundWriteDecoy = valid.replace("/*anticodex-generic-error-actions*/", "s&&=U;/*anticodex-generic-error-actions*/");
+    const configDestructureWriteDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "[d]=[U];/*anticodex-crash-recovery-actions*/");
+    const genericForOfWriteDecoy = valid.replace("/*anticodex-generic-error-actions*/", "for(s of q){}/*anticodex-generic-error-actions*/");
+    const configThunkDecoy = valid.replace('let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})});', 'let d;x?d=t[99]:(()=>{d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`})});t[99]=d});');
+    const restartThunkDecoy = valid.replace('let p;p=(0,j.jsx)(B,{onClick:R,children:f});', 'let p;x?p=t[99]:(()=>{p=(0,j.jsx)(B,{onClick:R,children:f});t[99]=p});');
+    const genericThunkDecoy = valid.replace('let s;s=()=>{n(),r(`/`)};', 'let s;x?s=t[99]:(()=>{s=()=>{n(),r(`/`)};t[99]=s});');
+    const appDecoy = valid.replace("/*anticodex-crash-recovery-actions*/", "children:[u,d,p];/*anticodex-crash-recovery-actions*/");
+    const genericDecoy = valid.replace("/*anticodex-generic-error-actions*/", "children:[q,(0,j.jsx)(B,{onClick:s,children:c})];/*anticodex-generic-error-actions*/");
+    const harness = join(fixture, "candidate-crash.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
+${validator}
+function Accept-Crash([string]$Text) {
+  try { Test-AntiCodexCrashRecoveryPage -Text $Text | Out-Null; return $true } catch { return $false }
+}
+[pscustomobject]@{
+  valid = Accept-Crash ${quotePowerShell(valid)}
+  memoValid = Accept-Crash ${quotePowerShell(memoValid)}
+  roleSwap = Accept-Crash ${quotePowerShell(roleSwap)}
+  restartHandlerSwap = Accept-Crash ${quotePowerShell(restartHandlerSwap)}
+  genericHandlerSwap = Accept-Crash ${quotePowerShell(genericHandlerSwap)}
+  configHandlerReassign = Accept-Crash ${quotePowerShell(configHandlerReassign)}
+  restartHandlerReassign = Accept-Crash ${quotePowerShell(restartHandlerReassign)}
+  genericHandlerReassign = Accept-Crash ${quotePowerShell(genericHandlerReassign)}
+  configCacheDecoy = Accept-Crash ${quotePowerShell(configCacheDecoy)}
+  restartCacheDecoy = Accept-Crash ${quotePowerShell(restartCacheDecoy)}
+  genericCacheDecoy = Accept-Crash ${quotePowerShell(genericCacheDecoy)}
+  configCompoundWriteDecoy = Accept-Crash ${quotePowerShell(configCompoundWriteDecoy)}
+  restartCompoundWriteDecoy = Accept-Crash ${quotePowerShell(restartCompoundWriteDecoy)}
+  genericCompoundWriteDecoy = Accept-Crash ${quotePowerShell(genericCompoundWriteDecoy)}
+  configDestructureWriteDecoy = Accept-Crash ${quotePowerShell(configDestructureWriteDecoy)}
+  genericForOfWriteDecoy = Accept-Crash ${quotePowerShell(genericForOfWriteDecoy)}
+  configThunkDecoy = Accept-Crash ${quotePowerShell(configThunkDecoy)}
+  restartThunkDecoy = Accept-Crash ${quotePowerShell(restartThunkDecoy)}
+  genericThunkDecoy = Accept-Crash ${quotePowerShell(genericThunkDecoy)}
+  appDecoy = Accept-Crash ${quotePowerShell(appDecoy)}
+  genericDecoy = Accept-Crash ${quotePowerShell(genericDecoy)}
+  missingFallback = Accept-Crash ${quotePowerShell(`${app}${generic}`)}
+} | ConvertTo-Json -Compress
+`, "utf8");
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      valid: true,
+      memoValid: true,
+      roleSwap: false,
+      restartHandlerSwap: false,
+      genericHandlerSwap: false,
+      configHandlerReassign: false,
+      restartHandlerReassign: false,
+      genericHandlerReassign: false,
+      configCacheDecoy: false,
+      restartCacheDecoy: false,
+      genericCacheDecoy: false,
+      configCompoundWriteDecoy: false,
+      restartCompoundWriteDecoy: false,
+      genericCompoundWriteDecoy: false,
+      configDestructureWriteDecoy: false,
+      genericForOfWriteDecoy: false,
+      configThunkDecoy: false,
+      restartThunkDecoy: false,
+      genericThunkDecoy: false,
+      appDecoy: false,
+      genericDecoy: false,
+      missingFallback: false,
+    });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
   }
 });
 

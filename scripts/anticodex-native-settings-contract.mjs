@@ -15,3 +15,25 @@ export function classifyUnsupportedExternalSettingsTarget({ href = "", label = "
   }
   return null;
 }
+
+export function classifyNativeSettingsCrashSnapshot({
+  headings = [],
+  buttons = [],
+  bodyText = "",
+  hasComposer = false,
+} = {}) {
+  if (hasComposer === true) return false;
+  const normalizedHeadings = Array.isArray(headings)
+    ? headings.map((value) => String(value ?? "").replace(/\s+/g, " ").trim()).filter(Boolean)
+    : [];
+  const normalizedButtons = Array.isArray(buttons)
+    ? buttons.map((value) => String(value ?? "").replace(/\s+/g, " ").trim()).filter(Boolean)
+    : [];
+  const normalizedBody = String(bodyText ?? "").replace(/\s+/g, " ").trim();
+  const fatalHeading = normalizedHeadings.some((heading) => /^(?:(?:ChatGPT|Anti-Codex)\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed)|(?:quit|stopped|closed)\s+unexpectedly)[.!。！]?$/i.test(heading));
+  const genericError = normalizedBody.length > 0
+    && normalizedBody.length <= 1_600
+    && /(?:^|\s)(?:糟糕[，,]\s*出错了|Oops,?\s+an error has occurred|Something went wrong)[.!。！]?(?:\s|$)/i.test(normalizedBody);
+  const recoveryAction = normalizedButtons.some((label) => /^(?:重试|重新加载|重新启动|重启|再试一次|retry|reload|restart|try again)$/i.test(label));
+  return recoveryAction && (fatalHeading || genericError);
+}

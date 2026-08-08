@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   buildAsarIntegrity,
   hasAppServerManagedSessionFlags,
+  hasCrashRecoveryPageSignature,
   hasPatchedAuthRequirement,
   hasPrimaryWindowRestoreRepaint,
   hasProductNameDrivenSessionTitle,
@@ -14,6 +15,7 @@ import {
   patchAppServerManagedSessionFlags,
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
+  patchCrashRecoveryPage,
   patchLocalModelAvailability,
   patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
@@ -21,13 +23,14 @@ import {
   patchSettingsExternalNavigation,
   patchSettingsExternalNavigationRender,
   patchWindowsTrayIconSelection,
+  selectCrashRecoveryBundleCandidate,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
 
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 4;
+const hostPatchRevision = 5;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -717,6 +720,20 @@ function findSettingsExternalLinksPatch(fd, header, dataOffset) {
   return [definitionCandidates[0], renderCandidates[0]];
 }
 
+function findCrashRecoveryPagePatch(fd, header, dataOffset) {
+  const bundles = [];
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (hasCrashRecoveryPageSignature(text)) {
+      bundles.push({ rel, text });
+    }
+  }
+  const selected = selectCrashRecoveryBundleCandidate(bundles);
+  return [selected.rel, patchCrashRecoveryPage];
+}
+
 function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
@@ -884,6 +901,7 @@ const patchSpecs = [
   ["appearance-settings", () => findAppearanceSettingsPatch(fd, header, dataOffset)],
   ["profile-dropdown-settings", () => findProfileDropdownSettingsPatch(fd, header, dataOffset)],
   ["settings-external-links", () => findSettingsExternalLinksPatch(fd, header, dataOffset)],
+  ["crash-recovery-page", () => findCrashRecoveryPagePatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
   ["primary-window-restore-repaint", () => findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset)],
   ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
@@ -910,6 +928,7 @@ const fixedShellCriticalPatchNames = new Set([
   "app-route-gate",
   "profile-dropdown-settings",
   "settings-external-links",
+  "crash-recovery-page",
   "browser-window-icon",
   "primary-window-restore-repaint",
   "windows-tray-icon",

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { classifyUnsupportedExternalSettingsTarget } from "../../scripts/anticodex-native-settings-contract.mjs";
+import {
+  classifyNativeSettingsCrashSnapshot,
+  classifyUnsupportedExternalSettingsTarget,
+} from "../../scripts/anticodex-native-settings-contract.mjs";
 
 const scriptUrl = new URL("../../scripts/run-anticodex-manager-action-real-mouse.mjs", import.meta.url);
 
@@ -107,4 +110,13 @@ test("native Settings external-target policy rejects only account surfaces", () 
   assert.equal(injectedClassifier({ href: "https://openai.com/docs", label: "API documentation" }), null);
   assert.equal(injectedClassifier({ href: "app://-/settings/security", label: "Security Settings" }), null);
   assert.equal(injectedClassifier({ href: "https://example.com/account", label: "Account" }), null);
+});
+
+test("native Settings crash policy requires a visible fatal heading and recovery action", () => {
+  const classify = Function(`return (${classifyNativeSettingsCrashSnapshot.toString()});`)();
+  assert.equal(classify({ headings: ["Anti-Codex 已意外停止"], buttons: ["打开 Config.toml", "重启"] }), true);
+  assert.equal(classify({ headings: ["已意外停止"], buttons: ["重试"] }), true);
+  assert.equal(classify({ headings: [], buttons: ["重试"], bodyText: "糟糕，出错了 重试" }), true);
+  assert.equal(classify({ headings: ["Settings"], buttons: ["保存"], bodyText: "聊天里说：已意外停止", hasComposer: true }), false);
+  assert.equal(classify({ headings: ["讨论已意外停止的原因"], buttons: ["重试"] }), false);
 });
