@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { classifyUnsupportedExternalSettingsTarget } from "../../scripts/anticodex-native-settings-contract.mjs";
 
 const scriptUrl = new URL("../../scripts/run-anticodex-manager-action-real-mouse.mjs", import.meta.url);
 
@@ -58,6 +59,20 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.match(source, /nav\[aria-label="Settings"\], nav\[aria-label="\u8bbe\u7f6e"\]/);
   assert.match(source, /chatgpt\.com\/#settings/);
   assert.match(source, /chatgpt\.com\/open-security-settings/);
+  assert.match(source, /classifyUnsupportedExternalSettingsTarget/);
+  assert.match(source, /panel\?\.querySelectorAll\?\.\('a,button'\)/);
+  assert.match(source, /externalTargets/);
+  assert.match(source, /pages\.flatMap\(\(page\) => page\.externalTargets/);
+  assert.doesNotMatch(source, /externalChatGptSettingsHidden:\s*true/);
+  const openSettingsSource = source.slice(
+    source.indexOf("async function openNativeSettingsSection"),
+    source.indexOf("async function replaceNativeInstructions"),
+  );
+  const externalScanSource = openSettingsSource.slice(
+    openSettingsSource.indexOf("const externalTargets"),
+    openSettingsSource.indexOf("return {", openSettingsSource.indexOf("const externalTargets")),
+  );
+  assert.doesNotMatch(externalScanSource, /!entry\.disabled|aria-disabled/);
   assert.match(source, /localSecurityLabels/);
   assert.match(source, /Approval policy|\u6279\u51c6\u7b56\u7565/);
   assert.match(source, /Sandbox settings|\u6c99\u76d2\u8bbe\u7f6e/);
@@ -73,4 +88,15 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.match(source, /inspectOnly/);
   assert.doesNotMatch(source, /Network\.setBlockedURLs|Fetch\.enable|Fetch\.requestPaused/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFileSync/);
+});
+
+test("native Settings external-target policy rejects only account surfaces", () => {
+  const injectedClassifier = Function(`return (${classifyUnsupportedExternalSettingsTarget.toString()});`)();
+  assert.equal(injectedClassifier({ href: "https://chatgpt.com/#settings", label: "" })?.reason, "known-chatgpt-settings");
+  assert.equal(injectedClassifier({ href: "https://chatgpt.com/open-security-settings", label: "Security" })?.reason, "known-chatgpt-settings");
+  assert.equal(injectedClassifier({ href: "https://openai.com/account", label: "Manage Account" })?.reason, "provider-account-surface");
+  assert.equal(injectedClassifier({ href: "", label: "管理账户" })?.reason, "button-account-surface");
+  assert.equal(injectedClassifier({ href: "https://openai.com/docs", label: "API documentation" }), null);
+  assert.equal(injectedClassifier({ href: "app://-/settings/security", label: "Security Settings" }), null);
+  assert.equal(injectedClassifier({ href: "https://example.com/account", label: "Account" }), null);
 });

@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { classifyUnsupportedExternalSettingsTarget } from "./anticodex-native-settings-contract.mjs";
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -293,12 +294,24 @@ async function openNativeSettingsSection(slug) {
     const loading = /^(Loading settings…?|正在加载设置…?)$/i.test(panelText);
     const selected = active?.getAttribute('aria-current') === 'page';
     const controlCount = panel?.querySelectorAll?.('button,input,textarea,select,a').length || 0;
+    const classifyUnsupportedExternalSettingsTarget = ${classifyUnsupportedExternalSettingsTarget.toString()};
+    const externalTargets = Array.from(panel?.querySelectorAll?.('a,button') || [])
+      .filter((entry) => {
+        const rect = entry.getBoundingClientRect?.();
+        return rect && rect.width > 0 && rect.height > 0;
+      })
+      .map((entry) => classifyUnsupportedExternalSettingsTarget({
+        href: String(entry.href || entry.querySelector?.('a')?.href || ''),
+        label: String(entry.getAttribute?.('aria-label') || entry.textContent || ''),
+      }))
+      .filter(Boolean);
     return {
       ok: Boolean(nav && active && selected && panel && !crash && !loading && (panelText.length > 0 || controlCount > 0)),
       route: location.pathname,
       selected,
       panelTextLength: panelText.length,
       controlCount,
+      externalTargets,
       crash,
       loading,
     };
@@ -459,6 +472,14 @@ async function runNativeSettingsAcceptance() {
       personalization = await auditNativePersonalization({ allowWrite: !inspectOnly });
     }
   }
+  const pageExternalTargets = pages.flatMap((page) => page.externalTargets.map((target) => ({
+    slug: page.slug,
+    page: page.label,
+    ...target,
+  })));
+  if (pageExternalTargets.length > 0) {
+    throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings pages: ${JSON.stringify(pageExternalTargets)}`);
+  }
   if (!agent) throw new Error("Native Settings did not expose the required Configuration page.");
   if (!personalization) throw new Error("Native Settings did not expose the required Personalization page.");
   const localSecurityLabels = nav.entries
@@ -468,7 +489,8 @@ async function runNativeSettingsAcceptance() {
     ok: pages.length === nav.entries.length && pages.every((page) => page.ok),
     inspectOnly,
     pages,
-    externalChatGptSettingsHidden: true,
+    externalChatGptSettingsHidden: nav.externalTargets.length === 0 && pageExternalTargets.length === 0,
+    pageExternalTargets,
     localSecurityLabels,
     agent,
     personalization,
