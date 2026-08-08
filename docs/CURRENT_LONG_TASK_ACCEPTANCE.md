@@ -328,3 +328,9 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - Therefore the older project-wide 100% statement is historical, not current. Current completion remains open without changing the accepted Gate 8 long-task result.
 - A source-only external-entry observer now passes focused tests `27/27` and fails closed without moving the mouse or changing window state. It can record a fresh user restore of the exact minimized Anti-Codex PID/HWND/CDP target, but the declared Desktop/Start/tray surface is not machine-proven and no fresh user activation has been captured yet. This does not reopen the accepted long-task artifact and does not close the startup matrix.
 - Its clean follow-up commit `c429489` passes the complete no-traffic source preflight `931/931`; report SHA-256 is `081d958c04235f9fbb9074e5208ddfbcf01ccecb08b9df3f310af1d9f5193364`. No runtime activation is required for this observer-only acceptance tool.
+
+## 2026-08-08 accepted task remains frozen during product repair
+
+- The accepted autonomous media task and package identity remain unchanged: task `019f9a93-0de5-71f3-9329-12e0e914e681`, package SHA-256 `bf1733ad2680315f91d9b556f12d5e864ae05408a1a5e97b2c4b3625e156fd8c`, 21 declared artifacts, ASR accuracy `0.984127`, and five accepted mouth-motion windows. Do not send further production prompts.
+- One stale-summary `继续` on 2026-08-08 resumed only a later client-audit context and produced no deliverable files. It does not supersede the accepted Gemini media turn or reopen Gate 8.
+- Current startup, Manager settlement, ASAR candidate validation and CodexPlusPlus `v1.2.45` work are product-release repairs outside the frozen media artifact. Their source checkpoints are not runtime acceptance, and the project-wide historical 100% label remains superseded until current source activation and the external Desktop/Start/tray matrix are closed.

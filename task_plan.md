@@ -3560,3 +3560,15 @@ Clean follow-up commit `c429489` passes the complete no-traffic source preflight
 - [x] Pass the clean full no-traffic source preflight `934/934`; report SHA-256 `5dcc17cd825757dba078d0e087f0726e70c491d05cfb85fd6e9f58a7f484f275`.
 - [x] Activate the final 125-file runtime through no-restart transaction `20260807T060047924Z-6d0d81d2ff6248bb947b485d0bcdf60f`; installed fast readiness reports `fast_live_update_check`, source/runtime hashes match, and the report SHA-256 is `2cb877f939c13ab256581b8c440d28c45790b68975bf23a258dcdefff6a50fd5`.
 - [ ] Keep physical Manager button terminal-state acceptance, native Settings, external startup entries, prompt-route evidence and Gate 8 long-task acceptance open. Anti-Codex was deliberately not launched for this offline closure.
+
+### 2026-08-08 stable-start and CodexPlusPlus v1.2.45 closure
+
+- [x] Preserve patched ASAR integrity metadata (`e82e18cc`) and pass the complete no-traffic source preflight `935/935`. The single restored Anti-Codex reached ready state in about `52.521s`; official Codex remained alive and unchanged.
+- [x] Settle a Manager action that times out after renderer lease without replaying or abandoning any other request (`2a726d05`, focused coverage `72/72`). This repair remains source-only.
+- [x] Fail closed on missing, malformed, truncated or block-mismatched candidate ASAR integrity metadata (`35bfe1c8`, focused coverage `43/43`). The validator independently accepted all `5715` live active entries. This repair remains source-only.
+- [x] Prepare the isolated CodexPlusPlus `v1.2.45` source checkpoint (`419b976`) with twelve narrow patches. The managed candidate passed exact-tag, replay, isolation, format, protocol, watcher, Windows Manager, launcher and Docker hygiene checks; its launcher SHA-256 is `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922`.
+- [ ] Pass one clean complete no-traffic source preflight on the final documentation checkpoint before any runtime activation.
+- [ ] Keep the Desktop, Start-menu and actual tray activation observations open. Do not call the project 100% until these current external-entry observations and the source-only runtime changes are closed.
+- [x] Keep the accepted autonomous media task `019f9a93-0de5-71f3-9329-12e0e914e681` frozen. One stale-summary `继续` resumed only a later client-audit context and wrote no deliverable files; no further prompt is authorized.
+
+No provider request, Anti-Codex restart, official-Codex action or runtime activation was used for the v1.2.45 candidate. Temporary Anti-Codex Docker containers auto-removed and the final Anti-Codex container count is zero.
