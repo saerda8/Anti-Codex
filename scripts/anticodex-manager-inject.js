@@ -1290,7 +1290,7 @@
       r.nextAction === "refreshModels" ? "\u4e0b\u4e00\u6b65\uff1a\u5237\u65b0\u6a21\u578b" : "",
     ].filter(Boolean).join("\n");
     if (action === "accountProxy") {
-      const ready = unwrapped.diagnosis === "ready";
+      const ready = payload?.ok === true && unwrapped.ok === true && unwrapped.diagnosis === "ready";
       return [
         `\u8d26\u53f7/\u4ee3\u7406\u68c0\u67e5\uff1a${ready ? "\u53ef\u7528" : "\u9700\u8981\u5904\u7406"}`,
         `\u8d26\u53f7\uff1a${unwrapped.account?.signedIn ? "\u5df2\u767b\u5f55" : "\u672a\u786e\u8ba4"}${unwrapped.account?.planName ? ` / ${unwrapped.account.planName}` : ""}`,

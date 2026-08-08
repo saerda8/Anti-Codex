@@ -320,6 +320,7 @@ test("Manager account and proxy check is no-traffic and returns a readable resul
   const summary = summarize("accountProxy", {
     ok: true,
     result: {
+      ok: true,
       diagnosis: "ready",
       diagnosisDetail: "ready",
       suggestedAction: "",
@@ -333,6 +334,66 @@ test("Manager account and proxy check is no-traffic and returns a readable resul
   assert.match(summary, /已登录/);
   assert.match(summary, /模型数：3/);
   assert.doesNotMatch(summary, /^\{/);
+});
+
+test("Manager account and proxy summaries require the action and result to succeed", () => {
+  const managerActionResult = vm.runInNewContext(`(${extractNamedFunction(managerInject, "managerActionResult")})`);
+  const summaries = [
+    vm.runInNewContext(`(${extractNamedFunction(managerInject, "summaryText")})`, { managerActionResult }),
+    vm.runInNewContext(`(${extractNamedFunction(source, "managerSummary")})`),
+  ];
+  const failedPayloads = [
+    { ok: false, result: { ok: true, diagnosis: "ready" } },
+    { ok: true, result: { ok: false, diagnosis: "ready" } },
+    { ok: true, result: { ok: true, diagnosis: "proxy_unavailable" } },
+  ];
+
+  for (const summarize of summaries) {
+    for (const payload of failedPayloads) {
+      const summary = summarize("accountProxy", payload);
+      assert.match(summary, /账号\/代理检查：需要处理/);
+      assert.doesNotMatch(summary, /账号\/代理检查：可用/);
+    }
+  }
+});
+
+test("Manager bridge preserves readable account and source-preflight summaries", () => {
+  const reportSummaryLines = vm.runInNewContext(`(${extractNamedFunction(source, "reportSummaryLines")})`);
+  const failureSummaryLine = vm.runInNewContext(`(${extractNamedFunction(source, "failureSummaryLine")})`);
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(source, "managerSummary")})`, {
+    reportSummaryLines,
+    failureSummaryLine,
+  });
+
+  const accountSummary = summarize("accountProxy", {
+    ok: true,
+    result: {
+      ok: true,
+      diagnosis: "ready",
+      diagnosisDetail: "ready",
+      account: { signedIn: true, planName: "Pro" },
+      models: { count: 3 },
+      realRequest: { attempted: false },
+      report: { latest: "C:\\reports\\latest-account-proxy-readiness.json" },
+    },
+  });
+  assert.match(accountSummary, /账号\/代理检查：可用/);
+  assert.match(accountSummary, /真实请求：未执行（不耗模型额度）/);
+  assert.doesNotMatch(accountSummary, /^\s*\{/);
+
+  const sourceSummary = summarize("sourcePreflight", {
+    ok: true,
+    result: {
+      ok: true,
+      elapsedMs: 123,
+      reportName: "source-preflight",
+      report: { latest: "C:\\reports\\latest-source-preflight.json" },
+      failures: [],
+    },
+  });
+  assert.match(sourceSummary, /源码预检：通过/);
+  assert.match(sourceSummary, /最新报告：C:\\reports\\latest-source-preflight\.json/);
+  assert.doesNotMatch(sourceSummary, /^\s*\{/);
 });
 
 test("Manager injected UI owns third-party setup while the fallback page omits the unsupported fake action", () => {

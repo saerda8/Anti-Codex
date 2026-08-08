@@ -747,6 +747,18 @@ function managerSummary(action, payload) {
     "\u8bf7\u5728 Antigravity \u4e2d\u5207\u6362\u8d26\u53f7\uff0c\u5b8c\u6210\u540e\u56de\u5230 Anti-Codex \u70b9\u201c\u5237\u65b0\u6a21\u578b\u201d\u3002",
     result.nextAction === "refreshModels" ? "\u4e0b\u4e00\u6b65\uff1a\u5237\u65b0\u6a21\u578b" : "",
   ].filter(Boolean).join("\n");
+  if (action === "accountProxy") {
+    const ready = payload?.ok === true && unwrappedResult.ok === true && unwrappedResult.diagnosis === "ready";
+    return [
+      `\u8d26\u53f7/\u4ee3\u7406\u68c0\u67e5\uff1a${ready ? "\u53ef\u7528" : "\u9700\u8981\u5904\u7406"}`,
+      `\u8d26\u53f7\uff1a${unwrappedResult.account?.signedIn ? "\u5df2\u767b\u5f55" : "\u672a\u786e\u8ba4"}${unwrappedResult.account?.planName ? ` / ${unwrappedResult.account.planName}` : ""}`,
+      `\u6a21\u578b\u6570\uff1a${unwrappedResult.models?.count ?? "\u672a\u77e5"}`,
+      `\u8bca\u65ad\uff1a${unwrappedResult.diagnosisDetail || unwrappedResult.diagnosis || "\u672a\u77e5"}`,
+      unwrappedResult.suggestedAction ? `\u5efa\u8bae\uff1a${unwrappedResult.suggestedAction}` : "",
+      unwrappedResult.realRequest?.attempted ? "\u771f\u5b9e\u8bf7\u6c42\uff1a\u5df2\u6267\u884c" : "\u771f\u5b9e\u8bf7\u6c42\uff1a\u672a\u6267\u884c\uff08\u4e0d\u8017\u6a21\u578b\u989d\u5ea6\uff09",
+      unwrappedResult.report?.latest ? `\u62a5\u544a\uff1a${unwrappedResult.report.latest}` : "",
+    ].filter(Boolean).join("\n");
+  }
   if (action === "updateCheck") {
     const remoteState = unwrappedResult.components?.remoteState || "not_checked";
     const remoteTag = unwrappedResult.components?.remoteTag || "\u672a\u77e5";
@@ -764,6 +776,12 @@ function managerSummary(action, payload) {
       remoteLine,
     ].join("\n");
   }
+  if (action === "sourcePreflight") return [
+    `\u6e90\u7801\u9884\u68c0\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
+    `\u8017\u65f6\uff1a${result.elapsedMs ?? "\u672a\u77e5"} ms`,
+    ...reportSummaryLines(result),
+    failureSummaryLine(result),
+  ].filter(Boolean).join("\n");
   if (action === "syncReadiness") return [
     `\u5b89\u88c5/\u540c\u6b65\u68c0\u67e5\uff1a${result.ok ? "\u901a\u8fc7" : "\u9700\u8981\u5904\u7406"}`,
     failureSummaryLine(result),
