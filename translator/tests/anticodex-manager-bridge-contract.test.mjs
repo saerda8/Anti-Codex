@@ -280,6 +280,36 @@ test("Manager third-party form saves configuration without switching the active 
   }
 });
 
+test("Manager reuses one successful upstream test for save and invalidates it after edits", () => {
+  const start = managerInject.indexOf("async function showUpstreamConfig()");
+  const end = managerInject.indexOf("function installActions()", start);
+  const block = managerInject.slice(start, end);
+  const testStart = block.indexOf("testButton.onclick");
+  const saveStart = block.indexOf("saveButton.onclick", testStart);
+  const saveEnd = block.indexOf("\n      refreshUpstreamConfigControls();", saveStart);
+  const testHandler = block.slice(testStart, saveStart);
+  const saveHandler = block.slice(saveStart, saveEnd);
+
+  assert.match(testHandler, /managerPostJson\("\/anticodex\/upstream-test"/);
+  assert.match(testHandler, /testedFingerprint = payload\.ok === true \? requestFingerprint : ""/);
+  assert.match(saveHandler, /testedFingerprint !== upstreamConfigFingerprint\(\)/);
+  assert.match(saveHandler, /managerPostJson\("\/anticodex\/upstream-profile"/);
+  assert.doesNotMatch(saveHandler, /\/anticodex\/upstream-test/);
+
+  const controlsStart = block.indexOf("const refreshUpstreamConfigControls");
+  const controlsEnd = block.indexOf("const setUpstreamConfigBusy", controlsStart);
+  const controlsBlock = block.slice(controlsStart, controlsEnd);
+  assert.match(controlsBlock, /saveButton\.disabled = upstreamConfigOperationInFlight[\s\S]*?\|\| !testedFingerprint[\s\S]*?\|\| testedFingerprint !== upstreamConfigFingerprint\(\)/);
+
+  const invalidateStart = block.indexOf("const invalidateConnectionTest");
+  const invalidateEnd = block.indexOf("const upstreamConnectionSummaryText", invalidateStart);
+  const invalidateBlock = block.slice(invalidateStart, invalidateEnd);
+  assert.match(invalidateBlock, /testedFingerprint = ""/);
+  assert.match(invalidateBlock, /refreshUpstreamConfigControls\(\)/);
+  assert.match(invalidateBlock, /field\.addEventListener\("input", invalidateConnectionTest\)/);
+  assert.match(invalidateBlock, /field\.addEventListener\("change", invalidateConnectionTest\)/);
+});
+
 test("Manager account and proxy check is no-traffic and returns a readable result", () => {
   assert.match(managerService, /accountProxy:\s*\{[\s\S]*?args:\s*\[[^\]]*"-NoRealRequest"[^\]]*\]/);
   assert.match(accountProxyTest, /\[switch\]\$NoRealRequest/);
