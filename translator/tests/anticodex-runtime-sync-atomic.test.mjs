@@ -106,10 +106,15 @@ function functionSource(name) {
   return syncSource.slice(start, next === -1 ? syncSource.length : next);
 }
 
-function createTrustedRuntimeVersion(fixture, name, createdAt) {
+function createTrustedRuntimeVersion(
+  fixture,
+  name,
+  createdAt,
+  { manifestFiles = requiredFiles } = {},
+) {
   const directory = join(fixture.installRoot, "runtime-versions", name);
   const files = {};
-  for (const relative of requiredFiles) {
+  for (const relative of manifestFiles) {
     const source = join(fixture.sourceRoot, ...relative.split("\\"));
     const destination = join(directory, ...relative.split("\\"));
     mkdirSync(dirname(destination), { recursive: true });
@@ -129,7 +134,7 @@ function createTrustedRuntimeVersion(fixture, name, createdAt) {
       sourceRoot: fixture.sourceRoot,
       activeRuntime: fixture.activeRuntime,
       stagedRuntime: directory,
-      verifiedFileCount: requiredFiles.length,
+      verifiedFileCount: manifestFiles.length,
       entryCount: Object.keys(entries).length,
       createdAt,
       files,
@@ -509,6 +514,116 @@ test("NoRestart with a live runtime process validates a versioned stage but leav
     assert.ok(receipt.cleanup.skipped.includes(contaminatedStage));
     assert.ok(receipt.cleanup.skipped.includes(uncertainStage));
     assert.ok(receipt.cleanup.skipped.includes(uncertainRollback));
+  } finally {
+    stopChild(live);
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("deferred cleanup prunes self-verified historical runtimes without trusting unsafe candidates", () => {
+  const fixture = createFixture();
+  const historicalFiles = requiredFiles.slice(0, -1);
+  assert.ok(historicalFiles.length > 0);
+  const obsoleteStage = createTrustedRuntimeVersion(
+    fixture,
+    "staged-historical-obsolete",
+    "2026-07-20T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const olderRollback = createTrustedRuntimeVersion(
+    fixture,
+    "rollback-historical-older",
+    "2026-07-19T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const newestRollback = createTrustedRuntimeVersion(
+    fixture,
+    "rollback-historical-newest",
+    "2026-07-21T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const damagedStage = createTrustedRuntimeVersion(
+    fixture,
+    "staged-historical-damaged",
+    "2026-07-18T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  writeFixture(
+    join(damagedStage, ...historicalFiles[0].split("\\")),
+    "tampered after manifest\n",
+  );
+  const escapingStage = createTrustedRuntimeVersion(
+    fixture,
+    "staged-historical-escape",
+    "2026-07-17T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const escapingManifestPath = join(escapingStage, ".anticodex-runtime-manifest.json");
+  const escapingManifest = JSON.parse(readFileSync(escapingManifestPath, "utf8"));
+  escapingManifest.files["..\\outside.txt"] = "0".repeat(64);
+  escapingManifest.verifiedFileCount += 1;
+  writeFixture(escapingManifestPath, `${JSON.stringify(escapingManifest, null, 2)}\n`);
+  const reparseStage = createTrustedRuntimeVersion(
+    fixture,
+    "staged-historical-reparse",
+    "2026-07-16T00:00:00.000Z",
+    { manifestFiles: historicalFiles },
+  );
+  const unknownStage = join(fixture.installRoot, "runtime-versions", "staged-unknown");
+  writeFixture(join(unknownStage, "do-not-delete.txt"), "unknown\n");
+  const liveScript = join(fixture.activeRuntime, "scripts", "live-runtime.mjs");
+  writeFixture(liveScript, "setTimeout(() => {}, 30000);\n");
+  const activeBefore = snapshotTree(fixture.activeRuntime);
+  const live = spawn(process.execPath, [liveScript], { windowsHide: true });
+  const wrapperPrelude = [String.raw`
+function Get-Item {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [switch]$Force
+    )
+    $item = Microsoft.PowerShell.Management\Get-Item -LiteralPath $LiteralPath -Force:$Force -ErrorAction Stop
+    if ([IO.Path]::GetFullPath($LiteralPath).Equals(
+        [IO.Path]::GetFullPath($env:ANTICODEX_TEST_REPARSE_PATH),
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        return [pscustomobject]@{
+            PSIsContainer = $true
+            Attributes = ($item.Attributes -bor [IO.FileAttributes]::ReparsePoint)
+            FullName = $item.FullName
+            Name = $item.Name
+        }
+    }
+    return $item
+}`];
+  try {
+    const result = runSync(fixture, {
+      env: {
+        ANTICODEX_RUNTIME_SYNC_TEST_NO_PROCESSES: "0",
+        ANTICODEX_TEST_REPARSE_PATH: reparseStage,
+      },
+      wrapperPrelude,
+    });
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const receipt = lastJson(result.stdout);
+    assert.equal(receipt.mode, "staged_deferred_running");
+    assert.deepEqual(snapshotTree(fixture.activeRuntime), activeBefore);
+    assert.equal(existsSync(obsoleteStage), false);
+    assert.equal(existsSync(olderRollback), false);
+    assert.equal(existsSync(newestRollback), true);
+    assert.equal(existsSync(damagedStage), true);
+    assert.equal(existsSync(escapingStage), true);
+    assert.equal(existsSync(reparseStage), true);
+    assert.equal(existsSync(unknownStage), true);
+    assert.equal(existsSync(receipt.stagedRuntime), true);
+    assert.ok(receipt.cleanup.removed.includes(obsoleteStage));
+    assert.ok(receipt.cleanup.removed.includes(olderRollback));
+    assert.ok(receipt.cleanup.kept.includes(newestRollback));
+    assert.ok(receipt.cleanup.kept.includes(receipt.stagedRuntime));
+    assert.ok(receipt.cleanup.skipped.includes(damagedStage));
+    assert.ok(receipt.cleanup.skipped.includes(escapingStage));
+    assert.ok(receipt.cleanup.skipped.includes(reparseStage));
+    assert.ok(receipt.cleanup.skipped.includes(unknownStage));
   } finally {
     stopChild(live);
     rmSync(fixture.root, { recursive: true, force: true });

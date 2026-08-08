@@ -843,7 +843,8 @@ function Write-AntiCodexStagedRuntimeManifest {
 function Get-AntiCodexTrustedRuntimeVersion {
     param(
         [Parameter(Mandatory = $true)][string]$Directory,
-        [Parameter(Mandatory = $true)][ValidateSet("staged", "rollback")][string]$Kind
+        [Parameter(Mandatory = $true)][ValidateSet("staged", "rollback")][string]$Kind,
+        [switch]$AllowHistoricalContract
     )
 
     try {
@@ -863,8 +864,12 @@ function Get-AntiCodexTrustedRuntimeVersion {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ([string]$manifest.schema -cne "anticodex-runtime-manifest-v2" -or
             [string]$manifest.state -cne "validated" -or
-            [string]::IsNullOrWhiteSpace([string]$manifest.transactionId) -or
-            [int]$manifest.verifiedFileCount -ne $requiredSourceFiles.Count) {
+            [string]::IsNullOrWhiteSpace([string]$manifest.transactionId)) {
+            return $null
+        }
+        [int]$verifiedFileCount = $manifest.verifiedFileCount
+        if ($verifiedFileCount -lt 1 -or
+            (-not $AllowHistoricalContract -and $verifiedFileCount -ne $requiredSourceFiles.Count)) {
             return $null
         }
         $manifestActiveRuntime = [IO.Path]::GetFullPath([string]$manifest.activeRuntime).TrimEnd("\")
@@ -879,7 +884,7 @@ function Get-AntiCodexTrustedRuntimeVersion {
         $createdAt = [DateTimeOffset]::MinValue
         if (-not [DateTimeOffset]::TryParse([string]$manifest.createdAt, [ref]$createdAt)) { return $null }
         $manifestFiles = @($manifest.files.PSObject.Properties)
-        if ($manifestFiles.Count -ne $requiredSourceFiles.Count) { return $null }
+        if ($manifestFiles.Count -ne $verifiedFileCount) { return $null }
         $actualEntries = Get-AntiCodexRuntimeInventory -Directory $directoryFull
         $manifestEntries = @($manifest.entries.PSObject.Properties)
         if ([int]$manifest.entryCount -ne $actualEntries.Count -or
@@ -916,7 +921,12 @@ function Get-AntiCodexTrustedRuntimeVersion {
         foreach ($property in $manifestFiles) {
             $relative = [string]$property.Name
             $expectedHash = [string]$property.Value
-            if (-not $required.ContainsKey($relative) -or $expectedHash -notmatch "^[a-fA-F0-9]{64}$") {
+            if ((-not $AllowHistoricalContract -and -not $required.ContainsKey($relative)) -or
+                $expectedHash -notmatch "^[a-fA-F0-9]{64}$" -or
+                ($AllowHistoricalContract -and (
+                    -not $declaredEntries.ContainsKey($relative) -or
+                    [string]$declaredEntries[$relative].type -cne "file"
+                ))) {
                 return $null
             }
             $filePath = [IO.Path]::GetFullPath((Join-Path $directoryFull $relative))
@@ -963,7 +973,10 @@ function Invoke-AntiCodexRuntimeVersionCleanup {
         } else {
             continue
         }
-        $trusted = Get-AntiCodexTrustedRuntimeVersion -Directory $directory.FullName -Kind $kind
+        $trusted = Get-AntiCodexTrustedRuntimeVersion `
+            -Directory $directory.FullName `
+            -Kind $kind `
+            -AllowHistoricalContract
         if (-not $trusted) {
             $skipped += [IO.Path]::GetFullPath($directory.FullName).TrimEnd("\")
         } elseif ($kind -eq "staged") {
@@ -991,7 +1004,10 @@ function Invoke-AntiCodexRuntimeVersionCleanup {
             $kept += $candidate.Directory
             continue
         }
-        if (-not (Get-AntiCodexTrustedRuntimeVersion -Directory $candidate.Directory -Kind $candidate.Kind)) {
+        if (-not (Get-AntiCodexTrustedRuntimeVersion `
+            -Directory $candidate.Directory `
+            -Kind $candidate.Kind `
+            -AllowHistoricalContract)) {
             $skipped += $candidate.Directory
             continue
         }
