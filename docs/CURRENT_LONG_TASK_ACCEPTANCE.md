@@ -334,3 +334,9 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - The accepted autonomous media task and package identity remain unchanged: task `019f9a93-0de5-71f3-9329-12e0e914e681`, package SHA-256 `bf1733ad2680315f91d9b556f12d5e864ae05408a1a5e97b2c4b3625e156fd8c`, 21 declared artifacts, ASR accuracy `0.984127`, and five accepted mouth-motion windows. Do not send further production prompts.
 - One stale-summary `继续` on 2026-08-08 resumed only a later client-audit context and produced no deliverable files. It does not supersede the accepted Gemini media turn or reopen Gate 8.
 - Current startup, Manager settlement, ASAR candidate validation and CodexPlusPlus `v1.2.45` work are product-release repairs outside the frozen media artifact. Their source checkpoints are not runtime acceptance, and the project-wide historical 100% label remains superseded until current source activation and the external Desktop/Start/tray matrix are closed.
+
+## 2026-08-09 crash-recovery source checkpoint
+
+- The frozen autonomous media task, accepted package hash and Gate 8 result remain unchanged; no prompt or provider traffic was sent.
+- Source commit `51708a02` adds host patch revision 5 for both inherited desktop error pages. It removes the upstream update action, uses Anti-Codex branding, and preserves only the isolated Config, true Restart and true Retry actions. Focused crash/candidate/rollback coverage passes `56/56`, Manager bridge passes `75/75`, and the current active renderer bundle passes a read-only equal-length/idempotence check.
+- This checkpoint is not installed acceptance. The active marker remains revision 4, so current project completion stays open until a fresh post-exit transaction is activated and the installed recovery UI plus outstanding external startup entries are physically verified.

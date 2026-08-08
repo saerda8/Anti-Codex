@@ -3593,3 +3593,12 @@ Clean follow-up commit `c429489` passes the complete no-traffic source preflight
 - [ ] After the single running Anti-Codex exits naturally, include this connector delta in the one guarded local-feature/runtime activation, then rerun installed plugin/MCP/Skill truth checks. The same transactional refresh should remove three formerly synchronized Skills that no longer exist in either current source root; do not hand-delete them or hot-copy the live profile.
 
 No provider request, Anti-Codex restart, official-Codex action or runtime activation was used for the v1.2.45 candidate. Temporary Anti-Codex Docker containers auto-removed and the final Anti-Codex container count is zero.
+
+### 2026-08-09 Anti-Codex crash-recovery source closure
+
+- [x] Replace both inherited ChatGPT error surfaces in source revision 5: the app-server crash page is branded Anti-Codex and retains only isolated Config + true Restart; the generic error boundary retains only true Retry. Neither page can render or call the upstream desktop updater.
+- [x] Bind Config, Restart and Retry to their real handlers in the source patcher, candidate validator and rollback validator. The three layers fail closed on role swaps, later reassignments, fake memo branches, nested thunks, compound writes, destructuring and `for-in/of` writes while accepting the current official React memo form.
+- [x] Commit `51708a02` passes the focused crash/candidate/rollback matrix `56/56`, Manager bridge `75/75`, the broader six-suite offline regression, 12 Node syntax checks, 4 PowerShell parses and diff hygiene. A read-only pass over the active 13,173,278-byte bundle is length-stable and idempotent; two independent reviews found no P0-P2.
+- [ ] Keep this source-only revision uninstalled while the current Anti-Codex is running. After it exits naturally, build one fresh candidate from the then-current clean source, activate it transactionally with CodexPlusPlus `v1.2.45` and the pending connector refresh, then perform installed error-page/Manager/startup acceptance without touching official Codex.
+
+The active installed marker remains host patch revision 4. This checkpoint does not restore a current project-wide 100% label and does not reopen the frozen accepted media task.
