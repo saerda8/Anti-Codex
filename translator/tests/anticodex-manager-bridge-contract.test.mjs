@@ -689,6 +689,41 @@ test("Manager renderer lease survives a lost dequeue response until explicit ack
   );
 });
 
+test("Manager abandons a timed-out leased action without stranding later queue state", async () => {
+  const renderer = {};
+  renderer.globalThis = renderer;
+  vm.runInNewContext(managerBridge.createManagerBridgeSource(), renderer);
+
+  const timedOut = renderer.__ANTICODEX_RUN_MANAGER_ACTION__("mcpSkills", "timed-out-token");
+  const [leased] = vm.runInNewContext(managerBridge.createManagerQueuePollSource(), renderer);
+  assert.ok(leased?.id);
+  assert.equal(leased.leaseCount, 1);
+  assert.equal(typeof renderer.__ANTICODEX_ABANDON_MANAGER_ACTION__, "function");
+
+  const timeoutPayload = {
+    ok: false,
+    action: "mcpSkills",
+    actionToken: "timed-out-token",
+    abandoned: true,
+    message: "Anti-Codex manager bridge timed out.",
+  };
+  assert.equal(renderer.__ANTICODEX_ABANDON_MANAGER_ACTION__(leased.id, timeoutPayload), true);
+  assert.deepEqual(await timedOut, timeoutPayload);
+  assert.equal(renderer.__ANTICODEX_MANAGER_ACTION_QUEUE__.length, 0);
+  assert.equal(Object.keys(renderer.__ANTICODEX_MANAGER_ACTION_PROMISES__).length, 0);
+
+  const next = renderer.__ANTICODEX_RUN_MANAGER_ACTION__("refreshStatus", "next-token");
+  const [nextLease] = vm.runInNewContext(managerBridge.createManagerQueuePollSource(), renderer);
+  renderer.__ANTICODEX_ACK_MANAGER_ACTION__(nextLease.id, { ok: true, action: "refreshStatus" });
+  assert.deepEqual(await next, { ok: true, action: "refreshStatus" });
+  assert.equal(renderer.__ANTICODEX_MANAGER_ACTION_QUEUE__.length, 0);
+  assert.equal(Object.keys(renderer.__ANTICODEX_MANAGER_ACTION_PROMISES__).length, 0);
+
+  const bridgeActionBlock = extractNamedFunction(managerInject, "runActionViaBridge");
+  assert.match(bridgeActionBlock, /__ANTICODEX_ABANDON_MANAGER_ACTION__/);
+  assert.match(bridgeActionBlock, /bridgeRequestId/);
+});
+
 test("silent Manager snapshot refresh never reopens a panel the user closed", () => {
   const deliverStart = source.indexOf("async function deliver(request, session)");
   const deliverEnd = source.indexOf("controller = new ManagerBridgeRecoveryController", deliverStart);

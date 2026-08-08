@@ -403,13 +403,18 @@ export function createManagerBridgeSource() {
   globalThis.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
   globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__ ||= {};
   globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ ||= [];
-  globalThis.__ANTICODEX_ACK_MANAGER_ACTION__ = (id, payload) => {
+  globalThis.__ANTICODEX_ABANDON_MANAGER_ACTION__ = (id, payload) => {
     const entry = globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__?.[id];
+    const previousLength = (globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).length;
     globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ =
       (globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__ || []).filter((request) => request?.id !== id);
-    if (!entry) return;
+    if (!entry) return globalThis.__ANTICODEX_MANAGER_ACTION_QUEUE__.length !== previousLength;
     delete globalThis.__ANTICODEX_MANAGER_ACTION_PROMISES__[id];
     entry.resolve(payload);
+    return true;
+  };
+  globalThis.__ANTICODEX_ACK_MANAGER_ACTION__ = (id, payload) => {
+    globalThis.__ANTICODEX_ABANDON_MANAGER_ACTION__(id, payload);
   };
   globalThis.__ANTICODEX_RESOLVE_MANAGER_ACTION__ = globalThis.__ANTICODEX_ACK_MANAGER_ACTION__;
   globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ = (action, actionToken = "") => new Promise((resolve) => {
@@ -443,6 +448,7 @@ export function createManagerQueuePollSource(bridgeSource = createManagerBridgeS
   if (
     typeof globalThis.__ANTICODEX_RUN_MANAGER_ACTION__ !== "function" ||
     typeof globalThis.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function" ||
+    typeof globalThis.__ANTICODEX_ABANDON_MANAGER_ACTION__ !== "function" ||
     typeof globalThis.__ANTICODEX_ACK_MANAGER_ACTION__ !== "function"
   ) {
     ${bridgeSource}

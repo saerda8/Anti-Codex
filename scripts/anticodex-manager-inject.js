@@ -415,7 +415,7 @@
     return error?.code === "ANTICODEX_MANAGER_BRIDGE_STALE";
   }
 
-  function invokeManagerBridgeWithPickup(invoke) {
+  function invokeManagerBridgeWithPickup(invoke, onQueued = null) {
     const queueBefore = Array.isArray(window.__ANTICODEX_MANAGER_ACTION_QUEUE__)
       ? window.__ANTICODEX_MANAGER_ACTION_QUEUE__
       : [];
@@ -428,6 +428,7 @@
 
     return (async () => {
       const requestId = String(queuedRequest.id);
+      if (typeof onQueued === "function") onQueued(requestId);
       const startedAt = Date.now();
       const backlogDeadline = startedAt + MANAGER_BRIDGE_BACKLOG_GRACE_MS;
       let pickupDeadline = startedAt + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS;
@@ -694,10 +695,12 @@
     if (typeof window.__ANTICODEX_RUN_MANAGER_ACTION__ === "function") {
       try {
         let payload;
+        let bridgeRequestId = "";
         const bridgeTimeoutMs = actionTransportTimeoutMs(action);
         const winner = await Promise.race([
           invokeManagerBridgeWithPickup(
             () => window.__ANTICODEX_RUN_MANAGER_ACTION__(action, actionToken),
+            (requestId) => { bridgeRequestId = requestId; },
           ).then(p => { payload = p; return "bridge"; }),
           new Promise(resolve => setTimeout(() => resolve("timeout"), bridgeTimeoutMs)),
         ]);
@@ -713,6 +716,13 @@
           if (payload?.ok !== false || (payload?.result && typeof payload.result === "object")) return payload;
           throw new Error(payload.message || "Anti-Codex manager action failed.");
         }
+        window.__ANTICODEX_ABANDON_MANAGER_ACTION__?.(bridgeRequestId, {
+          ok: false,
+          action,
+          actionToken,
+          abandoned: true,
+          message: "Anti-Codex manager bridge timed out.",
+        });
         if (location.protocol === "app:") throw new Error("Anti-Codex manager bridge timed out.");
       } catch (error) {
         if (isManagerBridgeStaleError(error)) return runActionViaScript(action, actionToken);
