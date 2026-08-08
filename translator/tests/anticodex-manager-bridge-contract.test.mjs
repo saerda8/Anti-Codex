@@ -1418,6 +1418,52 @@ test("Manager verifier restores any action bridge that it replaces", () => {
   assert.ok(finalCleanup >= 0 && finalCleanup < finalClose, "single-action cleanup must run before the CDP socket closes");
 });
 
+test("Manager verifier cleanup settles a silent refresh and reports empty queues", () => {
+  const buildBridge = vm.runInNewContext(`(${extractNamedFunction(managerButtonTest, "realBridgeSource")})`, {
+    uiOnlyMode: false,
+    timeoutMs: 1000,
+  });
+  const buildCleanup = vm.runInNewContext(`(${extractNamedFunction(managerButtonTest, "cleanupRealBridgeSource")})`);
+  const renderer = {
+    clearTimeout() {},
+    setTimeout() { return 1; },
+    window: {
+      __ANTICODEX_RUN_MANAGER_ACTION__: () => Promise.resolve({ ok: true }),
+      __ANTICODEX_MANAGER_BRIDGE_READY__: true,
+    },
+  };
+  vm.runInNewContext(`(() => { ${buildBridge(true)} return true; })()`, renderer);
+  let settledPayload = null;
+  renderer.window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.push({ id: "silent-refresh", action: "refreshStatus", silent: true });
+  renderer.window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__["silent-refresh"] = {
+    action: "refreshStatus",
+    silent: true,
+    resolve(payload) { settledPayload = payload; },
+  };
+  const cleanupState = vm.runInNewContext(`(() => {
+    ${buildCleanup(true)}
+    return {
+      queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : 0,
+      pendingCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
+    };
+  })()`, renderer);
+
+  assert.equal(settledPayload?.ok, false);
+  assert.equal(cleanupState.queueLength, 0);
+  assert.equal(cleanupState.pendingCount, 0);
+  assert.equal(renderer.window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__, undefined);
+  assert.equal(renderer.window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__, undefined);
+});
+
+test("single-action Manager evidence reports verifier queues after cleanup", () => {
+  const singleActionStart = managerButtonTest.lastIndexOf("let latest = initial;");
+  const singleActionEnd = managerButtonTest.indexOf("const output = {", singleActionStart);
+  const block = managerButtonTest.slice(singleActionStart, singleActionEnd);
+  assert.match(block, /const cleanupState = await cleanupInjectedBridges\(\)/);
+  assert.match(block, /pendingCount: cleanupState\.pendingCount/);
+  assert.match(block, /queueLength: cleanupState\.queueLength/);
+});
+
 test("Manager bridge invokes the real model refresh action", () => {
   const block = extractNamedFunction(source, "runAction");
   assert.doesNotMatch(block, /action === "refreshModels"[\s\S]*?`\$\{baseUrl\}\/models`/);

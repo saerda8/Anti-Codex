@@ -1534,11 +1534,15 @@ async function waitForUiOnlyBatchIdle(waitMs = 30000) {
 }
 
 async function cleanupInjectedBridges() {
-  await evaluate(`(() => {
+  return evaluate(`(() => {
     ${cleanupUiOnlyBridgeSource()}
     ${cleanupRealBridgeSource()}
-    return true;
-  })()`, 2500).catch(() => {});
+    return {
+      ok: true,
+      queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__) ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : 0,
+      pendingCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
+    };
+  })()`, 2500).catch((error) => ({ ok: false, error: error?.message || String(error) }));
 }
 
 async function verifyProfileManagerEntryActualMouseWithFreshCdp() {
@@ -2993,7 +2997,14 @@ while (initial.ok && Date.now() < deadline) {
     if (actionSettled && visibleFinished) break;
   }
 }
-await cleanupInjectedBridges();
+const cleanupState = await cleanupInjectedBridges();
+if (cleanupState.ok === true) {
+  latest = {
+    ...latest,
+    pendingCount: cleanupState.pendingCount,
+    queueLength: cleanupState.queueLength,
+  };
+}
 ws.close();
 releaseManagerButtonLock(managerButtonLock);
 
