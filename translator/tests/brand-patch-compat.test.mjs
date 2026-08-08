@@ -1,11 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import * as brandPatchCompat from "../../scripts/brand-patch-compat.mjs";
 
 const { hasProductNameDrivenSessionTitle } = brandPatchCompat;
 const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asar.mjs", import.meta.url), "utf8");
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+test("rebuilds every ASAR integrity block after patching a large renderer bundle", () => {
+  const payload = Buffer.from("abcdefghij");
+  assert.deepEqual(brandPatchCompat.buildAsarIntegrity(payload, 4), {
+    hash: sha256(payload),
+    blocks: ["abcd", "efgh", "ij"].map((value) => sha256(value)),
+  });
+  assert.deepEqual(brandPatchCompat.buildAsarIntegrity(Buffer.alloc(0), 4), {
+    hash: sha256(Buffer.alloc(0)),
+    blocks: [sha256(Buffer.alloc(0))],
+  });
+  assert.throws(() => brandPatchCompat.buildAsarIntegrity(payload, 0), /block size/i);
+  assert.match(brandPatcherSource, /buildAsarIntegrity\(afterBuf,\s*entry\.integrity\.blockSize\)/);
+  assert.doesNotMatch(brandPatcherSource, /entry\.integrity\.blocks\s*=\s*\[hash\]/);
+});
 
 test("finds settings and model patches in Codex's consolidated app-initial bundle", () => {
   const profileFinder = brandPatcherSource.match(/function findProfileDropdownSettingsPatch[\s\S]*?(?=function findBrowserWindowIconPatch)/)?.[0] ?? "";

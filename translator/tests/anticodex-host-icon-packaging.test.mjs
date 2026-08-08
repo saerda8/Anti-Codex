@@ -72,14 +72,14 @@ test("candidate validation requires one complete deferred restore repaint", () =
 });
 
 test("host patch revision is release-bound without changing the fixed-shell profile", () => {
-  assert.match(brandPatcher, /const hostPatchRevision = 3/);
+  assert.match(brandPatcher, /const hostPatchRevision = 4/);
   assert.match(brandPatcher, /hostPatchRevision,/);
   assert.match(installer, /hostPatchRevision\s*=\s*\$HostPatchRevision/);
-  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"3"/);
-  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*3/);
+  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"4"/);
+  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*4/);
   assert.match(updateChecker, /active host patch revision is not current/);
   assert.match(updateChecker, /\$sourceFingerprint[\s\S]{0,260}hostPatchRevision=/);
-  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"3"/);
+  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"4"/);
   assert.match(candidateValidator, /anticodex-local-settings-only/);
   assert.match(candidateValidator, /securitySettingsEnabled:0/);
   assert.match(rollback, /hostPatchRevision/);

@@ -280,7 +280,7 @@ function Test-AntiCodexAsarPatches {
         [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
-    $shapeMatches = if ($ExpectedHostPatchRevision -eq 3) {
+    $shapeMatches = if ($ExpectedHostPatchRevision -in @(3, 4)) {
         $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 1 -and
         $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 0 -and
         $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
@@ -762,7 +762,7 @@ test("complete rollback host validation maps immutable predecessor matrices to t
       revision2Current: true,
       legacyCurrent: false,
       revisionOne: false,
-      revisionFour: false,
+      revisionFour: true,
       previous: true,
       legacy: true,
       previousMissingBridge: false,

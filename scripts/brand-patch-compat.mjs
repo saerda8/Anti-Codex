@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const ANTI_CODEX_TITLE = "`Anti-Codex`";
 const ANTI_CODEX_TRAY_ICON = "`codex-tray.ico`";
 const WINDOWS_TRAY_BRAND_ICONS = [
@@ -35,6 +37,20 @@ function padReplacement(match, replacement) {
     );
   }
   return replacement + " ".repeat(match.length - replacement.length);
+}
+
+export function buildAsarIntegrity(value, blockSize) {
+  const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value);
+  const size = Number(blockSize);
+  if (!Number.isSafeInteger(size) || size <= 0) {
+    throw new TypeError("ASAR integrity block size must be a positive integer");
+  }
+  const digest = (chunk) => createHash("sha256").update(chunk).digest("hex");
+  const blocks = [];
+  for (let offset = 0; offset < bytes.length || offset === 0; offset += size) {
+    blocks.push(digest(bytes.subarray(offset, Math.min(offset + size, bytes.length))));
+  }
+  return { hash: digest(bytes), blocks };
 }
 
 function allMatches(source, pattern) {

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildAsarIntegrity,
   hasAppServerManagedSessionFlags,
   hasPatchedAuthRequirement,
   hasPrimaryWindowRestoreRepaint,
@@ -26,7 +27,7 @@ import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.m
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 3;
+const hostPatchRevision = 4;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -935,10 +936,10 @@ for (const [name, findPatch] of selectedPatchSpecs) {
         throw new Error(`${rel} size changed: ${afterBuf.length} !== ${buf.length}`);
       }
       fs.writeSync(fd, afterBuf, 0, afterBuf.length, offset);
-      const hash = crypto.createHash("sha256").update(afterBuf).digest("hex");
       if (entry.integrity) {
-        entry.integrity.hash = hash;
-        entry.integrity.blocks = [hash];
+        const integrity = buildAsarIntegrity(afterBuf, entry.integrity.blockSize);
+        entry.integrity.hash = integrity.hash;
+        entry.integrity.blocks = integrity.blocks;
       }
       written.push({ name, rel, size: afterBuf.length });
     }

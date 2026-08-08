@@ -349,7 +349,7 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowDeferredRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
-        [ValidateSet(0, 2, 3)][int]$ExpectedHostPatchRevision = 0
+        [ValidateSet(0, 2, 3, 4)][int]$ExpectedHostPatchRevision = 0
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -365,7 +365,7 @@ function Test-AntiCodexAsarPatches {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
         }
     }
-    if ($ExpectedHostPatchRevision -in @(2, 3)) {
+    if ($ExpectedHostPatchRevision -in @(2, 3, 4)) {
         $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
         if ([regex]::Matches($text, $settingsDefinitionPattern).Count -ne 1 -or
             [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count -ne 1 -or
@@ -458,11 +458,11 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host marker patch profile is invalid: $MarkerPath"
     }
     $patchProfile = "fixed-shell-v1"
-    $currentHostPatchRevision = 3
+    $currentHostPatchRevision = 4
     $hostPatchRevisionProperty = $manifest.PSObject.Properties["hostPatchRevision"]
     $legacyHostPatchRevision = $null -eq $hostPatchRevisionProperty
     $hostPatchRevisionText = if ($legacyHostPatchRevision) { "0" } else { [string]$hostPatchRevisionProperty.Value }
-    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", [string]$currentHostPatchRevision)) {
+    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", "3", [string]$currentHostPatchRevision)) {
         throw "Anti-Codex host marker patch revision is invalid: $MarkerPath"
     }
     $hostPatchRevision = [int]$hostPatchRevisionText
@@ -525,7 +525,7 @@ function Test-AntiCodexHost {
     $recordedCriticalPatches = @($manifest.criticalPatches)
     $currentManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq $currentHostPatchRevision
+        -Expected $expectedCriticalPatches) -and $hostPatchRevision -in @(3, $currentHostPatchRevision)
     $revision2ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq 2

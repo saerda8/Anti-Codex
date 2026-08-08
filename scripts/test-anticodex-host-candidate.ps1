@@ -135,7 +135,7 @@ if ($manifest.schema -ne "anticodex-host-manifest-v2") {
 if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
     throw "Anti-Codex candidate marker patch profile is invalid."
 }
-if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "3") {
+if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "4") {
     throw "Anti-Codex candidate marker patch revision is invalid."
 }
 $expectedFixedShellCriticalPatches = @(
