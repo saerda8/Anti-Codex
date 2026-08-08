@@ -41,6 +41,7 @@ test("fixed shell leaves native locale detection and language-source selection u
 
   assert.ok(selectedBlock, "fixed-shell patch selection is explicit");
   assert.doesNotMatch(selectedBlock, /"(?:locale-info|default-locale|enable-i18n|i18n-loading-gate)"/);
+  assert.match(brandPatcherSource, /const selectedPatchNames = fixedShellCriticalPatchNames;/);
   assert.match(brandPatcherSource, /const selectedPatchSpecs = patchSpecs\.filter\(\(\[name\]\) => selectedPatchNames\.has\(name\)\);/);
 });
 
