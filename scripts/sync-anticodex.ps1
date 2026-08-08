@@ -1048,6 +1048,21 @@ function Repair-RollbackHostUnpackedFileManifest {
     return $rollbackManifestCompatible
 }
 
+function Test-AntiCodexRollbackReleaseAvailable {
+    if (-not [IO.Directory]::Exists("\\?\$rollbackHost") -or
+        -not [IO.Directory]::Exists("\\?\$rollbackComponent") -or
+        -not [IO.File]::Exists($rollbackMarker)) {
+        return $false
+    }
+    try {
+        $global:LASTEXITCODE = 0
+        & $rollbackScript -ValidateOnly | Out-Null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
 $syncMutex = New-Object Threading.Mutex($false, "Local\AntiCodexHostSync")
 if (-not $syncMutex.WaitOne(0)) {
     $syncMutex.Dispose()
@@ -1064,6 +1079,7 @@ $restartAfterSync = $false
 $rollbackAvailable = $false
 $rollbackRestoreAvailable = $false
 $activationRestored = $false
+$activationFailure = $null
 $legacyCurrentRecoveryOnly = $false
 $preservedRollbackAvailable = $false
 $activationRecoveryCleanupPending = $false
@@ -1305,6 +1321,12 @@ try {
             $syncCompleted = $true
         } catch {
             $activationError = $_.Exception.Message
+            $activationFailure = [pscustomobject]@{
+                stage = $updateStage
+                message = $activationError
+                error = "sync_failed"
+                at = [DateTimeOffset]::UtcNow.ToString("o")
+            }
             if ($activationStarted) {
                 try {
                     if ($activeHostChanged) {
@@ -1380,8 +1402,17 @@ if ($syncError) {
             }
         }
         if ($activationRestored) {
-            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
-            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component after activation failed." -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+            $rollbackAvailable = Test-AntiCodexRollbackReleaseAvailable
+            if ($null -eq $activationFailure) {
+                $activationFailure = [pscustomobject]@{
+                    stage = $updateStage
+                    message = $syncError.Exception.Message
+                    error = "sync_failed"
+                    at = [DateTimeOffset]::UtcNow.ToString("o")
+                }
+            }
+            Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $activationFailure.message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
+            Set-AntiCodexUpdateOperation -State "rolled_back" -Stage "complete" -Message "Anti-Codex restored the previous host and CodexPlusPlus component after activation failed." -RollbackAvailable $rollbackAvailable -OriginalFailure $activationFailure -StateRoot $stateRoot
         } else {
             Set-AntiCodexUpdateOperation -State "failed" -Stage $updateStage -Message $syncError.Exception.Message -FailureCode "sync_failed" -RollbackAvailable $rollbackAvailable -StateRoot $stateRoot
         }

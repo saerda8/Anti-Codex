@@ -809,6 +809,51 @@ test("host sync keeps a valid predecessor rollback while using the revisionless 
   assert.doesNotMatch(rollback, /AllowLegacyCurrent/);
 });
 
+test("restored activation reports rollback availability only after validating the live rollback pair", () => {
+  const sync = readSyncScript();
+  const availability = extractFunction(sync, "Test-AntiCodexRollbackReleaseAvailable");
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-restored-rollback-status-"));
+  const rollbackHost = join(fixture, "rollback-host");
+  const rollbackComponent = join(fixture, "rollback-component");
+  const rollbackMarker = join(fixture, "rollback-host.ok");
+  const rollbackValidator = join(fixture, "validate-rollback.ps1");
+  const harness = join(fixture, "run.ps1");
+  try {
+    mkdirSync(rollbackHost, { recursive: true });
+    mkdirSync(rollbackComponent, { recursive: true });
+    writeFileSync(rollbackMarker, "valid\n");
+    writeFileSync(
+      rollbackValidator,
+      "param([switch]$ValidateOnly)\nif ($env:ANTICODEX_TEST_ROLLBACK_INVALID -eq '1') { throw 'invalid rollback' }\n",
+    );
+    writeFileSync(harness, `$ErrorActionPreference = 'Stop'
+$rollbackHost = ${quotePowerShell(rollbackHost)}
+$rollbackComponent = ${quotePowerShell(rollbackComponent)}
+$rollbackMarker = ${quotePowerShell(rollbackMarker)}
+$rollbackScript = ${quotePowerShell(rollbackValidator)}
+${availability}
+$valid = Test-AntiCodexRollbackReleaseAvailable
+Remove-Item -LiteralPath $rollbackMarker -Force
+$missing = Test-AntiCodexRollbackReleaseAvailable
+Set-Content -LiteralPath $rollbackMarker -Value 'valid'
+$env:ANTICODEX_TEST_ROLLBACK_INVALID = '1'
+$invalid = Test-AntiCodexRollbackReleaseAvailable
+[pscustomobject]@{ valid = [bool]$valid; missing = [bool]$missing; invalid = [bool]$invalid } | ConvertTo-Json -Compress
+`);
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      valid: true,
+      missing: false,
+      invalid: false,
+    });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test("activation recovery restores the immediate release, preserves the advertised rollback, and keeps cleanup retryable", () => {
   const sync = readSyncScript();
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-activation-recovery-"));
@@ -1011,7 +1056,8 @@ test("host sync validates the exact rollback contract and separates activation r
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\s+-and\s+\$rollbackManifestSchemaCompatible\)\s*\{[\s\S]*?Repair-RollbackHostIconManifest[\s\S]*?&\s+\$rollbackScript\s+-ValidateOnly[\s\S]*?\$rollbackAvailable\s*=\s*\$true/);
   assert.match(sync, /if\s*\(\$rollbackRestoreAvailable\)\s*\{[\s\S]*?\$activationRestored\s*=\s*\$true[\s\S]*?\$rollbackAvailable\s*=\s*\$preservedRollbackAvailable/);
   assert.match(sync, /\$rollbackRestoreAvailable\s*=\s*\(\s*\[IO\.Directory\]::Exists\("\\\\\?\\\$activeHost"\)[\s\S]*?\[IO\.Directory\]::Exists\("\\\\\?\\\$activeComponent"\)[\s\S]*?\[IO\.File\]::Exists\(\$activeMarker\)/);
-  assert.match(sync, /if\s*\(\$activationRestored\)\s*\{[\s\S]*?-State\s+"failed"\s+-Stage\s+\$updateStage[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable[\s\S]*?-State\s+"rolled_back"\s+-Stage\s+"complete"[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable/);
+  assert.match(sync, /\$activationFailure\s*=\s*\[pscustomobject\]@\{[\s\S]*?message\s*=\s*\$activationError/);
+  assert.match(sync, /if\s*\(\$activationRestored\)\s*\{[\s\S]*?\$rollbackAvailable\s*=\s*Test-AntiCodexRollbackReleaseAvailable[\s\S]*?-State\s+"failed"\s+-Stage\s+\$updateStage[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable[\s\S]*?-State\s+"rolled_back"\s+-Stage\s+"complete"[\s\S]*?-RollbackAvailable\s+\$rollbackAvailable\s+-OriginalFailure\s+\$activationFailure/);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{\s*throw[\s\S]*?No compatible rollback release was available\./);
   assert.match(sync, /if\s*\(-not\s+\$rollbackAvailable\)\s*\{[\s\S]*?Remove-Item\s+-LiteralPath\s+\$rollbackMarker[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackHost[\s\S]*?Remove-FixedUpdateDirectory\s+-Path\s+\$rollbackComponent/);
   assert.match(sync, /No compatible previous release is available for rollback\./);

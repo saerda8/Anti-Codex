@@ -252,7 +252,11 @@ Set-AntiCodexUpdateOperation -State 'running' -Stage 'acceptance' -NewOperationI
 Set-AntiCodexUpdateOperation -State 'failed' -Stage 'acceptance' -Message 'acceptance failed' -FailureCode 'sync_failed' -RollbackAvailable $true
 Set-AntiCodexUpdateOperation -State 'running' -Stage 'rollback_validation' -RollbackAvailable $true
 Set-AntiCodexUpdateOperation -State 'failed' -Stage 'rollback_acceptance' -Message 'rollback failed' -FailureCode 'rollback_failed' -RollbackAvailable $true
-[pscustomobject]@{ rolledBack = $rolledBack.operation; rollbackFailed = (Get-AntiCodexUpdateStatus).operation } | ConvertTo-Json -Depth 8 -Compress`,
+$rollbackFailed = (Get-AntiCodexUpdateStatus).operation
+Set-AntiCodexUpdateOperation -State 'running' -Stage 'activation' -NewOperationId 'sync-3'
+$activationFailure = [pscustomobject]@{ stage = 'activation'; message = 'raw candidate activation error'; error = 'sync_failed'; at = '2026-08-08T00:00:00.000Z' }
+Set-AntiCodexUpdateOperation -State 'rolled_back' -Stage 'complete' -Message 'previous release restored' -RollbackAvailable $false -OriginalFailure $activationFailure
+[pscustomobject]@{ rolledBack = $rolledBack.operation; rollbackFailed = $rollbackFailed; directRecovery = (Get-AntiCodexUpdateStatus).operation } | ConvertTo-Json -Depth 8 -Compress`,
     );
 
     const result = spawnSync("powershell.exe", [
@@ -272,6 +276,15 @@ Set-AntiCodexUpdateOperation -State 'failed' -Stage 'rollback_acceptance' -Messa
     assert.equal(parsed.rollbackFailed.stage, "rollback_acceptance");
     assert.equal(parsed.rollbackFailed.failureCode, "rollback_failed");
     assert.equal(parsed.rollbackFailed.originalFailure.stage, "acceptance");
+    assert.equal(parsed.directRecovery.operationId, "sync-3");
+    assert.equal(parsed.directRecovery.state, "rolled_back");
+    assert.equal(parsed.directRecovery.rollbackAvailable, false);
+    assert.deepEqual(parsed.directRecovery.originalFailure, {
+      stage: "activation",
+      message: "raw candidate activation error",
+      error: "sync_failed",
+      at: "2026-08-08T00:00:00.000Z",
+    });
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

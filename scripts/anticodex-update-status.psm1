@@ -149,6 +149,7 @@ function Set-AntiCodexUpdateOperation {
         [string]$Message,
         [string]$FailureCode,
         [bool]$RollbackAvailable = $false,
+        [object]$OriginalFailure,
         [string]$NewOperationId,
         [string[]]$ExpectedStates,
         [string[]]$ExpectedStages,
@@ -158,6 +159,7 @@ function Set-AntiCodexUpdateOperation {
     $resolvedStateRoot = Get-AntiCodexUpdateStateRoot -StateRoot $StateRoot
     $hasExpectedStates = $PSBoundParameters.ContainsKey("ExpectedStates") -and $ExpectedStates.Count -gt 0
     $hasExpectedStages = $PSBoundParameters.ContainsKey("ExpectedStages") -and $ExpectedStages.Count -gt 0
+    $hasOriginalFailure = $PSBoundParameters.ContainsKey("OriginalFailure") -and $null -ne $OriginalFailure
     $conditionalWrite = $hasExpectedStates -or $hasExpectedStages
     try {
         $written = Invoke-AntiCodexUpdateStatusLocked {
@@ -173,7 +175,7 @@ function Set-AntiCodexUpdateOperation {
             $now = [DateTimeOffset]::UtcNow.ToString("o")
             $operationId = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "operationId"
             $startedAt = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "startedAt"
-            $originalFailure = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "originalFailure"
+            $recordedOriginalFailure = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "originalFailure"
             $isRollbackStage = $Stage.StartsWith("rollback_", [StringComparison]::OrdinalIgnoreCase)
             $continuesFailedUpdate = $State -eq "running" -and $isRollbackStage -and $existingState -eq "failed"
             $startsNewOperation = -not [string]::IsNullOrWhiteSpace($NewOperationId) -or
@@ -192,16 +194,19 @@ function Set-AntiCodexUpdateOperation {
                 $startedAt = $now
             }
 
-            if ($startsNewOperation -or $State -eq "succeeded") {
-                $originalFailure = $null
+            if ($hasOriginalFailure) {
+                $recordedOriginalFailure = $OriginalFailure
             }
-            elseif ($null -eq $originalFailure -and $existingState -eq "failed" -and
+            elseif ($startsNewOperation -or $State -eq "succeeded") {
+                $recordedOriginalFailure = $null
+            }
+            elseif ($null -eq $recordedOriginalFailure -and $existingState -eq "failed" -and
                 ($isRollbackStage -or $State -eq "rolled_back")) {
                 $failureAt = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "completedAt"
                 if ([string]::IsNullOrWhiteSpace([string]$failureAt)) {
                     $failureAt = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "updatedAt"
                 }
-                $originalFailure = [pscustomobject]@{
+                $recordedOriginalFailure = [pscustomobject]@{
                     stage = $existingStage
                     message = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "message"
                     error = Get-AntiCodexObjectProperty -InputObject $existingOperation -Name "failureCode"
@@ -221,8 +226,8 @@ function Set-AntiCodexUpdateOperation {
                 failureCode = $FailureCode
                 rollbackAvailable = $RollbackAvailable
             }
-            if ($null -ne $originalFailure) {
-                $operation | Add-Member -NotePropertyName originalFailure -NotePropertyValue $originalFailure
+            if ($null -ne $recordedOriginalFailure) {
+                $operation | Add-Member -NotePropertyName originalFailure -NotePropertyValue $recordedOriginalFailure
             }
 
             $operationProperty = $status.PSObject.Properties["operation"]
