@@ -36,6 +36,14 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
   assert.match(modelFinder, /return candidates\[0\]/);
 });
 
+test("fixed shell leaves native locale detection and language-source selection untouched", () => {
+  const selectedBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+
+  assert.ok(selectedBlock, "fixed-shell patch selection is explicit");
+  assert.doesNotMatch(selectedBlock, /"(?:locale-info|default-locale|enable-i18n|i18n-loading-gate)"/);
+  assert.match(brandPatcherSource, /const selectedPatchSpecs = patchSpecs\.filter\(\(\[name\]\) => selectedPatchNames\.has\(name\)\);/);
+});
+
 const settingsExternalLinksFixtures = [
   "var G=m({account:{id:`settings.nav.chatSettings`},securitySettings:{id:`settings.nav.securitySettings`}}),q={account:{href:`https://chatgpt.com/#settings`,icon:we,message:G.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:W,message:G.securitySettings}},it={agent:L,personalization:r,\"plugins-settings\":v};",
   "var A=x({account:{id:`settings.nav.account`},securitySettings:{id:`settings.nav.securitySettings`}}),B={account:{href:`https://chatgpt.com/#settings`,icon:C,message:A.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:D,message:A.securitySettings}},E={agent:F,\"mcp-settings\":G,\"plugins-settings\":H};",
