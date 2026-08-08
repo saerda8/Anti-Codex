@@ -309,6 +309,13 @@ if ($asar.Length -lt 1MB) {
     throw "Anti-Codex candidate app package is invalid."
 }
 
+$asarIntegrityScript = Join-Path $PSScriptRoot "verify-anticodex-asar-integrity.mjs"
+$nodeRuntime = Join-Path $candidateAppRoot "resources\cua_node\bin\node.exe"
+& $nodeRuntime $asarIntegrityScript $asarPath
+if ($LASTEXITCODE -ne 0) {
+    throw "Anti-Codex candidate ASAR integrity validation failed."
+}
+
 $versionOutput = @(& $codex --version 2>&1)
 if ($LASTEXITCODE -ne 0 -or -not ($versionOutput -join "").Trim()) {
     throw "Anti-Codex candidate bundled Codex CLI did not start."
