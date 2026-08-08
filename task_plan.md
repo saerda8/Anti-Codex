@@ -3567,7 +3567,7 @@ Clean follow-up commit `c429489` passes the complete no-traffic source preflight
 - [x] Settle a Manager action that times out after renderer lease without replaying or abandoning any other request (`2a726d05`, focused coverage `72/72`). This repair remains source-only.
 - [x] Fail closed on missing, malformed, truncated or block-mismatched candidate ASAR integrity metadata (`35bfe1c8`, focused coverage `43/43`). The validator independently accepted all `5715` live active entries. This repair remains source-only.
 - [x] Prepare the isolated CodexPlusPlus `v1.2.45` source checkpoint (`419b976`) with twelve narrow patches. The managed candidate passed exact-tag, replay, isolation, format, protocol, watcher, Windows Manager, launcher and Docker hygiene checks; its launcher SHA-256 is `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922`.
-- [ ] Pass one clean complete no-traffic source preflight on the final documentation checkpoint before any runtime activation.
+- [x] Pass the clean complete no-traffic source preflight on checkpoint `be6bc17`: `946/946`, zero failures/warnings and `usedRealTraffic:false`. Report `20260808-211628-source-preflight.json` has SHA-256 `0f1d918e6d7c847a700224fffd8dcb65710536e9a091925c07f66c275efa9dd0`.
 - [ ] Keep the Desktop, Start-menu and actual tray activation observations open. Do not call the project 100% until these current external-entry observations and the source-only runtime changes are closed.
 - [x] Keep the accepted autonomous media task `019f9a93-0de5-71f3-9329-12e0e914e681` frozen. One stale-summary `继续` resumed only a later client-audit context and wrote no deliverable files; no further prompt is authorized.
 
