@@ -447,18 +447,22 @@ async function runNativeSettingsAcceptance() {
         return entryRect.width > 0 && entryRect.height > 0 && !entry.disabled && entry.getAttribute('aria-disabled') !== 'true';
       })
       .map((entry) => ({ slug: entry.getAttribute('data-settings-panel-slug'), label: entry.getAttribute('aria-label') || String(entry.textContent || '').trim() }));
-    const externalTargets = Array.from(node?.querySelectorAll('a,button') || []).filter((entry) => {
-      if (entry.hasAttribute('data-settings-panel-slug')) return false;
-      const href = String(entry.href || entry.querySelector?.('a')?.href || '');
-      const label = String(entry.getAttribute('aria-label') || entry.textContent || '').replace(/\\s+/g, ' ').trim();
-      return href.includes('chatgpt.com/#settings')
-        || href.includes('chatgpt.com/open-security-settings')
-        || /^(?:ChatGPT\\s+)?Account$|^账户$|^(?:ChatGPT\\s+)?Security(?: Settings)?$|^安全设置$/i.test(label);
-    }).map((entry) => entry.getAttribute('aria-label') || String(entry.textContent || '').trim());
+    const classifyUnsupportedExternalSettingsTarget = ${classifyUnsupportedExternalSettingsTarget.toString()};
+    const externalTargets = Array.from(node?.querySelectorAll('a,button') || [])
+      .filter((entry) => {
+        if (entry.hasAttribute('data-settings-panel-slug')) return false;
+        const rect = entry.getBoundingClientRect?.();
+        return rect && rect.width > 0 && rect.height > 0;
+      })
+      .map((entry) => classifyUnsupportedExternalSettingsTarget({
+        href: String(entry.href || entry.querySelector?.('a')?.href || ''),
+        label: String(entry.getAttribute?.('aria-label') || entry.textContent || ''),
+      }))
+      .filter(Boolean);
     return { ok: Boolean(node && rect && rect.width > 0 && rect.height > 0 && entries.length > 0), entries, externalTargets };
   })()`, (value) => value?.ok === true);
   if (nav.externalTargets.length > 0) {
-    throw new Error(`ChatGPT Account or web Security links are still visible: ${nav.externalTargets.join(", ")}`);
+    throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings navigation: ${JSON.stringify(nav.externalTargets)}`);
   }
 
   const pages = [];

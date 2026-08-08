@@ -57,13 +57,21 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.doesNotMatch(source, /location\.pathname\.includes\('\/settings\//);
   assert.match(source, /async function auditNativeAgentSettings\(\) \{[\s\S]*?await waitFor\(/);
   assert.match(source, /nav\[aria-label="Settings"\], nav\[aria-label="\u8bbe\u7f6e"\]/);
-  assert.match(source, /chatgpt\.com\/#settings/);
-  assert.match(source, /chatgpt\.com\/open-security-settings/);
   assert.match(source, /classifyUnsupportedExternalSettingsTarget/);
   assert.match(source, /panel\?\.querySelectorAll\?\.\('a,button'\)/);
   assert.match(source, /externalTargets/);
   assert.match(source, /pages\.flatMap\(\(page\) => page\.externalTargets/);
   assert.doesNotMatch(source, /externalChatGptSettingsHidden:\s*true/);
+  const nativeAcceptanceSource = source.slice(
+    source.indexOf("async function runNativeSettingsAcceptance"),
+    source.indexOf("let result;"),
+  );
+  const navExternalScanSource = nativeAcceptanceSource.slice(
+    nativeAcceptanceSource.indexOf("const externalTargets"),
+    nativeAcceptanceSource.indexOf("return { ok:", nativeAcceptanceSource.indexOf("const externalTargets")),
+  );
+  assert.match(navExternalScanSource, /classifyUnsupportedExternalSettingsTarget/);
+  assert.doesNotMatch(navExternalScanSource, /href\.includes\(|Account\$|Security\(\?: Settings\)/);
   const openSettingsSource = source.slice(
     source.indexOf("async function openNativeSettingsSection"),
     source.indexOf("async function replaceNativeInstructions"),

@@ -1093,6 +1093,7 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     const body3 = await res3.json();
     assert.equal(body3.ok, true);
     assert.equal(body3.action, "refreshStatus");
+    assert.equal(body3.result.ok, true);
     assert.equal(body3.result.diagnostics.object, "anticodex.diagnostics");
     assert.equal(body3.result.diagnostics.paths.stateRoot, tempDir);
     assert.equal(body3.result.reports.reportRoot, path.join(tempDir, "reports"));

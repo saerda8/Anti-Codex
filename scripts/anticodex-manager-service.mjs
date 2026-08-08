@@ -1952,6 +1952,7 @@ export function createAntiCodexManagerService(options = {}) {
   const managerActionRuntime = options.managerActionRuntime;
   const refreshModels = options.refreshModels;
   const refreshStatus = async () => ({
+    ok: true,
     diagnostics: await diagnosticsPayload(stateRoot, false, fixedHealthUrl, adapterAuthToken),
     reports: latestManagerReportsPayload(stateRoot),
   });
