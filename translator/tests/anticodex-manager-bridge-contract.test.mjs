@@ -1891,6 +1891,9 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(promptSettingsBlock, /const developer = editor\("codexDeveloper", "Codex 开发者提示词"\)/);
   assert.match(promptSettingsBlock, /codexDeveloper: developer\.value\(\)/);
   assert.match(promptSettingsBlock, /上方完整合并提示词.*沿用当前运行时内容.*此层才单独生效/);
+  assert.match(promptSettingsBlock, /系统、开发者及环境说明都按整体设置处理/);
+  assert.match(promptSettingsBlock, /AGENTS\.md 请用下方独立项控制/);
+  assert.doesNotMatch(promptSettingsBlock, /AGENTS\.md、环境和真实用户消息不受影响/);
   assert.match(managerInject, /\u6062\u590d\u9ed8\u8ba4|恢复默认/);
   assert.match(managerInject, /snapshotLayers\.filter\(\(layer\) => layer\.required\)/);
   assert.match(managerRealMouseAction, /promptSettingsSaveRestore/);

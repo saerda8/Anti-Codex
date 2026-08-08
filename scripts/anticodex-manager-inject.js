@@ -2133,7 +2133,7 @@
         effectiveContent: nativePromptSnapshot.effectiveContent,
       } : null);
       const developer = editor("codexDeveloper", "Codex 开发者提示词");
-      developer.node.append(el("div", { className: "anticodex-result anticodex-warn", text: "只有上方完整合并提示词沿用当前运行时内容时，此层才单独生效；若上方整体被替换或关闭，以整体设置为准。AGENTS.md、环境和真实用户消息不受影响。" }));
+      developer.node.append(el("div", { className: "anticodex-result anticodex-warn", text: "只有上方完整合并提示词沿用当前运行时内容时，此层才单独生效；若上方整体被替换或关闭，系统、开发者及环境说明都按整体设置处理。AGENTS.md 请用下方独立项控制，真实用户消息不会被此页编辑。" }));
       const nativeInstructions = payload.nativeCustomInstructions || { content: "", defaultContent: "" };
       const nativeInstructionsText = el("textarea", {
         style: fieldStyle,
