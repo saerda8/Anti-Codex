@@ -750,9 +750,13 @@ function Send-CdpPageScreenshotRequest {
         requestSendCompletedAtMs = $null
         requestSendCompletedRelativeToForegroundMs = $null
         requestSent = $false
+        started = $false
+        sendTask = $null
+        cancellation = $null
         error = ""
     }
     $cancellation = [Threading.CancellationTokenSource]::new()
+    $request.cancellation = $cancellation
     try {
         if ($Socket.State -ne [Net.WebSockets.WebSocketState]::Open) {
             throw "Preconnected CDP websocket is not open"
@@ -766,19 +770,17 @@ function Send-CdpPageScreenshotRequest {
         $requestBytes = [Text.Encoding]::UTF8.GetBytes($requestJson)
         $request.requestSendStartedAtMs = [int]$Stopwatch.ElapsedMilliseconds
         $request.requestSendStartedRelativeToForegroundMs = $request.requestSendStartedAtMs - $ForegroundAtMs
-        [void]$Socket.SendAsync(
+        $request.sendTask = $Socket.SendAsync(
             [ArraySegment[byte]]::new($requestBytes),
             [Net.WebSockets.WebSocketMessageType]::Text,
             $true,
             $cancellation.Token
-        ).GetAwaiter().GetResult()
-        $request.requestSendCompletedAtMs = [int]$Stopwatch.ElapsedMilliseconds
-        $request.requestSendCompletedRelativeToForegroundMs = $request.requestSendCompletedAtMs - $ForegroundAtMs
-        $request.requestSent = $true
+        )
+        $request.started = $true
     } catch {
         $request.error = $_.Exception.Message
-    } finally {
         $cancellation.Dispose()
+        $request.cancellation = $null
     }
     return [pscustomobject]$request
 }
@@ -1390,8 +1392,44 @@ try {
                     $firstRestoredFrameRendererCapture.error = "CDP screenshot request failed: $($_.Exception.Message)"
                 }
             }
-            $frameStartedAtMs = [int]$stopwatch.ElapsedMilliseconds
-            $metric = Get-FrameMetric -WindowHandle $windowHandle
+            $metric = $null
+            try {
+                $frameStartedAtMs = [int]$stopwatch.ElapsedMilliseconds
+                $metric = Get-FrameMetric -WindowHandle $windowHandle
+                if ($rendererCaptureStarted -and $null -ne $rendererCaptureRequest -and $rendererCaptureRequest.started) {
+                    try {
+                        [void]$rendererCaptureRequest.sendTask.GetAwaiter().GetResult()
+                        $rendererCaptureRequest.requestSendCompletedAtMs = [int]$stopwatch.ElapsedMilliseconds
+                        $rendererCaptureRequest.requestSendCompletedRelativeToForegroundMs = $rendererCaptureRequest.requestSendCompletedAtMs - [int]$frameCaptureOriginMs
+                        $rendererCaptureRequest.requestSent = $true
+                    } catch {
+                        $rendererCaptureRequest.error = $_.Exception.Message
+                    }
+                }
+            } finally {
+                if ($rendererCaptureStarted -and $null -ne $rendererCaptureRequest -and $rendererCaptureRequest.started) {
+                    if ($null -ne $rendererCaptureRequest.sendTask -and -not $rendererCaptureRequest.sendTask.IsCompleted) {
+                        try { $rendererCaptureRequest.cancellation.Cancel() } catch {
+                            if (-not $rendererCaptureRequest.error) { $rendererCaptureRequest.error = $_.Exception.Message }
+                        }
+                    }
+                    if ($null -ne $rendererCaptureRequest.sendTask) {
+                        try { [void]$rendererCaptureRequest.sendTask.GetAwaiter().GetResult() } catch {
+                            if (-not $rendererCaptureRequest.error) { $rendererCaptureRequest.error = $_.Exception.Message }
+                        }
+                    }
+                    try {
+                        if ($null -ne $rendererCaptureRequest.cancellation) {
+                            $rendererCaptureRequest.cancellation.Dispose()
+                            $rendererCaptureRequest.cancellation = $null
+                        }
+                    } catch {
+                        if (-not $rendererCaptureRequest.error) {
+                            $rendererCaptureRequest.error = "CDP screenshot request cleanup failed: $($_.Exception.Message)"
+                        }
+                    }
+                }
+            }
             if ($null -ne $metric) {
                 if ($rendererCaptureStarted -and -not $rendererCaptureReceived -and $null -ne $rendererCaptureRequest) {
                     $rendererCaptureReceived = $true

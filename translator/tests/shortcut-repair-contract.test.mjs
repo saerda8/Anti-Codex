@@ -143,7 +143,7 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
 });
 
-test("shortcut restore sends a same-page renderer capture immediately before the first restored physical frame", () => {
+test("shortcut restore starts a same-page renderer capture without delaying the first restored physical frame", () => {
   assert.match(shortcutRestoreAcceptance, /\[switch\]\$CaptureRendererForFirstRestoredFrame/);
   assert.doesNotMatch(shortcutRestoreAcceptance, /CaptureRendererOnFirst(?:Blank|PureWhite)Frame|isPureWhitePhysicalFrame|firstPureWhiteFrameRendererCapture|postBlankCadencePerturbed/);
   assert.match(shortcutRestoreAcceptance, /webSocketDebuggerUrl/);
@@ -178,7 +178,10 @@ test("shortcut restore sends a same-page renderer capture immediately before the
   const sendScreenshot = shortcutRestoreAcceptance.match(/function Send-CdpPageScreenshotRequest[\s\S]*?\n\}/)?.[0] ?? "";
   const receiveScreenshot = shortcutRestoreAcceptance.match(/function Receive-CdpPageScreenshotEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(openSocket, /\[void\]\$socket\.ConnectAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
-  assert.match(sendScreenshot, /\[void\]\$Socket\.SendAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
+  assert.match(sendScreenshot, /\$request\.sendTask\s*=\s*\$Socket\.SendAsync\(/);
+  assert.match(sendScreenshot, /\$request\.cancellation\s*=\s*\$cancellation/);
+  assert.match(sendScreenshot, /\$request\.started\s*=\s*\$true/);
+  assert.doesNotMatch(sendScreenshot, /GetAwaiter\(\)\.GetResult\(\)/);
   assert.doesNotMatch(sendScreenshot, /ReceiveAsync|Get-PngFrameMetric/);
   assert.match(receiveScreenshot, /ReceiveAsync[\s\S]*?Get-PngFrameMetric/);
   assert.match(receiveScreenshot, /screenMean = \$ScreenMetric\.mean/);
@@ -201,9 +204,19 @@ test("shortcut restore sends a same-page renderer capture immediately before the
   const send = sampling.indexOf("Send-CdpPageScreenshotRequest");
   const physicalTimestamp = sampling.indexOf("$frameStartedAtMs = [int]$stopwatch.ElapsedMilliseconds", send);
   const physical = sampling.indexOf("Get-FrameMetric -WindowHandle $windowHandle", physicalTimestamp);
-  const receive = sampling.indexOf("Receive-CdpPageScreenshotEvidence", physical);
-  assert.ok(send >= 0 && physicalTimestamp > send && physical > physicalTimestamp && receive > physical, "CDP send must precede the physical timestamp/metric and receive must follow it");
+  const awaitSend = sampling.indexOf("$rendererCaptureRequest.sendTask.GetAwaiter().GetResult()", physical);
+  const receive = sampling.indexOf("Receive-CdpPageScreenshotEvidence", awaitSend);
+  assert.ok(send >= 0 && physicalTimestamp > send && physical > physicalTimestamp && awaitSend > physical && receive > awaitSend, "CDP send must start before the physical timestamp/metric, then complete before receive");
   assert.match(sampling, /\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric/);
+  assert.match(
+    sampling,
+    /try \{\s*\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric[\s\S]*?\} finally \{[\s\S]*?\.Cancel\(\)[\s\S]*?sendTask\.GetAwaiter\(\)\.GetResult\(\)[\s\S]*?cancellation\.Dispose\(\)/,
+  );
+  const sampleCleanup = sampling.slice(
+    sampling.indexOf("} finally {", physical),
+    sampling.indexOf("if ($null -ne $metric)", physical),
+  );
+  assert.doesNotMatch(sampleCleanup, /\$probeError\s*=/);
   assert.match(sampling, /\$diagnosticCadencePerturbed = \$true[\s\S]*?Receive-CdpPageScreenshotEvidence/);
   assert.doesNotMatch(sampling, /\$probeError\s*=/);
   const probeFinally = shortcutRestoreAcceptance.slice(
@@ -241,7 +254,7 @@ test("external shortcut observation arms existing watchers without driving user 
 
 test("taskbar restore keeps the cursor off hover-activated apps until the sampling deadline", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
-  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const finallyStart = shortcutRestoreAcceptance.indexOf("\n} finally {", samplingStart);
   const deadlineStart = shortcutRestoreAcceptance.indexOf(
     "$deadlineForegroundWindowHandle = [AntiCodexShortcutRestoreProbe]::GetForegroundWindow()",
     finallyStart,
@@ -265,7 +278,7 @@ test("taskbar restore keeps the cursor off hover-activated apps until the sampli
 
 test("taskbar restore captures two exact-foreground frames before moving the cursor", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
-  const finallyStart = shortcutRestoreAcceptance.indexOf("} finally {", samplingStart);
+  const finallyStart = shortcutRestoreAcceptance.indexOf("\n} finally {", samplingStart);
   const sampling = samplingStart >= 0 && finallyStart > samplingStart
     ? shortcutRestoreAcceptance.slice(samplingStart, finallyStart)
     : "";
