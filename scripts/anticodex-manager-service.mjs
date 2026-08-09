@@ -1827,6 +1827,8 @@ function fallbackBackgroundReport(payload, action, startedAt) {
   const report = payload?.result?.diagnostics?.managerActionResults?.[action];
   const reportedAt = Date.parse(String(report?.reportedAt || ""));
   if (!report || report.exists === false || !Number.isFinite(reportedAt) || reportedAt < Number(startedAt || 0)) return null;
+  const state = String(report.state || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["running", "queued", "pending", "starting", "waiting", "processing", "in_progress", "inprogress", "updater_queued", "updater_handoff"].includes(state)) return null;
   const ok = report.effectiveOk === true || report.ok === true
     ? true
     : (report.effectiveOk === false || report.ok === false ? false : null);

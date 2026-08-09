@@ -449,6 +449,25 @@ test("fallback Manager waits for the same background action's fresh report and s
   assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z"), "stabilitySoak", startedAt).ok, true);
   assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z", false), "stabilitySoak", startedAt).ok, false);
 
+  for (const state of ["running", "queued", "pending", "updater_handoff"]) {
+    const inProgress = {
+      result: {
+        diagnostics: {
+          managerActionResults: {
+            syncHost: {
+              exists: true,
+              ok: null,
+              effectiveOk: false,
+              state,
+              reportedAt: "2026-08-01T01:00:01.000Z",
+            },
+          },
+        },
+      },
+    };
+    assert.equal(reportFor(inProgress, "syncHost", startedAt), null, `${state} is not a terminal update result`);
+  }
+
   const waitBlock = extractNamedFunction(managerService, "waitForFallbackBackgroundAction");
   const runBlock = extractNamedFunction(managerService, "runFallbackManagerAction");
   assert.match(waitBlock, /postFallbackManagerAction\("refreshStatus"\)/);
