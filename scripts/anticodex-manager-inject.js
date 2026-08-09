@@ -1863,6 +1863,7 @@
     let managerOperationInFlight = false;
     let managerOperationGeneration = 0;
     let managerView = "status";
+    let managerInitialLoadPromise = null;
 
     function setManagerOperationBusy(busy) {
       managerOperationInFlight = Boolean(busy);
@@ -1870,6 +1871,7 @@
     }
 
     async function runManagerExclusive(operation) {
+      if (managerInitialLoadPromise) await managerInitialLoadPromise;
       const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
       const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
       if (managerOperationInFlight || actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
@@ -2089,12 +2091,7 @@
       actions.style.display = "none";
       result.classList.remove("anticodex-error");
       result.textContent = "正在读取提示词设置...";
-      let promptResult = await safeJson("/anticodex/prompt-policy", { allowSnapshotFallback: false });
-      if (!promptResult.ok) {
-        const snapshot = (await refreshManagerSnapshot())?.responses?.["/anticodex/prompt-policy"]
-          || snapshotResponse("/anticodex/prompt-policy");
-        if (snapshot) promptResult = { ok: true, value: snapshot };
-      }
+      const promptResult = await safeJson("/anticodex/prompt-policy", { allowSnapshotFallback: false });
       if (!promptResult.ok) {
         result.classList.add("anticodex-error");
         result.textContent = "读取提示词设置失败：" + (promptResult.error?.message || "本地管理通道不可用");
@@ -2618,10 +2615,12 @@
     }
 
     installActions();
-    load({ updateResult: !preserveLastActionResult }).catch((error) => {
-      result.classList.add("anticodex-error");
-      result.textContent = "读取失败：" + (error?.message || "本地状态暂不可用");
-    });
+    managerInitialLoadPromise = load({ updateResult: !preserveLastActionResult })
+      .catch((error) => {
+        result.classList.add("anticodex-error");
+        result.textContent = "读取失败：" + (error?.message || "本地状态暂不可用");
+      })
+      .finally(() => { managerInitialLoadPromise = null; });
   }
 
   function installManagerRuntime() {

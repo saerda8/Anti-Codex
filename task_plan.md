@@ -3630,7 +3630,7 @@ The accepted media task remains frozen. Current source closure is not installed 
 
 ### 2026-08-09 physical installed acceptance repair
 
-- [x] Use the user's controlled-shutdown authorization to activate the previous clean source once, then launch exactly one Anti-Codex from the real Desktop shortcut. Official Codex remained running and no provider traffic or Docker action occurred.
+- [x] Use the user's controlled-shutdown authorization to activate the previous clean source once, then launch exactly one Anti-Codex through the Desktop shortcut's exact installed broker payload. This tool session could not ShellExecute the `.lnk`, so the user's real Desktop/Start click remains a separate external observation. Official Codex remained running and no provider traffic or Docker action occurred.
 - [x] Physically open the installed Manager and native Settings. The current Codex package exposes 16 visible Settings pages and 13 registered feature-gated pages; fix the verifier so gated pages are reported instead of falsely required as visible.
 - [x] Reproduce the prompt restore race with a real mouse run. Wait for true Manager view generations and operation generations, restore all four semantic layers, and restore the exact pre-test bytes/existence of `prompt-policy.json` and isolated `AGENTS.md` in `finally`. Focused Manager coverage passes `84/84`.
 - [x] Diagnose the live tray false appearance: the icon resource is correctly pink, but revision 5 shares the official Windows tray GUID and collides with the simultaneously running official Codex. Source revision 6 assigns one stable Anti-Codex-only GUID and keeps revision 5 rollback-compatible.
@@ -3640,4 +3640,13 @@ The accepted media task remains frozen. Current source closure is not installed 
 The running installed client remains revision 5 until that final activation. Do not claim project-wide 100% from source-only tests.
 
 - [x] Reject the first `cbe1f53` full preflight as an activation checkpoint: all reported checks stayed green but the 63-file translator regression exceeded the inherited 240-second process limit and was terminated at 240,505 ms. Give only the translator regression a fixed 600-second floor; focused timeout-contract coverage is RED then `4/4` GREEN.
-- [ ] Commit the timeout correction and obtain one replacement exact-HEAD no-traffic preflight before activation.
+- [x] Commit the timeout correction and obtain one replacement exact-HEAD no-traffic preflight before activation.
+
+### 2026-08-09 installed revision 6 acceptance continuation
+
+- [x] Commit the translator-only timeout floor as `7b0b39a5ade0d4cb57f49b698b35b6bd9c9c5d0f` and pass the replacement exact-HEAD no-traffic preflight: all 13 checks and translator `990/990` pass with zero failures/warnings/skips; report `20260809-152421-source-preflight.json` SHA-256 is `d6b2c5a114005f722465b4636aca9395882035fb7b585038f532f65194129d6`.
+- [x] Use the authorized supervisor shutdown once, activate the 126-file current runtime without restart, run the newly installed host/CodexPlusPlus updater without restart, and verify host revision 6 plus CodexPlusPlus `1.2.45`. Refresh local features separately and verify Connector/Skill/app-tool parity including Montage. Official Codex stayed running and unchanged; no provider request or Docker action occurred.
+- [x] Start exactly one Anti-Codex and pass the installed native Settings real-mouse acceptance: all 16 visible pages open without crash/loading/external account surfaces, 13 feature-gated pages are reported, and isolated Personalization writes then restores the original present empty `AGENTS.md`.
+- [x] Reproduce the remaining Manager prompt failure without exposing prompt contents: the live service and disk agree before and after the test write, while a prompt form opened during the initial Manager load falls back to a stale snapshot. Add RED/GREEN contracts so exclusive operations await the initial status load and the write-capable prompt editor never accepts snapshot fallback; focused Manager coverage is `85/85`.
+- [ ] Commit this narrow Manager repair, pass one exact clean no-traffic preflight, then use the existing controlled-shutdown authorization to activate it once. Restart exactly one Anti-Codex and rerun prompt save/restore, three close positions, Manager UI/safe actions, Desktop/Start/taskbar single-instance and live pink-tray acceptance.
+- [ ] Only after installed acceptance passes, resume autonomous smoke testing. Provider priority is fixed to Antigravity Gemini, then Claude; Xiaomi MIMO 2.5 Pro is a third-party fallback only when both are explicitly unavailable. Do not persist credentials in source, plans, findings or logs.

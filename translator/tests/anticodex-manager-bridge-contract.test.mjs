@@ -2078,14 +2078,18 @@ test("Manager prompt editor bypasses a stale snapshot after saving", () => {
     promptSettingsBlock,
     /safeJson\("\/anticodex\/prompt-policy", \{ allowSnapshotFallback: false \}\)/,
   );
-  const refreshIndex = promptSettingsBlock.indexOf("await refreshManagerSnapshot()");
-  const staleFallbackIndex = promptSettingsBlock.indexOf('snapshotResponse("/anticodex/prompt-policy")');
-  assert.ok(refreshIndex >= 0, "a failed live read must refresh the Manager snapshot");
-  assert.ok(staleFallbackIndex >= 0, "prompt reads must retain a last-resort snapshot fallback");
-  assert.ok(
-    refreshIndex < staleFallbackIndex,
-    "a failed live read must refresh before accepting an older prompt snapshot",
-  );
+  assert.doesNotMatch(promptSettingsBlock, /refreshManagerSnapshot\(\)/);
+  assert.doesNotMatch(promptSettingsBlock, /snapshotResponse\("\/anticodex\/prompt-policy"\)/);
+  assert.match(promptSettingsBlock, /读取提示词设置失败/);
+});
+
+test("Manager waits for its initial status load before accepting an exclusive operation", () => {
+  const openManagerBlock = extractNamedFunction(managerInject, "openManager");
+  const runManagerExclusiveBlock = extractNamedFunction(openManagerBlock, "runManagerExclusive");
+  assert.match(openManagerBlock, /let managerInitialLoadPromise = null;/);
+  assert.match(runManagerExclusiveBlock, /if \(managerInitialLoadPromise\) await managerInitialLoadPromise;/);
+  assert.match(openManagerBlock, /managerInitialLoadPromise = load\(\{ updateResult: !preserveLastActionResult \}\)/);
+  assert.match(openManagerBlock, /managerInitialLoadPromise = null;/);
 });
 
 test("physical prompt restore waits for the prompt view to unlock", () => {
