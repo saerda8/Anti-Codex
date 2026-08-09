@@ -20,6 +20,7 @@ const shortcutRestoreAcceptancePath = resolve(root, "scripts", "test-anticodex-s
 const shortcutRestoreAcceptance = existsSync(shortcutRestoreAcceptancePath)
   ? readFileSync(shortcutRestoreAcceptancePath, "utf8")
   : "";
+const gate5EvidenceBuilder = readFileSync(resolve(root, "scripts", "build-anticodex-gate5-evidence.mjs"), "utf8");
 
 test("interactive shortcut broker recovers the exact hidden main window without selecting an overlay", () => {
   assert.equal(existsSync(shortcutBrokerPath), true);
@@ -110,7 +111,7 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   );
   assert.match(
     shortcutRestoreAcceptance,
-    /if \(\$null -ne \$frameCaptureOriginMs -and \$isVisible -and -not \$isMinimized -and \$isExactForeground\) \{\s*\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric -WindowHandle \$windowHandle/,
+    /if \(\$null -ne \$frameCaptureOriginMs -and \$isVisible -and -not \$isMinimized -and \$isExactForeground\) \{[\s\S]*?\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric -WindowHandle \$windowHandle/,
   );
   assert.match(shortcutRestoreAcceptance, /\$sampleDeadlineMs\s*=\s*\[int\]\$activationSentAtMs\s*\+\s*\$SampleDurationMs/);
   assert.match(shortcutRestoreAcceptance, /while \(\$stopwatch\.ElapsedMilliseconds -lt \$sampleDeadlineMs\)/);
@@ -142,9 +143,9 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
 });
 
-test("shortcut restore can capture one same-page CDP screenshot for the first physical pure-white frame without changing acceptance", () => {
-  assert.match(shortcutRestoreAcceptance, /\[switch\]\$CaptureRendererOnFirstPureWhiteFrame/);
-  assert.doesNotMatch(shortcutRestoreAcceptance, /CaptureRendererOnFirstBlankFrame|rendererIsBlank/);
+test("shortcut restore sends a same-page renderer capture immediately before the first restored physical frame", () => {
+  assert.match(shortcutRestoreAcceptance, /\[switch\]\$CaptureRendererForFirstRestoredFrame/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /CaptureRendererOnFirst(?:Blank|PureWhite)Frame|isPureWhitePhysicalFrame|firstPureWhiteFrameRendererCapture|postBlankCadencePerturbed/);
   assert.match(shortcutRestoreAcceptance, /webSocketDebuggerUrl/);
   assert.match(shortcutRestoreAcceptance, /Page\.captureScreenshot/);
   assert.match(shortcutRestoreAcceptance, /\$sessionBefore\.targetId/);
@@ -152,10 +153,6 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
   assert.match(
     shortcutRestoreAcceptance,
     /rendererIsNearWhite\s*=\s*\$mean\s+-ge\s+250\s+-and\s+\$standardDeviation\s+-lt\s+5\s+-and\s+\$darkRatio\s+-lt\s+0\.005/,
-  );
-  assert.match(
-    shortcutRestoreAcceptance,
-    /\$isPureWhitePhysicalFrame\s*=\s*\$metric\.mean\s+-ge\s+250\s+-and\s+\$metric\.standardDeviation\s+-lt\s+5\s+-and\s+\$metric\.darkRatio\s+-lt\s+0\.005[\s\S]*?if \(\$CaptureRendererOnFirstPureWhiteFrame -and \$isPureWhitePhysicalFrame -and -not \$rendererCaptureStarted -and \$null -ne \$rendererCaptureSocket\)[\s\S]*?Invoke-CdpPageScreenshotEvidence[\s\S]*?-Socket \$rendererCaptureSocket/,
   );
   assert.match(shortcutRestoreAcceptance, /captureStartedRelativeToForegroundMs/);
   assert.match(shortcutRestoreAcceptance, /requestSendStartedAtMs/);
@@ -166,23 +163,34 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
   assert.doesNotMatch(shortcutRestoreAcceptance, /requestSentAtMs|requestSentRelativeMs/);
   assert.match(shortcutRestoreAcceptance, /pngSha256/);
   assert.match(shortcutRestoreAcceptance, /rendererIsNearWhite/);
-  assert.match(shortcutRestoreAcceptance, /firstPureWhiteFrameRendererCapture = \$firstPureWhiteFrameRendererCapture/);
-  assert.match(shortcutRestoreAcceptance, /postBlankCadencePerturbed = \$postBlankCadencePerturbed/);
+  assert.match(shortcutRestoreAcceptance, /firstRestoredFrameRendererCapture = \$firstRestoredFrameRendererCapture/);
+  assert.match(shortcutRestoreAcceptance, /diagnosticCadencePerturbed = \$diagnosticCadencePerturbed/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /postFirstFrameCadencePerturbed/);
   assert.match(shortcutRestoreAcceptance, /cdpPreconnectedBeforeActivation = \$cdpPreconnectedBeforeActivation/);
+  assert.match(shortcutRestoreAcceptance, /diagnosticOnly = \$diagnosticOnly/);
+  assert.match(shortcutRestoreAcceptance, /eligibleForGate = \$eligibleForGate/);
+  assert.match(shortcutRestoreAcceptance, /latest-shortcut-restore-diagnostic\.json/);
+  assert.match(shortcutRestoreAcceptance, /anticodex-shortcut-restore-diagnostic-v1/);
+  assert.match(gate5EvidenceBuilder, /raw\?\.schema === "anticodex-shortcut-restore-acceptance-v1"/);
+  assert.doesNotMatch(gate5EvidenceBuilder, /anticodex-shortcut-restore-diagnostic-v1|latest-shortcut-restore-diagnostic/);
   assert.doesNotMatch(shortcutRestoreAcceptance, /rendererCaptureRunspace|rendererCapturePowerShell|rendererCaptureAsync/);
   const openSocket = shortcutRestoreAcceptance.match(/function Open-CdpPageScreenshotSocket[\s\S]*?\n\}/)?.[0] ?? "";
-  const captureScreenshot = shortcutRestoreAcceptance.match(/function Invoke-CdpPageScreenshotEvidence[\s\S]*?\n\}/)?.[0] ?? "";
+  const sendScreenshot = shortcutRestoreAcceptance.match(/function Send-CdpPageScreenshotRequest[\s\S]*?\n\}/)?.[0] ?? "";
+  const receiveScreenshot = shortcutRestoreAcceptance.match(/function Receive-CdpPageScreenshotEvidence[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(openSocket, /\[void\]\$socket\.ConnectAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
-  assert.match(captureScreenshot, /\[void\]\$Socket\.SendAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
+  assert.match(sendScreenshot, /\[void\]\$Socket\.SendAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
+  assert.doesNotMatch(sendScreenshot, /ReceiveAsync|Get-PngFrameMetric/);
+  assert.match(receiveScreenshot, /ReceiveAsync[\s\S]*?Get-PngFrameMetric/);
+  assert.match(receiveScreenshot, /screenMean = \$ScreenMetric\.mean/);
 
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const socketConnect = shortcutRestoreAcceptance.indexOf("$rendererCaptureSocket = Open-CdpPageScreenshotSocket");
   assert.ok(socketConnect >= 0 && socketConnect < samplingStart, "renderer CDP socket must be connected before sampling");
   assert.match(shortcutRestoreAcceptance.slice(socketConnect, samplingStart), /\$cdpPreconnectedBeforeActivation = \$true/);
-  const setupStart = shortcutRestoreAcceptance.indexOf("if ($CaptureRendererOnFirstPureWhiteFrame) {");
+  const setupStart = shortcutRestoreAcceptance.indexOf("if ($CaptureRendererForFirstRestoredFrame) {");
   const setupEnd = shortcutRestoreAcceptance.indexOf("$topologyWatcherRunspace =", setupStart);
   const setup = shortcutRestoreAcceptance.slice(setupStart, setupEnd);
-  assert.match(setup, /try \{[\s\S]*?Open-CdpPageScreenshotSocket[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error/);
+  assert.match(setup, /try \{[\s\S]*?Open-CdpPageScreenshotSocket[\s\S]*?\} catch \{[\s\S]*?firstRestoredFrameRendererCapture\.error/);
   assert.match(setup, /rendererCaptureSocket\.Dispose\(\)/);
   assert.doesNotMatch(setup, /\$probeError|\$failures/);
 
@@ -190,10 +198,13 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
     samplingStart,
     shortcutRestoreAcceptance.indexOf("if ($taskbarActivationObserved -and $frames.Count", samplingStart),
   );
-  assert.match(
-    sampling,
-    /if \(\$CaptureRendererOnFirstPureWhiteFrame[\s\S]*?\$rendererCaptureStarted = \$true[\s\S]*?\$postBlankCadencePerturbed = \$true[\s\S]*?Invoke-CdpPageScreenshotEvidence[\s\S]*?-Socket \$rendererCaptureSocket/,
-  );
+  const send = sampling.indexOf("Send-CdpPageScreenshotRequest");
+  const physicalTimestamp = sampling.indexOf("$frameStartedAtMs = [int]$stopwatch.ElapsedMilliseconds", send);
+  const physical = sampling.indexOf("Get-FrameMetric -WindowHandle $windowHandle", physicalTimestamp);
+  const receive = sampling.indexOf("Receive-CdpPageScreenshotEvidence", physical);
+  assert.ok(send >= 0 && physicalTimestamp > send && physical > physicalTimestamp && receive > physical, "CDP send must precede the physical timestamp/metric and receive must follow it");
+  assert.match(sampling, /\$frameStartedAtMs = \[int\]\$stopwatch\.ElapsedMilliseconds\s*\$metric = Get-FrameMetric/);
+  assert.match(sampling, /\$diagnosticCadencePerturbed = \$true[\s\S]*?Receive-CdpPageScreenshotEvidence/);
   assert.doesNotMatch(sampling, /\$probeError\s*=/);
   const probeFinally = shortcutRestoreAcceptance.slice(
     shortcutRestoreAcceptance.indexOf("} finally {", samplingStart),
@@ -205,7 +216,7 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
     shortcutRestoreAcceptance.indexOf("$failures = New-Object"),
     shortcutRestoreAcceptance.indexOf("$checkedAt ="),
   );
-  assert.doesNotMatch(failureBlock, /firstPureWhiteFrameRendererCapture|rendererCapture(?:Error|Started|Completed)/);
+  assert.doesNotMatch(failureBlock, /firstRestoredFrameRendererCapture|rendererCapture(?:Error|Started|Completed)/);
 });
 
 test("external shortcut observation arms existing watchers without driving user input", () => {
