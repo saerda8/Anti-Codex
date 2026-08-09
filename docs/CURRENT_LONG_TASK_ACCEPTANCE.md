@@ -349,3 +349,13 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - Source commit `18de6345` exposes the real CodexPlusPlus patch-tool compatibility guidance as a read-only prompt layer without changing or duplicating request policy.
 - Historical checkpoint `f9d980b` passes 13/13 aggregate checks and `964/964` translator tests, zero failures/warnings/skips, without provider traffic. Report `20260809-081909-source-preflight.json` SHA-256 is `e574271c0161288aa0531ec848a2ca4578de866b098401b4cd6a385c4f150cfb`; because it predates `7be3979`, a fresh clean exact-HEAD preflight is still required before activation.
 - These remain source-only facts. Installed acceptance and the project-wide 100% claim stay open until Anti-Codex naturally exits, one fresh current transaction activates the changes, and the real external-entry/Manager/prompt/recovery matrix passes.
+
+## 2026-08-09 source truth integration after the frozen task
+
+- The autonomous media artifact stays accepted and frozen; no prompt, continuation or provider request was sent during this product-repair lane.
+- Clean main commit `dd0b4acc14f146f360a5390bed4c4a2c6ca3256b` combines the live tray gate, transactional four-layer prompt restore, dynamic native Settings completeness, truthful Manager UI-versus-handler evidence, exact installed-runtime/live-supervisor provenance, runtime-generation age binding and PID-reuse-safe test cleanup.
+- The clean merged source passes the directly affected combined suite `155/155`, release self-test `13/13`, JavaScript/PowerShell syntax, diff hygiene and a post-merge independent review with no P0-P2. These are offline source facts only.
+- The running Anti-Codex was not restarted or synchronized and remains its existing 15-process tree. Therefore installed host revision 4, installed CodexPlusPlus 1.2.44, current Manager UI and external Desktop/Start/tray behavior have not yet accepted the new source.
+- Completion remains open: first run a fresh exact-HEAD no-traffic source preflight; then wait for the Anti-Codex tree to reach zero naturally; then activate one fresh current runtime plus CodexPlusPlus 1.2.45 and the pending connector refresh with `NoRestart`; finally perform installed Manager, Settings, prompt, recovery-page and external-entry physical acceptance. Only after those pass may a new autonomous long smoke task be started.
+
+Do not use the frozen media result to hide these product-release gaps, and do not relabel the current project 100% before installed acceptance.
