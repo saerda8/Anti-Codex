@@ -59,7 +59,8 @@ test("Gate 5 is an offline explicit-evidence aggregate, not an old traffic/UI ru
     "--release-binding-evidence",
   ]) assert.match(source, new RegExp(requiredFlag));
   assert.match(source, /args\.has\("--help"\)/);
-  assert.doesNotMatch(source, /spawnSync|fetch\s*\(/);
+  assert.match(source, /spawnSync\("git"/);
+  assert.doesNotMatch(source, /fetch\s*\(/);
   assert.doesNotMatch(source, /latest-gate5-visible-(?:text|tool|history)/);
   assert.doesNotMatch(source, /gemini-3-flash-agent|1\.2\.36/);
 });
@@ -114,22 +115,22 @@ function writeSigned(path, value) {
   writeFileSync(`${path}.sha256`, `sha256:${hash(body)}`, "ascii");
 }
 
-function fixture(root) {
+function fixture(root, fixtureSourceRoot = sourceRoot) {
   const checkedAt = new Date().toISOString();
   const runtimeRoot = join(root, "runtime");
   mkdirSync(join(runtimeRoot, "scripts"), { recursive: true });
   const runtimeFiles = managerContractFiles.map((relativePath) => {
-    const bytes = readFileSync(resolve(sourceRoot, relativePath));
+    const bytes = readFileSync(resolve(fixtureSourceRoot, relativePath));
     const runtimePath = resolve(runtimeRoot, relativePath);
     mkdirSync(dirname(runtimePath), { recursive: true });
     writeFileSync(runtimePath, bytes);
     return { relativePath, fileSha256: hash(bytes), manifestSha256: hash(bytes) };
   });
-  const sourceGitHead = String(spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout || "").trim().toLowerCase();
+  const sourceGitHead = String(spawnSync("git", ["-C", fixtureSourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout || "").trim().toLowerCase();
   const manifestPath = join(runtimeRoot, ".anticodex-runtime-manifest.json");
   writeFileSync(manifestPath, `${JSON.stringify({
     schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
-    sourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    sourceRoot: fixtureSourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
     files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
   }, null, 2)}\n`, "utf8");
   const taskId = "019f9000-1111-7222-8333-444444444444";
@@ -210,7 +211,7 @@ function fixture(root) {
       provenance: {
         schema: "anticodex-manager-handler-provenance-v1", verified: true,
         runtimeRoot, scriptsRoot: join(runtimeRoot, "scripts"), manifestPath,
-        manifestSha256: hash(readFileSync(manifestPath)), sourceRoot, sourceGitHead,
+        manifestSha256: hash(readFileSync(manifestPath)), sourceRoot: fixtureSourceRoot, sourceGitHead,
         sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
       },
     },
@@ -316,14 +317,16 @@ function addContinuation(state) {
   };
 }
 
-function runFixture(root, mutate = () => {}) {
-  const state = fixture(root);
+function runFixture(root, mutate = () => {}, options = {}) {
+  const fixtureSourceRoot = options.sourceRoot || sourceRoot;
+  const fixtureAggregateScriptPath = options.aggregateScriptPath || aggregateScriptPath;
+  const state = fixture(root, fixtureSourceRoot);
   mutate(state);
   for (const [name, value] of Object.entries(state.values)) writeSigned(state.paths[name], value);
   const reportRoot = join(root, "reports");
   const auditPath = join(root, "gate5-audit.json");
   const child = spawnSync(process.execPath, [
-    aggregateScriptPath,
+    fixtureAggregateScriptPath,
     "--task-manifest", state.paths.taskManifest,
     "--manager-evidence", state.paths.managerEvidence,
     "--model-switch-evidence", state.paths.modelSwitchEvidence,
@@ -336,6 +339,35 @@ function runFixture(root, mutate = () => {}) {
   const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
   return { child, payload, reportRoot, auditPath, state };
 }
+
+test("Gate 5 fails closed when the current source worktree becomes dirty after evidence capture", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-live-source-"));
+  try {
+    const fixtureSourceRoot = join(root, "source");
+    const fixtureAggregateScriptPath = join(fixtureSourceRoot, "scripts", "test-anticodex-gate5-visible-integration.mjs");
+    for (const relativePath of [...managerContractFiles, "scripts/test-anticodex-gate5-visible-integration.mjs"]) {
+      const destination = resolve(fixtureSourceRoot, relativePath);
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(destination, readFileSync(resolve(sourceRoot, relativePath)));
+    }
+    writeFileSync(join(fixtureSourceRoot, "revision-marker.txt"), "captured\n", "utf8");
+    for (const gitArgs of [
+      ["init"],
+      ["add", "."],
+      ["-c", "user.name=Gate5 Test", "-c", "user.email=gate5@example.invalid", "commit", "-m", "fixture"],
+    ]) {
+      const git = spawnSync("git", ["-C", fixtureSourceRoot, ...gitArgs], { encoding: "utf8", windowsHide: true });
+      assert.equal(git.status, 0, git.stderr || git.stdout);
+    }
+    const result = runFixture(join(root, "evidence"), () => {
+      writeFileSync(join(fixtureSourceRoot, "revision-marker.txt"), "dirty after capture\n", "utf8");
+    }, { sourceRoot: fixtureSourceRoot, aggregateScriptPath: fixtureAggregateScriptPath });
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /manager_actual_mouse_matrix/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("Gate 5 rehashes current artifacts and signs a successful offline aggregate", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-aggregate-"));

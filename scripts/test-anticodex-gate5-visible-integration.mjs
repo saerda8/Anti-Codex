@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -128,6 +129,22 @@ function normalizedContractPath(value) {
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
 }
 
+function currentSourceGitState() {
+  const run = (gitArgs) => spawnSync("git", ["-C", sourceRoot, ...gitArgs], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const headResult = run(["rev-parse", "HEAD"]);
+  const head = String(headResult.stdout || "").trim().toLowerCase();
+  if (headResult.error || headResult.status !== 0 || !/^[0-9a-f]{40}$/.test(head)) {
+    return { ok: false, head, clean: false };
+  }
+  const statusResult = run(["status", "--porcelain=v1", "--untracked-files=normal"]);
+  if (statusResult.error || statusResult.status !== 0) return { ok: false, head, clean: false };
+  return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
+}
+
 function validateManagerHandlerProvenance(handlerVerification) {
   const contracts = handlerVerification?.contracts || {};
   const contractEntries = Object.entries(contracts);
@@ -135,6 +152,7 @@ function validateManagerHandlerProvenance(handlerVerification) {
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
   const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  const sourceGit = currentSourceGitState();
   if (contractEntries.length !== managerActions.length
     || !contractEntries.every(([action, entry], index) => {
       const expected = managerHandlerContractByAction[action];
@@ -148,9 +166,10 @@ function validateManagerHandlerProvenance(handlerVerification) {
     || !samePath(provenance?.scriptsRoot, resolve(runtimeRoot, "scripts"))
     || !samePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
     || !samePath(provenance?.sourceRoot, sourceRoot)
-    || provenance?.sourceGitClean !== true
+    || sourceGit.ok !== true || sourceGit.clean !== true
+    || provenance?.sourceGitClean !== sourceGit.clean
     || provenance?.sourceRevisionProvenance !== "git"
-    || !/^[a-f0-9]{40}$/i.test(String(provenance?.sourceGitHead || ""))
+    || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
     || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
     || !/^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
     || sha256(readFileSync(manifestPath)) !== String(provenance.manifestSha256).toLowerCase()) return false;
@@ -158,8 +177,8 @@ function validateManagerHandlerProvenance(handlerVerification) {
   try { manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, "")); } catch { return false; }
   if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
     || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
-    || manifest?.sourceGitClean !== true || manifest?.sourceRevisionProvenance !== "git"
-    || String(manifest?.sourceGitHead || "").toLowerCase() !== String(provenance.sourceGitHead).toLowerCase()) return false;
+    || manifest?.sourceGitClean !== sourceGit.clean || manifest?.sourceRevisionProvenance !== "git"
+    || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head) return false;
   const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source),
     String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
