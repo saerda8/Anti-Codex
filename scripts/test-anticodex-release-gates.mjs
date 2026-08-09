@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -54,6 +54,40 @@ const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA
 const maxAgeHours = Math.max(0.01, Number(args.get("--max-age-hours") || 48));
 const strict = args.has("--strict");
 const compactOutput = args.has("--summary") || args.has("--compact") || args.has("--compact-status") || args.has("--status");
+const runtimeManifestClockToleranceMs = 1;
+const managerActions = Object.freeze([
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const managerHandlerContractByAction = Object.freeze({
+  refreshStatus: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"], refreshModels: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  accountSwitch: ["script", "scripts/anticodex-manager-service.mjs", "open-antigravity-account-switch.ps1"], accountProxy: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-account-proxy-readiness.ps1"],
+  syncReadiness: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-sync-readiness.ps1"], repairShortcuts: ["script", "scripts/anticodex-manager-service.mjs", "repair-anticodex-shortcuts.ps1"],
+  updateCheck: ["script", "scripts/anticodex-manager-service.mjs", "check-anticodex-update.ps1"], sourcePreflight: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-source-preflight.ps1"],
+  mcpSkills: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-mcp-skills.ps1"], pluginCapabilities: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-plugin-capabilities.ps1"],
+  diagnosticsBundle: ["script", "scripts/anticodex-manager-service.mjs", "collect-anticodex-diagnostics.ps1"], viewLatestReports: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  syncHost: ["script", "scripts/anticodex-manager-service.mjs", "sync-anticodex-launcher.ps1"], upstreamConfig: ["ui-function", "scripts/anticodex-manager-inject.js", "ui-function"],
+  refreshFeatures: ["script", "scripts/anticodex-manager-service.mjs", "refresh-anticodex-local-features.ps1"], stabilitySoak: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-stability-soak.ps1"],
+  coldRelaunch: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-cold-relaunch.ps1"], fastOverallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  overallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"], postVerificationFull: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-post-verification.ps1"],
+});
+
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
+}
 
 function sha256Buffer(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -61,6 +95,78 @@ function sha256Buffer(value) {
 
 function sha256File(path) {
   return sha256Buffer(readFileSync(path));
+}
+
+function samePath(left, right) {
+  try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
+}
+
+function normalizedContractPath(value) {
+  const normalized = String(value || "").replaceAll("\\", "/");
+  return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
+}
+
+function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
+  const contracts = handlerVerification?.contracts || {};
+  const entries = Object.entries(contracts);
+  const provenance = handlerVerification?.provenance || {};
+  const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
+  const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
+  const taskRuntimeCreationDateUtc = String(provenance?.taskRuntimeCreationDateUtc || "");
+  const sourceGit = currentSourceGitState();
+  const liveTaskRuntime = queryExactWindowsProcess(taskRuntimePid);
+  const expectedTaskRuntimeScript = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
+  if (entries.length !== managerActions.length || !entries.every(([action, entry], index) => {
+    const expected = managerHandlerContractByAction[action];
+    return action === managerActions[index] && entry?.verified === true && String(entry?.kind || "") === expected?.[0]
+      && String(entry?.source || "") === expected?.[1] && String(entry?.handler || "") === expected?.[2];
+  }) || provenance?.schema !== "anticodex-manager-handler-provenance-v1" || provenance?.verified !== true
+    || !samePath(provenance?.scriptsRoot, resolve(runtimeRoot, "scripts"))
+    || !samePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
+    || !samePath(provenance?.sourceRoot, sourceRoot) || sourceGit.ok !== true
+    || taskRuntimePid <= 0 || taskRuntimePid !== Number(runtimeIdentity?.supervisorPid || 0)
+    || !samePath(provenance?.taskRuntimeScriptPath, expectedTaskRuntimeScript)
+    || !liveTaskRuntime || Number(liveTaskRuntime.processId) !== taskRuntimePid
+    || String(liveTaskRuntime.executablePath || "").replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() !== "node.exe"
+    || !Array.isArray(liveTaskRuntime.arguments) || liveTaskRuntime.arguments.length < 2
+    || !samePath(liveTaskRuntime.arguments[1], expectedTaskRuntimeScript)
+    || !taskRuntimeCreationDateUtc || String(liveTaskRuntime.creationDateUtc || "") !== taskRuntimeCreationDateUtc
+    || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
+    || provenance?.sourceGitClean !== true || provenance?.sourceRevisionProvenance !== "git"
+    || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
+    || sha256File(manifestPath) !== String(provenance?.manifestSha256 || "").toLowerCase()) return false;
+  let manifest;
+  try { manifest = readJson(manifestPath); } catch { return false; }
+  if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
+    || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
+    || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head
+    || manifest?.sourceGitClean !== true || manifest?.sourceRevisionProvenance !== "git"
+    || !processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt)) return false;
+  const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...entries.flatMap(([, entry]) => [
+    normalizedContractPath(entry?.source), String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
+  ])].filter(Boolean))];
+  const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
+  if (files.length !== expectedFiles.length || fileByPath.size !== files.length) return false;
+  return expectedFiles.every((relativePath) => {
+    const entry = fileByPath.get(relativePath);
+    const expectedHash = String(entry?.fileSha256 || "").toLowerCase();
+    const manifestEntry = Object.entries(manifest?.files || {}).find(([path]) => normalizedContractPath(path) === relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    const currentSourcePath = resolve(sourceRoot, relativePath);
+    return /^[a-f0-9]{64}$/.test(expectedHash) && String(entry?.manifestSha256 || "").toLowerCase() === expectedHash
+      && String(manifestEntry?.[1] || "").toLowerCase() === expectedHash
+      && existsSync(runtimePath) && statSync(runtimePath).isFile() && sha256File(runtimePath) === expectedHash
+      && existsSync(currentSourcePath) && statSync(currentSourcePath).isFile() && sha256File(currentSourcePath) === expectedHash;
+  });
 }
 
 function readJson(path) {
@@ -81,6 +187,77 @@ function currentSourceGitState(root = sourceRoot) {
   const statusResult = run(["status", "--porcelain=v1", "--untracked-files=normal"]);
   if (statusResult.error || statusResult.status !== 0) return { ok: false, head, clean: false };
   return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
+}
+
+function queryExactWindowsProcess(processId) {
+  if (!Number.isInteger(processId) || processId <= 0 || process.platform !== "win32") return null;
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = String.raw`
+$ErrorActionPreference = "Stop"
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class AntiCodexReleaseCommandLine {
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern IntPtr CommandLineToArgvW(string value, out int count);
+  [DllImport("kernel32.dll", SetLastError = true)]
+  private static extern IntPtr LocalFree(IntPtr value);
+  public static string[] Parse(string value) {
+    int count; IntPtr vector = CommandLineToArgvW(value, out count);
+    if (vector == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+    try { var result = new string[count]; for (int i = 0; i < count; i++) result[i] = Marshal.PtrToStringUni(Marshal.ReadIntPtr(vector, i * IntPtr.Size)) ?? String.Empty; return result; }
+    finally { LocalFree(vector); }
+  }
+}
+'@
+$rows = @(Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction Stop)
+if ($rows.Count -ne 1) { throw "exact process not found" }
+$row = $rows[0]
+[pscustomobject]@{
+  processId = [int]$row.ProcessId
+  executablePath = [string]$row.ExecutablePath
+  creationDateUtc = ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+  arguments = @([AntiCodexReleaseCommandLine]::Parse([string]$row.CommandLine))
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+  const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    encoding: "utf8", windowsHide: true, timeout: 15000,
+  });
+  if (result.error || result.status !== 0) return null;
+  try { return JSON.parse(String(result.stdout || "").trim()); } catch { return null; }
+}
+
+function startSuspendedSelfTestSupervisor(scriptPath) {
+  const child = spawn(process.execPath, [scriptPath], {
+    env: { ...process.env, NODE_OPTIONS: "--inspect-brk=0" },
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  let snapshot = null;
+  for (let attempt = 0; attempt < 20 && !snapshot; attempt += 1) {
+    snapshot = queryExactWindowsProcess(child.pid);
+    if (!snapshot) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  if (!snapshot) {
+    child.kill();
+    throw new Error("could not observe suspended fixed-route self-test supervisor");
+  }
+  return { child, snapshot };
+}
+
+function stopSelfTestSupervisor(supervisor, {
+  queryProcess = queryExactWindowsProcess,
+  killProcessTree = (processId) => spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], { windowsHide: true, stdio: "ignore" }),
+} = {}) {
+  const processId = Number(supervisor?.child?.pid || 0);
+  const capturedProcessId = Number(supervisor?.snapshot?.processId || 0);
+  const expectedCreationDateUtc = String(supervisor?.snapshot?.creationDateUtc || "");
+  if (!Number.isInteger(processId) || processId <= 0 || capturedProcessId !== processId || !expectedCreationDateUtc) return false;
+  const liveProcess = queryProcess(processId);
+  if (Number(liveProcess?.processId || 0) !== processId
+    || String(liveProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
+  return killProcessTree(processId)?.status === 0;
 }
 
 const codexPlusPlusMetadata = readJson(join(sourceRoot, "third_party", "codexplusplus", "upstream.json"));
@@ -209,11 +386,22 @@ function validateGate5CurrentUiEvidence(report, failures) {
   const closeProbes = Array.isArray(manager?.closeProbes) ? manager.closeProbes : [];
   const closeByName = Object.fromEntries(closeProbes.map((entry) => [String(entry?.name || ""), entry]));
   const protocol = manager?.protocolInteraction || {};
+  const uiInteraction = manager?.uiInteraction || {};
+  const handlerVerification = manager?.handlerVerification || {};
   if (manager?.ok !== true
     || manager?.usedRealTraffic !== false
     || manager?.actualMouse !== true
     || Number(manager?.actionCount) < 20
     || manager?.zeroSideEffects !== true
+    || uiInteraction?.scope !== "ui-interaction-only"
+    || Number(uiInteraction?.verifiedCount) !== managerActions.length
+    || !exactStringList(uiInteraction?.verifiedActionIds, managerActions)
+    || !exactStringList(handlerVerification?.offlineContractVerifiedActionIds, managerActions)
+    || !exactStringList(handlerVerification?.safeRealActionIds, safeRealManagerActions)
+    || !exactStringList(handlerVerification?.realExecutedActionIds, [])
+    || !exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
+    || handlerVerification?.allFunctionsVerified !== false
+    || !validateManagerHandlerProvenance(handlerVerification, manager?.runtimeIdentity)
     || manager?.profileEntryText !== "管理"
     || manager?.forbiddenEnglishVisible !== false
     || manager?.trayIconPreserved !== true
@@ -700,7 +888,22 @@ function gate8NextAction(missingEvidence = []) {
 
 function selfTest() {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
+  let gate5Supervisor = null;
   try {
+    const cleanupIdentity = {
+      child: { pid: 999999999 },
+      snapshot: { processId: 999999999, creationDateUtc: "2026-08-09T00:00:00.0000000Z" },
+    };
+    let cleanupKillCalls = 0;
+    const cleanupKillProcessTree = () => { cleanupKillCalls += 1; return { status: 0 }; };
+    if (stopSelfTestSupervisor(cleanupIdentity, {
+      queryProcess: () => ({ processId: cleanupIdentity.child.pid, creationDateUtc: "2026-08-09T00:00:01.0000000Z" }),
+      killProcessTree: cleanupKillProcessTree,
+    }) !== false || cleanupKillCalls !== 0) throw new Error("self-test supervisor cleanup accepted a reused PID identity");
+    if (stopSelfTestSupervisor(cleanupIdentity, {
+      queryProcess: () => cleanupIdentity.snapshot,
+      killProcessTree: cleanupKillProcessTree,
+    }) !== true || cleanupKillCalls !== 1) throw new Error("self-test supervisor cleanup rejected its captured process identity");
     const path = join(temporaryRoot, "latest-legacy-zero-hit.json");
     const valid = {
       reportName: "legacy-zero-hit",
@@ -807,6 +1010,37 @@ function selfTest() {
       blankFrameCount: 0, frameCount: 3, originalCodexAlive: true,
       after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
     }));
+    const gate5ManagerContracts = Object.fromEntries(managerActions.map((action) => {
+      const expected = managerHandlerContractByAction[action];
+      return [action, { verified: true, kind: expected[0], source: expected[1], handler: expected[2] }];
+    }));
+    const gate5ManagerFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...Object.values(gate5ManagerContracts).flatMap((entry) => [
+      entry.source, String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
+    ])].filter(Boolean))];
+    const gate5RuntimeRoot = join(temporaryRoot, "runtime");
+    mkdirSync(join(gate5RuntimeRoot, "scripts"), { recursive: true });
+    const gate5RuntimeFiles = gate5ManagerFiles.map((relativePath) => {
+      const bytes = readFileSync(resolve(sourceRoot, relativePath));
+      const runtimePath = resolve(gate5RuntimeRoot, relativePath);
+      mkdirSync(dirname(runtimePath), { recursive: true });
+      writeFileSync(runtimePath, bytes);
+      const fileSha256 = sha256Buffer(bytes);
+      return { relativePath, fileSha256, manifestSha256: fileSha256 };
+    });
+    const gate5SourceHead = currentSourceGitState().head;
+    const gate5ManifestPath = join(gate5RuntimeRoot, ".anticodex-runtime-manifest.json");
+    writeFileSync(gate5ManifestPath, `${JSON.stringify({
+      schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: gate5RuntimeRoot,
+      sourceRoot, sourceGitHead: gate5SourceHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      files: Object.fromEntries(gate5RuntimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
+    }, null, 2)}\n`, "utf8");
+    gate5Supervisor = startSuspendedSelfTestSupervisor(join(gate5RuntimeRoot, "scripts", "start-anticodex-fixed-route.mjs"));
+    const gate5SupervisorPid = gate5Supervisor.child.pid;
+    for (const entry of gate5Switches) {
+      entry.supervisorPidBefore = gate5SupervisorPid;
+      entry.supervisorPidAfter = gate5SupervisorPid;
+    }
     const gate5Fixture = {
       schema: "anticodex-gate5-visible-integration-v1",
       gate: 5,
@@ -832,6 +1066,23 @@ function selfTest() {
       currentUiEvidence: {
         manager_actual_mouse_matrix: {
           ok: true, usedRealTraffic: false, actualMouse: true, actionCount: 20, zeroSideEffects: true,
+          uiInteraction: {
+            scope: "ui-interaction-only", verifiedActionIds: [...managerActions], verifiedCount: managerActions.length,
+          },
+          handlerVerification: {
+            offlineContractVerifiedActionIds: [...managerActions], safeRealActionIds: [...safeRealManagerActions],
+            realExecutedActionIds: [], pendingAuthorizedActionIds: [...highImpactManagerActions], allFunctionsVerified: false,
+            contracts: gate5ManagerContracts,
+            provenance: {
+              schema: "anticodex-manager-handler-provenance-v1", verified: true,
+              runtimeRoot: gate5RuntimeRoot, scriptsRoot: join(gate5RuntimeRoot, "scripts"), manifestPath: gate5ManifestPath,
+              manifestSha256: sha256File(gate5ManifestPath), sourceRoot, sourceGitHead: gate5SourceHead,
+              sourceGitClean: true, sourceRevisionProvenance: "git", files: gate5RuntimeFiles,
+              taskRuntimePid: gate5SupervisorPid,
+              taskRuntimeScriptPath: join(gate5RuntimeRoot, "scripts", "start-anticodex-fixed-route.mjs"),
+              taskRuntimeCreationDateUtc: gate5Supervisor.snapshot.creationDateUtc,
+            },
+          },
           profileEntryText: "管理", forbiddenEnglishVisible: false, trayIconPreserved: true,
           liveTrayEvidence: {
             schema: "anticodex-live-tray-icon-v1", ok: true, checkedAt: new Date().toISOString(),
@@ -851,6 +1102,7 @@ function selfTest() {
             before: "chatCompletions", alternate: "responses", restored: "chatCompletions",
             selectedAlternate: true, restoredOriginal: true, profileUnchanged: true,
           },
+          runtimeIdentity: { supervisorPid: gate5SupervisorPid },
         },
         frontend_model_hot_switch: {
           ok: true, usedRealTraffic: false, sameTask: true, taskId: gate5TaskId,
@@ -887,6 +1139,27 @@ function selfTest() {
     expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted missing live tray evidence");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.liveTrayEvidence.checkedAt = new Date(Date.now() - 6 * 60_000).toISOString(); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted stale live tray evidence");
     expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence.notificationAreaItem.state; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted incomplete live tray accessibility evidence");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.runtimeRoot = join(temporaryRoot, "wrong-runtime"); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from the wrong runtime root");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimePid = 999; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from a different supervisor PID");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimeCreationDateUtc = "2020-01-01T00:00:00.0000000Z"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a reused supervisor PID");
+    const gate5ManifestOriginal = readFileSync(gate5ManifestPath, "utf8");
+    const setGate5ManifestCreatedAt = (createdAt) => {
+      const manifest = JSON.parse(gate5ManifestOriginal);
+      manifest.createdAt = createdAt;
+      writeFileSync(gate5ManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      gate5Fixture.currentUiEvidence.manager_actual_mouse_matrix.handlerVerification.provenance.manifestSha256 = sha256File(gate5ManifestPath);
+    };
+    setGate5ManifestCreatedAt(new Date(Date.parse(gate5Supervisor.snapshot.creationDateUtc) + 1).toISOString());
+    const toleranceBoundaryFailures = [];
+    validateGate5CurrentUiEvidence(gate5Fixture, toleranceBoundaryFailures);
+    if (toleranceBoundaryFailures.length > 0) throw new Error(`Gate 5 rejected the 1ms serialization boundary: ${toleranceBoundaryFailures.join(",")}`);
+    setGate5ManifestCreatedAt(new Date(Date.parse(gate5Supervisor.snapshot.creationDateUtc) + 2).toISOString());
+    const staleGenerationFailures = [];
+    validateGate5CurrentUiEvidence(gate5Fixture, staleGenerationFailures);
+    if (!staleGenerationFailures.includes("gate5_current_ui_manager_actual_mouse_matrix")) throw new Error("Gate 5 accepted a supervisor older than its validated runtime generation");
+    writeFileSync(gate5ManifestPath, gate5ManifestOriginal, "utf8");
+    gate5Fixture.currentUiEvidence.manager_actual_mouse_matrix.handlerVerification.provenance.manifestSha256 = sha256File(gate5ManifestPath);
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.files[0].fileSha256 = "f".repeat(64); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a stale Manager handler file hash");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].taskId = "019f9000-1111-7222-8333-555555555555"; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a switch in another task");
@@ -928,8 +1201,10 @@ function selfTest() {
       "gate8_deleted_artifact_rejection",
       "gate8_current_component_binding",
       "gate8_autonomous_video_semantics",
+      "self_test_supervisor_pid_reuse_guard",
     ] }));
   } finally {
+    stopSelfTestSupervisor(gate5Supervisor);
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
 }

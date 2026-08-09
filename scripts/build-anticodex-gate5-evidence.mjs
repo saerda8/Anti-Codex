@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +11,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const runtimeManifestClockToleranceMs = 1;
 
 function parseArgs(values) {
   const parsed = new Map();
@@ -38,7 +43,7 @@ Offline normalization only. This command never launches UI, processes, or model 
 Required raw evidence:
   --task-receipt <path>             Signed single-submit handoff receipt
   --task-artifact <path>            Current task artifact (repeat at least 3 times)
-  --manager-matrix <path>           Signed Manager 20-action UI-only matrix
+  --manager-matrix <path>           Signed Manager 20-action UI-interaction matrix
   --manager-profile <path>          Signed Manager profile-entry mouse probe
   --manager-close <path>            Signed Manager three-height close mouse probe
   --manager-protocol <path>         Signed Manager protocol round-trip mouse probe
@@ -97,6 +102,48 @@ const managerActions = Object.freeze([
   "overallNoTraffic",
   "postVerificationFull",
 ]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const managerHandlerContractByAction = Object.freeze({
+  refreshStatus: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  refreshModels: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  accountSwitch: ["script", "scripts/anticodex-manager-service.mjs", "open-antigravity-account-switch.ps1"],
+  accountProxy: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-account-proxy-readiness.ps1"],
+  syncReadiness: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-sync-readiness.ps1"],
+  repairShortcuts: ["script", "scripts/anticodex-manager-service.mjs", "repair-anticodex-shortcuts.ps1"],
+  updateCheck: ["script", "scripts/anticodex-manager-service.mjs", "check-anticodex-update.ps1"],
+  sourcePreflight: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-source-preflight.ps1"],
+  mcpSkills: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-mcp-skills.ps1"],
+  pluginCapabilities: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-plugin-capabilities.ps1"],
+  diagnosticsBundle: ["script", "scripts/anticodex-manager-service.mjs", "collect-anticodex-diagnostics.ps1"],
+  viewLatestReports: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  syncHost: ["script", "scripts/anticodex-manager-service.mjs", "sync-anticodex-launcher.ps1"],
+  upstreamConfig: ["ui-function", "scripts/anticodex-manager-inject.js", "ui-function"],
+  refreshFeatures: ["script", "scripts/anticodex-manager-service.mjs", "refresh-anticodex-local-features.ps1"],
+  stabilitySoak: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-stability-soak.ps1"],
+  coldRelaunch: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-cold-relaunch.ps1"],
+  fastOverallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  overallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  postVerificationFull: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-post-verification.ps1"],
+});
+
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
+}
+
+function currentSourceGitHead() {
+  const child = spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true });
+  const head = String(child.stdout || "").trim().toLowerCase();
+  return child.status === 0 && /^[a-f0-9]{40}$/.test(head) ? head : "";
+}
 const requiredSingleFlags = [
   "--task-receipt",
   "--manager-matrix",
@@ -668,12 +715,126 @@ function normalizeLiveTray(source) {
   };
 }
 
+function normalizedContractPath(value) {
+  const normalized = String(value || "").replaceAll("\\", "/");
+  return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
+}
+
+function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries, runtimeIdentity) {
+  const provenance = handlerContracts?.provenance || {};
+  const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
+  const scriptsRoot = resolve(String(provenance?.scriptsRoot || ""));
+  const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
+  const taskRuntimeScriptPath = resolve(String(provenance?.taskRuntimeScriptPath || ""));
+  const taskRuntimeCreationDateUtc = String(provenance?.taskRuntimeCreationDateUtc || "");
+  const expectedTaskRuntimeScriptPath = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
+  const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...contractEntries.flatMap(([, entry]) => [
+    normalizedContractPath(entry?.source),
+    String(entry?.handler || "").toLowerCase().endsWith(".ps1")
+      ? normalizedContractPath(`scripts/${entry.handler}`)
+      : "",
+  ])].filter(Boolean))];
+  const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  const sourceHead = currentSourceGitHead();
+  requireCondition(provenance?.schema === "anticodex-manager-handler-provenance-v1"
+    && provenance?.verified === true
+    && sameNativePath(wrapper?.runtimeRoot, runtimeRoot)
+    && sameNativePath(scriptsRoot, resolve(runtimeRoot, "scripts"))
+    && sameNativePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
+    && sameNativePath(provenance?.sourceRoot, sourceRoot)
+    && provenance?.sourceGitClean === true
+    && provenance?.sourceRevisionProvenance === "git"
+    && /^[a-f0-9]{40}$/i.test(String(provenance?.sourceGitHead || ""))
+    && String(provenance.sourceGitHead).toLowerCase() === sourceHead
+    && files.length === expectedFiles.length,
+  "manager-matrix: handler runtime/source provenance is incomplete or stale");
+  requireCondition(taskRuntimePid > 0
+    && taskRuntimePid === Number(wrapper?.processIdentity?.supervisorPid || 0)
+    && taskRuntimePid === Number(runtimeIdentity?.supervisorPid || 0)
+    && sameNativePath(taskRuntimeScriptPath, expectedTaskRuntimeScriptPath)
+    && Number.isFinite(Date.parse(taskRuntimeCreationDateUtc)),
+  "manager-matrix: handler task runtime PID/script does not match the fixed-route supervisor command line");
+  requireCondition(existsSync(manifestPath) && statSync(manifestPath).isFile()
+    && /^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
+    && sha256(readFileSync(manifestPath)) === String(provenance.manifestSha256).toLowerCase(),
+  "manager-matrix: handler runtime manifest hash is invalid");
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+  } catch (error) {
+    throw new Error(`manager-matrix: handler runtime manifest is invalid JSON: ${error?.message || error}`);
+  }
+  requireCondition(manifest?.schema === "anticodex-runtime-manifest-v2"
+    && manifest?.state === "validated"
+    && sameNativePath(manifest?.activeRuntime, runtimeRoot)
+    && sameNativePath(manifest?.sourceRoot, sourceRoot)
+    && manifest?.sourceGitClean === true
+    && manifest?.sourceRevisionProvenance === "git"
+    && String(manifest?.sourceGitHead || "").toLowerCase() === sourceHead,
+  "manager-matrix: handler runtime manifest identity is stale");
+  requireCondition(processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt),
+    "manager-matrix: fixed-route supervisor predates runtime manifest generation");
+  const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
+  requireCondition(fileByPath.size === files.length && expectedFiles.every((path) => fileByPath.has(path)),
+    "manager-matrix: handler provenance file inventory is incomplete or duplicated");
+  for (const relativePath of expectedFiles) {
+    const entry = fileByPath.get(relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    const sourcePath = resolve(sourceRoot, relativePath);
+    const manifestEntry = Object.entries(manifest?.files || {}).find(([path]) => normalizedContractPath(path) === relativePath);
+    const expectedHash = String(entry?.fileSha256 || "").toLowerCase();
+    requireCondition(insideRoot(runtimePath, runtimeRoot)
+      && insideRoot(sourcePath, sourceRoot)
+      && existsSync(runtimePath) && statSync(runtimePath).isFile()
+      && existsSync(sourcePath) && statSync(sourcePath).isFile()
+      && /^[a-f0-9]{64}$/.test(expectedHash)
+      && String(entry?.manifestSha256 || "").toLowerCase() === expectedHash
+      && String(manifestEntry?.[1] || "").toLowerCase() === expectedHash
+      && sha256(readFileSync(runtimePath)) === expectedHash
+      && sha256(readFileSync(sourcePath)) === expectedHash,
+    `manager-matrix: handler provenance hash mismatch: ${relativePath}`);
+  }
+  return {
+    schema: provenance.schema,
+    verified: true,
+    runtimeRoot,
+    scriptsRoot,
+    manifestPath,
+    manifestSha256: String(provenance.manifestSha256).toLowerCase(),
+    sourceRoot,
+    sourceGitHead: sourceHead,
+    sourceGitClean: true,
+    sourceRevisionProvenance: "git",
+    taskRuntimePid,
+    taskRuntimeScriptPath,
+    taskRuntimeCreationDateUtc,
+    files: expectedFiles.map((path) => ({
+      relativePath: path,
+      fileSha256: String(fileByPath.get(path).fileSha256).toLowerCase(),
+      manifestSha256: String(fileByPath.get(path).manifestSha256).toLowerCase(),
+    })),
+  };
+}
+
 function normalizeManager(matrixSource, profileSource, closeSource, protocolSource, releaseBinding, liveTrayEvidence, runtimeIdentity) {
   const wrapper = matrixSource.data;
   const matrix = wrapper?.managerButton?.payload || wrapper;
   requireCondition(wrapper?.ok === true && (wrapper?.managerButton ? wrapper.managerButton?.ok === true : true),
     "manager-matrix: wrapper reported failure");
   const actions = Array.isArray(matrix?.actions) ? matrix.actions : [];
+  const uiInteraction = matrix?.uiInteractionEvidence || {};
+  const handlerContracts = matrix?.handlerContractEvidence || {};
+  const contractEntries = handlerContracts?.contracts && typeof handlerContracts.contracts === "object"
+    ? Object.entries(handlerContracts.contracts)
+    : [];
   requireCondition(matrix?.ok === true
     && matrix?.mode === "ui-only-matrix"
     && matrix?.zeroSideEffects === true
@@ -687,7 +848,29 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
         && entry?.actionActualMouseOk === true
         && entry?.managerOpenedNewPage === false;
     }),
-  "manager-matrix: exact 20 unique action coverage or actual-mouse zero-side-effect evidence is incomplete");
+  "manager-matrix: exact 20 unique UI interactions or actual-mouse zero-side-effect evidence is incomplete");
+  requireCondition(uiInteraction?.schema === "anticodex-manager-ui-interaction-v1"
+    && uiInteraction?.scope === "ui-interaction-only"
+    && Number(uiInteraction?.passedCount) === managerActions.length
+    && exactStringList(uiInteraction?.verifiedActions, managerActions),
+  "manager-matrix: 20/20 UI interaction evidence is incomplete");
+  requireCondition(handlerContracts?.schema === "anticodex-manager-handler-contract-v1"
+    && exactStringList(handlerContracts?.offlineContractVerifiedActions, managerActions)
+    && exactStringList(handlerContracts?.safeRealActionAllowlist, safeRealManagerActions)
+    && exactStringList(handlerContracts?.liveExecutedActions, [])
+    && exactStringList(handlerContracts?.pendingAuthorizedActions, highImpactManagerActions)
+    && handlerContracts?.allFunctionsVerified === false
+    && contractEntries.length === managerActions.length
+    && contractEntries.every(([action, entry], index) => {
+      const expected = managerHandlerContractByAction[action];
+      return action === managerActions[index]
+        && entry?.verified === true
+        && String(entry?.kind || "") === expected?.[0]
+        && String(entry?.source || "") === expected?.[1]
+        && String(entry?.handler || "") === expected?.[2];
+    }),
+  "manager-matrix: offline handler contract mapping is missing or UI-only evidence claims functional execution");
+  const handlerProvenance = validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries, runtimeIdentity);
 
   const profile = profileSource.data?.profileEntry || profileSource.data;
   requireCondition(profileSource.data?.ok === true
@@ -747,12 +930,26 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
     requireMatchingRuntimeIdentity(raw, runtimeIdentity, label);
   }
   return {
-    schema: "anticodex-manager-actual-mouse-matrix-v1",
+    schema: "anticodex-manager-actual-mouse-matrix-v2",
     ok: true,
     requestedRealTraffic: false,
     usedRealTraffic: false,
     actionCount: actions.length,
     zeroSideEffects: true,
+    uiInteraction: {
+      scope: "ui-interaction-only",
+      verifiedActionIds: [...managerActions],
+      verifiedCount: managerActions.length,
+    },
+    handlerVerification: {
+      offlineContractVerifiedActionIds: [...managerActions],
+      safeRealActionIds: [...safeRealManagerActions],
+      realExecutedActionIds: [],
+      pendingAuthorizedActionIds: [...highImpactManagerActions],
+      allFunctionsVerified: false,
+      contracts: handlerContracts.contracts,
+      provenance: handlerProvenance,
+    },
     actualMouse: true,
     profileEntryText: "管理",
     forbiddenEnglishVisible: false,

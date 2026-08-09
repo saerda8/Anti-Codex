@@ -1279,7 +1279,7 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   const actionsBlock = managerInject.match(/const ACTIONS = \[([\s\S]*?)\n  \];/)?.[1] ?? "";
   const injectedActions = [...actionsBlock.matchAll(/\["([^"]+)",/g)].map((entry) => entry[1]);
   const parsePowerShellList = (name) => {
-    const block = managerRealButtonsTest.match(new RegExp(`\\$${name} = @\\(([\\s\\S]*?)\\n    \\)`))?.[1] ?? "";
+    const block = managerRealButtonsTest.match(new RegExp(`\\$${name} = @\\(([\\s\\S]*?)\\r?\\n\\)`))?.[1] ?? "";
     return [...block.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
   };
 
@@ -1524,6 +1524,33 @@ test("Manager real-buttons wrapper exposes a dedicated safe UI-only matrix entry
   assert.match(managerRealButtonsTest, /manager-ui-only-button-matrix/);
   assert.match(managerRealButtonsTest, /usedRealTraffic -ne \$false/);
   assert.match(managerRealButtonsTest, /zeroSideEffects -ne \$true/);
+  assert.match(managerRealButtonsTest, /uiInteractionEvidence/);
+  assert.match(managerRealButtonsTest, /handlerContractEvidence/);
+  assert.match(managerRealButtonsTest, /Join-Path \$runtimeFull "scripts"/);
+  assert.doesNotMatch(managerRealButtonsTest, /\$contractScriptsRoot\s*=\s*if\s*\(Test-Path[\s\S]*?\$PSScriptRoot/);
+  assert.match(managerRealButtonsTest, /\.anticodex-runtime-manifest\.json/);
+  assert.match(managerRealButtonsTest, /sourceGitHead/);
+  assert.match(managerRealButtonsTest, /manifestSha256/);
+  assert.match(managerRealButtonsTest, /fileSha256/);
+  assert.match(managerRealButtonsTest, /Get-CimInstance Win32_Process -Filter "ProcessId = \$TaskRuntimePid"/);
+  assert.match(managerRealButtonsTest, /CommandLineToArgvW/);
+  assert.match(managerRealButtonsTest, /\$taskRuntimeArguments\.Count -lt 2/);
+  assert.match(managerRealButtonsTest, /\$taskRuntimeArguments\[1\]/);
+  assert.doesNotMatch(managerRealButtonsTest, /matchingScriptArguments/);
+  assert.match(managerRealButtonsTest, /CreationDate/);
+  assert.match(managerRealButtonsTest, /RuntimeManifestClockToleranceMilliseconds\s*=\s*1/);
+  assert.match(managerRealButtonsTest, /manifest\.createdAt/);
+  assert.match(managerRealButtonsTest, /fixed-route supervisor predates runtime manifest/);
+  assert.match(managerRealButtonsTest, /taskRuntimePid\s*=\s*\$TaskRuntimePid/);
+  assert.match(managerRealButtonsTest, /taskRuntimeScriptPath\s*=\s*\$taskRuntimeScriptPath/);
+  assert.match(managerRealButtonsTest, /taskRuntimeCreationDateUtc\s*=\s*\$taskRuntimeCreationDateUtc/);
+  assert.match(managerRealButtonsTest, /Get-BoundRuntimeFile -FileName "start-anticodex-fixed-route\.mjs"/);
+  assert.match(managerRealButtonsTest, /offlineContractVerifiedActions/);
+  assert.match(managerRealButtonsTest, /safeRealActionAllowlist/);
+  assert.match(managerRealButtonsTest, /liveExecutedActions\s*=\s*@\(\)/);
+  assert.match(managerRealButtonsTest, /pendingAuthorizedActions/);
+  assert.match(managerRealButtonsTest, /allFunctionsVerified\s*=\s*\$false/);
+  assert.doesNotMatch(managerRealButtonsTest, /complete 20-button contract/);
   assert.match(managerRealButtonsTest, /actionActualMouseExpectedClickCount/);
   assert.match(managerRealButtonsTest, /actionActualMouseConfirmationCleared/);
 });

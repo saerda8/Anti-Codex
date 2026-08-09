@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -54,6 +55,7 @@ const compact = args.has("--compact");
 const reportRoot = resolve(args.get("--report-root") || `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`);
 const auditPath = resolve(args.get("--audit-out") || resolve(sourceRoot, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
 const maxSourceAgeHours = positiveNumber(args.get("--max-source-age-hours"), 48);
+const runtimeManifestClockToleranceMs = 1;
 const requiredInputs = {
   taskManifest: "--task-manifest",
   managerEvidence: "--manager-evidence",
@@ -61,6 +63,43 @@ const requiredInputs = {
   shortcutRestoreEvidence: "--shortcut-restore-evidence",
   releaseBindingEvidence: "--release-binding-evidence",
 };
+const managerActions = Object.freeze([
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const managerHandlerContractByAction = Object.freeze({
+  refreshStatus: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  refreshModels: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  accountSwitch: ["script", "scripts/anticodex-manager-service.mjs", "open-antigravity-account-switch.ps1"],
+  accountProxy: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-account-proxy-readiness.ps1"],
+  syncReadiness: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-sync-readiness.ps1"],
+  repairShortcuts: ["script", "scripts/anticodex-manager-service.mjs", "repair-anticodex-shortcuts.ps1"],
+  updateCheck: ["script", "scripts/anticodex-manager-service.mjs", "check-anticodex-update.ps1"],
+  sourcePreflight: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-source-preflight.ps1"],
+  mcpSkills: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-mcp-skills.ps1"],
+  pluginCapabilities: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-plugin-capabilities.ps1"],
+  diagnosticsBundle: ["script", "scripts/anticodex-manager-service.mjs", "collect-anticodex-diagnostics.ps1"],
+  viewLatestReports: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  syncHost: ["script", "scripts/anticodex-manager-service.mjs", "sync-anticodex-launcher.ps1"],
+  upstreamConfig: ["ui-function", "scripts/anticodex-manager-inject.js", "ui-function"],
+  refreshFeatures: ["script", "scripts/anticodex-manager-service.mjs", "refresh-anticodex-local-features.ps1"],
+  stabilitySoak: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-stability-soak.ps1"],
+  coldRelaunch: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-cold-relaunch.ps1"],
+  fastOverallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  overallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  postVerificationFull: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-post-verification.ps1"],
+});
 const missingArguments = Object.values(requiredInputs).filter((flag) => !String(args.get(flag) || "").trim());
 if (missingArguments.length > 0) {
   console.error(JSON.stringify({ ok: false, error: "missing_required_arguments", missingArguments }));
@@ -72,8 +111,152 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
+}
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function samePath(left, right) {
+  try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
+}
+
+function normalizedContractPath(value) {
+  const normalized = String(value || "").replaceAll("\\", "/");
+  return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
+}
+
+function currentSourceGitState() {
+  const run = (gitArgs) => spawnSync("git", ["-C", sourceRoot, ...gitArgs], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const headResult = run(["rev-parse", "HEAD"]);
+  const head = String(headResult.stdout || "").trim().toLowerCase();
+  if (headResult.error || headResult.status !== 0 || !/^[0-9a-f]{40}$/.test(head)) {
+    return { ok: false, head, clean: false };
+  }
+  const statusResult = run(["status", "--porcelain=v1", "--untracked-files=normal"]);
+  if (statusResult.error || statusResult.status !== 0) return { ok: false, head, clean: false };
+  return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
+}
+
+function queryExactWindowsProcess(processId) {
+  if (!Number.isInteger(processId) || processId <= 0 || process.platform !== "win32") return null;
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = String.raw`
+$ErrorActionPreference = "Stop"
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class AntiCodexGate5CommandLine {
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern IntPtr CommandLineToArgvW(string value, out int count);
+  [DllImport("kernel32.dll", SetLastError = true)]
+  private static extern IntPtr LocalFree(IntPtr value);
+  public static string[] Parse(string value) {
+    int count; IntPtr vector = CommandLineToArgvW(value, out count);
+    if (vector == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+    try { var result = new string[count]; for (int i = 0; i < count; i++) result[i] = Marshal.PtrToStringUni(Marshal.ReadIntPtr(vector, i * IntPtr.Size)) ?? String.Empty; return result; }
+    finally { LocalFree(vector); }
+  }
+}
+'@
+$rows = @(Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction Stop)
+if ($rows.Count -ne 1) { throw "exact process not found" }
+$row = $rows[0]
+[pscustomobject]@{
+  processId = [int]$row.ProcessId
+  executablePath = [string]$row.ExecutablePath
+  creationDateUtc = ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+  arguments = @([AntiCodexGate5CommandLine]::Parse([string]$row.CommandLine))
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+  const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    encoding: "utf8", windowsHide: true, timeout: 15000,
+  });
+  if (result.error || result.status !== 0) return null;
+  try { return JSON.parse(String(result.stdout || "").trim()); } catch { return null; }
+}
+
+function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
+  const contracts = handlerVerification?.contracts || {};
+  const contractEntries = Object.entries(contracts);
+  const provenance = handlerVerification?.provenance || {};
+  const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
+  const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
+  const taskRuntimeCreationDateUtc = String(provenance?.taskRuntimeCreationDateUtc || "");
+  const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  const sourceGit = currentSourceGitState();
+  const liveTaskRuntime = queryExactWindowsProcess(taskRuntimePid);
+  const expectedTaskRuntimeScript = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
+  if (contractEntries.length !== managerActions.length
+    || !contractEntries.every(([action, entry], index) => {
+      const expected = managerHandlerContractByAction[action];
+      return action === managerActions[index] && entry?.verified === true
+        && String(entry?.kind || "") === expected?.[0]
+        && String(entry?.source || "") === expected?.[1]
+        && String(entry?.handler || "") === expected?.[2];
+    })
+    || provenance?.schema !== "anticodex-manager-handler-provenance-v1"
+    || provenance?.verified !== true
+    || !samePath(provenance?.scriptsRoot, resolve(runtimeRoot, "scripts"))
+    || !samePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
+    || !samePath(provenance?.sourceRoot, sourceRoot)
+    || sourceGit.ok !== true || sourceGit.clean !== true
+    || provenance?.sourceGitClean !== sourceGit.clean
+    || taskRuntimePid <= 0
+    || taskRuntimePid !== Number(runtimeIdentity?.supervisorPid || 0)
+    || !samePath(provenance?.taskRuntimeScriptPath, expectedTaskRuntimeScript)
+    || !liveTaskRuntime || Number(liveTaskRuntime.processId) !== taskRuntimePid
+    || String(liveTaskRuntime.executablePath || "").replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() !== "node.exe"
+    || !Array.isArray(liveTaskRuntime.arguments) || liveTaskRuntime.arguments.length < 2
+    || !samePath(liveTaskRuntime.arguments[1], expectedTaskRuntimeScript)
+    || !taskRuntimeCreationDateUtc || String(liveTaskRuntime.creationDateUtc || "") !== taskRuntimeCreationDateUtc
+    || provenance?.sourceRevisionProvenance !== "git"
+    || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
+    || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
+    || !/^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
+    || sha256(readFileSync(manifestPath)) !== String(provenance.manifestSha256).toLowerCase()) return false;
+  let manifest;
+  try { manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, "")); } catch { return false; }
+  if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
+    || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
+    || manifest?.sourceGitClean !== sourceGit.clean || manifest?.sourceRevisionProvenance !== "git"
+    || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head
+    || !processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt)) return false;
+  const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...contractEntries.flatMap(([, entry]) => [
+    normalizedContractPath(entry?.source),
+    String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
+  ])].filter(Boolean))];
+  const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
+  if (files.length !== expectedFiles.length || fileByPath.size !== files.length) return false;
+  return expectedFiles.every((relativePath) => {
+    const entry = fileByPath.get(relativePath);
+    const expectedHash = String(entry?.fileSha256 || "").toLowerCase();
+    const manifestEntry = Object.entries(manifest?.files || {}).find(([path]) => normalizedContractPath(path) === relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    const sourcePath = resolve(sourceRoot, relativePath);
+    return /^[a-f0-9]{64}$/.test(expectedHash)
+      && String(entry?.manifestSha256 || "").toLowerCase() === expectedHash
+      && String(manifestEntry?.[1] || "").toLowerCase() === expectedHash
+      && existsSync(runtimePath) && statSync(runtimePath).isFile() && sha256(readFileSync(runtimePath)) === expectedHash
+      && existsSync(sourcePath) && statSync(sourcePath).isFile() && sha256(readFileSync(sourcePath)) === expectedHash;
+  });
 }
 
 function embeddedTimestampMs(data) {
@@ -296,12 +479,23 @@ function validateManager(data) {
   const closes = Array.isArray(data?.closeProbes) ? data.closeProbes : [];
   const closeByName = Object.fromEntries(closes.map((entry) => [String(entry?.name || ""), entry]));
   const protocol = data?.protocolInteraction || {};
-  return data?.schema === "anticodex-manager-actual-mouse-matrix-v1"
+  const uiInteraction = data?.uiInteraction || {};
+  const handlerVerification = data?.handlerVerification || {};
+  return data?.schema === "anticodex-manager-actual-mouse-matrix-v2"
     && data?.ok === true
     && data?.requestedRealTraffic === false
     && data?.usedRealTraffic === false
     && Number(data?.actionCount) >= 20
     && data?.zeroSideEffects === true
+    && uiInteraction?.scope === "ui-interaction-only"
+    && Number(uiInteraction?.verifiedCount) === managerActions.length
+    && exactStringList(uiInteraction?.verifiedActionIds, managerActions)
+    && exactStringList(handlerVerification?.offlineContractVerifiedActionIds, managerActions)
+    && exactStringList(handlerVerification?.safeRealActionIds, safeRealManagerActions)
+    && exactStringList(handlerVerification?.realExecutedActionIds, [])
+    && exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
+    && handlerVerification?.allFunctionsVerified === false
+    && validateManagerHandlerProvenance(handlerVerification, data?.runtimeIdentity)
     && data?.actualMouse === true
     && data?.profileEntryText === "管理"
     && data?.forbiddenEnglishVisible === false
@@ -433,7 +627,11 @@ record("current_antigravity_route_bound", taskManifest?.route?.provider === "ant
 const manager = sources.managerEvidence?.data || {};
 const managerOk = validateManager(manager);
 const closeByName = Object.fromEntries((Array.isArray(manager?.closeProbes) ? manager.closeProbes : []).map((entry) => [entry?.name, entry]));
-record("manager_actual_mouse_matrix", managerOk, { actionCount: manager?.actionCount ?? null, zeroSideEffects: manager?.zeroSideEffects ?? null });
+record("manager_actual_mouse_matrix", managerOk, {
+  uiInteractionCount: manager?.uiInteraction?.verifiedCount ?? null,
+  realHandlerExecutedCount: manager?.handlerVerification?.realExecutedActionIds?.length ?? null,
+  pendingAuthorizedCount: manager?.handlerVerification?.pendingAuthorizedActionIds?.length ?? null,
+});
 record("profile_menu_uses_exact_chinese_manager_label", manager?.profileEntryText === "管理" && manager?.forbiddenEnglishVisible === false);
 record("manager_close_full_height_actual_mouse", ["upper-center", "center", "lower-center"].every((name) => closeByName[name]?.actualMouse === true && closeByName[name]?.closed === true && closeByName[name]?.hasTextNode === false));
 record("manager_protocol_physical_round_trip", normalizeProtocol(manager?.protocolInteraction?.before) === "chatCompletions"
@@ -512,6 +710,8 @@ const payload = {
       actualMouse: manager?.actualMouse === true,
       actionCount: Number(manager?.actionCount || 0),
       zeroSideEffects: manager?.zeroSideEffects === true,
+      uiInteraction: manager?.uiInteraction || null,
+      handlerVerification: manager?.handlerVerification || null,
       profileEntryText: String(manager?.profileEntryText || ""),
       forbiddenEnglishVisible: manager?.forbiddenEnglishVisible === false,
       trayIconPreserved: manager?.trayIconPreserved === true,
@@ -579,7 +779,7 @@ console.log(JSON.stringify(compact ? {
   failures,
   taskId: payload.task.taskId,
   artifactCount: artifactEvidence.length,
-  managerActionCount: payload.currentUiEvidence.manager_actual_mouse_matrix.actionCount,
+  managerUiInteractionCount: payload.currentUiEvidence.manager_actual_mouse_matrix.uiInteraction?.verifiedCount ?? 0,
   modelSwitchCount: payload.currentUiEvidence.frontend_model_hot_switch.switchCount,
   shortcutRestoreRounds: payload.currentUiEvidence.shortcut_restore_single_window_no_blank_frames.roundCount,
   report: reportPaths,

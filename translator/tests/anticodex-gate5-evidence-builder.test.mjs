@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -11,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -26,6 +27,46 @@ const managerActions = [
   "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
   "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
+const safeRealActions = [
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+];
+const highImpactActions = [
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+];
+const virtualManagerActions = new Set(["refreshStatus", "refreshModels", "viewLatestReports"]);
+const scriptHandlerByAction = {
+  accountSwitch: "open-antigravity-account-switch.ps1",
+  accountProxy: "test-anticodex-account-proxy-readiness.ps1",
+  syncReadiness: "test-anticodex-sync-readiness.ps1",
+  repairShortcuts: "repair-anticodex-shortcuts.ps1",
+  updateCheck: "check-anticodex-update.ps1",
+  sourcePreflight: "test-anticodex-source-preflight.ps1",
+  mcpSkills: "test-anticodex-mcp-skills.ps1",
+  pluginCapabilities: "test-anticodex-plugin-capabilities.ps1",
+  diagnosticsBundle: "collect-anticodex-diagnostics.ps1",
+  syncHost: "sync-anticodex-launcher.ps1",
+  refreshFeatures: "refresh-anticodex-local-features.ps1",
+  stabilitySoak: "test-anticodex-stability-soak.ps1",
+  coldRelaunch: "test-anticodex-cold-relaunch.ps1",
+  fastOverallNoTraffic: "test-anticodex-installed-overall.ps1",
+  overallNoTraffic: "test-anticodex-installed-overall.ps1",
+  postVerificationFull: "test-anticodex-post-verification.ps1",
+};
+const managerHandlerContracts = Object.fromEntries(managerActions.map((action) => [action, {
+  verified: true,
+  kind: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : "script"),
+  source: action === "upstreamConfig" ? "scripts/anticodex-manager-inject.js" : "scripts/anticodex-manager-service.mjs",
+  handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
+}]));
+const sourceRoot = resolve(dirname(builderPath), "..");
+const fixtureSupervisorPid = 101;
+const fixtureSupervisorCreationDateUtc = "2026-08-09T00:00:00.0000000Z";
+const managerContractFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...Object.values(managerHandlerContracts).flatMap((entry) => [
+  entry.source,
+  String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
+])].filter(Boolean))];
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,11 +79,128 @@ function writeJson(path, value, { signed = false } = {}) {
   return sha256(body);
 }
 
+function queryExactWindowsProcessIdentity(processId) {
+  if (!Number.isInteger(processId) || processId <= 0 || process.platform !== "win32") return null;
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = `$rows = @(Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction Stop); if ($rows.Count -ne 1) { throw "exact process not found" }; $row = $rows[0]; [pscustomobject]@{ processId = [int]$row.ProcessId; creationDateUtc = ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture) } | ConvertTo-Json -Compress`;
+  const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8", windowsHide: true, timeout: 5000,
+  });
+  if (result.error || result.status !== 0) return null;
+  try { return JSON.parse(String(result.stdout || "").trim()); } catch { return null; }
+}
+
+function startSuspendedSupervisor(scriptPath) {
+  const child = spawn(process.execPath, [scriptPath], {
+    env: { ...process.env, NODE_OPTIONS: "--inspect-brk=0" },
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  let snapshot = null;
+  for (let attempt = 0; attempt < 20 && !snapshot; attempt += 1) {
+    snapshot = queryExactWindowsProcessIdentity(child.pid);
+    if (!snapshot) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  if (!snapshot) {
+    child.kill();
+    throw new Error("could not observe suspended fixed-route test supervisor");
+  }
+  return { child, creationDateUtc: snapshot.creationDateUtc };
+}
+
+function stopTestSupervisor(supervisor, {
+  queryProcess = queryExactWindowsProcessIdentity,
+  killProcessTree = (processId) => spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], { windowsHide: true, stdio: "ignore" }),
+} = {}) {
+  const processId = Number(supervisor?.child?.pid || 0);
+  const expectedCreationDateUtc = String(supervisor?.creationDateUtc || "");
+  if (!Number.isInteger(processId) || processId <= 0 || !expectedCreationDateUtc) return false;
+  const liveProcess = queryProcess(processId);
+  if (Number(liveProcess?.processId || 0) !== processId
+    || String(liveProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
+  return killProcessTree(processId)?.status === 0;
+}
+
+test("paused builder supervisor cleanup rejects a reused PID identity", () => {
+  const supervisor = {
+    child: { pid: 999999999 },
+    creationDateUtc: "2026-08-09T00:00:00.0000000Z",
+  };
+  let killCalls = 0;
+  const killProcessTree = () => { killCalls += 1; return { status: 0 }; };
+  assert.equal(stopTestSupervisor(supervisor, {
+    queryProcess: () => ({
+      processId: supervisor.child.pid,
+      creationDateUtc: "2026-08-09T00:00:01.0000000Z",
+    }),
+    killProcessTree,
+  }), false);
+  assert.equal(killCalls, 0);
+  assert.equal(stopTestSupervisor(supervisor, {
+    queryProcess: () => ({ processId: supervisor.child.pid, creationDateUtc: supervisor.creationDateUtc }),
+    killProcessTree,
+  }), true);
+  assert.equal(killCalls, 1);
+});
+
+function replaceFixtureSupervisorIdentity(value, actualPid) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (["supervisorPid", "supervisorBefore", "supervisorAfter"].includes(key) && Number(entry) === fixtureSupervisorPid) {
+      value[key] = actualPid;
+    } else {
+      replaceFixtureSupervisorIdentity(entry, actualPid);
+    }
+  }
+}
+
+function bindStateToSupervisor(state, supervisor) {
+  const evidencePaths = [
+    state.paths.taskReceipt,
+    state.paths.managerMatrix,
+    state.paths.managerProfile,
+    state.paths.managerClose,
+    state.paths.managerProtocol,
+    ...state.paths.modelSwitches,
+    ...state.paths.shortcutRounds,
+  ];
+  for (const path of evidencePaths) {
+    const evidence = JSON.parse(readFileSync(path, "utf8"));
+    replaceFixtureSupervisorIdentity(evidence, supervisor.child.pid);
+    const provenance = evidence?.managerButton?.payload?.handlerContractEvidence?.provenance;
+    if (provenance?.taskRuntimePid === fixtureSupervisorPid) provenance.taskRuntimePid = supervisor.child.pid;
+    if (provenance?.taskRuntimeCreationDateUtc === fixtureSupervisorCreationDateUtc) {
+      provenance.taskRuntimeCreationDateUtc = supervisor.creationDateUtc;
+    }
+    writeJson(path, evidence, { signed: true });
+  }
+}
+
 function buildRawEvidence(root) {
   const taskId = "019f9000-1111-7222-8333-444444444444";
   const prompt = "只提交一次完整自主总目标。";
   const taskStartedAt = new Date(Date.now() - 60_000).toISOString();
   const checkedAt = new Date().toISOString();
+  const runtimeRoot = join(root, "runtime");
+  const runtimeScriptsRoot = join(runtimeRoot, "scripts");
+  mkdirSync(runtimeScriptsRoot, { recursive: true });
+  const runtimeFiles = managerContractFiles.map((relativePath) => {
+    const sourcePath = resolve(sourceRoot, relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    mkdirSync(dirname(runtimePath), { recursive: true });
+    const bytes = readFileSync(sourcePath);
+    writeFileSync(runtimePath, bytes);
+    return { relativePath, fileSha256: sha256(bytes), manifestSha256: sha256(bytes) };
+  });
+  const sourceGitHead = String(spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout || "").trim().toLowerCase();
+  const manifestPath = join(runtimeRoot, ".anticodex-runtime-manifest.json");
+  const runtimeManifest = {
+    schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
+    sourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    createdAt: "2026-08-08T23:59:00.000Z",
+    files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, "utf8");
   const projectRoot = join(root, "project");
   const promptPath = join(root, "total-goal.md");
   const rolloutPath = join(root, "rollout.jsonl");
@@ -82,7 +240,7 @@ function buildRawEvidence(root) {
   const target = { id: "app-page-1", title: "Anti-Codex", url: "app://codex/index.html" };
   const cdpPort = 18318;
   const runtimeProcessIdentity = {
-    supervisorPid: 101,
+    supervisorPid: fixtureSupervisorPid,
     codexPlusPlusPid: 102,
     antiCodexMainPid: 103,
     originalCodexPid: 201,
@@ -173,6 +331,7 @@ function buildRawEvidence(root) {
     reportName: "manager-ui-only-button-matrix",
     processIdentity: runtimeProcessIdentity,
     sessionIdentity: runtimeSessionIdentity,
+    runtimeRoot,
     managerButton: {
       ok: true,
       payload: {
@@ -184,6 +343,30 @@ function buildRawEvidence(root) {
         actions,
         zeroSideEffects: true,
         usedRealTraffic: false,
+        uiInteractionEvidence: {
+          schema: "anticodex-manager-ui-interaction-v1",
+          scope: "ui-interaction-only",
+          verifiedActions: actions,
+          passedCount: actions.length,
+        },
+        handlerContractEvidence: {
+          schema: "anticodex-manager-handler-contract-v1",
+          contracts: managerHandlerContracts,
+          provenance: {
+            schema: "anticodex-manager-handler-provenance-v1", verified: true,
+            runtimeRoot, scriptsRoot: runtimeScriptsRoot, manifestPath,
+            manifestSha256: sha256(readFileSync(manifestPath)), sourceRoot, sourceGitHead,
+            sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
+            taskRuntimePid: runtimeProcessIdentity.supervisorPid,
+            taskRuntimeScriptPath: join(runtimeScriptsRoot, "start-anticodex-fixed-route.mjs"),
+            taskRuntimeCreationDateUtc: fixtureSupervisorCreationDateUtc,
+          },
+          offlineContractVerifiedActions: actions,
+          safeRealActionAllowlist: safeRealActions,
+          liveExecutedActions: [],
+          pendingAuthorizedActions: highImpactActions,
+          allFunctionsVerified: false,
+        },
         results: Object.fromEntries(actions.map((action) => [action, {
           ok: true,
           action,
@@ -579,10 +762,23 @@ function runBuilder(root, state, extraArgs = []) {
   return { child, payload, outputRoot };
 }
 
+function rewriteBoundRuntimeManifestCreatedAt(state, createdAt) {
+  const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+  const provenance = matrix.managerButton.payload.handlerContractEvidence.provenance;
+  const manifest = JSON.parse(readFileSync(provenance.manifestPath, "utf8"));
+  manifest.createdAt = createdAt;
+  writeFileSync(provenance.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  provenance.manifestSha256 = sha256(readFileSync(provenance.manifestPath));
+  writeJson(state.paths.managerMatrix, matrix, { signed: true });
+}
+
 test("builder converts raw real-probe shapes into five signed inputs accepted by Gate 5", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-"));
+  let supervisor = null;
   try {
     const state = buildRawEvidence(root);
+    supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+    bindStateToSupervisor(state, supervisor);
     const result = runBuilder(root, state);
     assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
     assert.equal(result.payload.ok, true);
@@ -617,6 +813,7 @@ test("builder converts raw real-probe shapes into five signed inputs accepted by
     assert.equal(aggregate.status, 0, aggregate.stderr || aggregate.stdout);
     assert.equal(JSON.parse(aggregate.stdout).ok, true);
   } finally {
+    stopTestSupervisor(supervisor);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -647,6 +844,25 @@ test("builder fails closed when the live tray probe is missing, stale, or failed
       assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
       assert.match(result.payload.failures.join("\n"), /live.?tray|notification.?area/i, label);
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder rejects a supervisor older than its manifest generation beyond the 1ms serialization tolerance", () => {
+  for (const [deltaMs, expectedStatus] of [[1, 0], [2, 1]]) {
+    const root = mkdtempSync(join(tmpdir(), `anticodex-gate5-builder-runtime-age-${deltaMs}-`));
+    let supervisor = null;
+    try {
+      const state = buildRawEvidence(root);
+      supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+      bindStateToSupervisor(state, supervisor);
+      rewriteBoundRuntimeManifestCreatedAt(state, new Date(Date.parse(supervisor.creationDateUtc) + deltaMs).toISOString());
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, expectedStatus, result.child.stderr || JSON.stringify(result.payload));
+      if (expectedStatus !== 0) assert.match(result.payload.failures.join("\n"), /manifest generation|predates/i);
+    } finally {
+      stopTestSupervisor(supervisor);
       rmSync(root, { recursive: true, force: true });
     }
   }
@@ -1076,6 +1292,79 @@ test("builder requires the exact 20 unique Manager actions", () => {
     const result = runBuilder(root, state);
     assert.equal(result.child.status, 1, result.child.stderr);
     assert.match(result.payload.failures.join("\n"), /20 unique|action coverage/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects a UI-only click matrix without separate handler truth", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-truth-"));
+  try {
+    const state = buildRawEvidence(root);
+    const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+    delete matrix.managerButton.payload.uiInteractionEvidence;
+    delete matrix.managerButton.payload.handlerContractEvidence;
+    writeJson(state.paths.managerMatrix, matrix, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /UI interaction|handler contract/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects handler truth bound to the wrong runtime root or stale file hash", () => {
+  for (const [label, mutate] of [
+    ["wrong root", (evidence) => { evidence.provenance.runtimeRoot = "C:\\wrong-runtime"; }],
+    ["wrong hash", (evidence) => { evidence.provenance.files[0].fileSha256 = "f".repeat(64); }],
+  ]) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-provenance-"));
+    try {
+      const state = buildRawEvidence(root);
+      const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+      matrix.managerButton.payload.handlerContractEvidence.provenance = {
+        schema: "anticodex-manager-handler-provenance-v1",
+        runtimeRoot: join(root, "runtime"),
+        scriptsRoot: join(root, "runtime", "scripts"),
+        manifestPath: join(root, "runtime", ".anticodex-runtime-manifest.json"),
+        manifestSha256: "a".repeat(64),
+        sourceGitHead: "b".repeat(40),
+        files: [{ relativePath: "scripts/anticodex-manager-service.mjs", fileSha256: "c".repeat(64) }],
+      };
+      mutate(matrix.managerButton.payload.handlerContractEvidence);
+      writeJson(state.paths.managerMatrix, matrix, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /handler.*provenance|runtime root|hash/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder rejects self-consistent handler truth from a runtime copy not owned by the clicked UI supervisor", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-runtime-owner-"));
+  try {
+    const state = buildRawEvidence(root);
+    const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+    const copiedRuntimeRoot = join(root, "copied-runtime");
+    cpSync(join(root, "runtime"), copiedRuntimeRoot, { recursive: true });
+    const copiedManifestPath = join(copiedRuntimeRoot, ".anticodex-runtime-manifest.json");
+    const copiedManifest = JSON.parse(readFileSync(copiedManifestPath, "utf8"));
+    copiedManifest.activeRuntime = copiedRuntimeRoot;
+    writeFileSync(copiedManifestPath, `${JSON.stringify(copiedManifest, null, 2)}\n`, "utf8");
+    matrix.runtimeRoot = copiedRuntimeRoot;
+    Object.assign(matrix.managerButton.payload.handlerContractEvidence.provenance, {
+      runtimeRoot: copiedRuntimeRoot,
+      scriptsRoot: join(copiedRuntimeRoot, "scripts"),
+      manifestPath: copiedManifestPath,
+      manifestSha256: sha256(readFileSync(copiedManifestPath)),
+    });
+    writeJson(state.paths.managerMatrix, matrix, { signed: true });
+
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /task runtime pid|fixed-route supervisor|command line/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
