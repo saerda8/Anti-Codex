@@ -1832,6 +1832,30 @@ function fallbackBackgroundReport(payload, action, startedAt) {
     : (report.effectiveOk === false || report.ok === false ? false : null);
   return { ...report, ok };
 }
+function fallbackManagerActionSummary(action, payload) {
+  const label = managerActions[action]?.label || payload?.label || action || "管理操作";
+  const layers = [];
+  const seen = new Set();
+  let current = payload;
+  while (current && typeof current === "object" && !seen.has(current) && layers.length < 4) {
+    layers.push(current);
+    seen.add(current);
+    current = current.result && typeof current.result === "object" ? current.result : null;
+  }
+  const verdicts = layers.flatMap((item) => [item.ok, item.effectiveOk]).filter((value) => typeof value === "boolean");
+  const ok = verdicts.includes(false) ? false : (verdicts.includes(true) ? true : null);
+  const detail = layers.slice().reverse().map((item) => (
+    item.firstFailure || item.reason || item.message || (typeof item.error === "string" ? item.error : "")
+  )).find(Boolean) || "";
+  const reportPath = layers.slice().reverse().map((item) => (
+    item.latestPath || item.report?.latest || item.zipPath || item.bundleRoot || ""
+  )).find(Boolean) || "";
+  return [
+    label + "：" + (ok === true ? "已完成" : (ok === false ? "未通过" : "结果未知")),
+    detail ? "说明：" + detail : "",
+    reportPath ? "报告：" + reportPath : "",
+  ].filter(Boolean).join("\\n");
+}
 async function bootstrap() {
   const response = await fetch("/anticodex/manager/bootstrap", { cache: "no-store" });
   const payload = await response.json();
@@ -1894,15 +1918,12 @@ async function runFallbackManagerAction(button) {
       result.textContent = payload.message || "后台任务已启动，正在等待真实报告……";
       const outcome = await waitForFallbackBackgroundAction(action, actionStartedAt, result);
       if (outcome.state === "reported") {
-        const status = outcome.report.ok === true
-          ? "后台任务已完成并通过"
-          : (outcome.report.ok === false ? "后台任务已完成但未通过" : "后台任务已结束，结果未知");
-        result.textContent = status + "\\n" + JSON.stringify(outcome.report, null, 2);
+        result.textContent = fallbackManagerActionSummary(action, { ok: outcome.report.ok, result: outcome.report });
       } else {
         result.textContent = outcome.message;
       }
     } else {
-      result.textContent = JSON.stringify(payload, null, 2);
+      result.textContent = fallbackManagerActionSummary(action, payload);
     }
   } catch (error) {
     result.textContent = "执行失败：" + error.message;

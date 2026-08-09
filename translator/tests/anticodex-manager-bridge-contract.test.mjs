@@ -461,6 +461,43 @@ test("fallback Manager waits for the same background action's fresh report and s
   assert.match(runBlock, /waitForFallbackBackgroundAction\(action, actionStartedAt, result\)/);
 });
 
+test("fallback Manager gives every visible action a readable truthful terminal result", () => {
+  const summarize = vm.runInNewContext(`(${extractNamedFunction(managerService, "fallbackManagerActionSummary")})`, {
+    managerActions: Object.fromEntries(EXPECTED_ACTION_IDS.map((action) => [action, { label: `label-${action}` }])),
+  });
+  const fallbackActionIds = parseFallbackActionGroups(managerService).flatMap((group) => group.actionIds);
+
+  for (const action of fallbackActionIds) {
+    const passed = summarize(action, { ok: true, result: { ok: true, message: `passed-${action}` } });
+    assert.match(passed, new RegExp(`label-${action}`));
+    assert.match(passed, /已完成/);
+    assert.match(passed, new RegExp(`passed-${action}`));
+    assert.doesNotMatch(passed, /^\s*[\[{]/, `${action} must not expose raw JSON on success`);
+
+    const failed = summarize(action, {
+      ok: true,
+      result: { ok: true, result: { ok: false, firstFailure: `failed-${action}` } },
+    });
+    assert.match(failed, /未通过/);
+    assert.doesNotMatch(failed, /已完成/);
+    assert.match(failed, new RegExp(`failed-${action}`));
+    assert.doesNotMatch(failed, /^\s*[\[{]/, `${action} must not expose raw JSON on failure`);
+
+    const effectiveFailed = summarize(action, {
+      ok: true,
+      result: { effectiveOk: false, reason: `effective-failed-${action}` },
+    });
+    assert.match(effectiveFailed, /未通过/);
+    assert.match(effectiveFailed, new RegExp(`effective-failed-${action}`));
+  }
+
+  const runBlock = extractNamedFunction(managerService, "runFallbackManagerAction");
+  assert.match(runBlock, /fallbackManagerActionSummary\(action,\s*payload\)/);
+  assert.match(runBlock, /fallbackManagerActionSummary\(action,\s*\{\s*ok:\s*outcome\.report\.ok,\s*result:\s*outcome\.report\s*\}\)/);
+  assert.doesNotMatch(runBlock, /JSON\.stringify\((?:payload|outcome\.report)/);
+  assert.match(managerService, /<pre id="actionResult"[^>]*>\u5c1a\u672a\u6267\u884c操作。<\/pre>/);
+});
+
 test("Manager advanced diagnostics are collapsed details with a visible label", () => {
   const advancedMarker = managerInject.search(/["']data-action-group["']\s*:\s*["']advanced["']/);
   const detailsCalls = [...managerInject.matchAll(/el\(\s*["']details["']/g)].filter((match) => match.index < advancedMarker);
