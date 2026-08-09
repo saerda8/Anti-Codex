@@ -3657,3 +3657,10 @@ The running installed client remains revision 5 until that final activation. Do 
 - [x] Run the four safe Manager actions. Update check, shortcut repair and plugin/app checks pass; MCP/Skill exposes a verifier false negative because the native client adds its own bundled node_modules path to the isolated trusted roots. The product still has only `node_repl`, excludes all nine development workers, inherits `98/98` Skills and passes the real node_repl call.
 - [ ] Commit and activate the narrow trusted-root verifier correction, rerun the four safe Manager actions, then complete Desktop/Start/taskbar single-instance and live pink-tray acceptance.
 - [ ] Only after installed acceptance passes, resume autonomous smoke testing. Provider priority is fixed to Antigravity Gemini, then Claude; Xiaomi MIMO 2.5 Pro is a third-party fallback only when both are explicitly unavailable. Do not persist credentials in source, plans, findings or logs.
+
+### 2026-08-09 Rev7 restore and tray acceptance status
+
+- [x] Host revision 7 removes the stale primary-window restore repaint hook that produced the minimize/restore white flash. This is source-only until deployment and three fresh physical restore rounds pass.
+- [ ] Keep Gate 5 red. The only current same-name white notification-area item belongs to official Codex PID `23788`; the installed Anti-Codex revision 6 GUID is not currently registered.
+- [ ] Finish the tray v2 verifier and require exact binding to the Anti-Codex main PID, notification owner and Anti-only GUID before accepting the tray result.
+- [x] Keep the accepted media task frozen and send no model/provider traffic. For any later autonomous smoke task, use Gemini first, Claude second, and MIMO 2.5 Pro only when both preferred providers are explicitly unavailable.

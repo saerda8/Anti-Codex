@@ -368,3 +368,10 @@ Do not use the frozen media result to hide these product-release gaps, and do no
 - A real Desktop-shortcut launch and real Manager/Settings interaction exposed two verifier defects and one shell defect: feature-gated Settings were falsely counted as missing, prompt restoration raced an asynchronous Manager view transition, and the Windows tray GUID collided with official Codex even though the Anti-Codex icon file itself was correct.
 - Source fixes now pass the focused Manager `84/84` and host/update/rollback `84/84` matrices. Revision 6 also applies cleanly and idempotently to a copy of the exact installed ASAR while preserving its byte length.
 - This does not close installed acceptance. The running client still uses revision 5; it must be controlled-shut down, synchronized once, restarted once, and pass the full installed Settings/prompt/Manager/startup/live-pink-tray matrix. Only then may a new autonomous long smoke task be prepared.
+
+## 2026-08-09 Rev7 restore and tray override
+
+- Source revision 7 removes the stale restore/invalidate repaint hook responsible for the observed minimize/restore white flash. It remains pending deployment and three fresh physical restore rounds.
+- Gate 5 stays red. The only current same-name white tray item is owned by official Codex PID `23788`; the Anti-Codex revision 6 independent GUID is not currently registered.
+- The tray v2 verifier remains in development and must bind the observed item to the Anti-Codex main PID, notification owner and Anti-only GUID before acceptance.
+- The accepted media task remains frozen and no model/provider traffic was sent. A later smoke task must prefer Gemini, then Claude, and use MIMO 2.5 Pro only when both are explicitly unavailable.
