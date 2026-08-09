@@ -375,6 +375,7 @@ function validateArtifactFiles(artifacts, failures, prefix, expectedHashField) {
 }
 
 function validateGate5CurrentUiEvidence(report, failures) {
+  const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
   const evidence = report?.currentUiEvidence || {};
   const manager = evidence.manager_actual_mouse_matrix;
   const liveTray = manager?.liveTrayEvidence;
@@ -405,7 +406,7 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || manager?.profileEntryText !== "管理"
     || manager?.forbiddenEnglishVisible !== false
     || manager?.trayIconPreserved !== true
-    || liveTray?.schema !== "anticodex-live-tray-icon-v1"
+    || liveTray?.schema !== "anticodex-live-tray-icon-v2"
     || liveTray?.ok !== true
     || liveTray?.requestedRealTraffic !== false
     || liveTray?.usedRealTraffic !== false
@@ -416,7 +417,7 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || notificationAreaItem?.visible !== true
     || notificationAreaItem?.clickable !== true
     || notificationAreaItem?.name !== "Anti-Codex"
-    || notificationAreaItem?.provider !== "MSAA"
+    || notificationAreaItem?.provider !== "MSAA+Shell_NotifyIconGetRect"
     || Number(notificationAreaItem?.role) !== 43
     || !Number.isFinite(Number(notificationAreaItem?.state))
     || Number(notificationAreaItem?.state) < 0
@@ -424,7 +425,15 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || Number(notificationAreaItem?.childId) <= 0
     || !Number.isFinite(Number(notificationAreaItem?.toolbarWindowHandle))
     || Number(notificationAreaItem?.toolbarWindowHandle) <= 0
-    || Number(notificationAreaItem?.candidateCount) !== 1
+    || Number(notificationAreaItem?.rawNameCandidateCount) < 1
+    || Number(notificationAreaItem?.verifiedAntiCandidateCount) !== 1
+    || Number(notificationAreaItem?.expectedMainPid) !== Number(manager?.runtimeIdentity?.antiCodexMainPid)
+    || Number(notificationAreaItem?.ownerWindowHandle) <= 0
+    || Number(notificationAreaItem?.ownerProcessId) !== Number(manager?.runtimeIdentity?.antiCodexMainPid)
+    || notificationAreaItem?.ownerWindowClass !== "OwlElectron_NotifyIconHostWindow"
+    || Number(notificationAreaItem?.notifyIconId) <= 0
+    || String(notificationAreaItem?.notifyIconGuid || "").toLowerCase() !== antiCodexTrayGuid
+    || notificationAreaItem?.shellNotifyIconRectMatched !== true
     || notificationAreaItem?.isEnabled !== true
     || notificationAreaItem?.isInvisible !== false
     || notificationAreaItem?.isOffscreen !== false
@@ -436,6 +445,9 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || !Number.isFinite(Number(liveTrayRectangle?.height))
     || Number(liveTrayRectangle?.height) < 16
     || liveTrayIdentity?.exactAccessibleName !== true
+    || liveTrayIdentity?.expectedMainPidMatched !== true
+    || liveTrayIdentity?.ownerWindowClassMatched !== true
+    || liveTrayIdentity?.antiGuidRectMatched !== true
     || liveTrayIdentity?.pinkArtwork !== true
     || !Number.isFinite(Number(liveTrayIdentity?.minimumPinkPixels))
     || Number(liveTrayIdentity?.minimumPinkPixels) < 8
@@ -1085,15 +1097,18 @@ function selfTest() {
           },
           profileEntryText: "管理", forbiddenEnglishVisible: false, trayIconPreserved: true,
           liveTrayEvidence: {
-            schema: "anticodex-live-tray-icon-v1", ok: true, checkedAt: new Date().toISOString(),
+            schema: "anticodex-live-tray-icon-v2", ok: true, checkedAt: new Date().toISOString(),
             requestedRealTraffic: false, usedRealTraffic: false,
             notificationAreaItem: {
-              present: true, visible: true, clickable: true, name: "Anti-Codex", provider: "MSAA",
-              role: 43, state: 0, childId: 7, toolbarWindowHandle: 6001, candidateCount: 1,
+              present: true, visible: true, clickable: true, name: "Anti-Codex", provider: "MSAA+Shell_NotifyIconGetRect",
+              role: 43, state: 0, childId: 7, toolbarWindowHandle: 6001,
+              rawNameCandidateCount: 1, verifiedAntiCandidateCount: 1, expectedMainPid: 103,
+              ownerWindowHandle: 7003, ownerProcessId: 103, ownerWindowClass: "OwlElectron_NotifyIconHostWindow",
+              notifyIconId: 3, notifyIconGuid: "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3", shellNotifyIconRectMatched: true,
               isEnabled: true, isInvisible: false, isOffscreen: false, hitTestMatched: true,
               rectangle: { x: 100, y: 100, width: 24, height: 24 },
             },
-            identity: { exactAccessibleName: true, pinkArtwork: true, pinkPixels: 12, minimumPinkPixels: 8 },
+            identity: { exactAccessibleName: true, expectedMainPidMatched: true, ownerWindowClassMatched: true, antiGuidRectMatched: true, pinkArtwork: true, pinkPixels: 12, minimumPinkPixels: 8 },
             sourcePath: join(temporaryRoot, "live-tray.json"), sourceSha256: "e".repeat(64),
           },
           closeUpper: true, closeCenter: true, closeLower: true, closeHasTextNode: false,
@@ -1102,7 +1117,7 @@ function selfTest() {
             before: "chatCompletions", alternate: "responses", restored: "chatCompletions",
             selectedAlternate: true, restoredOriginal: true, profileUnchanged: true,
           },
-          runtimeIdentity: { supervisorPid: gate5SupervisorPid },
+          runtimeIdentity: { supervisorPid: gate5SupervisorPid, antiCodexMainPid: 103 },
         },
         frontend_model_hot_switch: {
           ok: true, usedRealTraffic: false, sameTask: true, taskId: gate5TaskId,
@@ -1139,6 +1154,8 @@ function selfTest() {
     expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted missing live tray evidence");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.liveTrayEvidence.checkedAt = new Date(Date.now() - 6 * 60_000).toISOString(); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted stale live tray evidence");
     expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence.notificationAreaItem.state; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted incomplete live tray accessibility evidence");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.liveTrayEvidence.notificationAreaItem.ownerProcessId = 23788; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted an official Codex-owned tray item");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.liveTrayEvidence.notificationAreaItem.notifyIconGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted the official Codex tray GUID");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.runtimeRoot = join(temporaryRoot, "wrong-runtime"); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from the wrong runtime root");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimePid = 999; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from a different supervisor PID");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimeCreationDateUtc = "2020-01-01T00:00:00.0000000Z"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a reused supervisor PID");

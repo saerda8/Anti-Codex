@@ -1,5 +1,6 @@
 param(
     [ValidateRange(8, 2147483647)][int]$MinimumPinkPixels = 8,
+    [Parameter(Mandatory = $true)][ValidateRange(1, 2147483647)][int]$ExpectedMainPid,
     [string]$CapturePath = "",
     [string]$ReportPath = ""
 )
@@ -26,7 +27,48 @@ using System.Text;
 
 public static class AntiCodexTrayProbe
 {
+    private const uint TB_GETBUTTON = 0x0417;
+    private const uint PROCESS_VM_OPERATION = 0x0008;
+    private const uint PROCESS_VM_READ = 0x0010;
+    private const uint PROCESS_VM_WRITE = 0x0020;
+    private const uint MEM_COMMIT = 0x1000;
+    private const uint MEM_RESERVE = 0x2000;
+    private const uint MEM_RELEASE = 0x8000;
+    private const uint PAGE_READWRITE = 0x04;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
+
     public delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
+
+    public sealed class NotificationButtonIdentity
+    {
+        public long OwnerWindowHandle { get; set; }
+        public uint OwnerProcessId { get; set; }
+        public string OwnerWindowClass { get; set; }
+        public uint NotifyIconId { get; set; }
+        public bool AntiGuidRectAvailable { get; set; }
+        public int RectLeft { get; set; }
+        public int RectTop { get; set; }
+        public int RectRight { get; set; }
+        public int RectBottom { get; set; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NOTIFYICONIDENTIFIER
+    {
+        public uint cbSize;
+        public IntPtr hWnd;
+        public uint uID;
+        public Guid guidItem;
+    }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string className, string windowName);
@@ -36,6 +78,32 @@ public static class AntiCodexTrayProbe
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
+        IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam,
+        uint flags, uint timeoutMs, out IntPtr result);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr VirtualAllocEx(IntPtr process, IntPtr address, UIntPtr size, uint allocationType, uint protect);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool VirtualFreeEx(IntPtr process, IntPtr address, UIntPtr size, uint freeType);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ReadProcessMemory(IntPtr process, IntPtr address, byte[] buffer, UIntPtr size, out UIntPtr bytesRead);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("shell32.dll")]
+    private static extern int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER identifier, out RECT iconLocation);
 
     [DllImport("oleacc.dll")]
     public static extern int AccessibleObjectFromWindow(
@@ -59,11 +127,83 @@ public static class AntiCodexTrayProbe
         }, IntPtr.Zero);
         return toolbars.ToArray();
     }
+
+    // ToolbarWindow32 stores a TBBUTTON whose dwData points at Explorer's TRAYDATA.
+    public static NotificationButtonIdentity ReadNotificationButton(IntPtr toolbar, int buttonIndex, Guid antiGuid)
+    {
+        uint explorerPid;
+        if (buttonIndex < 0 || GetWindowThreadProcessId(toolbar, out explorerPid) == 0 || explorerPid == 0)
+            throw new InvalidOperationException("The notification toolbar owner could not be identified.");
+
+        IntPtr process = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE, false, explorerPid);
+        if (process == IntPtr.Zero) throw new InvalidOperationException("The notification toolbar process could not be opened.");
+        int buttonSize = IntPtr.Size == 8 ? 32 : 20;
+        IntPtr remoteButton = IntPtr.Zero;
+        try
+        {
+            remoteButton = VirtualAllocEx(process, IntPtr.Zero, (UIntPtr)buttonSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            if (remoteButton == IntPtr.Zero) throw new InvalidOperationException("A notification toolbar read buffer could not be allocated.");
+            IntPtr messageResult;
+            if (SendMessageTimeout(toolbar, TB_GETBUTTON, (IntPtr)buttonIndex, remoteButton,
+                SMTO_ABORTIFHUNG, 1000, out messageResult) == IntPtr.Zero || messageResult == IntPtr.Zero)
+                throw new InvalidOperationException("TB_GETBUTTON failed for the notification toolbar item.");
+
+            var buttonBytes = new byte[buttonSize];
+            UIntPtr bytesRead;
+            if (!ReadProcessMemory(process, remoteButton, buttonBytes, (UIntPtr)buttonBytes.Length, out bytesRead)
+                || bytesRead.ToUInt64() != (ulong)buttonBytes.Length)
+                throw new InvalidOperationException("The notification toolbar button could not be read.");
+
+            long trayDataAddress = IntPtr.Size == 8 ? BitConverter.ToInt64(buttonBytes, 16) : BitConverter.ToInt32(buttonBytes, 12);
+            if (trayDataAddress == 0) throw new InvalidOperationException("The notification toolbar item has no TRAYDATA identity.");
+            var trayBytes = new byte[IntPtr.Size == 8 ? 32 : 24];
+            if (!ReadProcessMemory(process, (IntPtr)trayDataAddress, trayBytes, (UIntPtr)trayBytes.Length, out bytesRead)
+                || bytesRead.ToUInt64() != (ulong)trayBytes.Length)
+                throw new InvalidOperationException("The notification toolbar TRAYDATA could not be read.");
+
+            long ownerHwndValue = IntPtr.Size == 8 ? BitConverter.ToInt64(trayBytes, 0) : BitConverter.ToInt32(trayBytes, 0);
+            uint notifyIconId = BitConverter.ToUInt32(trayBytes, IntPtr.Size);
+            var ownerHwnd = (IntPtr)ownerHwndValue;
+            uint ownerPid;
+            GetWindowThreadProcessId(ownerHwnd, out ownerPid);
+            var ownerClass = new StringBuilder(128);
+            GetClassName(ownerHwnd, ownerClass, ownerClass.Capacity);
+
+            var identifier = new NOTIFYICONIDENTIFIER
+            {
+                cbSize = (uint)Marshal.SizeOf(typeof(NOTIFYICONIDENTIFIER)),
+                hWnd = ownerHwnd,
+                uID = notifyIconId,
+                guidItem = antiGuid,
+            };
+            RECT rect;
+            bool antiGuidRectAvailable = Shell_NotifyIconGetRect(ref identifier, out rect) == 0;
+            return new NotificationButtonIdentity
+            {
+                OwnerWindowHandle = ownerHwndValue,
+                OwnerProcessId = ownerPid,
+                OwnerWindowClass = ownerClass.ToString(),
+                NotifyIconId = notifyIconId,
+                AntiGuidRectAvailable = antiGuidRectAvailable,
+                RectLeft = antiGuidRectAvailable ? rect.Left : 0,
+                RectTop = antiGuidRectAvailable ? rect.Top : 0,
+                RectRight = antiGuidRectAvailable ? rect.Right : 0,
+                RectBottom = antiGuidRectAvailable ? rect.Bottom : 0,
+            };
+        }
+        finally
+        {
+            if (remoteButton != IntPtr.Zero) VirtualFreeEx(process, remoteButton, UIntPtr.Zero, MEM_RELEASE);
+            CloseHandle(process);
+        }
+    }
 }
 '@
 
 $accessibleId = [Guid]"618736E0-3C3D-11CF-810C-00AA00389B71"
+$antiTrayGuid = [Guid]"a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3"
 $trayItems = New-Object System.Collections.Generic.List[object]
+$verifiedTrayItems = New-Object System.Collections.Generic.List[object]
 
 foreach ($toolbar in [AntiCodexTrayProbe]::FindNotificationToolbars()) {
     $accessible = $null
@@ -105,9 +245,23 @@ foreach ($toolbar in [AntiCodexTrayProbe]::FindNotificationToolbars()) {
         $hitTestMatched = $hitName -eq "Anti-Codex" -and ($hitChildId -eq 0 -or $hitChildId -eq $index)
         $clickable = $visible -and $isEnabled -and $role -eq 43 -and $hitTestMatched
 
-        $trayItems.Add([pscustomobject]@{
+        $nativeIdentity = $null
+        try {
+            $nativeIdentity = [AntiCodexTrayProbe]::ReadNotificationButton($toolbar, $index - 1, $antiTrayGuid)
+        } catch {}
+        $shellRectMatched = $null -ne $nativeIdentity -and
+            $nativeIdentity.AntiGuidRectAvailable -and
+            $nativeIdentity.RectLeft -eq $x -and
+            $nativeIdentity.RectTop -eq $y -and
+            ($nativeIdentity.RectRight - $nativeIdentity.RectLeft) -eq $width -and
+            ($nativeIdentity.RectBottom - $nativeIdentity.RectTop) -eq $height
+        $ownerPidMatched = $null -ne $nativeIdentity -and [int]$nativeIdentity.OwnerProcessId -eq $ExpectedMainPid
+        $ownerClassMatched = $null -ne $nativeIdentity -and $nativeIdentity.OwnerWindowClass -ceq "OwlElectron_NotifyIconHostWindow"
+        $verifiedAntiIdentity = $ownerPidMatched -and $ownerClassMatched -and $shellRectMatched
+
+        $trayItem = [pscustomobject]@{
             name = $name
-            provider = "MSAA"
+            provider = "MSAA+Shell_NotifyIconGetRect"
             role = $role
             state = $state
             childId = [int]$index
@@ -118,21 +272,32 @@ foreach ($toolbar in [AntiCodexTrayProbe]::FindNotificationToolbars()) {
             visible = $visible
             clickable = $clickable
             hitTestMatched = $hitTestMatched
+            expectedMainPid = $ExpectedMainPid
+            ownerWindowHandle = if ($nativeIdentity) { [long]$nativeIdentity.OwnerWindowHandle } else { 0 }
+            ownerProcessId = if ($nativeIdentity) { [int]$nativeIdentity.OwnerProcessId } else { 0 }
+            ownerWindowClass = if ($nativeIdentity) { [string]$nativeIdentity.OwnerWindowClass } else { "" }
+            notifyIconId = if ($nativeIdentity) { [long]$nativeIdentity.NotifyIconId } else { 0 }
+            notifyIconGuid = $antiTrayGuid.ToString()
+            shellNotifyIconRectMatched = $shellRectMatched
+            ownerPidMatched = $ownerPidMatched
+            ownerWindowClassMatched = $ownerClassMatched
             x = [int]$x
             y = [int]$y
             width = [int]$width
             height = [int]$height
-        }) | Out-Null
+        }
+        $trayItems.Add($trayItem) | Out-Null
+        if ($verifiedAntiIdentity) { $verifiedTrayItems.Add($trayItem) | Out-Null }
     }
 }
 
 if ($trayItems.Count -eq 0) {
     throw "The live Anti-Codex notification-area item was not found."
 }
-if ($trayItems.Count -ne 1) {
-    throw "The live Anti-Codex notification-area identity is ambiguous ($($trayItems.Count) matches)."
+if ($verifiedTrayItems.Count -ne 1) {
+    throw "The live Anti-Codex notification-area identity is not uniquely bound to PID $ExpectedMainPid and the Anti-Codex tray GUID (raw=$($trayItems.Count), verified=$($verifiedTrayItems.Count))."
 }
-$trayItem = $trayItems[0]
+$trayItem = $verifiedTrayItems[0]
 if (-not $trayItem.visible -or -not $trayItem.clickable) {
     throw "The live Anti-Codex notification-area item is not visible and clickable."
 }
@@ -165,7 +330,7 @@ try {
 
     $pinkArtwork = $pinkPixels -ge $MinimumPinkPixels
     $probe = [ordered]@{
-        schema = "anticodex-live-tray-icon-v1"
+        schema = "anticodex-live-tray-icon-v2"
         ok = $pinkArtwork
         checkedAt = (Get-Date).ToUniversalTime().ToString("o")
         requestedRealTraffic = $false
@@ -180,7 +345,15 @@ try {
             state = [long]$trayItem.state
             childId = [int]$trayItem.childId
             toolbarWindowHandle = [long]$trayItem.toolbarWindowHandle
-            candidateCount = [int]$trayItems.Count
+            rawNameCandidateCount = [int]$trayItems.Count
+            verifiedAntiCandidateCount = [int]$verifiedTrayItems.Count
+            expectedMainPid = [int]$ExpectedMainPid
+            ownerWindowHandle = [long]$trayItem.ownerWindowHandle
+            ownerProcessId = [int]$trayItem.ownerProcessId
+            ownerWindowClass = [string]$trayItem.ownerWindowClass
+            notifyIconId = [long]$trayItem.notifyIconId
+            notifyIconGuid = [string]$trayItem.notifyIconGuid
+            shellNotifyIconRectMatched = [bool]$trayItem.shellNotifyIconRectMatched
             isEnabled = [bool]$trayItem.isEnabled
             isInvisible = [bool]$trayItem.isInvisible
             isOffscreen = [bool]$trayItem.isOffscreen
@@ -194,6 +367,9 @@ try {
         }
         identity = [ordered]@{
             exactAccessibleName = ($trayItem.name -ceq "Anti-Codex")
+            expectedMainPidMatched = [bool]$trayItem.ownerPidMatched
+            ownerWindowClassMatched = [bool]$trayItem.ownerWindowClassMatched
+            antiGuidRectMatched = [bool]$trayItem.shellNotifyIconRectMatched
             pinkArtwork = $pinkArtwork
             pinkPixels = $pinkPixels
             minimumPinkPixels = $MinimumPinkPixels

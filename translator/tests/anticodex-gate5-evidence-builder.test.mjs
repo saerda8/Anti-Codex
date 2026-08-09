@@ -584,7 +584,7 @@ function buildRawEvidence(root) {
   modelSwitches.forEach((value, index) => writeJson(paths.modelSwitches[index], value, { signed: true }));
   shortcutRounds.forEach((value, index) => writeJson(paths.shortcutRounds[index], value, { signed: true }));
   writeJson(paths.liveTray, {
-    schema: "anticodex-live-tray-icon-v1",
+    schema: "anticodex-live-tray-icon-v2",
     ok: true,
     checkedAt,
     requestedRealTraffic: false,
@@ -594,12 +594,20 @@ function buildRawEvidence(root) {
       visible: true,
       clickable: true,
       name: "Anti-Codex",
-      provider: "MSAA",
+      provider: "MSAA+Shell_NotifyIconGetRect",
       role: 43,
       state: 0,
       childId: 7,
       toolbarWindowHandle: 6001,
-      candidateCount: 1,
+      rawNameCandidateCount: 1,
+      verifiedAntiCandidateCount: 1,
+      expectedMainPid: 103,
+      ownerWindowHandle: 7003,
+      ownerProcessId: 103,
+      ownerWindowClass: "OwlElectron_NotifyIconHostWindow",
+      notifyIconId: 3,
+      notifyIconGuid: "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3",
+      shellNotifyIconRectMatched: true,
       isEnabled: true,
       isInvisible: false,
       isOffscreen: false,
@@ -608,6 +616,9 @@ function buildRawEvidence(root) {
     },
     identity: {
       exactAccessibleName: true,
+      expectedMainPidMatched: true,
+      ownerWindowClassMatched: true,
+      antiGuidRectMatched: true,
       pinkArtwork: true,
       pinkPixels: 12,
       minimumPinkPixels: 8,
@@ -894,7 +905,12 @@ test("builder requires visible clickable notification-area Anti-Codex identity e
     ["disabled", (tray) => { tray.notificationAreaItem.isEnabled = false; }],
     ["offscreen", (tray) => { tray.notificationAreaItem.isOffscreen = true; }],
     ["hit-test mismatch", (tray) => { tray.notificationAreaItem.hitTestMatched = false; }],
-    ["ambiguous identity", (tray) => { tray.notificationAreaItem.candidateCount = 2; }],
+    ["ambiguous verified identity", (tray) => { tray.notificationAreaItem.verifiedAntiCandidateCount = 2; }],
+    ["official Codex owner", (tray) => { tray.notificationAreaItem.ownerProcessId = 23788; }],
+    ["official Codex GUID", (tray) => { tray.notificationAreaItem.notifyIconGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35"; }],
+    ["wrong owner class", (tray) => { tray.notificationAreaItem.ownerWindowClass = "ChatGPT"; }],
+    ["unverified shell rect", (tray) => { tray.notificationAreaItem.shellNotifyIconRectMatched = false; }],
+    ["legacy schema", (tray) => { tray.schema = "anticodex-live-tray-icon-v1"; }],
     ["wrong artwork", (tray) => { tray.identity.pinkArtwork = false; }],
     ["weak artwork threshold", (tray) => {
       tray.identity.minimumPinkPixels = 1;
@@ -920,8 +936,13 @@ test("builder requires visible clickable notification-area Anti-Codex identity e
 test("live tray probe emits a signed machine-readable accessibility report", () => {
   const source = readFileSync(liveTrayProbePath, "utf8");
   assert.match(source, /\[ValidateRange\(8,\s*2147483647\)\]\s*\[int\]\$MinimumPinkPixels/);
+  assert.match(source, /\[Parameter\(Mandatory\s*=\s*\$true\)\]\[ValidateRange\(1,\s*2147483647\)\]\[int\]\$ExpectedMainPid/);
   assert.match(source, /\[string\]\$ReportPath/);
-  assert.match(source, /anticodex-live-tray-icon-v1/);
+  assert.match(source, /anticodex-live-tray-icon-v2/);
+  assert.match(source, /TB_GETBUTTON/);
+  assert.match(source, /TRAYDATA/);
+  assert.match(source, /Shell_NotifyIconGetRect/);
+  assert.match(source, /a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3/i);
   assert.match(source, /checkedAt/);
   assert.match(source, /notificationAreaItem/);
   assert.match(source, /accHitTest/);

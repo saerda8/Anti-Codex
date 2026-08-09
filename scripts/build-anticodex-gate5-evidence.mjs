@@ -668,14 +668,16 @@ function normalizeTaskReceipt(source, artifactPaths, releaseBinding) {
   };
 }
 
-function normalizeLiveTray(source) {
+const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
+
+function normalizeLiveTray(source, runtimeIdentity) {
   const raw = source.data;
   const item = raw?.notificationAreaItem || {};
   const identity = raw?.identity || {};
   const rectangle = item?.rectangle || {};
   requireCondition(source.ageHours * 60 <= maxLiveTrayAgeMinutes,
     `live-tray-evidence: probe is stale (${(source.ageHours * 60).toFixed(2)}m)`);
-  requireCondition(raw?.schema === "anticodex-live-tray-icon-v1"
+  requireCondition(raw?.schema === "anticodex-live-tray-icon-v2"
     && raw?.ok === true
     && raw?.requestedRealTraffic === false
     && raw?.usedRealTraffic === false
@@ -683,12 +685,20 @@ function normalizeLiveTray(source) {
     && item?.visible === true
     && item?.clickable === true
     && item?.name === "Anti-Codex"
-    && item?.provider === "MSAA"
+    && item?.provider === "MSAA+Shell_NotifyIconGetRect"
     && Number(item?.role) === 43
     && Number(item?.state) >= 0
     && Number(item?.childId) > 0
     && Number(item?.toolbarWindowHandle) > 0
-    && Number(item?.candidateCount) === 1
+    && Number(item?.rawNameCandidateCount) >= 1
+    && Number(item?.verifiedAntiCandidateCount) === 1
+    && Number(item?.expectedMainPid) === Number(runtimeIdentity?.antiCodexMainPid)
+    && Number(item?.ownerWindowHandle) > 0
+    && Number(item?.ownerProcessId) === Number(runtimeIdentity?.antiCodexMainPid)
+    && item?.ownerWindowClass === "OwlElectron_NotifyIconHostWindow"
+    && Number(item?.notifyIconId) > 0
+    && String(item?.notifyIconGuid || "").toLowerCase() === antiCodexTrayGuid
+    && item?.shellNotifyIconRectMatched === true
     && item?.isEnabled === true
     && item?.isInvisible === false
     && item?.isOffscreen === false
@@ -698,6 +708,9 @@ function normalizeLiveTray(source) {
     && Number(rectangle?.width) >= 16
     && Number(rectangle?.height) >= 16
     && identity?.exactAccessibleName === true
+    && identity?.expectedMainPidMatched === true
+    && identity?.ownerWindowClassMatched === true
+    && identity?.antiGuidRectMatched === true
     && identity?.pinkArtwork === true
     && Number(identity?.minimumPinkPixels) >= 8
     && Number(identity?.pinkPixels) >= Number(identity?.minimumPinkPixels),
@@ -1205,9 +1218,8 @@ async function main() {
       && syncSource.data?.noTraffic === true
       && syncSource.data?.usedRealTraffic === false,
     "sync-readiness-evidence: current no-traffic sync readiness is not green");
-    const liveTrayEvidence = normalizeLiveTray(liveTraySource);
-
     const task = normalizeTaskReceipt(taskReceipt, values("--task-artifact"), releaseBinding);
+    const liveTrayEvidence = normalizeLiveTray(liveTraySource, task.runtimeIdentity);
     const normalized = {
       taskManifest: task.normalized,
       managerEvidence: normalizeManager(
