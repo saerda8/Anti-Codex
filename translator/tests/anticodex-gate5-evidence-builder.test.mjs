@@ -196,6 +196,7 @@ function buildRawEvidence(root) {
   const runtimeManifest = {
     schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
     sourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    createdAt: "2026-08-08T23:59:00.000Z",
     files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
   };
   writeFileSync(manifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, "utf8");
@@ -728,6 +729,16 @@ function runBuilder(root, state, extraArgs = []) {
   return { child, payload, outputRoot };
 }
 
+function rewriteBoundRuntimeManifestCreatedAt(state, createdAt) {
+  const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+  const provenance = matrix.managerButton.payload.handlerContractEvidence.provenance;
+  const manifest = JSON.parse(readFileSync(provenance.manifestPath, "utf8"));
+  manifest.createdAt = createdAt;
+  writeFileSync(provenance.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  provenance.manifestSha256 = sha256(readFileSync(provenance.manifestPath));
+  writeJson(state.paths.managerMatrix, matrix, { signed: true });
+}
+
 test("builder converts raw real-probe shapes into five signed inputs accepted by Gate 5", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-"));
   let supervisor = null;
@@ -771,6 +782,25 @@ test("builder converts raw real-probe shapes into five signed inputs accepted by
   } finally {
     stopTestSupervisor(supervisor);
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects a supervisor older than its manifest generation beyond the 1ms serialization tolerance", () => {
+  for (const [deltaMs, expectedStatus] of [[1, 0], [2, 1]]) {
+    const root = mkdtempSync(join(tmpdir(), `anticodex-gate5-builder-runtime-age-${deltaMs}-`));
+    let supervisor = null;
+    try {
+      const state = buildRawEvidence(root);
+      supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+      bindStateToSupervisor(state, supervisor);
+      rewriteBoundRuntimeManifestCreatedAt(state, new Date(Date.parse(supervisor.creationDateUtc) + deltaMs).toISOString());
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, expectedStatus, result.child.stderr || JSON.stringify(result.payload));
+      if (expectedStatus !== 0) assert.match(result.payload.failures.join("\n"), /manifest generation|predates/i);
+    } finally {
+      stopTestSupervisor(supervisor);
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

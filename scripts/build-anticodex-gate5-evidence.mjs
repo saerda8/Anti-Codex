@@ -14,6 +14,7 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const runtimeManifestClockToleranceMs = 1;
 
 function parseArgs(values) {
   const parsed = new Map();
@@ -669,6 +670,13 @@ function normalizedContractPath(value) {
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
 }
 
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
+}
+
 function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries, runtimeIdentity) {
   const provenance = handlerContracts?.provenance || {};
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
@@ -722,6 +730,8 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
     && manifest?.sourceRevisionProvenance === "git"
     && String(manifest?.sourceGitHead || "").toLowerCase() === sourceHead,
   "manager-matrix: handler runtime manifest identity is stale");
+  requireCondition(processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt),
+    "manager-matrix: fixed-route supervisor predates runtime manifest generation");
   const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
   requireCondition(fileByPath.size === files.length && expectedFiles.every((path) => fileByPath.has(path)),
     "manager-matrix: handler provenance file inventory is incomplete or duplicated");

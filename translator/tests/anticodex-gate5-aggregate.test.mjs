@@ -195,6 +195,7 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
   writeFileSync(manifestPath, `${JSON.stringify({
     schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
     sourceRoot: fixtureSourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    createdAt: new Date(Date.now() - 60_000).toISOString(),
     files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
   }, null, 2)}\n`, "utf8");
   const taskId = "019f9000-1111-7222-8333-444444444444";
@@ -525,6 +526,22 @@ test("Gate 5 rehashes the native rollout bound into the signed task manifest", (
   }
 });
 
+test("Gate 5 accepts the 1ms runtime-manifest serialization boundary", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-runtime-age-boundary-"));
+  try {
+    const result = runFixture(root, ({ values }) => {
+      const provenance = values.managerEvidence.handlerVerification.provenance;
+      const manifest = JSON.parse(readFileSync(provenance.manifestPath, "utf8"));
+      manifest.createdAt = new Date(Date.parse(provenance.taskRuntimeCreationDateUtc) + 1).toISOString();
+      writeFileSync(provenance.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      provenance.manifestSha256 = hash(readFileSync(provenance.manifestPath));
+    });
+    assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const rejectionCases = [
   ["old component version", ({ values }) => { values.taskManifest.route.codexPlusPlusVersion = "1.2.36"; }, /new_native_task_one_total_goal|current_antigravity_route_bound/],
   ["protocol not restored", ({ values }) => { values.managerEvidence.protocolInteraction.restored = "responses"; }, /manager_actual_mouse_matrix|manager_protocol_physical_round_trip/],
@@ -534,6 +551,13 @@ const rejectionCases = [
   ["Manager records side effects", ({ values }) => { values.managerEvidence.zeroSideEffects = false; }, /manager_actual_mouse_matrix/],
   ["Manager handler PID is not the clicked UI supervisor", ({ values }) => { values.managerEvidence.handlerVerification.provenance.taskRuntimePid = 999; }, /manager_actual_mouse_matrix/],
   ["Manager handler supervisor creation time is stale", ({ values }) => { values.managerEvidence.handlerVerification.provenance.taskRuntimeCreationDateUtc = "2020-01-01T00:00:00.0000000Z"; }, /manager_actual_mouse_matrix/],
+  ["Manager supervisor predates the validated runtime generation", ({ values }) => {
+    const provenance = values.managerEvidence.handlerVerification.provenance;
+    const manifest = JSON.parse(readFileSync(provenance.manifestPath, "utf8"));
+    manifest.createdAt = new Date(Date.parse(provenance.taskRuntimeCreationDateUtc) + 2).toISOString();
+    writeFileSync(provenance.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    provenance.manifestSha256 = hash(readFileSync(provenance.manifestPath));
+  }, /manager_actual_mouse_matrix/],
   ["Manager fixed-route supervisor script hash is stale", ({ values }) => {
     const provenance = values.managerEvidence.handlerVerification.provenance;
     writeFileSync(join(provenance.runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"), "tampered\n", "utf8");

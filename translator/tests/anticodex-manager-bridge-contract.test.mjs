@@ -1538,6 +1538,9 @@ test("Manager real-buttons wrapper exposes a dedicated safe UI-only matrix entry
   assert.match(managerRealButtonsTest, /\$taskRuntimeArguments\[1\]/);
   assert.doesNotMatch(managerRealButtonsTest, /matchingScriptArguments/);
   assert.match(managerRealButtonsTest, /CreationDate/);
+  assert.match(managerRealButtonsTest, /RuntimeManifestClockToleranceMilliseconds\s*=\s*1/);
+  assert.match(managerRealButtonsTest, /manifest\.createdAt/);
+  assert.match(managerRealButtonsTest, /fixed-route supervisor predates runtime manifest/);
   assert.match(managerRealButtonsTest, /taskRuntimePid\s*=\s*\$TaskRuntimePid/);
   assert.match(managerRealButtonsTest, /taskRuntimeScriptPath\s*=\s*\$taskRuntimeScriptPath/);
   assert.match(managerRealButtonsTest, /taskRuntimeCreationDateUtc\s*=\s*\$taskRuntimeCreationDateUtc/);

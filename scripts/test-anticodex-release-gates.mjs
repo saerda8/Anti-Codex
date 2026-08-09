@@ -54,6 +54,7 @@ const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA
 const maxAgeHours = Math.max(0.01, Number(args.get("--max-age-hours") || 48));
 const strict = args.has("--strict");
 const compactOutput = args.has("--summary") || args.has("--compact") || args.has("--compact-status") || args.has("--status");
+const runtimeManifestClockToleranceMs = 1;
 const managerActions = Object.freeze([
   "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
   "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
@@ -105,6 +106,13 @@ function normalizedContractPath(value) {
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
 }
 
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
+}
+
 function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
   const contracts = handlerVerification?.contracts || {};
   const entries = Object.entries(contracts);
@@ -140,7 +148,8 @@ function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) 
   if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
     || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
     || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head
-    || manifest?.sourceGitClean !== true || manifest?.sourceRevisionProvenance !== "git") return false;
+    || manifest?.sourceGitClean !== true || manifest?.sourceRevisionProvenance !== "git"
+    || !processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt)) return false;
   const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...entries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source), String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
   ])].filter(Boolean))];
@@ -979,6 +988,7 @@ function selfTest() {
     writeFileSync(gate5ManifestPath, `${JSON.stringify({
       schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: gate5RuntimeRoot,
       sourceRoot, sourceGitHead: gate5SourceHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
       files: Object.fromEntries(gate5RuntimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
     }, null, 2)}\n`, "utf8");
     gate5Supervisor = startSuspendedSelfTestSupervisor(join(gate5RuntimeRoot, "scripts", "start-anticodex-fixed-route.mjs"));
@@ -1073,6 +1083,23 @@ function selfTest() {
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.runtimeRoot = join(temporaryRoot, "wrong-runtime"); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from the wrong runtime root");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimePid = 999; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from a different supervisor PID");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimeCreationDateUtc = "2020-01-01T00:00:00.0000000Z"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a reused supervisor PID");
+    const gate5ManifestOriginal = readFileSync(gate5ManifestPath, "utf8");
+    const setGate5ManifestCreatedAt = (createdAt) => {
+      const manifest = JSON.parse(gate5ManifestOriginal);
+      manifest.createdAt = createdAt;
+      writeFileSync(gate5ManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      gate5Fixture.currentUiEvidence.manager_actual_mouse_matrix.handlerVerification.provenance.manifestSha256 = sha256File(gate5ManifestPath);
+    };
+    setGate5ManifestCreatedAt(new Date(Date.parse(gate5Supervisor.snapshot.creationDateUtc) + 1).toISOString());
+    const toleranceBoundaryFailures = [];
+    validateGate5CurrentUiEvidence(gate5Fixture, toleranceBoundaryFailures);
+    if (toleranceBoundaryFailures.length > 0) throw new Error(`Gate 5 rejected the 1ms serialization boundary: ${toleranceBoundaryFailures.join(",")}`);
+    setGate5ManifestCreatedAt(new Date(Date.parse(gate5Supervisor.snapshot.creationDateUtc) + 2).toISOString());
+    const staleGenerationFailures = [];
+    validateGate5CurrentUiEvidence(gate5Fixture, staleGenerationFailures);
+    if (!staleGenerationFailures.includes("gate5_current_ui_manager_actual_mouse_matrix")) throw new Error("Gate 5 accepted a supervisor older than its validated runtime generation");
+    writeFileSync(gate5ManifestPath, gate5ManifestOriginal, "utf8");
+    gate5Fixture.currentUiEvidence.manager_actual_mouse_matrix.handlerVerification.provenance.manifestSha256 = sha256File(gate5ManifestPath);
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.files[0].fileSha256 = "f".repeat(64); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a stale Manager handler file hash");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");

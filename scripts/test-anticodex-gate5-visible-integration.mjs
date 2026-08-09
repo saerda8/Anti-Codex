@@ -55,6 +55,7 @@ const compact = args.has("--compact");
 const reportRoot = resolve(args.get("--report-root") || `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`);
 const auditPath = resolve(args.get("--audit-out") || resolve(sourceRoot, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
 const maxSourceAgeHours = positiveNumber(args.get("--max-source-age-hours"), 48);
+const runtimeManifestClockToleranceMs = 1;
 const requiredInputs = {
   taskManifest: "--task-manifest",
   managerEvidence: "--manager-evidence",
@@ -127,6 +128,13 @@ function samePath(left, right) {
 function normalizedContractPath(value) {
   const normalized = String(value || "").replaceAll("\\", "/");
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function processStartedForManifest(processCreatedAt, manifestCreatedAt) {
+  const processCreatedAtMs = Date.parse(String(processCreatedAt || ""));
+  const manifestCreatedAtMs = Date.parse(String(manifestCreatedAt || ""));
+  return Number.isFinite(processCreatedAtMs) && Number.isFinite(manifestCreatedAtMs)
+    && processCreatedAtMs + runtimeManifestClockToleranceMs >= manifestCreatedAtMs;
 }
 
 function currentSourceGitState() {
@@ -229,7 +237,8 @@ function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) 
   if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
     || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
     || manifest?.sourceGitClean !== sourceGit.clean || manifest?.sourceRevisionProvenance !== "git"
-    || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head) return false;
+    || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head
+    || !processStartedForManifest(taskRuntimeCreationDateUtc, manifest?.createdAt)) return false;
   const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...contractEntries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source),
     String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",

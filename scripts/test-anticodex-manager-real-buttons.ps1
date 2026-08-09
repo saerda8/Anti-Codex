@@ -13,6 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$RuntimeManifestClockToleranceMilliseconds = 1
 
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
@@ -292,6 +293,7 @@ function Get-ManagerHandlerContractEvidence {
     $manifest = $null
     $manifestSourceRoot = ""
     $taskRuntimeCreationDateUtc = ""
+    $taskRuntimeCreatedAt = [DateTimeOffset]::MinValue
     $provenanceVerified = $true
     try {
         if ($TaskRuntimePid -le 0) { throw "fixed-route supervisor PID is missing" }
@@ -308,7 +310,10 @@ function Get-ManagerHandlerContractEvidence {
             throw "fixed-route supervisor entry script does not match the bound runtime"
         }
         $taskRuntimeCreationDateUtc = ([DateTime]$taskRuntimeProcess.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)
-        if (-not $taskRuntimeCreationDateUtc) { throw "fixed-route supervisor creation time is missing" }
+        if (-not $taskRuntimeCreationDateUtc -or
+            -not [DateTimeOffset]::TryParse($taskRuntimeCreationDateUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$taskRuntimeCreatedAt)) {
+            throw "fixed-route supervisor creation time is missing or invalid"
+        }
     } catch {
         $provenanceVerified = $false
         Add-Failure "Manager task runtime provenance could not be verified: $($_.Exception.Message)"
@@ -329,6 +334,13 @@ function Get-ManagerHandlerContractEvidence {
             [string]$manifest.sourceGitHead -notmatch "^[a-fA-F0-9]{40}$" -or
             -not $manifest.files) {
             throw "runtime manifest identity is invalid"
+        }
+        $manifestCreatedAt = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParse([string]$manifest.createdAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$manifestCreatedAt)) {
+            throw "runtime manifest creation time is missing or invalid"
+        }
+        if ($taskRuntimeCreatedAt.AddMilliseconds($RuntimeManifestClockToleranceMilliseconds) -lt $manifestCreatedAt) {
+            throw "fixed-route supervisor predates runtime manifest"
         }
     } catch {
         $provenanceVerified = $false
