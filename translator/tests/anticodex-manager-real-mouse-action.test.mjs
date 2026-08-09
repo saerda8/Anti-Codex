@@ -198,7 +198,7 @@ test("native Settings ASAR resolution supports both source and installed runtime
   }
 });
 
-test("native Settings completeness treats the current registration contract as known feature-gated slugs", () => {
+test("native Settings completeness requires explicit gate evidence for missing registered slugs", () => {
   assert.equal(typeof nativeSettingsContract.extractNativeSettingsRegistrationSlugs, "function");
   assert.equal(typeof nativeSettingsContract.compareNativeSettingsSlugSets, "function");
   const source = "var x={agent:A,personalization:B,\"plugins-settings\":C};";
@@ -209,8 +209,10 @@ test("native Settings completeness treats the current registration contract as k
   const compared = nativeSettingsContract.compareNativeSettingsSlugSets(
     ["agent", "personalization", "plugins-settings"],
     ["agent", "agent", "personalization", "unexpected"],
+    ["plugins-settings"],
   );
   assert.deepEqual(compared.gated, ["plugins-settings"]);
+  assert.deepEqual(compared.missingWithoutGateEvidence, []);
   assert.deepEqual(compared.duplicates, ["agent"]);
   assert.deepEqual(compared.unexpected, ["unexpected"]);
   assert.equal(compared.ok, false);
@@ -218,15 +220,25 @@ test("native Settings completeness treats the current registration contract as k
   const featureGated = nativeSettingsContract.compareNativeSettingsSlugSets(
     ["agent", "personalization", "plugins-settings", "usage"],
     ["agent", "personalization"],
+    ["plugins-settings", "usage"],
   );
   assert.equal(featureGated.ok, true);
   assert.deepEqual(featureGated.gated, ["plugins-settings", "usage"]);
 
+  const missingWithoutEvidence = nativeSettingsContract.compareNativeSettingsSlugSets(
+    ["agent", "personalization", "plugins-settings", "usage"],
+    ["agent", "personalization"],
+  );
+  assert.equal(missingWithoutEvidence.ok, false);
+  assert.deepEqual(missingWithoutEvidence.gated, []);
+  assert.deepEqual(missingWithoutEvidence.missingWithoutGateEvidence, ["plugins-settings", "usage"]);
+
   const runner = readFileSync(scriptUrl, "utf8");
-  assert.match(runner, /readNativeSettingsRegistrationSlugs/);
+  assert.match(runner, /readNativeSettingsContract/);
   assert.match(runner, /compareNativeSettingsSlugSets/);
   assert.match(runner, /knownSlugs/);
   assert.match(runner, /gatedSlugs/);
+  assert.match(runner, /missingWithoutGateEvidence/);
   assert.match(runner, /duplicateSlugs/);
 });
 

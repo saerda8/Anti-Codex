@@ -11,7 +11,7 @@ import {
   exactFileSnapshotMatches,
   promptSettingsStatesEqual,
   promptSettingsStatesSemanticallyEqual,
-  readNativeSettingsRegistrationSlugs,
+  readNativeSettingsContract,
   resolveNativeSettingsAsarPath,
   restoreExactFileSnapshot,
 } from "./anticodex-native-settings-contract.mjs";
@@ -659,7 +659,8 @@ async function auditNativePersonalization({ allowWrite }) {
 }
 
 async function runNativeSettingsAcceptance() {
-  const knownSlugs = readNativeSettingsRegistrationSlugs(nativeSettingsAsarPath);
+  const nativeSettingsContract = readNativeSettingsContract(nativeSettingsAsarPath);
+  const knownSlugs = nativeSettingsContract.registrationSlugs;
   const nav = await waitFor(`(() => {
     const node = ${nativeSettingsNavExpression};
     const rect = node?.getBoundingClientRect?.();
@@ -686,12 +687,17 @@ async function runNativeSettingsAcceptance() {
   if (nav.externalTargets.length > 0) {
     throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings navigation: ${JSON.stringify(nav.externalTargets)}`);
   }
-  const slugComparison = compareNativeSettingsSlugSets(knownSlugs, nav.entries.map((entry) => entry.slug));
+  const slugComparison = compareNativeSettingsSlugSets(
+    knownSlugs,
+    nav.entries.map((entry) => entry.slug),
+    nativeSettingsContract.gatedSlugs,
+  );
   if (!slugComparison.ok) {
     throw new Error(`Native Settings registration mismatch: ${JSON.stringify({
       knownSlugs: slugComparison.expected,
       visibleSlugs: slugComparison.visible,
       gatedSlugs: slugComparison.gated,
+      missingWithoutGateEvidence: slugComparison.missingWithoutGateEvidence,
       duplicateSlugs: slugComparison.duplicates,
       unexpectedSlugs: slugComparison.unexpected,
     })}`);
@@ -728,6 +734,7 @@ async function runNativeSettingsAcceptance() {
     knownSlugs: slugComparison.expected,
     visibleSlugs: slugComparison.visible,
     gatedSlugs: slugComparison.gated,
+    missingWithoutGateEvidence: slugComparison.missingWithoutGateEvidence,
     duplicateSlugs: slugComparison.duplicates,
     unexpectedSlugs: slugComparison.unexpected,
     externalChatGptSettingsHidden: nav.externalTargets.length === 0 && pageExternalTargets.length === 0,
