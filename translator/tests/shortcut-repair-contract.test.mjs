@@ -14,6 +14,7 @@ const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1")
 const launchTask = readFileSync(resolve(root, "scripts", "start-anticodex-task.mjs"), "utf8");
 const consoleHideScript = readFileSync(resolve(root, "scripts", "hide-anticodex-console.ps1"), "utf8");
 const shortcutBrokerPath = resolve(root, "scripts", "start-anticodex-shortcut-broker.ps1");
+const shortcutBrokerBytes = existsSync(shortcutBrokerPath) ? readFileSync(shortcutBrokerPath) : Buffer.alloc(0);
 const shortcutBroker = existsSync(shortcutBrokerPath) ? readFileSync(shortcutBrokerPath, "utf8") : "";
 const shortcutRestoreAcceptancePath = resolve(root, "scripts", "test-anticodex-shortcut-restore.ps1");
 const shortcutRestoreAcceptance = existsSync(shortcutRestoreAcceptancePath)
@@ -22,6 +23,9 @@ const shortcutRestoreAcceptance = existsSync(shortcutRestoreAcceptancePath)
 
 test("interactive shortcut broker recovers the exact hidden main window without selecting an overlay", () => {
   assert.equal(existsSync(shortcutBrokerPath), true);
+  const hasUtf8Bom = shortcutBrokerBytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
+  const isAscii = shortcutBrokerBytes.every((byte) => byte <= 0x7f);
+  assert.equal(hasUtf8Bom || isAscii, true, "Windows PowerShell 5.1 requires an ASCII-only or UTF-8 BOM broker");
   assert.match(shortcutBroker, /codex-patched-app[\\/]Anti-Codex\.exe/);
   assert.match(shortcutBroker, /Get-Process\s+-Name\s+"Anti-Codex"/);
   assert.match(shortcutBroker, /\.Path/);

@@ -243,13 +243,13 @@ if ($matchingProcesses.Count -gt 0) {
 }
 
 if (-not (Test-Path -LiteralPath $expectedExecutable -PathType Leaf)) {
-    Show-AntiCodexShortcutFailure -Message "Anti-Codex executable is missing. Run 【修复快捷方式】 in 管理 and try again."
+    Show-AntiCodexShortcutFailure -Message "Anti-Codex executable is missing. Open Manager, run Repair Shortcuts, and try again."
     exit 1
 }
 
 try {
     Start-ScheduledTask -TaskName "Anti-Codex Launcher"
 } catch {
-    Show-AntiCodexShortcutFailure -Message ("Anti-Codex could not start. Run 【修复快捷方式】 in 管理 and try again.`n`n" + $_.Exception.Message)
+    Show-AntiCodexShortcutFailure -Message ("Anti-Codex could not start. Open Manager, run Repair Shortcuts, and try again.`n`n" + $_.Exception.Message)
     exit 1
 }
