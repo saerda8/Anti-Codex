@@ -785,7 +785,7 @@ function latestManagerReportItem(stateRoot, label, fileName, options = {}) {
 
   const invalid = exists && !parseable;
   const failures = Array.isArray(value?.failures) ? value.failures.filter(Boolean) : [];
-  const timestampMs = parseable ? reportTimestampMs(value, fullPath) : null;
+  const timestampMs = exists ? reportTimestampMs(parseable ? value : null, fullPath) : null;
   const ageMs = Number.isFinite(timestampMs) ? Math.max(0, Date.now() - timestampMs) : null;
   const rawOk = !exists ? null : (!invalid && value?.ok === true);
   const releaseGateReport = fileName === "latest-release-gates.json";
@@ -1828,10 +1828,16 @@ function fallbackBackgroundReport(payload, action, startedAt) {
   const reportedAt = Date.parse(String(report?.reportedAt || ""));
   if (!report || report.exists === false || !Number.isFinite(reportedAt) || reportedAt < Number(startedAt || 0)) return null;
   const state = String(report.state || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (["running", "queued", "pending", "starting", "waiting", "processing", "in_progress", "inprogress", "updater_queued", "updater_handoff"].includes(state)) return null;
   const ok = report.effectiveOk === true || report.ok === true
     ? true
     : (report.effectiveOk === false || report.ok === false ? false : null);
+  const terminalStates = {
+    postVerificationFull: new Set(["completed", "verification_failed", "waiting_timeout"]),
+    syncHost: new Set(["succeeded", "success", "completed", "failed", "failure", "rolled_back"]),
+  };
+  const statelessTerminalActions = new Set(["stabilitySoak", "coldRelaunch"]);
+  if (state && state !== "invalid_report" && !terminalStates[action]?.has(state)) return null;
+  if (!state && (!statelessTerminalActions.has(action) || ok === null)) return null;
   return { ...report, ok };
 }
 function fallbackManagerActionSummary(action, payload) {

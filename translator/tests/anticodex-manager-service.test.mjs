@@ -1213,6 +1213,16 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
       assert.equal(actionResult.ok, true);
       assert.equal(actionResult.reportedAt, completedAt);
     }
+
+    const invalidReportPath = path.join(reportsDir, "latest-stability-soak.json");
+    fs.writeFileSync(invalidReportPath, "{", "utf8");
+    const invalidResponse = await fetch(`${baseUrl}/anticodex/diagnostics`);
+    assert.equal(invalidResponse.status, 200);
+    const invalid = (await invalidResponse.json()).managerActionResults.stabilitySoak;
+    assert.equal(invalid.state, "invalid_report");
+    assert.equal(invalid.ok, false);
+    assert.ok(Number.isFinite(Date.parse(invalid.reportedAt)), "invalid report must retain its file timestamp");
+    fs.rmSync(invalidReportPath, { force: true });
   });
 
   await t.test("diagnostics restores the persisted update check result and distinguishes missing from unknown", async () => {

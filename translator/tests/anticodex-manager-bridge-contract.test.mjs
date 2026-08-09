@@ -428,44 +428,68 @@ test("fallback Manager waits for the same background action's fresh report and s
   const reportBlock = extractNamedFunction(managerService, "fallbackBackgroundReport");
   const reportFor = vm.runInNewContext(`(${reportBlock})`);
   const startedAt = Date.parse("2026-08-01T01:00:00.000Z");
-  const snapshot = (reportedAt, ok = true) => ({
+  const snapshot = (action, reportedAt, ok = true, state = "") => ({
     result: {
       diagnostics: {
         managerActionResults: {
-          stabilitySoak: {
+          [action]: {
             exists: true,
             ok,
             effectiveOk: ok,
             reportedAt,
             latestPath: "C:\\reports\\latest-stability-soak.json",
+            ...(state ? { state } : {}),
           },
         },
       },
     },
   });
 
-  assert.equal(reportFor(snapshot("2026-08-01T00:59:59.000Z"), "stabilitySoak", startedAt), null);
-  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z"), "postVerificationFull", startedAt), null);
-  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z"), "stabilitySoak", startedAt).ok, true);
-  assert.equal(reportFor(snapshot("2026-08-01T01:00:01.000Z", false), "stabilitySoak", startedAt).ok, false);
+  assert.equal(reportFor(snapshot("stabilitySoak", "2026-08-01T00:59:59.000Z"), "stabilitySoak", startedAt), null);
+  assert.equal(reportFor(snapshot("stabilitySoak", "2026-08-01T01:00:01.000Z"), "postVerificationFull", startedAt), null);
+  assert.equal(reportFor(snapshot("stabilitySoak", "2026-08-01T01:00:01.000Z"), "stabilitySoak", startedAt).ok, true);
+  assert.equal(reportFor(snapshot("stabilitySoak", "2026-08-01T01:00:01.000Z", false), "stabilitySoak", startedAt).ok, false);
+  assert.equal(reportFor(snapshot("coldRelaunch", "2026-08-01T01:00:01.000Z"), "coldRelaunch", startedAt).ok, true);
+  assert.equal(reportFor(snapshot("syncHost", "2026-08-01T01:00:01.000Z"), "syncHost", startedAt), null);
+  assert.equal(reportFor(snapshot("postVerificationFull", "2026-08-01T01:00:01.000Z"), "postVerificationFull", startedAt), null);
+  assert.equal(reportFor(snapshot("postVerificationFull", "2026-08-01T01:00:01.000Z", false, "invalid_report"), "postVerificationFull", startedAt).ok, false);
 
-  for (const state of ["running", "queued", "pending", "updater_handoff"]) {
-    const inProgress = {
-      result: {
-        diagnostics: {
-          managerActionResults: {
-            syncHost: {
-              exists: true,
-              ok: null,
-              effectiveOk: false,
-              state,
-              reportedAt: "2026-08-01T01:00:01.000Z",
-            },
-          },
-        },
-      },
-    };
+  for (const state of ["running", "queued", "pending", "updater_handoff", "future_update_state"]) {
+    const inProgress = snapshot("syncHost", "2026-08-01T01:00:01.000Z", false, state);
     assert.equal(reportFor(inProgress, "syncHost", startedAt), null, `${state} is not a terminal update result`);
+  }
+
+  for (const state of [
+    "waiting_for_provider",
+    "provider_ready",
+    "waiting_for_account",
+    "account_ready",
+    "running_full_verification",
+    "future_progress_state",
+  ]) {
+    const inProgress = snapshot("postVerificationFull", "2026-08-01T01:00:01.000Z", false, state);
+    assert.equal(reportFor(inProgress, "postVerificationFull", startedAt), null, `${state} is not a terminal post-verification result`);
+  }
+
+  for (const [state, ok] of [
+    ["completed", true],
+    ["verification_failed", false],
+    ["waiting_timeout", false],
+  ]) {
+    const terminal = snapshot("postVerificationFull", "2026-08-01T01:00:01.000Z", ok, state);
+    assert.equal(reportFor(terminal, "postVerificationFull", startedAt).ok, ok, `${state} is terminal`);
+  }
+
+  for (const [state, ok] of [
+    ["succeeded", true],
+    ["success", true],
+    ["completed", true],
+    ["failed", false],
+    ["failure", false],
+    ["rolled_back", false],
+  ]) {
+    const terminal = snapshot("syncHost", "2026-08-01T01:00:01.000Z", ok, state);
+    assert.equal(reportFor(terminal, "syncHost", startedAt).ok, ok, `${state} is terminal`);
   }
 
   const waitBlock = extractNamedFunction(managerService, "waitForFallbackBackgroundAction");
