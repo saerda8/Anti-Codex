@@ -241,7 +241,14 @@ function Test-TransientManagerButtonFailure {
 
 function Get-ManagerFileSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
 }
 
 if (-not ("AntiCodex.ManagerEvidence.WindowsCommandLine" -as [type])) {
