@@ -200,6 +200,12 @@ function validateArtifactFiles(artifacts, failures, prefix, expectedHashField) {
 function validateGate5CurrentUiEvidence(report, failures) {
   const evidence = report?.currentUiEvidence || {};
   const manager = evidence.manager_actual_mouse_matrix;
+  const liveTray = manager?.liveTrayEvidence;
+  const notificationAreaItem = liveTray?.notificationAreaItem || {};
+  const liveTrayIdentity = liveTray?.identity || {};
+  const liveTrayRectangle = notificationAreaItem?.rectangle || {};
+  const liveTrayCheckedAtMs = Date.parse(String(liveTray?.checkedAt || ""));
+  const liveTrayAgeMinutes = (Date.now() - liveTrayCheckedAtMs) / 60_000;
   const closeProbes = Array.isArray(manager?.closeProbes) ? manager.closeProbes : [];
   const closeByName = Object.fromEntries(closeProbes.map((entry) => [String(entry?.name || ""), entry]));
   const protocol = manager?.protocolInteraction || {};
@@ -211,6 +217,44 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || manager?.profileEntryText !== "管理"
     || manager?.forbiddenEnglishVisible !== false
     || manager?.trayIconPreserved !== true
+    || liveTray?.schema !== "anticodex-live-tray-icon-v1"
+    || liveTray?.ok !== true
+    || liveTray?.requestedRealTraffic !== false
+    || liveTray?.usedRealTraffic !== false
+    || !Number.isFinite(liveTrayCheckedAtMs)
+    || liveTrayAgeMinutes < -5
+    || liveTrayAgeMinutes > 5
+    || notificationAreaItem?.present !== true
+    || notificationAreaItem?.visible !== true
+    || notificationAreaItem?.clickable !== true
+    || notificationAreaItem?.name !== "Anti-Codex"
+    || notificationAreaItem?.provider !== "MSAA"
+    || Number(notificationAreaItem?.role) !== 43
+    || !Number.isFinite(Number(notificationAreaItem?.state))
+    || Number(notificationAreaItem?.state) < 0
+    || !Number.isFinite(Number(notificationAreaItem?.childId))
+    || Number(notificationAreaItem?.childId) <= 0
+    || !Number.isFinite(Number(notificationAreaItem?.toolbarWindowHandle))
+    || Number(notificationAreaItem?.toolbarWindowHandle) <= 0
+    || Number(notificationAreaItem?.candidateCount) !== 1
+    || notificationAreaItem?.isEnabled !== true
+    || notificationAreaItem?.isInvisible !== false
+    || notificationAreaItem?.isOffscreen !== false
+    || notificationAreaItem?.hitTestMatched !== true
+    || !Number.isFinite(liveTrayRectangle?.x)
+    || !Number.isFinite(liveTrayRectangle?.y)
+    || !Number.isFinite(Number(liveTrayRectangle?.width))
+    || Number(liveTrayRectangle?.width) < 16
+    || !Number.isFinite(Number(liveTrayRectangle?.height))
+    || Number(liveTrayRectangle?.height) < 16
+    || liveTrayIdentity?.exactAccessibleName !== true
+    || liveTrayIdentity?.pinkArtwork !== true
+    || !Number.isFinite(Number(liveTrayIdentity?.minimumPinkPixels))
+    || Number(liveTrayIdentity?.minimumPinkPixels) < 8
+    || !Number.isFinite(Number(liveTrayIdentity?.pinkPixels))
+    || Number(liveTrayIdentity?.pinkPixels) < Number(liveTrayIdentity?.minimumPinkPixels)
+    || String(liveTray?.sourcePath || "").trim() === ""
+    || !/^[a-f0-9]{64}$/i.test(String(liveTray?.sourceSha256 || ""))
     || manager?.closeUpper !== true
     || manager?.closeCenter !== true
     || manager?.closeLower !== true
@@ -789,6 +833,18 @@ function selfTest() {
         manager_actual_mouse_matrix: {
           ok: true, usedRealTraffic: false, actualMouse: true, actionCount: 20, zeroSideEffects: true,
           profileEntryText: "管理", forbiddenEnglishVisible: false, trayIconPreserved: true,
+          liveTrayEvidence: {
+            schema: "anticodex-live-tray-icon-v1", ok: true, checkedAt: new Date().toISOString(),
+            requestedRealTraffic: false, usedRealTraffic: false,
+            notificationAreaItem: {
+              present: true, visible: true, clickable: true, name: "Anti-Codex", provider: "MSAA",
+              role: 43, state: 0, childId: 7, toolbarWindowHandle: 6001, candidateCount: 1,
+              isEnabled: true, isInvisible: false, isOffscreen: false, hitTestMatched: true,
+              rectangle: { x: 100, y: 100, width: 24, height: 24 },
+            },
+            identity: { exactAccessibleName: true, pinkArtwork: true, pinkPixels: 12, minimumPinkPixels: 8 },
+            sourcePath: join(temporaryRoot, "live-tray.json"), sourceSha256: "e".repeat(64),
+          },
           closeUpper: true, closeCenter: true, closeLower: true, closeHasTextNode: false,
           closeProbes: ["upper-center", "center", "lower-center"].map((name) => ({ name, ok: true, actualMouse: true, closed: true, hasTextNode: false })),
           protocolInteraction: {
@@ -828,6 +884,9 @@ function selfTest() {
     };
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.protocolInteraction.restored = "responses"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted an unrestored protocol");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.protocolInteraction.profileUnchanged = false; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a changed profile");
+    expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted missing live tray evidence");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.liveTrayEvidence.checkedAt = new Date(Date.now() - 6 * 60_000).toISOString(); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted stale live tray evidence");
+    expectUiFailure((ui) => { delete ui.manager_actual_mouse_matrix.liveTrayEvidence.notificationAreaItem.state; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted incomplete live tray accessibility evidence");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].taskId = "019f9000-1111-7222-8333-555555555555"; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a switch in another task");

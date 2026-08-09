@@ -18,6 +18,7 @@ import test from "node:test";
 const builderPath = fileURLToPath(new URL("../../scripts/build-anticodex-gate5-evidence.mjs", import.meta.url));
 const aggregatePath = fileURLToPath(new URL("../../scripts/test-anticodex-gate5-visible-integration.mjs", import.meta.url));
 const uiChatPath = fileURLToPath(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url));
+const liveTrayProbePath = fileURLToPath(new URL("../../scripts/test-anticodex-live-tray-icon.ps1", import.meta.url));
 const managerActions = [
   "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
   "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
@@ -387,6 +388,7 @@ function buildRawEvidence(root) {
     managerProtocol: join(root, "manager-protocol.json"),
     modelSwitches: modelSwitches.map((_, index) => join(root, `model-switch-${index + 1}.json`)),
     shortcutRounds: shortcutRounds.map((_, index) => join(root, `shortcut-round-${index + 1}.json`)),
+    liveTray: join(root, "live-tray.json"),
     syncReadiness: join(root, "sync-readiness.json"),
     releaseBinding: join(root, "release-binding.json"),
   };
@@ -398,6 +400,36 @@ function buildRawEvidence(root) {
   writeJson(paths.managerProtocol, managerProtocol, { signed: true });
   modelSwitches.forEach((value, index) => writeJson(paths.modelSwitches[index], value, { signed: true }));
   shortcutRounds.forEach((value, index) => writeJson(paths.shortcutRounds[index], value, { signed: true }));
+  writeJson(paths.liveTray, {
+    schema: "anticodex-live-tray-icon-v1",
+    ok: true,
+    checkedAt,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    notificationAreaItem: {
+      present: true,
+      visible: true,
+      clickable: true,
+      name: "Anti-Codex",
+      provider: "MSAA",
+      role: 43,
+      state: 0,
+      childId: 7,
+      toolbarWindowHandle: 6001,
+      candidateCount: 1,
+      isEnabled: true,
+      isInvisible: false,
+      isOffscreen: false,
+      hitTestMatched: true,
+      rectangle: { x: 100, y: 100, width: 24, height: 24 },
+    },
+    identity: {
+      exactAccessibleName: true,
+      pinkArtwork: true,
+      pinkPixels: 12,
+      minimumPinkPixels: 8,
+    },
+  }, { signed: true });
 
   const syncReadiness = {
     ok: true,
@@ -535,6 +567,7 @@ function runBuilder(root, state, extraArgs = []) {
     "--manager-protocol", state.paths.managerProtocol,
     ...state.paths.modelSwitches.flatMap((path) => ["--model-switch", path]),
     ...state.paths.shortcutRounds.flatMap((path) => ["--shortcut-restore", path]),
+    "--live-tray-evidence", state.paths.liveTray,
     "--release-binding-evidence", state.paths.releaseBinding,
     "--sync-readiness-evidence", state.paths.syncReadiness,
     "--output-root", outputRoot,
@@ -586,6 +619,97 @@ test("builder converts raw real-probe shapes into five signed inputs accepted by
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("builder fails closed when the live tray probe is missing, stale, or failed", () => {
+  const mutations = [
+    ["missing", (state) => {
+      rmSync(state.paths.liveTray);
+      rmSync(`${state.paths.liveTray}.sha256`);
+    }],
+    ["stale", (state) => {
+      const tray = JSON.parse(readFileSync(state.paths.liveTray, "utf8"));
+      tray.checkedAt = new Date(Date.now() - 6 * 60_000).toISOString();
+      writeJson(state.paths.liveTray, tray, { signed: true });
+    }],
+    ["failed", (state) => {
+      const tray = JSON.parse(readFileSync(state.paths.liveTray, "utf8"));
+      tray.ok = false;
+      writeJson(state.paths.liveTray, tray, { signed: true });
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const root = mkdtempSync(join(tmpdir(), `anticodex-gate5-live-tray-${label}-`));
+    try {
+      const state = buildRawEvidence(root);
+      mutate(state);
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /live.?tray|notification.?area/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("builder does not allow callers to widen the five-minute live tray freshness window", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-live-tray-age-"));
+  try {
+    const state = buildRawEvidence(root);
+    const tray = JSON.parse(readFileSync(state.paths.liveTray, "utf8"));
+    tray.checkedAt = new Date(Date.now() - 6 * 60_000).toISOString();
+    writeJson(state.paths.liveTray, tray, { signed: true });
+    const result = runBuilder(root, state, ["--max-live-tray-age-minutes", "999"]);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /live.?tray.*stale/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder requires visible clickable notification-area Anti-Codex identity evidence", () => {
+  const mutations = [
+    ["not present", (tray) => { tray.notificationAreaItem.present = false; }],
+    ["hidden", (tray) => { tray.notificationAreaItem.visible = false; }],
+    ["not clickable", (tray) => { tray.notificationAreaItem.clickable = false; }],
+    ["wrong name", (tray) => { tray.notificationAreaItem.name = "ChatGPT"; }],
+    ["wrong provider", (tray) => { tray.notificationAreaItem.provider = "fixture"; }],
+    ["wrong role", (tray) => { tray.notificationAreaItem.role = 0; }],
+    ["disabled", (tray) => { tray.notificationAreaItem.isEnabled = false; }],
+    ["offscreen", (tray) => { tray.notificationAreaItem.isOffscreen = true; }],
+    ["hit-test mismatch", (tray) => { tray.notificationAreaItem.hitTestMatched = false; }],
+    ["ambiguous identity", (tray) => { tray.notificationAreaItem.candidateCount = 2; }],
+    ["wrong artwork", (tray) => { tray.identity.pinkArtwork = false; }],
+    ["weak artwork threshold", (tray) => {
+      tray.identity.minimumPinkPixels = 1;
+      tray.identity.pinkPixels = 1;
+    }],
+  ];
+  for (const [label, mutate] of mutations) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-live-tray-contract-"));
+    try {
+      const state = buildRawEvidence(root);
+      const tray = JSON.parse(readFileSync(state.paths.liveTray, "utf8"));
+      mutate(tray);
+      writeJson(state.paths.liveTray, tray, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /live.?tray|notification.?area/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("live tray probe emits a signed machine-readable accessibility report", () => {
+  const source = readFileSync(liveTrayProbePath, "utf8");
+  assert.match(source, /\[ValidateRange\(8,\s*2147483647\)\]\s*\[int\]\$MinimumPinkPixels/);
+  assert.match(source, /\[string\]\$ReportPath/);
+  assert.match(source, /anticodex-live-tray-icon-v1/);
+  assert.match(source, /checkedAt/);
+  assert.match(source, /notificationAreaItem/);
+  assert.match(source, /accHitTest/);
+  assert.match(source, /Write-AntiCodexTextAtomic/);
 });
 
 test("builder accepts one total goal followed by exact continuation turns after explicit native errors", () => {

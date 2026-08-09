@@ -253,6 +253,45 @@ function validateTaskManifest(data, releaseBinding, artifactEvidence, rolloutEvi
     && artifactEvidence.every((artifact) => artifact.ok);
 }
 
+function validateLiveTrayEvidence(data) {
+  const item = data?.notificationAreaItem || {};
+  const identity = data?.identity || {};
+  const rectangle = item?.rectangle || {};
+  const checkedAtMs = Date.parse(String(data?.checkedAt || ""));
+  const ageMinutes = (Date.now() - checkedAtMs) / 60_000;
+  return data?.schema === "anticodex-live-tray-icon-v1"
+    && data?.ok === true
+    && data?.requestedRealTraffic === false
+    && data?.usedRealTraffic === false
+    && Number.isFinite(checkedAtMs)
+    && ageMinutes >= -5
+    && ageMinutes <= 5
+    && item?.present === true
+    && item?.visible === true
+    && item?.clickable === true
+    && item?.name === "Anti-Codex"
+    && item?.provider === "MSAA"
+    && Number(item?.role) === 43
+    && Number(item?.state) >= 0
+    && Number(item?.childId) > 0
+    && Number(item?.toolbarWindowHandle) > 0
+    && Number(item?.candidateCount) === 1
+    && item?.isEnabled === true
+    && item?.isInvisible === false
+    && item?.isOffscreen === false
+    && item?.hitTestMatched === true
+    && Number.isFinite(rectangle?.x)
+    && Number.isFinite(rectangle?.y)
+    && Number(rectangle?.width) >= 16
+    && Number(rectangle?.height) >= 16
+    && identity?.exactAccessibleName === true
+    && identity?.pinkArtwork === true
+    && Number(identity?.minimumPinkPixels) >= 8
+    && Number(identity?.pinkPixels) >= Number(identity?.minimumPinkPixels)
+    && String(data?.sourcePath || "").trim() !== ""
+    && /^[a-f0-9]{64}$/i.test(String(data?.sourceSha256 || ""));
+}
+
 function validateManager(data) {
   const closes = Array.isArray(data?.closeProbes) ? data.closeProbes : [];
   const closeByName = Object.fromEntries(closes.map((entry) => [String(entry?.name || ""), entry]));
@@ -267,6 +306,7 @@ function validateManager(data) {
     && data?.profileEntryText === "管理"
     && data?.forbiddenEnglishVisible === false
     && data?.trayIconPreserved === true
+    && validateLiveTrayEvidence(data?.liveTrayEvidence)
     && ["upper-center", "center", "lower-center"].every((name) => {
       const entry = closeByName[name];
       return entry?.ok === true
@@ -400,7 +440,8 @@ record("manager_protocol_physical_round_trip", normalizeProtocol(manager?.protoc
   && normalizeProtocol(manager?.protocolInteraction?.alternate) === "responses"
   && normalizeProtocol(manager?.protocolInteraction?.restored) === "chatCompletions"
   && manager?.protocolInteraction?.profileUnchanged === true);
-record("live_tray_icon_preserved", manager?.trayIconPreserved === true);
+record("live_tray_icon_preserved", manager?.trayIconPreserved === true
+  && validateLiveTrayEvidence(manager?.liveTrayEvidence));
 
 const modelSwitch = sources.modelSwitchEvidence?.data || {};
 const switches = Array.isArray(modelSwitch?.switches) ? modelSwitch.switches : [];
@@ -474,6 +515,7 @@ const payload = {
       profileEntryText: String(manager?.profileEntryText || ""),
       forbiddenEnglishVisible: manager?.forbiddenEnglishVisible === false,
       trayIconPreserved: manager?.trayIconPreserved === true,
+      liveTrayEvidence: manager?.liveTrayEvidence || null,
       closeUpper: closeByName["upper-center"]?.ok === true,
       closeCenter: closeByName.center?.ok === true,
       closeLower: closeByName["lower-center"]?.ok === true,

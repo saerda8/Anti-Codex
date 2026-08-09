@@ -44,6 +44,7 @@ Required raw evidence:
   --manager-protocol <path>         Signed Manager protocol round-trip mouse probe
   --model-switch <path>             Signed same-task model switch probe (repeat 3+)
   --shortcut-restore <path>         Signed taskbar-button restore probe (repeat exactly 3)
+  --live-tray-evidence <path>       Signed live notification-area accessibility probe
   --release-binding-evidence <path> Signed current release-binding report
   --sync-readiness-evidence <path>  Signed sync-readiness report bound by release hash
 
@@ -65,6 +66,7 @@ function positiveNumber(input, fallback) {
 }
 
 const maxSourceAgeHours = positiveNumber(value("--max-source-age-hours"), 48);
+const maxLiveTrayAgeMinutes = 5;
 const outputRoot = resolve(value("--output-root", resolve(process.cwd(), "gate5-normalized-evidence")));
 const outputNames = {
   taskManifest: "gate5-task-manifest.json",
@@ -101,6 +103,7 @@ const requiredSingleFlags = [
   "--manager-profile",
   "--manager-close",
   "--manager-protocol",
+  "--live-tray-evidence",
   "--release-binding-evidence",
   "--sync-readiness-evidence",
 ];
@@ -618,7 +621,54 @@ function normalizeTaskReceipt(source, artifactPaths, releaseBinding) {
   };
 }
 
-function normalizeManager(matrixSource, profileSource, closeSource, protocolSource, releaseBinding, trayIconPreserved, runtimeIdentity) {
+function normalizeLiveTray(source) {
+  const raw = source.data;
+  const item = raw?.notificationAreaItem || {};
+  const identity = raw?.identity || {};
+  const rectangle = item?.rectangle || {};
+  requireCondition(source.ageHours * 60 <= maxLiveTrayAgeMinutes,
+    `live-tray-evidence: probe is stale (${(source.ageHours * 60).toFixed(2)}m)`);
+  requireCondition(raw?.schema === "anticodex-live-tray-icon-v1"
+    && raw?.ok === true
+    && raw?.requestedRealTraffic === false
+    && raw?.usedRealTraffic === false
+    && item?.present === true
+    && item?.visible === true
+    && item?.clickable === true
+    && item?.name === "Anti-Codex"
+    && item?.provider === "MSAA"
+    && Number(item?.role) === 43
+    && Number(item?.state) >= 0
+    && Number(item?.childId) > 0
+    && Number(item?.toolbarWindowHandle) > 0
+    && Number(item?.candidateCount) === 1
+    && item?.isEnabled === true
+    && item?.isInvisible === false
+    && item?.isOffscreen === false
+    && item?.hitTestMatched === true
+    && Number.isFinite(rectangle?.x)
+    && Number.isFinite(rectangle?.y)
+    && Number(rectangle?.width) >= 16
+    && Number(rectangle?.height) >= 16
+    && identity?.exactAccessibleName === true
+    && identity?.pinkArtwork === true
+    && Number(identity?.minimumPinkPixels) >= 8
+    && Number(identity?.pinkPixels) >= Number(identity?.minimumPinkPixels),
+  "live-tray-evidence: live visible clickable Anti-Codex notification-area identity is incomplete");
+  return {
+    schema: raw.schema,
+    ok: true,
+    checkedAt: source.checkedAt,
+    requestedRealTraffic: false,
+    usedRealTraffic: false,
+    notificationAreaItem: item,
+    identity,
+    sourcePath: source.path,
+    sourceSha256: source.sha256,
+  };
+}
+
+function normalizeManager(matrixSource, profileSource, closeSource, protocolSource, releaseBinding, liveTrayEvidence, runtimeIdentity) {
   const wrapper = matrixSource.data;
   const matrix = wrapper?.managerButton?.payload || wrapper;
   requireCondition(wrapper?.ok === true && (wrapper?.managerButton ? wrapper.managerButton?.ok === true : true),
@@ -696,8 +746,6 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
   ]) {
     requireMatchingRuntimeIdentity(raw, runtimeIdentity, label);
   }
-  requireCondition(trayIconPreserved === true, "manager evidence: current Anti-Codex tray icon is not preserved");
-
   return {
     schema: "anticodex-manager-actual-mouse-matrix-v1",
     ok: true,
@@ -709,6 +757,7 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
     profileEntryText: "管理",
     forbiddenEnglishVisible: false,
     trayIconPreserved: true,
+    liveTrayEvidence,
     closeProbes: ["upper-center", "center", "lower-center"].map((name) => {
       const probe = closeProbes.find((entry) => entry?.name === name);
       return { name, ok: true, actualMouse: true, closed: true, hasTextNode: probe.hasTextNode };
@@ -947,6 +996,7 @@ async function main() {
       readRaw(path, { requireSigned: true, label: `shortcut-restore[${index}]` }));
     const releaseSource = readRaw(value("--release-binding-evidence"), { requireSigned: true, label: "release-binding-evidence" });
     const syncSource = readRaw(value("--sync-readiness-evidence"), { requireSigned: true, label: "sync-readiness-evidence" });
+    const liveTraySource = readRaw(value("--live-tray-evidence"), { requireSigned: true, label: "live-tray-evidence" });
 
     const releaseBinding = releaseBindingFrom(releaseSource.data);
     requireCondition(validReleaseBinding(releaseBinding), "release-binding-evidence: invalid current release binding");
@@ -958,8 +1008,7 @@ async function main() {
       && syncSource.data?.noTraffic === true
       && syncSource.data?.usedRealTraffic === false,
     "sync-readiness-evidence: current no-traffic sync readiness is not green");
-    const trayIconPreserved = syncSource.data?.activeHost?.trayIconExists === true
-      && syncSource.data?.activeHost?.trayIconPalette?.ok === true;
+    const liveTrayEvidence = normalizeLiveTray(liveTraySource);
 
     const task = normalizeTaskReceipt(taskReceipt, values("--task-artifact"), releaseBinding);
     const normalized = {
@@ -970,7 +1019,7 @@ async function main() {
         managerClose,
         managerProtocol,
         releaseBinding,
-        trayIconPreserved,
+        liveTrayEvidence,
         task.runtimeIdentity,
       ),
       modelSwitchEvidence: normalizeModelSwitches(modelSwitchSources, task.taskId, releaseBinding, task.runtimeIdentity),
@@ -1001,6 +1050,7 @@ async function main() {
       ...shortcutSources,
       releaseSource,
       syncSource,
+      liveTraySource,
     ];
     payload = {
       schema: "anticodex-gate5-evidence-build-v1",
