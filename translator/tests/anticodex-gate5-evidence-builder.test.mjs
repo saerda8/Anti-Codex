@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -60,10 +60,12 @@ const managerHandlerContracts = Object.fromEntries(managerActions.map((action) =
   handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
 }]));
 const sourceRoot = resolve(dirname(builderPath), "..");
-const managerContractFiles = [...new Set(Object.values(managerHandlerContracts).flatMap((entry) => [
+const fixtureSupervisorPid = 101;
+const fixtureSupervisorCreationDateUtc = "2026-08-09T00:00:00.0000000Z";
+const managerContractFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...Object.values(managerHandlerContracts).flatMap((entry) => [
   entry.source,
   String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
-]).filter(Boolean))];
+])].filter(Boolean))];
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -74,6 +76,45 @@ function writeJson(path, value, { signed = false } = {}) {
   writeFileSync(path, body, "utf8");
   if (signed) writeFileSync(`${path}.sha256`, `sha256:${sha256(body)}`, "ascii");
   return sha256(body);
+}
+
+function startSuspendedSupervisor(scriptPath) {
+  const child = spawn(process.execPath, [scriptPath], {
+    env: { ...process.env, NODE_OPTIONS: "--inspect-brk=0" },
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = `$row = Get-CimInstance Win32_Process -Filter "ProcessId = ${child.pid}" -ErrorAction Stop; ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)`;
+  let creationDateUtc = "";
+  for (let attempt = 0; attempt < 20 && !creationDateUtc; attempt += 1) {
+    const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
+      encoding: "utf8", windowsHide: true, timeout: 5000,
+    });
+    if (!result.error && result.status === 0) creationDateUtc = String(result.stdout || "").trim();
+    if (!creationDateUtc) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  if (!creationDateUtc) {
+    child.kill();
+    throw new Error("could not observe suspended fixed-route test supervisor");
+  }
+  return { child, creationDateUtc };
+}
+
+function stopTestSupervisor(supervisor) {
+  if (!supervisor?.child?.pid) return;
+  spawnSync("taskkill.exe", ["/PID", String(supervisor.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+}
+
+function replaceFixtureSupervisorIdentity(value, actualPid) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (["supervisorPid", "supervisorBefore", "supervisorAfter"].includes(key) && Number(entry) === fixtureSupervisorPid) {
+      value[key] = actualPid;
+    } else {
+      replaceFixtureSupervisorIdentity(entry, actualPid);
+    }
+  }
 }
 
 function buildRawEvidence(root) {
@@ -139,7 +180,7 @@ function buildRawEvidence(root) {
   const target = { id: "app-page-1", title: "Anti-Codex", url: "app://codex/index.html" };
   const cdpPort = 18318;
   const runtimeProcessIdentity = {
-    supervisorPid: 101,
+    supervisorPid: fixtureSupervisorPid,
     codexPlusPlusPid: 102,
     antiCodexMainPid: 103,
     originalCodexPid: 201,
@@ -258,6 +299,7 @@ function buildRawEvidence(root) {
             sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
             taskRuntimePid: runtimeProcessIdentity.supervisorPid,
             taskRuntimeScriptPath: join(runtimeScriptsRoot, "start-anticodex-fixed-route.mjs"),
+            taskRuntimeCreationDateUtc: fixtureSupervisorCreationDateUtc,
           },
           offlineContractVerifiedActions: actions,
           safeRealActionAllowlist: safeRealActions,
@@ -607,6 +649,26 @@ function appendAbortedContinuationTurn(state, {
 
 function runBuilder(root, state, extraArgs = []) {
   const outputRoot = join(root, "normalized");
+  const supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+  const evidencePaths = [
+    state.paths.taskReceipt,
+    state.paths.managerMatrix,
+    state.paths.managerProfile,
+    state.paths.managerClose,
+    state.paths.managerProtocol,
+    ...state.paths.modelSwitches,
+    ...state.paths.shortcutRounds,
+  ];
+  for (const path of evidencePaths) {
+    const evidence = JSON.parse(readFileSync(path, "utf8"));
+    replaceFixtureSupervisorIdentity(evidence, supervisor.child.pid);
+    const currentProvenance = evidence?.managerButton?.payload?.handlerContractEvidence?.provenance;
+    if (currentProvenance?.taskRuntimePid === fixtureSupervisorPid) currentProvenance.taskRuntimePid = supervisor.child.pid;
+    if (currentProvenance?.taskRuntimeCreationDateUtc === fixtureSupervisorCreationDateUtc) {
+      currentProvenance.taskRuntimeCreationDateUtc = supervisor.creationDateUtc;
+    }
+    writeJson(path, evidence, { signed: true });
+  }
   const args = [
     builderPath,
     "--task-receipt", state.paths.taskReceipt,
@@ -623,9 +685,13 @@ function runBuilder(root, state, extraArgs = []) {
     "--compact",
     ...extraArgs,
   ];
-  const child = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
-  const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
-  return { child, payload, outputRoot };
+  try {
+    const child = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
+    const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
+    return { child, payload, outputRoot };
+  } finally {
+    stopTestSupervisor(supervisor);
+  }
 }
 
 test("builder converts raw real-probe shapes into five signed inputs accepted by Gate 5", () => {

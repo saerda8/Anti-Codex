@@ -676,13 +676,14 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
   const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
   const taskRuntimeScriptPath = resolve(String(provenance?.taskRuntimeScriptPath || ""));
+  const taskRuntimeCreationDateUtc = String(provenance?.taskRuntimeCreationDateUtc || "");
   const expectedTaskRuntimeScriptPath = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
-  const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
+  const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...contractEntries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source),
     String(entry?.handler || "").toLowerCase().endsWith(".ps1")
       ? normalizedContractPath(`scripts/${entry.handler}`)
       : "",
-  ]).filter(Boolean))];
+  ])].filter(Boolean))];
   const files = Array.isArray(provenance?.files) ? provenance.files : [];
   const sourceHead = currentSourceGitHead();
   requireCondition(provenance?.schema === "anticodex-manager-handler-provenance-v1"
@@ -700,7 +701,8 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
   requireCondition(taskRuntimePid > 0
     && taskRuntimePid === Number(wrapper?.processIdentity?.supervisorPid || 0)
     && taskRuntimePid === Number(runtimeIdentity?.supervisorPid || 0)
-    && sameNativePath(taskRuntimeScriptPath, expectedTaskRuntimeScriptPath),
+    && sameNativePath(taskRuntimeScriptPath, expectedTaskRuntimeScriptPath)
+    && Number.isFinite(Date.parse(taskRuntimeCreationDateUtc)),
   "manager-matrix: handler task runtime PID/script does not match the fixed-route supervisor command line");
   requireCondition(existsSync(manifestPath) && statSync(manifestPath).isFile()
     && /^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
@@ -753,6 +755,7 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
     sourceRevisionProvenance: "git",
     taskRuntimePid,
     taskRuntimeScriptPath,
+    taskRuntimeCreationDateUtc,
     files: expectedFiles.map((path) => ({
       relativePath: path,
       fileSha256: String(fileByPath.get(path).fileSha256).toLowerCase(),

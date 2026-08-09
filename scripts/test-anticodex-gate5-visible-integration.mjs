@@ -145,6 +145,45 @@ function currentSourceGitState() {
   return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
 }
 
+function queryExactWindowsProcess(processId) {
+  if (!Number.isInteger(processId) || processId <= 0 || process.platform !== "win32") return null;
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = String.raw`
+$ErrorActionPreference = "Stop"
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class AntiCodexGate5CommandLine {
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern IntPtr CommandLineToArgvW(string value, out int count);
+  [DllImport("kernel32.dll", SetLastError = true)]
+  private static extern IntPtr LocalFree(IntPtr value);
+  public static string[] Parse(string value) {
+    int count; IntPtr vector = CommandLineToArgvW(value, out count);
+    if (vector == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+    try { var result = new string[count]; for (int i = 0; i < count; i++) result[i] = Marshal.PtrToStringUni(Marshal.ReadIntPtr(vector, i * IntPtr.Size)) ?? String.Empty; return result; }
+    finally { LocalFree(vector); }
+  }
+}
+'@
+$rows = @(Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction Stop)
+if ($rows.Count -ne 1) { throw "exact process not found" }
+$row = $rows[0]
+[pscustomobject]@{
+  processId = [int]$row.ProcessId
+  executablePath = [string]$row.ExecutablePath
+  creationDateUtc = ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+  arguments = @([AntiCodexGate5CommandLine]::Parse([string]$row.CommandLine))
+} | ConvertTo-Json -Depth 4 -Compress
+`;
+  const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    encoding: "utf8", windowsHide: true, timeout: 15000,
+  });
+  if (result.error || result.status !== 0) return null;
+  try { return JSON.parse(String(result.stdout || "").trim()); } catch { return null; }
+}
+
 function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
   const contracts = handlerVerification?.contracts || {};
   const contractEntries = Object.entries(contracts);
@@ -152,8 +191,11 @@ function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) 
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
   const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
+  const taskRuntimeCreationDateUtc = String(provenance?.taskRuntimeCreationDateUtc || "");
   const files = Array.isArray(provenance?.files) ? provenance.files : [];
   const sourceGit = currentSourceGitState();
+  const liveTaskRuntime = queryExactWindowsProcess(taskRuntimePid);
+  const expectedTaskRuntimeScript = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
   if (contractEntries.length !== managerActions.length
     || !contractEntries.every(([action, entry], index) => {
       const expected = managerHandlerContractByAction[action];
@@ -171,7 +213,12 @@ function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) 
     || provenance?.sourceGitClean !== sourceGit.clean
     || taskRuntimePid <= 0
     || taskRuntimePid !== Number(runtimeIdentity?.supervisorPid || 0)
-    || !samePath(provenance?.taskRuntimeScriptPath, resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"))
+    || !samePath(provenance?.taskRuntimeScriptPath, expectedTaskRuntimeScript)
+    || !liveTaskRuntime || Number(liveTaskRuntime.processId) !== taskRuntimePid
+    || String(liveTaskRuntime.executablePath || "").replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() !== "node.exe"
+    || !Array.isArray(liveTaskRuntime.arguments) || liveTaskRuntime.arguments.length < 2
+    || !samePath(liveTaskRuntime.arguments[1], expectedTaskRuntimeScript)
+    || !taskRuntimeCreationDateUtc || String(liveTaskRuntime.creationDateUtc || "") !== taskRuntimeCreationDateUtc
     || provenance?.sourceRevisionProvenance !== "git"
     || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
     || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
@@ -183,10 +230,10 @@ function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) 
     || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
     || manifest?.sourceGitClean !== sourceGit.clean || manifest?.sourceRevisionProvenance !== "git"
     || String(manifest?.sourceGitHead || "").toLowerCase() !== sourceGit.head) return false;
-  const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
+  const expectedFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...contractEntries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source),
     String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
-  ]).filter(Boolean))];
+  ])].filter(Boolean))];
   const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
   if (files.length !== expectedFiles.length || fileByPath.size !== files.length) return false;
   return expectedFiles.every((relativePath) => {

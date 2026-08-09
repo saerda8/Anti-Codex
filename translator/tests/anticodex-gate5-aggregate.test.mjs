@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,9 +45,9 @@ const managerHandlerContracts = Object.fromEntries(managerActions.map((action) =
   source: action === "upstreamConfig" ? "scripts/anticodex-manager-inject.js" : "scripts/anticodex-manager-service.mjs",
   handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
 }]));
-const managerContractFiles = [...new Set(Object.values(managerHandlerContracts).flatMap((entry) => [
+const managerContractFiles = [...new Set(["scripts/start-anticodex-fixed-route.mjs", ...Object.values(managerHandlerContracts).flatMap((entry) => [
   entry.source, String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
-]).filter(Boolean))];
+])].filter(Boolean))];
 
 test("Gate 5 is an offline explicit-evidence aggregate, not an old traffic/UI runner", async () => {
   const source = await readFile(aggregateScriptUrl, "utf8");
@@ -113,6 +113,34 @@ function writeSigned(path, value) {
   const body = `${JSON.stringify(value, null, 2)}\n`;
   writeFileSync(path, body, "utf8");
   writeFileSync(`${path}.sha256`, `sha256:${hash(body)}`, "ascii");
+}
+
+function startSuspendedSupervisor(scriptPath) {
+  const child = spawn(process.execPath, [scriptPath], {
+    env: { ...process.env, NODE_OPTIONS: "--inspect-brk=0" },
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = `$row = Get-CimInstance Win32_Process -Filter "ProcessId = ${child.pid}" -ErrorAction Stop; ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)`;
+  let creationDateUtc = "";
+  for (let attempt = 0; attempt < 20 && !creationDateUtc; attempt += 1) {
+    const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
+      encoding: "utf8", windowsHide: true, timeout: 5000,
+    });
+    if (!result.error && result.status === 0) creationDateUtc = String(result.stdout || "").trim();
+    if (!creationDateUtc) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  if (!creationDateUtc) {
+    child.kill();
+    throw new Error("could not observe suspended fixed-route test supervisor");
+  }
+  return { child, creationDateUtc };
+}
+
+function stopTestSupervisor(supervisor) {
+  if (!supervisor?.child?.pid) return;
+  spawnSync("taskkill.exe", ["/PID", String(supervisor.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
 }
 
 function fixture(root, fixtureSourceRoot = sourceRoot) {
@@ -215,6 +243,7 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
         sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
         taskRuntimePid: 101,
         taskRuntimeScriptPath: join(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"),
+        taskRuntimeCreationDateUtc: "",
       },
     },
     actualMouse: true,
@@ -324,23 +353,36 @@ function runFixture(root, mutate = () => {}, options = {}) {
   const fixtureSourceRoot = options.sourceRoot || sourceRoot;
   const fixtureAggregateScriptPath = options.aggregateScriptPath || aggregateScriptPath;
   const state = fixture(root, fixtureSourceRoot);
-  mutate(state);
-  for (const [name, value] of Object.entries(state.values)) writeSigned(state.paths[name], value);
-  const reportRoot = join(root, "reports");
-  const auditPath = join(root, "gate5-audit.json");
-  const child = spawnSync(process.execPath, [
-    fixtureAggregateScriptPath,
-    "--task-manifest", state.paths.taskManifest,
-    "--manager-evidence", state.paths.managerEvidence,
-    "--model-switch-evidence", state.paths.modelSwitchEvidence,
-    "--shortcut-restore-evidence", state.paths.shortcutRestoreEvidence,
-    "--release-binding-evidence", state.paths.releaseBindingEvidence,
-    "--report-root", reportRoot,
-    "--audit-out", auditPath,
-    "--compact",
-  ], { encoding: "utf8", windowsHide: true });
-  const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
-  return { child, payload, reportRoot, auditPath, state };
+  const supervisor = startSuspendedSupervisor(state.values.managerEvidence.handlerVerification.provenance.taskRuntimeScriptPath);
+  try {
+    const supervisorPid = supervisor.child.pid;
+    state.values.managerEvidence.runtimeIdentity.supervisorPid = supervisorPid;
+    state.values.managerEvidence.handlerVerification.provenance.taskRuntimePid = supervisorPid;
+    state.values.managerEvidence.handlerVerification.provenance.taskRuntimeCreationDateUtc = supervisor.creationDateUtc;
+    for (const entry of state.values.modelSwitchEvidence.switches) {
+      entry.supervisorPidBefore = supervisorPid;
+      entry.supervisorPidAfter = supervisorPid;
+    }
+    mutate(state);
+    for (const [name, value] of Object.entries(state.values)) writeSigned(state.paths[name], value);
+    const reportRoot = join(root, "reports");
+    const auditPath = join(root, "gate5-audit.json");
+    const child = spawnSync(process.execPath, [
+      fixtureAggregateScriptPath,
+      "--task-manifest", state.paths.taskManifest,
+      "--manager-evidence", state.paths.managerEvidence,
+      "--model-switch-evidence", state.paths.modelSwitchEvidence,
+      "--shortcut-restore-evidence", state.paths.shortcutRestoreEvidence,
+      "--release-binding-evidence", state.paths.releaseBindingEvidence,
+      "--report-root", reportRoot,
+      "--audit-out", auditPath,
+      "--compact",
+    ], { encoding: "utf8", windowsHide: true });
+    const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
+    return { child, payload, reportRoot, auditPath, state };
+  } finally {
+    stopTestSupervisor(supervisor);
+  }
 }
 
 test("Gate 5 fails closed when the current source worktree becomes dirty after evidence capture", () => {
@@ -455,6 +497,11 @@ const rejectionCases = [
   ["Manager has only 19 actions", ({ values }) => { values.managerEvidence.actionCount = 19; }, /manager_actual_mouse_matrix/],
   ["Manager records side effects", ({ values }) => { values.managerEvidence.zeroSideEffects = false; }, /manager_actual_mouse_matrix/],
   ["Manager handler PID is not the clicked UI supervisor", ({ values }) => { values.managerEvidence.handlerVerification.provenance.taskRuntimePid = 999; }, /manager_actual_mouse_matrix/],
+  ["Manager handler supervisor creation time is stale", ({ values }) => { values.managerEvidence.handlerVerification.provenance.taskRuntimeCreationDateUtc = "2020-01-01T00:00:00.0000000Z"; }, /manager_actual_mouse_matrix/],
+  ["Manager fixed-route supervisor script hash is stale", ({ values }) => {
+    const provenance = values.managerEvidence.handlerVerification.provenance;
+    writeFileSync(join(provenance.runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"), "tampered\n", "utf8");
+  }, /manager_actual_mouse_matrix/],
   ["Manager handler provenance points at the wrong runtime", ({ values }) => {
     values.managerEvidence.handlerVerification.provenance = {
       schema: "anticodex-manager-handler-provenance-v1",

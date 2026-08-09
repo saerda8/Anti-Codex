@@ -291,20 +291,24 @@ function Get-ManagerHandlerContractEvidence {
     $taskRuntimeScriptPath = [IO.Path]::GetFullPath((Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"))
     $manifest = $null
     $manifestSourceRoot = ""
+    $taskRuntimeCreationDateUtc = ""
     $provenanceVerified = $true
     try {
         if ($TaskRuntimePid -le 0) { throw "fixed-route supervisor PID is missing" }
         $taskRuntimeProcesses = @(Get-CimInstance Win32_Process -Filter "ProcessId = $TaskRuntimePid" -ErrorAction Stop)
         if ($taskRuntimeProcesses.Count -ne 1) { throw "exact fixed-route supervisor PID did not resolve to one process" }
-        $taskRuntimeArguments = @([AntiCodex.ManagerEvidence.WindowsCommandLine]::Parse([string]$taskRuntimeProcesses[0].CommandLine))
-        $matchingScriptArguments = @($taskRuntimeArguments | Where-Object {
-            try {
-                ([IO.Path]::GetFullPath([string]$_)).Equals($taskRuntimeScriptPath, [StringComparison]::OrdinalIgnoreCase)
-            } catch { $false }
-        })
-        if ($matchingScriptArguments.Count -ne 1) {
-            throw "exact fixed-route supervisor command line does not identify the bound runtime script"
+        $taskRuntimeProcess = $taskRuntimeProcesses[0]
+        if (-not ([IO.Path]::GetFileName([string]$taskRuntimeProcess.ExecutablePath)).Equals("node.exe", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "fixed-route supervisor executable is not node.exe"
         }
+        $taskRuntimeArguments = @([AntiCodex.ManagerEvidence.WindowsCommandLine]::Parse([string]$taskRuntimeProcess.CommandLine))
+        if ($taskRuntimeArguments.Count -lt 2) { throw "fixed-route supervisor entry script is missing" }
+        $taskRuntimeEntryScript = [IO.Path]::GetFullPath([string]$taskRuntimeArguments[1])
+        if (-not $taskRuntimeEntryScript.Equals($taskRuntimeScriptPath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "fixed-route supervisor entry script does not match the bound runtime"
+        }
+        $taskRuntimeCreationDateUtc = ([DateTime]$taskRuntimeProcess.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+        if (-not $taskRuntimeCreationDateUtc) { throw "fixed-route supervisor creation time is missing" }
     } catch {
         $provenanceVerified = $false
         Add-Failure "Manager task runtime provenance could not be verified: $($_.Exception.Message)"
@@ -385,6 +389,7 @@ function Get-ManagerHandlerContractEvidence {
         overallNoTraffic = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-installed-overall.ps1"; anchors = @('    overallNoTraffic: {', 'script: "test-anticodex-installed-overall.ps1"') }
         postVerificationFull = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-post-verification.ps1"; anchors = @('    postVerificationFull: {', 'script: "test-anticodex-post-verification.ps1"') }
     }
+    Get-BoundRuntimeFile -FileName "start-anticodex-fixed-route.mjs" | Out-Null
     $sourceCache = @{}
     $contracts = [ordered]@{}
     foreach ($actionName in $ActionNames) {
@@ -460,6 +465,7 @@ function Get-ManagerHandlerContractEvidence {
             sourceRevisionProvenance = if ($manifest) { [string]$manifest.sourceRevisionProvenance } else { "" }
             taskRuntimePid = $TaskRuntimePid
             taskRuntimeScriptPath = $taskRuntimeScriptPath
+            taskRuntimeCreationDateUtc = $taskRuntimeCreationDateUtc
             files = @($fileEvidence.Values)
         }
     }
