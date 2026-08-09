@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -177,6 +177,44 @@ test("MCP verification accepts only a live Anti-Codex pipe distinct from the sha
   assert.match(verifier, /\$sharedNativePipeDirectory\s*=\s*Get-TomlQuotedFieldValue/);
   assert.match(verifier, /\$localNativePipeDirectory\s*-ieq\s*\$sharedNativePipeDirectory/);
   assert.match(verifier, /Test-Path -LiteralPath \$localNativePipeDirectory/);
+});
+
+test("MCP verification accepts only isolated node_repl trusted roots", {
+  skip: process.platform !== "win32",
+}, () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+  const start = verifier.indexOf("function Test-NodeReplTrustedCodePaths");
+  const end = verifier.indexOf("\nfunction ", start + 10);
+  assert.ok(start >= 0 && end > start, "trusted-path validator must be independently testable");
+  const validator = verifier.slice(start, end);
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  const codexHome = path.join(tempDir(), "state", "codex-home");
+  const nodeModules = path.join(tempDir(), "install", "resources", "cua_node", "bin", "node_modules");
+  const sharedCodexHome = path.join(tempDir(), ".codex");
+  const pathList = (...values) => values.join(path.delimiter);
+  const script = [
+    validator,
+    "$result = [ordered]@{",
+    `  homeOnly = Test-NodeReplTrustedCodePaths -Actual ${quote(codexHome)} -CodexHome ${quote(codexHome)} -NodeModulesPath ${quote(nodeModules)}`,
+    `  homeAndModules = Test-NodeReplTrustedCodePaths -Actual ${quote(pathList(codexHome, nodeModules))} -CodexHome ${quote(codexHome)} -NodeModulesPath ${quote(nodeModules)}`,
+    `  modulesOnly = Test-NodeReplTrustedCodePaths -Actual ${quote(nodeModules)} -CodexHome ${quote(codexHome)} -NodeModulesPath ${quote(nodeModules)}`,
+    `  sharedExtra = Test-NodeReplTrustedCodePaths -Actual ${quote(pathList(codexHome, sharedCodexHome))} -CodexHome ${quote(codexHome)} -NodeModulesPath ${quote(nodeModules)}`,
+    "}",
+    "$result | ConvertTo-Json -Compress",
+  ].join("\n");
+  const powershell = path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const encodedCommand = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), {
+    homeOnly: true,
+    homeAndModules: true,
+    modulesOnly: false,
+    sharedExtra: false,
+  });
 });
 
 test("shared config sync excludes Anti-Codex development workers by default", () => {

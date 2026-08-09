@@ -363,6 +363,40 @@ function Get-TomlQuotedFieldValue {
     return $raw
 }
 
+function Test-NodeReplTrustedCodePaths {
+    param(
+        [string]$Actual,
+        [string]$CodexHome,
+        [string]$NodeModulesPath
+    )
+    $normalize = {
+        param([string]$PathValue)
+        if ([string]::IsNullOrWhiteSpace($PathValue) -or -not [IO.Path]::IsPathRooted($PathValue)) { return "" }
+        try {
+            return ([IO.Path]::GetFullPath($PathValue)).TrimEnd([char[]]@(
+                [IO.Path]::DirectorySeparatorChar,
+                [IO.Path]::AltDirectorySeparatorChar
+            ))
+        } catch {
+            return ""
+        }
+    }
+    $required = & $normalize $CodexHome
+    $allowed = @(
+        (& $normalize $CodexHome),
+        (& $normalize $NodeModulesPath)
+    ) | Where-Object { $_ } | Sort-Object -Unique
+    $actualPaths = @($Actual -split [IO.Path]::PathSeparator |
+        ForEach-Object { & $normalize $_.Trim() })
+    if (-not $required -or $actualPaths.Count -lt 1 -or @($actualPaths | Where-Object { -not $_ }).Count) {
+        return $false
+    }
+    if (@($actualPaths | Where-Object { $_ -ieq $required }).Count -ne 1) {
+        return $false
+    }
+    return @($actualPaths | Where-Object { $candidate = $_; -not @($allowed | Where-Object { $_ -ieq $candidate }).Count }).Count -eq 0
+}
+
 function Get-WorkerMcpNamesFromToml {
     param([string]$Text, [switch]$AllowGeneratedHttp)
     if (-not $Text) { return @() }
@@ -771,7 +805,12 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
             foreach ($entry in $expectedNodeReplValues.GetEnumerator()) {
                 $section = if ($entry.Key -eq "command") { $nodeReplSection } else { $nodeReplEnv }
                 $actual = Get-TomlQuotedFieldValue $section $entry.Key
-                if ($actual -ine $entry.Value) {
+                $valid = if ($entry.Key -eq "NODE_REPL_TRUSTED_CODE_PATHS") {
+                    Test-NodeReplTrustedCodePaths -Actual $actual -CodexHome $CodexHome -NodeModulesPath (Join-Path $nodeReplBin "node_modules")
+                } else {
+                    $actual -ieq $entry.Value
+                }
+                if (-not $valid) {
                     Add-Failure "node_repl $($entry.Key) is not isolated to Anti-Codex"
                 }
             }
