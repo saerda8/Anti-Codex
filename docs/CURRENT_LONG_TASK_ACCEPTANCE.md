@@ -361,3 +361,10 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - The old process tree will not clear by passive waiting: one exact hidden/iconic main window remains recoverable through the existing broker, and the live supervisor intentionally has no idle exit while its owned client and CDP are healthy. Do not restore, terminate or synchronize it without user action or explicit controlled-shutdown authorization; never force-kill it or touch official Codex.
 
 Do not use the frozen media result to hide these product-release gaps, and do not relabel the current project 100% before installed acceptance.
+
+## 2026-08-09 installed physical rerun remains open
+
+- The accepted autonomous media task remains frozen and unchanged. No prompt or provider request was used for the current product repair.
+- A real Desktop-shortcut launch and real Manager/Settings interaction exposed two verifier defects and one shell defect: feature-gated Settings were falsely counted as missing, prompt restoration raced an asynchronous Manager view transition, and the Windows tray GUID collided with official Codex even though the Anti-Codex icon file itself was correct.
+- Source fixes now pass the focused Manager `84/84` and host/update/rollback `84/84` matrices. Revision 6 also applies cleanly and idempotently to a copy of the exact installed ASAR while preserving its byte length.
+- This does not close installed acceptance. The running client still uses revision 5; it must be controlled-shut down, synchronized once, restarted once, and pass the full installed Settings/prompt/Manager/startup/live-pink-tray matrix. Only then may a new autonomous long smoke task be prepared.

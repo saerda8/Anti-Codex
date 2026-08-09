@@ -4,11 +4,16 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import {
+  captureExactFileSnapshot,
   classifyNativeSettingsCrashSnapshot,
   classifyUnsupportedExternalSettingsTarget,
   compareNativeSettingsSlugSets,
+  exactFileSnapshotMatches,
   promptSettingsStatesEqual,
+  promptSettingsStatesSemanticallyEqual,
   readNativeSettingsRegistrationSlugs,
+  resolveNativeSettingsAsarPath,
+  restoreExactFileSnapshot,
 } from "./anticodex-native-settings-contract.mjs";
 
 const args = new Map();
@@ -30,8 +35,14 @@ const promptClosePosition = String(args.get("--prompt-close-position") || "").to
 const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore || promptSettingsRestoreDefault
   || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
 const promptSettingsAcceptanceValue = "Anti-Codex 原生自定义指令实体按钮测试；本次立即恢复默认。";
-const promptSettingsAgentsPath = promptSettingsUiOnly && process.env.APPDATA
-  ? resolve(String(process.env.APPDATA), "anticodex", "codex-home-deepseek-app", "AGENTS.md")
+const promptSettingsStateRoot = promptSettingsUiOnly && process.env.APPDATA
+  ? resolve(String(process.env.APPDATA), "anticodex")
+  : "";
+const promptSettingsAgentsPath = promptSettingsStateRoot
+  ? resolve(promptSettingsStateRoot, "codex-home-deepseek-app", "AGENTS.md")
+  : "";
+const promptSettingsPolicyPath = promptSettingsStateRoot
+  ? resolve(promptSettingsStateRoot, "prompt-policy.json")
   : "";
 const promptSettingsRecoveryFile = promptSettingsRestoreDefault
   ? promptSettingsAgentsPath
@@ -41,7 +52,7 @@ const promptSettingsRecoveryFileValue = promptSettingsRecoveryFile && existsSync
   : "";
 const timeoutMs = Number(args.get("--timeout-ms") || 35_000);
 const nativeSettingsAsarPath = nativeSettingsAcceptance
-  ? resolve(String(args.get("--app-asar") || join(import.meta.dirname, "..", "codex-patched-app", "resources", "app.asar")))
+  ? resolveNativeSettingsAsarPath({ explicitPath: args.get("--app-asar") || "", scriptDirectory: import.meta.dirname })
   : "";
 
 if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
@@ -411,6 +422,19 @@ const promptSettingsStateExpression = `(() => {
   };
 })()`;
 
+const promptViewStateExpression = `(() => {
+  const root = document.querySelector('#anticodex-manager-overlay');
+  const promptForm = Array.from(root?.querySelectorAll('section h2') || [])
+    .some((node) => String(node.textContent || '').trim() === 'Codex 原生自定义指令 (AGENTS.md)');
+  return {
+    view: root?.getAttribute('data-anticodex-manager-view') || '',
+    busy: root?.getAttribute('data-anticodex-busy') || '',
+    generation: Number(root?.getAttribute('data-anticodex-prompt-generation') || 0),
+    promptForm,
+    statusButton: Boolean(root?.querySelector('button[data-action="syncHost"]')),
+  };
+})()`;
+
 async function capturePromptSettingsState() {
   const state = await evaluate(promptSettingsStateExpression);
   if (!state?.ok) throw new Error("Prompt settings are incomplete; refusing a write-capable acceptance.");
@@ -466,6 +490,7 @@ async function applyPromptSettingsState(state) {
 }
 
 async function savePromptSettingsForm() {
+  const previousOperationGeneration = Number(await evaluate(`document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-operation-generation') || 0`));
   await evaluate(`(() => {
     const button = Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存');
     button?.scrollIntoView({ block: 'center' });
@@ -474,40 +499,59 @@ async function savePromptSettingsForm() {
   await sleep(150);
   const savePoint = await waitFor(
     visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
-    (value) => value?.ok === true,
+    (value) => value?.ok === true && value.disabled !== true && value.ariaDisabled !== true,
   );
   await realMouseClick(savePoint, "保存");
   await waitFor(`(() => ({
     busy: document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-busy') || '',
+    generation: Number(document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-operation-generation') || 0),
     text: document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || '',
-  }))()`, (value) => value?.busy === "false" && String(value?.text || "").includes("已保存"), 15_000);
+  }))()`, (value) => value?.generation > previousOperationGeneration
+    && value?.busy === "false"
+    && String(value?.text || "").includes("已保存"), 15_000);
 }
 
 async function ensurePromptSettingsView() {
-  const view = await evaluate(`document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-manager-view') || ''`);
-  if (view === "prompts") return;
-  if (view !== "status") throw new Error("Manager prompt view is unavailable for transactional restoration.");
+  const current = await evaluate(promptViewStateExpression);
+  if (current?.view === "prompts") {
+    await waitFor(promptViewStateExpression, (value) => value?.view === "prompts" && value?.busy === "false" && value?.promptForm === true);
+    return;
+  }
+  if (current?.view !== "status") throw new Error("Manager prompt view is unavailable for transactional restoration.");
+  const previousGeneration = Number(current?.generation || 0);
   const point = await waitFor(
     visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
-    (value) => value?.ok === true,
+    (value) => value?.ok === true && value.disabled !== true && value.ariaDisabled !== true,
   );
   await realMouseClick(point, "提示词");
+  await waitFor(promptViewStateExpression, (value) => value?.view === "prompts"
+    && value?.busy === "false"
+    && value?.generation > previousGeneration
+    && value?.promptForm === true);
   await waitFor(promptSettingsStateExpression, (value) => value?.ok === true);
 }
 
 async function reopenPromptSettingsView() {
   await ensurePromptSettingsView();
+  const previousGeneration = Number((await evaluate(promptViewStateExpression))?.generation || 0);
   const backPoint = await waitFor(
     visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
     (value) => value?.ok === true,
   );
   await realMouseClick(backPoint, "返回状态");
-  await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
+  await waitFor(promptViewStateExpression, (value) => value?.view === "status"
+    && value?.busy === "false"
+    && value?.promptForm === false
+    && value?.statusButton === true);
   const promptPoint = await waitFor(
     visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
-    (value) => value?.ok === true,
+    (value) => value?.ok === true && value.disabled !== true && value.ariaDisabled !== true,
   );
   await realMouseClick(promptPoint, "提示词");
+  await waitFor(promptViewStateExpression, (value) => value?.view === "prompts"
+    && value?.busy === "false"
+    && value?.generation > previousGeneration
+    && value?.promptForm === true);
   await waitFor(promptSettingsStateExpression, (value) => value?.ok === true);
 }
 
@@ -517,8 +561,8 @@ async function restorePromptSettingsState(promptStateBefore) {
   await savePromptSettingsForm();
   await reopenPromptSettingsView();
   const promptStateAfterRestore = await capturePromptSettingsState();
-  if (!promptSettingsStatesEqual(promptStateBefore, promptStateAfterRestore)) {
-    throw new Error("Prompt settings did not restore exactly after physical acceptance.");
+  if (!promptSettingsStatesSemanticallyEqual(promptStateBefore, promptStateAfterRestore)) {
+    throw new Error("Prompt settings did not restore the original semantic values after physical acceptance.");
   }
   return promptStateAfterRestore;
 }
@@ -615,7 +659,7 @@ async function auditNativePersonalization({ allowWrite }) {
 }
 
 async function runNativeSettingsAcceptance() {
-  const expectedSlugs = readNativeSettingsRegistrationSlugs(nativeSettingsAsarPath);
+  const knownSlugs = readNativeSettingsRegistrationSlugs(nativeSettingsAsarPath);
   const nav = await waitFor(`(() => {
     const node = ${nativeSettingsNavExpression};
     const rect = node?.getBoundingClientRect?.();
@@ -642,12 +686,12 @@ async function runNativeSettingsAcceptance() {
   if (nav.externalTargets.length > 0) {
     throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings navigation: ${JSON.stringify(nav.externalTargets)}`);
   }
-  const slugComparison = compareNativeSettingsSlugSets(expectedSlugs, nav.entries.map((entry) => entry.slug));
+  const slugComparison = compareNativeSettingsSlugSets(knownSlugs, nav.entries.map((entry) => entry.slug));
   if (!slugComparison.ok) {
     throw new Error(`Native Settings registration mismatch: ${JSON.stringify({
-      expectedSlugs: slugComparison.expected,
+      knownSlugs: slugComparison.expected,
       visibleSlugs: slugComparison.visible,
-      missingSlugs: slugComparison.missing,
+      gatedSlugs: slugComparison.gated,
       duplicateSlugs: slugComparison.duplicates,
       unexpectedSlugs: slugComparison.unexpected,
     })}`);
@@ -681,9 +725,9 @@ async function runNativeSettingsAcceptance() {
     ok: pages.length === nav.entries.length && pages.every((page) => page.ok),
     inspectOnly,
     pages,
-    expectedSlugs: slugComparison.expected,
+    knownSlugs: slugComparison.expected,
     visibleSlugs: slugComparison.visible,
-    missingSlugs: slugComparison.missing,
+    gatedSlugs: slugComparison.gated,
     duplicateSlugs: slugComparison.duplicates,
     unexpectedSlugs: slugComparison.unexpected,
     externalChatGptSettingsHidden: nav.externalTargets.length === 0 && pageExternalTargets.length === 0,
@@ -920,6 +964,10 @@ try {
     if (promptSettingsSaveRestore) {
       const testValue = promptSettingsAcceptanceValue;
       const promptStateBefore = await capturePromptSettingsState();
+      const promptFileSnapshots = [
+        captureExactFileSnapshot(promptSettingsPolicyPath),
+        captureExactFileSnapshot(promptSettingsAgentsPath),
+      ];
       const expectedAfterSave = structuredClone(promptStateBefore);
       expectedAfterSave.nativeCustomInstructions = { content: testValue, existed: true };
       let promptStateAfterSave = null;
@@ -937,11 +985,28 @@ try {
         transactionFailure = error;
       } finally {
         try {
-          promptStateAfterRestore = await restorePromptSettingsState(promptStateBefore);
+          const promptStateAfterUiRestore = await restorePromptSettingsState(promptStateBefore);
+          if (!promptSettingsStatesSemanticallyEqual(promptStateBefore, promptStateAfterUiRestore)) {
+            throw new Error("Prompt settings UI did not restore the original semantic values.");
+          }
         } catch (restoreError) {
           transactionFailure = new AggregateError(
             [transactionFailure, restoreError].filter(Boolean),
-            "Prompt settings acceptance failed and transactional restoration was incomplete.",
+            "Prompt settings acceptance failed and UI restoration was incomplete.",
+          );
+        }
+        try {
+          for (const snapshot of promptFileSnapshots) restoreExactFileSnapshot(snapshot);
+          if (!promptFileSnapshots.every(exactFileSnapshotMatches)) throw new Error("Prompt settings files did not restore byte-for-byte.");
+          await reopenPromptSettingsView();
+          promptStateAfterRestore = await capturePromptSettingsState();
+          if (!promptSettingsStatesEqual(promptStateBefore, promptStateAfterRestore)) {
+            throw new Error("Prompt settings did not restore exactly after file transaction cleanup.");
+          }
+        } catch (restoreError) {
+          transactionFailure = new AggregateError(
+            [transactionFailure, restoreError].filter(Boolean),
+            "Prompt settings acceptance failed and exact file restoration was incomplete.",
           );
         }
       }

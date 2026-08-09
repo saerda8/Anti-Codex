@@ -2090,8 +2090,15 @@ test("Manager prompt editor bypasses a stale snapshot after saving", () => {
 
 test("physical prompt restore waits for the prompt view to unlock", () => {
   assert.match(managerRealMouseAction, /async function reopenPromptSettingsView/);
-  assert.match(managerRealMouseAction, /await waitFor\(promptSettingsStateExpression/);
+  assert.match(managerRealMouseAction, /data-anticodex-prompt-generation/);
+  assert.match(managerRealMouseAction, /generation > previousGeneration/);
+  assert.match(managerRealMouseAction, /view === "status"/);
+  assert.match(managerRealMouseAction, /view === "prompts"/);
   assert.match(managerRealMouseAction, /getAttribute\('data-anticodex-busy'\)/);
+  const promptSettingsBlock = extractNamedFunction(managerInject, "showPromptSettings");
+  assert.match(promptSettingsBlock, /data-anticodex-prompt-generation/);
+  assert.match(promptSettingsBlock, /backButton\.onclick = \(\) => \{ void runManagerExclusive\(async \(\) => \{/);
+  assert.match(managerInject, /data-anticodex-operation-generation/);
 });
 
 test("native compatibility style makes closed Radix menu wrappers mouse transparent", () => {

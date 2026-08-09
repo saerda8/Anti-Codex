@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   classifyNativeSettingsCrashSnapshot,
@@ -115,6 +117,10 @@ test("prompt physical acceptance restores all four prompt layers transactionally
   assert.match(block, /promptStateAfterRestore/);
   assert.match(block, /try\s*\{/);
   assert.match(block, /finally\s*\{/);
+  assert.match(block, /captureExactFileSnapshot/);
+  assert.match(block, /restoreExactFileSnapshot/);
+  assert.match(block, /promptSettingsPolicyPath/);
+  assert.match(block, /exactFileSnapshotMatches/);
   assert.doesNotMatch(block, /realMouseClick\(restorePoint/);
   const recoveryStart = source.indexOf("if (promptSettingsRestoreDefault) {");
   const recoveryEnd = source.indexOf("} else if (promptClosePosition)", recoveryStart);
@@ -136,9 +142,63 @@ test("prompt physical acceptance restores all four prompt layers transactionally
     ...structuredClone(state),
     user: { enabled: true, content: "changed" },
   }), false);
+  assert.equal(typeof nativeSettingsContract.promptSettingsStatesSemanticallyEqual, "function");
+  assert.equal(nativeSettingsContract.promptSettingsStatesSemanticallyEqual(state, {
+    ...structuredClone(state),
+    nativeCustomInstructions: { content: "agents", existed: false },
+  }), true);
+  assert.match(block, /promptSettingsStatesSemanticallyEqual/);
 });
 
-test("native Settings completeness comes from the current registration contract", () => {
+test("prompt acceptance exact file snapshots preserve an existing empty file and remove a newly created file", () => {
+  assert.equal(typeof nativeSettingsContract.captureExactFileSnapshot, "function");
+  assert.equal(typeof nativeSettingsContract.restoreExactFileSnapshot, "function");
+  assert.equal(typeof nativeSettingsContract.exactFileSnapshotMatches, "function");
+  const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-snapshot-"));
+  try {
+    const existingEmpty = join(root, "AGENTS.md");
+    writeFileSync(existingEmpty, Buffer.alloc(0));
+    const emptySnapshot = nativeSettingsContract.captureExactFileSnapshot(existingEmpty);
+    writeFileSync(existingEmpty, "sentinel", "utf8");
+    nativeSettingsContract.restoreExactFileSnapshot(emptySnapshot);
+    assert.equal(existsSync(existingEmpty), true);
+    assert.equal(readFileSync(existingEmpty).length, 0);
+    assert.equal(nativeSettingsContract.exactFileSnapshotMatches(emptySnapshot), true);
+
+    const initiallyMissing = join(root, "prompt-policy.json");
+    const missingSnapshot = nativeSettingsContract.captureExactFileSnapshot(initiallyMissing);
+    writeFileSync(initiallyMissing, "created", "utf8");
+    nativeSettingsContract.restoreExactFileSnapshot(missingSnapshot);
+    assert.equal(existsSync(initiallyMissing), false);
+    assert.equal(nativeSettingsContract.exactFileSnapshotMatches(missingSnapshot), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native Settings ASAR resolution supports both source and installed runtime layouts", () => {
+  assert.equal(typeof nativeSettingsContract.resolveNativeSettingsAsarPath, "function");
+  const root = mkdtempSync(join(tmpdir(), "anticodex-settings-asar-"));
+  try {
+    const sourceScripts = join(root, "source", "scripts");
+    const sourceAsar = join(root, "source", "codex-patched-app", "resources", "app.asar");
+    mkdirSync(join(root, "source", "codex-patched-app", "resources"), { recursive: true });
+    mkdirSync(sourceScripts, { recursive: true });
+    writeFileSync(sourceAsar, "source");
+    assert.equal(nativeSettingsContract.resolveNativeSettingsAsarPath({ scriptDirectory: sourceScripts }), sourceAsar);
+
+    const installedScripts = join(root, "installed", "runtime", "scripts");
+    const installedAsar = join(root, "installed", "codex-patched-app", "resources", "app.asar");
+    mkdirSync(join(root, "installed", "codex-patched-app", "resources"), { recursive: true });
+    mkdirSync(installedScripts, { recursive: true });
+    writeFileSync(installedAsar, "installed");
+    assert.equal(nativeSettingsContract.resolveNativeSettingsAsarPath({ scriptDirectory: installedScripts }), installedAsar);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native Settings completeness treats the current registration contract as known feature-gated slugs", () => {
   assert.equal(typeof nativeSettingsContract.extractNativeSettingsRegistrationSlugs, "function");
   assert.equal(typeof nativeSettingsContract.compareNativeSettingsSlugSets, "function");
   const source = "var x={agent:A,personalization:B,\"plugins-settings\":C};";
@@ -150,16 +210,23 @@ test("native Settings completeness comes from the current registration contract"
     ["agent", "personalization", "plugins-settings"],
     ["agent", "agent", "personalization", "unexpected"],
   );
-  assert.deepEqual(compared.missing, ["plugins-settings"]);
+  assert.deepEqual(compared.gated, ["plugins-settings"]);
   assert.deepEqual(compared.duplicates, ["agent"]);
   assert.deepEqual(compared.unexpected, ["unexpected"]);
   assert.equal(compared.ok, false);
 
+  const featureGated = nativeSettingsContract.compareNativeSettingsSlugSets(
+    ["agent", "personalization", "plugins-settings", "usage"],
+    ["agent", "personalization"],
+  );
+  assert.equal(featureGated.ok, true);
+  assert.deepEqual(featureGated.gated, ["plugins-settings", "usage"]);
+
   const runner = readFileSync(scriptUrl, "utf8");
   assert.match(runner, /readNativeSettingsRegistrationSlugs/);
   assert.match(runner, /compareNativeSettingsSlugSets/);
-  assert.match(runner, /expectedSlugs/);
-  assert.match(runner, /missingSlugs/);
+  assert.match(runner, /knownSlugs/);
+  assert.match(runner, /gatedSlugs/);
   assert.match(runner, /duplicateSlugs/);
 });
 

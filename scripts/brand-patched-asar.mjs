@@ -11,6 +11,7 @@ import {
   hasStartupMcpConfigReload,
   hasSettingsExternalNavigationPatch,
   hasSettingsExternalNavigationRenderPatch,
+  hasWindowsTrayIconPatchCandidate,
   hasWindowsTrayIconSelection,
   patchAppServerManagedSessionFlags,
   patchComputerUseLegacyNotifyOptOut,
@@ -30,7 +31,7 @@ import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.m
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 5;
+const hostPatchRevision = 6;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -824,15 +825,15 @@ function findWebviewLocalPluginCatalogPatch(fd, header, dataOffset) {
 }
 
 function findWindowsTrayIconPatch(fd, header, dataOffset) {
+  const candidates = [];
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (hasWindowsTrayIconSelection(text)) {
-      return [rel, patchWindowsTrayIconSelection];
-    }
+    if (hasWindowsTrayIconPatchCandidate(text)) candidates.push(rel);
   }
-  throw new Error("Could not find the Windows tray icon selector under .vite/build/*.js");
+  if (candidates.length !== 1) throw new Error(`Expected one Windows tray icon/GUID bundle, found ${candidates.length}`);
+  return [candidates[0], patchWindowsTrayIconSelection];
 }
 
 function findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset) {

@@ -3627,3 +3627,14 @@ The active installed marker remains host patch revision 4. This checkpoint does 
 - [ ] Anti-Codex still has the same 15-process owned product tree. Read-only native-window evidence proves one exact hidden/iconic `Anti-Codex` main window and a complete supervisor ancestry; this design has no idle timeout and will not exit naturally. Do not focus, restore, kill or synchronize it without user action or explicit controlled-shutdown authorization. Once the tree and Launcher task are both zero, run the source runtime sync once with `NoRestart`, then the newly installed core updater once with `NoRestart`; while Anti-Codex remains closed, refresh Connector/Skill snapshots as a separate step and verify Montage/parity before installed Manager/Settings/prompt/error/startup acceptance and any new autonomous long task.
 
 The accepted media task remains frozen. Current source closure is not installed acceptance and does not restore a project-wide 100% label.
+
+### 2026-08-09 physical installed acceptance repair
+
+- [x] Use the user's controlled-shutdown authorization to activate the previous clean source once, then launch exactly one Anti-Codex from the real Desktop shortcut. Official Codex remained running and no provider traffic or Docker action occurred.
+- [x] Physically open the installed Manager and native Settings. The current Codex package exposes 16 visible Settings pages and 13 registered feature-gated pages; fix the verifier so gated pages are reported instead of falsely required as visible.
+- [x] Reproduce the prompt restore race with a real mouse run. Wait for true Manager view generations and operation generations, restore all four semantic layers, and restore the exact pre-test bytes/existence of `prompt-policy.json` and isolated `AGENTS.md` in `finally`. Focused Manager coverage passes `84/84`.
+- [x] Diagnose the live tray false appearance: the icon resource is correctly pink, but revision 5 shares the official Windows tray GUID and collides with the simultaneously running official Codex. Source revision 6 assigns one stable Anti-Codex-only GUID and keeps revision 5 rollback-compatible.
+- [x] Replay revision 6 against a copy of the real installed 226,936,983-byte ASAR. All critical patches apply with zero skips, size is unchanged, a second application is hash-idempotent, the official GUID count is zero and the Anti-Codex GUID count is one. Host/update/rollback focused coverage passes `84/84`.
+- [ ] Commit the current source, run one exact clean no-traffic preflight, then use one controlled shutdown to activate revision 6. Restart exactly one Anti-Codex and repeat installed Settings, prompt, Manager, Desktop, Start, taskbar and live pink-tray acceptance before any new autonomous smoke task.
+
+The running installed client remains revision 5 until that final activation. Do not claim project-wide 100% from source-only tests.

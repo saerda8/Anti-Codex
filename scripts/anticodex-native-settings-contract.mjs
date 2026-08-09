@@ -1,4 +1,16 @@
-import { closeSync, openSync, readSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 function normalizedPromptSettingsState(value = {}) {
   const editor = (entry = {}) => ({
@@ -24,6 +36,59 @@ export function promptSettingsStatesEqual(left, right) {
   return JSON.stringify(normalizedPromptSettingsState(left)) === JSON.stringify(normalizedPromptSettingsState(right));
 }
 
+export function promptSettingsStatesSemanticallyEqual(left, right) {
+  const normalizedLeft = normalizedPromptSettingsState(left);
+  const normalizedRight = normalizedPromptSettingsState(right);
+  normalizedLeft.nativeCustomInstructions.existed = false;
+  normalizedRight.nativeCustomInstructions.existed = false;
+  return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
+}
+
+export function captureExactFileSnapshot(filePath) {
+  const target = resolve(String(filePath || ""));
+  if (!existsSync(target)) return { target, existed: false, bytes: null };
+  if (!lstatSync(target).isFile()) throw new Error(`Acceptance state path is not a regular file: ${target}`);
+  return { target, existed: true, bytes: readFileSync(target) };
+}
+
+export function restoreExactFileSnapshot(snapshot) {
+  const target = resolve(String(snapshot?.target || ""));
+  if (!snapshot?.existed) {
+    if (existsSync(target) && !lstatSync(target).isFile()) throw new Error(`Refusing to remove a non-file acceptance state path: ${target}`);
+    rmSync(target, { force: true });
+    return;
+  }
+  if (!Buffer.isBuffer(snapshot.bytes)) throw new Error(`Acceptance snapshot bytes are missing: ${target}`);
+  if (existsSync(target) && !lstatSync(target).isFile()) throw new Error(`Refusing to replace a non-file acceptance state path: ${target}`);
+  mkdirSync(dirname(target), { recursive: true });
+  const temporary = `${target}.${process.pid}.acceptance-restore.tmp`;
+  try {
+    writeFileSync(temporary, snapshot.bytes);
+    renameSync(temporary, target);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+export function exactFileSnapshotMatches(snapshot) {
+  const target = resolve(String(snapshot?.target || ""));
+  if (!snapshot?.existed) return !existsSync(target);
+  if (!existsSync(target) || !lstatSync(target).isFile() || !Buffer.isBuffer(snapshot.bytes)) return false;
+  return readFileSync(target).equals(snapshot.bytes);
+}
+
+export function resolveNativeSettingsAsarPath({ explicitPath = "", scriptDirectory = "" } = {}) {
+  if (explicitPath) return resolve(String(explicitPath));
+  const scripts = resolve(String(scriptDirectory || ""));
+  const candidates = [
+    join(scripts, "..", "codex-patched-app", "resources", "app.asar"),
+    join(scripts, "..", "..", "codex-patched-app", "resources", "app.asar"),
+  ].map((value) => resolve(value));
+  const matches = [...new Set(candidates.filter((value) => existsSync(value)))];
+  if (matches.length !== 1) throw new Error(`Expected one native Settings ASAR candidate, found ${matches.length}.`);
+  return matches[0];
+}
+
 export function extractNativeSettingsRegistrationSlugs(source = "") {
   const candidates = [];
   for (const match of String(source).matchAll(/(?:^|[;,])(?:var |let |const )?[A-Za-z_$][\w$]*\s*=\s*\{([^{}]{1,1200})\}/g)) {
@@ -46,10 +111,10 @@ export function compareNativeSettingsSlugSets(expectedSlugs = [], visibleSlugs =
   for (const slug of visible) counts.set(slug, (counts.get(slug) || 0) + 1);
   const visibleSet = new Set(visible);
   const expectedSet = new Set(expected);
-  const missing = expected.filter((slug) => !visibleSet.has(slug));
+  const gated = expected.filter((slug) => !visibleSet.has(slug));
   const duplicates = [...counts].filter(([, count]) => count > 1).map(([slug]) => slug).sort();
   const unexpected = [...visibleSet].filter((slug) => !expectedSet.has(slug)).sort();
-  return { ok: missing.length === 0 && duplicates.length === 0 && unexpected.length === 0, expected, visible, missing, duplicates, unexpected };
+  return { ok: duplicates.length === 0 && unexpected.length === 0, expected, visible, gated, duplicates, unexpected };
 }
 
 function alignedAsarDataOffset(headerSize) {

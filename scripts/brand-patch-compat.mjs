@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 const ANTI_CODEX_TITLE = "`Anti-Codex`";
 const ANTI_CODEX_TRAY_ICON = "`codex-tray.ico`";
+const OFFICIAL_CODEX_TRAY_GUID = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
+const ANTI_CODEX_TRAY_GUID = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
 const WINDOWS_TRAY_BRAND_ICONS = [
   "`icon-agent.ico`",
   "`chatgpt-tray-dark.ico`",
@@ -708,7 +710,14 @@ export function patchWindowsTrayIconSelection(text) {
   const source = String(text ?? "");
   const match = findWindowsTrayIconSelector(source);
   if (!match) throw new Error("Windows tray icon selector not found");
-  if (match.alternateIconCount === 0 && match.codexIconCount >= 4) return source;
+  const officialGuidCount = source.split(OFFICIAL_CODEX_TRAY_GUID).length - 1;
+  const antiCodexGuidCount = source.split(ANTI_CODEX_TRAY_GUID).length - 1;
+  const originalIdentity = officialGuidCount === 1 && antiCodexGuidCount === 0;
+  const patchedIdentity = officialGuidCount === 0 && antiCodexGuidCount === 1;
+  if (!originalIdentity && !patchedIdentity) {
+    throw new Error(`Windows tray GUID contract is invalid: official=${officialGuidCount}, anticodex=${antiCodexGuidCount}`);
+  }
+  if (match.alternateIconCount === 0 && match.codexIconCount >= 4 && patchedIdentity) return source;
 
   let selector = match.selector;
   for (const icon of WINDOWS_TRAY_BRAND_ICONS) {
@@ -716,11 +725,28 @@ export function patchWindowsTrayIconSelection(text) {
       ANTI_CODEX_TRAY_ICON + " ".repeat(icon.length - ANTI_CODEX_TRAY_ICON.length);
     selector = selector.replaceAll(icon, replacement);
   }
-  return source.slice(0, match.start) + selector + source.slice(match.end);
+  let next = source.slice(0, match.start) + selector + source.slice(match.end);
+  if (originalIdentity) next = next.replace(OFFICIAL_CODEX_TRAY_GUID, ANTI_CODEX_TRAY_GUID);
+  if (next.length !== source.length || !hasWindowsTrayIconSelection(next)) {
+    throw new Error("Windows tray icon and GUID patch did not reach the required state");
+  }
+  return next;
 }
 
 export function hasWindowsTrayIconSelection(text) {
-  return findWindowsTrayIconSelector(String(text ?? "")) !== null;
+  const source = String(text ?? "");
+  const match = findWindowsTrayIconSelector(source);
+  return Boolean(match
+    && match.alternateIconCount === 0
+    && match.codexIconCount >= 4
+    && source.split(OFFICIAL_CODEX_TRAY_GUID).length - 1 === 0
+    && source.split(ANTI_CODEX_TRAY_GUID).length - 1 === 1);
+}
+
+export function hasWindowsTrayIconPatchCandidate(text) {
+  const source = String(text ?? "");
+  return findWindowsTrayIconSelector(source) !== null
+    && (source.includes(OFFICIAL_CODEX_TRAY_GUID) || source.includes(ANTI_CODEX_TRAY_GUID));
 }
 
 const LEGACY_NOTIFY_ENSURE_PATTERN = /function (?<fn>[\w$]+)\((?<content>[\w$]+),(?<helper>[\w$]+)\)\{let (?<notify>[\w$]+)=(?<read>[\w$]+)\(\k<content>\),(?<previous>[\w$]+)=(?<unwrap>[\w$]+)\(\k<notify>\),(?<next>[\w$]+)=\[\k<helper>,(?<turn>[\w$]+)\];return \k<previous>!=null&&\k<next>\.push\((?<previousFlag>[\w$]+),JSON\.stringify\(\k<previous>\)\),(?<same>[\w$]+)\(\k<notify>,\k<next>\)\?\{content:\k<content>,hadNotify:!0\}:\{content:(?<replace>[\w$]+)\(\k<content>,(?<toml>[\w$]+)\(\{notify:\k<next>\}\)\.trimEnd\(\)\),hadNotify:\k<notify>!=null\}\}/;

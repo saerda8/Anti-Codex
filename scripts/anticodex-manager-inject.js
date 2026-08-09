@@ -1861,6 +1861,7 @@
     let actionGeneration = 0;
     let actionInFlight = false;
     let managerOperationInFlight = false;
+    let managerOperationGeneration = 0;
     let managerView = "status";
 
     function setManagerOperationBusy(busy) {
@@ -1876,6 +1877,8 @@
         result.textContent = "已有管理操作正在运行，请等待完成。";
         return false;
       }
+      managerOperationGeneration += 1;
+      root.setAttribute("data-anticodex-operation-generation", String(managerOperationGeneration));
       setManagerOperationBusy(true);
       try {
         await operation();
@@ -2079,6 +2082,8 @@
     window.__ANTICODEX_REFRESH_MANAGER_PANEL__ = () => load({ updateResult: false });
 
     async function showPromptSettings() {
+      const promptGeneration = Number(root.getAttribute("data-anticodex-prompt-generation") || 0) + 1;
+      root.setAttribute("data-anticodex-prompt-generation", String(promptGeneration));
       managerView = "prompts";
       root.setAttribute("data-anticodex-manager-view", "prompts");
       actions.style.display = "none";
@@ -2176,12 +2181,12 @@
         ...defaults,
         nativeCustomInstructions: { content: nativeInstructions.defaultContent || "" },
       });
-      backButton.onclick = async () => {
+      backButton.onclick = () => { void runManagerExclusive(async () => {
         managerView = "status";
         root.setAttribute("data-anticodex-manager-view", "status");
         actions.style.display = "";
         await load();
-      };
+      }); };
       const required = snapshotLayers.filter((layer) => layer.required).map((layer) => card(layer.title || "必需兼容层", el("pre", { className: "anticodex-result", text: layer.effectiveContent || "" })));
       const requiredLocal = requiredLocalLayers.map((layer) => card(`只读本地兼容提示词：${layer.title || "必需兼容层"}`, el("div", { style: "display:grid;gap:9px" }, [
         el("pre", { className: "anticodex-result", text: layer.content || "" }),

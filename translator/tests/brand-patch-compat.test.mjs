@@ -120,7 +120,7 @@ test("wires the crash recovery page as one fixed-shell critical patch", () => {
   assert.match(brandPatcherSource, /\["crash-recovery-page",\s*\(\)\s*=>\s*findCrashRecoveryPagePatch/);
   const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
   assert.equal((criticalBlock.match(/"crash-recovery-page"/g) ?? []).length, 1);
-  assert.match(brandPatcherSource, /const hostPatchRevision = 5;/);
+  assert.match(brandPatcherSource, /const hostPatchRevision = 6;/);
 });
 
 test("selects exactly one signed crash bundle and never hides a partial second bundle", () => {
@@ -526,7 +526,10 @@ test("defers the primary-window repaint until restore without changing bundle si
 });
 
 test("routes every Windows tray brand to the Anti-Codex tray resource", () => {
+  const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
+  const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
   const source = [
+    `function dEe(e){switch(e){case\`Prod\`:return\`${officialTrayGuid}\`;default:return}}`,
     "function x_(e,t){",
     "if(e===i.a.Agent&&t===n.Vc.ChatGPT)",
     "return{dark:`icon-agent.ico`,light:`icon-agent.ico`};",
@@ -545,9 +548,20 @@ test("routes every Windows tray brand to the Anti-Codex tray resource", () => {
   assert.equal(patched.length, source.length);
   assert.doesNotMatch(patched, /icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico/);
   assert.equal((patched.match(/codex-tray\.ico/g) || []).length, 6);
+  assert.equal((patched.match(new RegExp(officialTrayGuid, "g")) || []).length, 0);
+  assert.equal((patched.match(new RegExp(antiCodexTrayGuid, "g")) || []).length, 1);
+  assert.equal(brandPatchCompat.hasWindowsTrayIconSelection(patched), true);
   assert.equal(
     brandPatchCompat.patchWindowsTrayIconSelection(patched),
     patched,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchWindowsTrayIconSelection(source.replace(officialTrayGuid, "00000000-0000-0000-0000-000000000000")),
+    /tray GUID/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchWindowsTrayIconSelection(`${source}${officialTrayGuid}`),
+    /tray GUID/i,
   );
 });
 

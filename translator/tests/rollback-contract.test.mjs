@@ -196,7 +196,8 @@ function runRollbackHostPatchMatrix() {
   ].includes(name));
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
-    ["current", current, true, 5],
+    ["current", current, true, 6],
+    ["revisionFive", current, true, 5],
     ["revision2Current", revision4, true, 2],
     ["legacyCurrent", current, true],
     ["revisionOne", current, true, 1],
@@ -281,7 +282,7 @@ function Test-AntiCodexAsarPatches {
         [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
-    $shapeMatches = if ($ExpectedHostPatchRevision -in @(3, 4, 5)) {
+    $shapeMatches = if ($ExpectedHostPatchRevision -in @(3, 4, 5, 6)) {
         $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 1 -and
         $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 0 -and
         $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
@@ -630,7 +631,12 @@ test("rollback patch compatibility accepts the current and supported predecessor
       "codex-tray.ico codex-tray.ico codex-tray.ico codex-tray.ico",
     ].join(";");
     const configWriteBridge = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
-    const patchedBase = `${base};${configWriteBridge}`;
+    const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
+    const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
+    const currentBase = `${base};${antiCodexTrayGuid}`;
+    const predecessorBase = `${base};${officialTrayGuid}`;
+    const patchedBase = `${currentBase};${configWriteBridge}`;
+    const predecessorPatchedBase = `${predecessorBase};${configWriteBridge}`;
     const currentSettingsPatch = 'q={/*anticodex-local-settings-only*/account:{href:`about:blank`,icon:a,message:m.account},securitySettings:{href:`about:blank`,icon:b,message:m.securitySettings}};/*anticodex-hide-external-account*/null;(0,Q.jsx)(Zt,{...e,securitySettingsEnabled:0});Z.securitySettings.message';
     const paddedCurrentSettingsPatch = currentSettingsPatch.replace("securitySettingsEnabled:0}", "securitySettingsEnabled:0          }");
     const missingAccountMessagePatch = currentSettingsPatch.replace("message:m.account", "missing:m.account");
@@ -668,6 +674,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
       zero: join(fixture, "zero.asar"),
       one: join(fixture, "one.asar"),
       two: join(fixture, "two.asar"),
+      revision5: join(fixture, "revision5.asar"),
       revision2: join(fixture, "revision2.asar"),
       focusOnly: join(fixture, "focus-only.asar"),
       splitCross: join(fixture, "split-cross.asar"),
@@ -704,7 +711,8 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.zero, patchedBase);
     writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.two, `${patchedBase};${hook};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
-    writeFileSync(paths.revision2, `${patchedBase};${revision2Hook};${currentSettingsPatch};${crashRecoveryOriginal}`);
+    writeFileSync(paths.revision5, `${predecessorPatchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.revision2, `${predecessorPatchedBase};${revision2Hook};${currentSettingsPatch};${crashRecoveryOriginal}`);
     writeFileSync(paths.focusOnly, `${patchedBase};${focusOnlyHook}`);
     writeFileSync(paths.splitCross, `${patchedBase};${focusOnlyHook};${hook}`);
     writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
@@ -717,7 +725,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.previousSettings, `${patchedBase};${hook};${previousSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.currentMissingCrash, `${patchedBase};${hook};${currentSettingsPatch}`);
     writeFileSync(paths.currentWithOriginalCrash, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch};${crashRecoveryOriginal}`);
-    writeFileSync(paths.revision4PartialCrash, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryOriginal.replace('id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`title`,values:{appName:X}', 'id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,values:{appName:`Anti-Codex`}')}`);
+    writeFileSync(paths.revision4PartialCrash, `${predecessorPatchedBase};${hook};${currentSettingsPatch};${crashRecoveryOriginal.replace('id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`title`,values:{appName:X}', 'id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,values:{appName:`Anti-Codex`}')}`);
     writeFileSync(paths.currentConfigHandlerSwap, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryConfigHandlerSwap}`);
     writeFileSync(paths.currentMemoHandlers, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryMemoPatch}`);
     writeFileSync(paths.currentRestartHandlerSwap, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryRestartHandlerSwap}`);
@@ -754,42 +762,43 @@ $revision4 = @($current | Where-Object { $_ -ne "crash-recovery-page" })
 $previous = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
 $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
 [pscustomobject]@{
-    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0 0 5
-    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 5
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0 0 5
-    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 1 0 0 5
-    currentMissingCrash = Accept-Asar ${quote(paths.currentMissingCrash)} 1 1 0 0 5
-    currentWithOriginalCrash = Accept-Asar ${quote(paths.currentWithOriginalCrash)} 1 1 0 0 5
+    currentHook = Accept-Asar ${quote(paths.one)} 1 1 0 0 6
+    currentMissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 6
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 1 0 0 6
+    revision5Hook = Accept-Asar ${quote(paths.revision5)} 1 1 0 0 5
+    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 1 0 0 6
+    currentMissingCrash = Accept-Asar ${quote(paths.currentMissingCrash)} 1 1 0 0 6
+    currentWithOriginalCrash = Accept-Asar ${quote(paths.currentWithOriginalCrash)} 1 1 0 0 6
     revision4PartialCrash = Accept-Asar ${quote(paths.revision4PartialCrash)} 1 1 0 0 4
-    currentConfigHandlerSwap = Accept-Asar ${quote(paths.currentConfigHandlerSwap)} 1 1 0 0 5
-    currentMemoHandlers = Accept-Asar ${quote(paths.currentMemoHandlers)} 1 1 0 0 5
-    currentRestartHandlerSwap = Accept-Asar ${quote(paths.currentRestartHandlerSwap)} 1 1 0 0 5
-    currentGenericRetryHandlerSwap = Accept-Asar ${quote(paths.currentGenericRetryHandlerSwap)} 1 1 0 0 5
-    currentConfigHandlerReassign = Accept-Asar ${quote(paths.currentConfigHandlerReassign)} 1 1 0 0 5
-    currentRestartHandlerReassign = Accept-Asar ${quote(paths.currentRestartHandlerReassign)} 1 1 0 0 5
-    currentGenericRetryHandlerReassign = Accept-Asar ${quote(paths.currentGenericRetryHandlerReassign)} 1 1 0 0 5
-    currentConfigCacheDecoy = Accept-Asar ${quote(paths.currentConfigCacheDecoy)} 1 1 0 0 5
-    currentRestartCacheDecoy = Accept-Asar ${quote(paths.currentRestartCacheDecoy)} 1 1 0 0 5
-    currentGenericRetryCacheDecoy = Accept-Asar ${quote(paths.currentGenericRetryCacheDecoy)} 1 1 0 0 5
-    currentConfigCompoundWriteDecoy = Accept-Asar ${quote(paths.currentConfigCompoundWriteDecoy)} 1 1 0 0 5
-    currentRestartCompoundWriteDecoy = Accept-Asar ${quote(paths.currentRestartCompoundWriteDecoy)} 1 1 0 0 5
-    currentGenericRetryCompoundWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryCompoundWriteDecoy)} 1 1 0 0 5
-    currentConfigDestructureWriteDecoy = Accept-Asar ${quote(paths.currentConfigDestructureWriteDecoy)} 1 1 0 0 5
-    currentGenericRetryForOfWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryForOfWriteDecoy)} 1 1 0 0 5
-    currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 1 0 0 5
-    currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 1 0 0 5
-    currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 1 0 0 5
+    currentConfigHandlerSwap = Accept-Asar ${quote(paths.currentConfigHandlerSwap)} 1 1 0 0 6
+    currentMemoHandlers = Accept-Asar ${quote(paths.currentMemoHandlers)} 1 1 0 0 6
+    currentRestartHandlerSwap = Accept-Asar ${quote(paths.currentRestartHandlerSwap)} 1 1 0 0 6
+    currentGenericRetryHandlerSwap = Accept-Asar ${quote(paths.currentGenericRetryHandlerSwap)} 1 1 0 0 6
+    currentConfigHandlerReassign = Accept-Asar ${quote(paths.currentConfigHandlerReassign)} 1 1 0 0 6
+    currentRestartHandlerReassign = Accept-Asar ${quote(paths.currentRestartHandlerReassign)} 1 1 0 0 6
+    currentGenericRetryHandlerReassign = Accept-Asar ${quote(paths.currentGenericRetryHandlerReassign)} 1 1 0 0 6
+    currentConfigCacheDecoy = Accept-Asar ${quote(paths.currentConfigCacheDecoy)} 1 1 0 0 6
+    currentRestartCacheDecoy = Accept-Asar ${quote(paths.currentRestartCacheDecoy)} 1 1 0 0 6
+    currentGenericRetryCacheDecoy = Accept-Asar ${quote(paths.currentGenericRetryCacheDecoy)} 1 1 0 0 6
+    currentConfigCompoundWriteDecoy = Accept-Asar ${quote(paths.currentConfigCompoundWriteDecoy)} 1 1 0 0 6
+    currentRestartCompoundWriteDecoy = Accept-Asar ${quote(paths.currentRestartCompoundWriteDecoy)} 1 1 0 0 6
+    currentGenericRetryCompoundWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryCompoundWriteDecoy)} 1 1 0 0 6
+    currentConfigDestructureWriteDecoy = Accept-Asar ${quote(paths.currentConfigDestructureWriteDecoy)} 1 1 0 0 6
+    currentGenericRetryForOfWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryForOfWriteDecoy)} 1 1 0 0 6
+    currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 1 0 0 6
+    currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 1 0 0 6
+    currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 1 0 0 6
     revision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 1 0 2
     revision2RejectsCurrent = Accept-Asar ${quote(paths.one)} 1 0 1 0 2
-    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0 0 5
-    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0 0 5
-    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0 0 5
-    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0 0 5
-    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 0 5
-    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 0 5
-    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 0 5
-    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 0 5
-    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 0 5
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 1 0 0 6
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 1 0 0 6
+    currentMissingConfigBridge = Accept-Asar ${quote(paths.missingConfigBridge)} 1 1 0 0 6
+    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 1 0 0 6
+    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 1 0 0 6
+    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 1 0 0 6
+    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 1 0 0 6
+    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 1 0 0 6
+    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 1 0 0 6
     legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 0 1 0
     predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 0 1 0
     previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0 1 0
@@ -812,6 +821,7 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
       currentHook: true,
       currentMissingHook: false,
       currentDuplicateHook: false,
+      revision5Hook: true,
       currentRevision2Hook: false,
       currentMissingCrash: false,
       currentWithOriginalCrash: false,
@@ -869,6 +879,7 @@ test("complete rollback host validation maps immutable predecessor matrices to t
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
       current: true,
+      revisionFive: true,
       revision2Current: true,
       legacyCurrent: false,
       revisionOne: false,
