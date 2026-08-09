@@ -117,6 +117,28 @@ function replaceFixtureSupervisorIdentity(value, actualPid) {
   }
 }
 
+function bindStateToSupervisor(state, supervisor) {
+  const evidencePaths = [
+    state.paths.taskReceipt,
+    state.paths.managerMatrix,
+    state.paths.managerProfile,
+    state.paths.managerClose,
+    state.paths.managerProtocol,
+    ...state.paths.modelSwitches,
+    ...state.paths.shortcutRounds,
+  ];
+  for (const path of evidencePaths) {
+    const evidence = JSON.parse(readFileSync(path, "utf8"));
+    replaceFixtureSupervisorIdentity(evidence, supervisor.child.pid);
+    const provenance = evidence?.managerButton?.payload?.handlerContractEvidence?.provenance;
+    if (provenance?.taskRuntimePid === fixtureSupervisorPid) provenance.taskRuntimePid = supervisor.child.pid;
+    if (provenance?.taskRuntimeCreationDateUtc === fixtureSupervisorCreationDateUtc) {
+      provenance.taskRuntimeCreationDateUtc = supervisor.creationDateUtc;
+    }
+    writeJson(path, evidence, { signed: true });
+  }
+}
+
 function buildRawEvidence(root) {
   const taskId = "019f9000-1111-7222-8333-444444444444";
   const prompt = "只提交一次完整自主总目标。";
@@ -649,26 +671,6 @@ function appendAbortedContinuationTurn(state, {
 
 function runBuilder(root, state, extraArgs = []) {
   const outputRoot = join(root, "normalized");
-  const supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
-  const evidencePaths = [
-    state.paths.taskReceipt,
-    state.paths.managerMatrix,
-    state.paths.managerProfile,
-    state.paths.managerClose,
-    state.paths.managerProtocol,
-    ...state.paths.modelSwitches,
-    ...state.paths.shortcutRounds,
-  ];
-  for (const path of evidencePaths) {
-    const evidence = JSON.parse(readFileSync(path, "utf8"));
-    replaceFixtureSupervisorIdentity(evidence, supervisor.child.pid);
-    const currentProvenance = evidence?.managerButton?.payload?.handlerContractEvidence?.provenance;
-    if (currentProvenance?.taskRuntimePid === fixtureSupervisorPid) currentProvenance.taskRuntimePid = supervisor.child.pid;
-    if (currentProvenance?.taskRuntimeCreationDateUtc === fixtureSupervisorCreationDateUtc) {
-      currentProvenance.taskRuntimeCreationDateUtc = supervisor.creationDateUtc;
-    }
-    writeJson(path, evidence, { signed: true });
-  }
   const args = [
     builderPath,
     "--task-receipt", state.paths.taskReceipt,
@@ -685,19 +687,18 @@ function runBuilder(root, state, extraArgs = []) {
     "--compact",
     ...extraArgs,
   ];
-  try {
-    const child = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
-    const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
-    return { child, payload, outputRoot };
-  } finally {
-    stopTestSupervisor(supervisor);
-  }
+  const child = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true });
+  const payload = JSON.parse(String(child.stdout || "{}").trim() || "{}");
+  return { child, payload, outputRoot };
 }
 
 test("builder converts raw real-probe shapes into five signed inputs accepted by Gate 5", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-"));
+  let supervisor = null;
   try {
     const state = buildRawEvidence(root);
+    supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+    bindStateToSupervisor(state, supervisor);
     const result = runBuilder(root, state);
     assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
     assert.equal(result.payload.ok, true);
@@ -732,6 +733,7 @@ test("builder converts raw real-probe shapes into five signed inputs accepted by
     assert.equal(aggregate.status, 0, aggregate.stderr || aggregate.stdout);
     assert.equal(JSON.parse(aggregate.stdout).ok, true);
   } finally {
+    stopTestSupervisor(supervisor);
     rmSync(root, { recursive: true, force: true });
   }
 });
