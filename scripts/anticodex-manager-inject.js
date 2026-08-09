@@ -195,6 +195,7 @@
       if (key === "style") node.style.cssText = value;
       else if (key === "className") node.className = value;
       else if (key === "text") node.textContent = value;
+      else if (key === "value") node.value = value ?? "";
       else node.setAttribute(key, value);
     }
     for (const child of [].concat(children)) {

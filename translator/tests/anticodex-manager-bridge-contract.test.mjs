@@ -2083,6 +2083,26 @@ test("Manager prompt editor bypasses a stale snapshot after saving", () => {
   assert.match(promptSettingsBlock, /读取提示词设置失败/);
 });
 
+test("Manager form controls receive their live value when created", () => {
+  const document = {
+    createElement(tag) {
+      return {
+        tagName: String(tag).toUpperCase(),
+        style: {},
+        value: "",
+        attributes: {},
+        setAttribute(key, value) { this.attributes[key] = String(value); },
+        append() {},
+      };
+    },
+    createTextNode(value) { return { nodeType: 3, textContent: String(value) }; },
+  };
+  const el = vm.runInNewContext(`(${extractNamedFunction(managerInject, "el")})`, { document });
+  const textarea = el("textarea", { value: "saved prompt" });
+
+  assert.equal(textarea.value, "saved prompt");
+});
+
 test("Manager waits for its initial status load before accepting an exclusive operation", () => {
   const openManagerBlock = extractNamedFunction(managerInject, "openManager");
   const runManagerExclusiveBlock = extractNamedFunction(openManagerBlock, "runManagerExclusive");
