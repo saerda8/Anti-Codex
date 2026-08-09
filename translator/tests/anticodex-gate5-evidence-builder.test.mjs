@@ -25,6 +25,39 @@ const managerActions = [
   "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
   "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
+const safeRealActions = [
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+];
+const highImpactActions = [
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+];
+const virtualManagerActions = new Set(["refreshStatus", "refreshModels", "viewLatestReports"]);
+const scriptHandlerByAction = {
+  accountSwitch: "open-antigravity-account-switch.ps1",
+  accountProxy: "test-anticodex-account-proxy-readiness.ps1",
+  syncReadiness: "test-anticodex-sync-readiness.ps1",
+  repairShortcuts: "repair-anticodex-shortcuts.ps1",
+  updateCheck: "check-anticodex-update.ps1",
+  sourcePreflight: "test-anticodex-source-preflight.ps1",
+  mcpSkills: "test-anticodex-mcp-skills.ps1",
+  pluginCapabilities: "test-anticodex-plugin-capabilities.ps1",
+  diagnosticsBundle: "collect-anticodex-diagnostics.ps1",
+  syncHost: "sync-anticodex-launcher.ps1",
+  refreshFeatures: "refresh-anticodex-local-features.ps1",
+  stabilitySoak: "test-anticodex-stability-soak.ps1",
+  coldRelaunch: "test-anticodex-cold-relaunch.ps1",
+  fastOverallNoTraffic: "test-anticodex-installed-overall.ps1",
+  overallNoTraffic: "test-anticodex-installed-overall.ps1",
+  postVerificationFull: "test-anticodex-post-verification.ps1",
+};
+const managerHandlerContracts = Object.fromEntries(managerActions.map((action) => [action, {
+  verified: true,
+  kind: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : "script"),
+  source: action === "upstreamConfig" ? "scripts/anticodex-manager-inject.js" : "scripts/anticodex-manager-service.mjs",
+  handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
+}]));
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -183,6 +216,21 @@ function buildRawEvidence(root) {
         actions,
         zeroSideEffects: true,
         usedRealTraffic: false,
+        uiInteractionEvidence: {
+          schema: "anticodex-manager-ui-interaction-v1",
+          scope: "ui-interaction-only",
+          verifiedActions: actions,
+          passedCount: actions.length,
+        },
+        handlerContractEvidence: {
+          schema: "anticodex-manager-handler-contract-v1",
+          contracts: managerHandlerContracts,
+          offlineContractVerifiedActions: actions,
+          safeRealActionAllowlist: safeRealActions,
+          liveExecutedActions: [],
+          pendingAuthorizedActions: highImpactActions,
+          allFunctionsVerified: false,
+        },
         results: Object.fromEntries(actions.map((action) => [action, {
           ok: true,
           action,
@@ -952,6 +1000,22 @@ test("builder requires the exact 20 unique Manager actions", () => {
     const result = runBuilder(root, state);
     assert.equal(result.child.status, 1, result.child.stderr);
     assert.match(result.payload.failures.join("\n"), /20 unique|action coverage/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects a UI-only click matrix without separate handler truth", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-truth-"));
+  try {
+    const state = buildRawEvidence(root);
+    const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+    delete matrix.managerButton.payload.uiInteractionEvidence;
+    delete matrix.managerButton.payload.handlerContractEvidence;
+    writeJson(state.paths.managerMatrix, matrix, { signed: true });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr);
+    assert.match(result.payload.failures.join("\n"), /UI interaction|handler contract/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

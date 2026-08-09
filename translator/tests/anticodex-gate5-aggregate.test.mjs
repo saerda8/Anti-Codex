@@ -12,6 +12,21 @@ const aggregateScriptUrl = new URL("../../scripts/test-anticodex-gate5-visible-i
 const aggregateScriptPath = fileURLToPath(aggregateScriptUrl);
 const releaseGateScriptUrl = new URL("../../scripts/test-anticodex-release-gates.mjs", import.meta.url);
 const sourcePreflightScriptUrl = new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url);
+const managerActions = [
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+];
+const safeRealActions = [
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+];
+const highImpactActions = [
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+];
 
 test("Gate 5 is an offline explicit-evidence aggregate, not an old traffic/UI runner", async () => {
   const source = await readFile(aggregateScriptUrl, "utf8");
@@ -33,6 +48,8 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
   for (const contract of [
     /Number\(manager\?\.actionCount\) < 20/,
     /manager\?\.zeroSideEffects !== true/,
+    /handlerVerification\?\.allFunctionsVerified !== false/,
+    /exactStringList\(handlerVerification\?\.realExecutedActionIds, \[\]\)/,
     /protocol\?\.before !== "chatCompletions"/,
     /protocol\?\.alternate !== "responses"/,
     /protocol\?\.restored !== protocol\?\.before/,
@@ -134,13 +151,25 @@ function fixture(root) {
     releaseBinding,
   };
   const managerEvidence = {
-    schema: "anticodex-manager-actual-mouse-matrix-v1",
+    schema: "anticodex-manager-actual-mouse-matrix-v2",
     checkedAt,
     ok: true,
     requestedRealTraffic: false,
     usedRealTraffic: false,
     actionCount: 20,
     zeroSideEffects: true,
+    uiInteraction: {
+      scope: "ui-interaction-only",
+      verifiedActionIds: managerActions,
+      verifiedCount: managerActions.length,
+    },
+    handlerVerification: {
+      offlineContractVerifiedActionIds: managerActions,
+      safeRealActionIds: safeRealActions,
+      realExecutedActionIds: [],
+      pendingAuthorizedActionIds: highImpactActions,
+      allFunctionsVerified: false,
+    },
     actualMouse: true,
     profileEntryText: "管理",
     forbiddenEnglishVisible: false,
@@ -271,7 +300,7 @@ test("Gate 5 rehashes current artifacts and signs a successful offline aggregate
     assert.equal(result.child.status, 0, result.child.stderr || JSON.stringify(result.payload));
     assert.equal(result.payload.ok, true);
     assert.equal(result.payload.artifactCount, 3);
-    assert.equal(result.payload.managerActionCount, 20);
+    assert.equal(result.payload.managerUiInteractionCount, 20);
     assert.equal(result.payload.modelSwitchCount, 3);
     assert.equal(result.payload.shortcutRestoreRounds, 3);
     const latest = join(result.reportRoot, "latest-gate5-visible-integration.json");
@@ -346,6 +375,7 @@ const rejectionCases = [
   ["English Manager label", ({ values }) => { values.managerEvidence.profileEntryText = "Manager"; values.managerEvidence.forbiddenEnglishVisible = true; }, /profile_menu_uses_exact_chinese_manager_label/],
   ["Manager has only 19 actions", ({ values }) => { values.managerEvidence.actionCount = 19; }, /manager_actual_mouse_matrix/],
   ["Manager records side effects", ({ values }) => { values.managerEvidence.zeroSideEffects = false; }, /manager_actual_mouse_matrix/],
+  ["UI-only Manager claims all functions verified", ({ values }) => { values.managerEvidence.handlerVerification.allFunctionsVerified = true; }, /manager_actual_mouse_matrix/],
   ["close contains a real text node", ({ values }) => { values.managerEvidence.closeProbes[1].hasTextNode = true; }, /manager_close_full_height_actual_mouse/],
   ["model request count changed", ({ values }) => { values.modelSwitchEvidence.switches[1].requestCountAfter = 8; }, /frontend_model_hot_switch_zero_requests/],
   ["model switch restarted a process", ({ values }) => { values.modelSwitchEvidence.switches[1].antiCodexMainPidAfter = 999; }, /frontend_model_hot_switch_stable_processes/],

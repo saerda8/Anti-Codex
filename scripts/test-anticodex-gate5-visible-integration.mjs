@@ -61,6 +61,21 @@ const requiredInputs = {
   shortcutRestoreEvidence: "--shortcut-restore-evidence",
   releaseBindingEvidence: "--release-binding-evidence",
 };
+const managerActions = Object.freeze([
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
 const missingArguments = Object.values(requiredInputs).filter((flag) => !String(args.get(flag) || "").trim());
 if (missingArguments.length > 0) {
   console.error(JSON.stringify({ ok: false, error: "missing_required_arguments", missingArguments }));
@@ -70,6 +85,12 @@ if (missingArguments.length > 0) {
 function positiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
 }
 
 function sha256(value) {
@@ -257,12 +278,22 @@ function validateManager(data) {
   const closes = Array.isArray(data?.closeProbes) ? data.closeProbes : [];
   const closeByName = Object.fromEntries(closes.map((entry) => [String(entry?.name || ""), entry]));
   const protocol = data?.protocolInteraction || {};
-  return data?.schema === "anticodex-manager-actual-mouse-matrix-v1"
+  const uiInteraction = data?.uiInteraction || {};
+  const handlerVerification = data?.handlerVerification || {};
+  return data?.schema === "anticodex-manager-actual-mouse-matrix-v2"
     && data?.ok === true
     && data?.requestedRealTraffic === false
     && data?.usedRealTraffic === false
     && Number(data?.actionCount) >= 20
     && data?.zeroSideEffects === true
+    && uiInteraction?.scope === "ui-interaction-only"
+    && Number(uiInteraction?.verifiedCount) === managerActions.length
+    && exactStringList(uiInteraction?.verifiedActionIds, managerActions)
+    && exactStringList(handlerVerification?.offlineContractVerifiedActionIds, managerActions)
+    && exactStringList(handlerVerification?.safeRealActionIds, safeRealManagerActions)
+    && exactStringList(handlerVerification?.realExecutedActionIds, [])
+    && exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
+    && handlerVerification?.allFunctionsVerified === false
     && data?.actualMouse === true
     && data?.profileEntryText === "管理"
     && data?.forbiddenEnglishVisible === false
@@ -393,7 +424,11 @@ record("current_antigravity_route_bound", taskManifest?.route?.provider === "ant
 const manager = sources.managerEvidence?.data || {};
 const managerOk = validateManager(manager);
 const closeByName = Object.fromEntries((Array.isArray(manager?.closeProbes) ? manager.closeProbes : []).map((entry) => [entry?.name, entry]));
-record("manager_actual_mouse_matrix", managerOk, { actionCount: manager?.actionCount ?? null, zeroSideEffects: manager?.zeroSideEffects ?? null });
+record("manager_actual_mouse_matrix", managerOk, {
+  uiInteractionCount: manager?.uiInteraction?.verifiedCount ?? null,
+  realHandlerExecutedCount: manager?.handlerVerification?.realExecutedActionIds?.length ?? null,
+  pendingAuthorizedCount: manager?.handlerVerification?.pendingAuthorizedActionIds?.length ?? null,
+});
 record("profile_menu_uses_exact_chinese_manager_label", manager?.profileEntryText === "管理" && manager?.forbiddenEnglishVisible === false);
 record("manager_close_full_height_actual_mouse", ["upper-center", "center", "lower-center"].every((name) => closeByName[name]?.actualMouse === true && closeByName[name]?.closed === true && closeByName[name]?.hasTextNode === false));
 record("manager_protocol_physical_round_trip", normalizeProtocol(manager?.protocolInteraction?.before) === "chatCompletions"
@@ -471,6 +506,8 @@ const payload = {
       actualMouse: manager?.actualMouse === true,
       actionCount: Number(manager?.actionCount || 0),
       zeroSideEffects: manager?.zeroSideEffects === true,
+      uiInteraction: manager?.uiInteraction || null,
+      handlerVerification: manager?.handlerVerification || null,
       profileEntryText: String(manager?.profileEntryText || ""),
       forbiddenEnglishVisible: manager?.forbiddenEnglishVisible === false,
       trayIconPreserved: manager?.trayIconPreserved === true,
@@ -537,7 +574,7 @@ console.log(JSON.stringify(compact ? {
   failures,
   taskId: payload.task.taskId,
   artifactCount: artifactEvidence.length,
-  managerActionCount: payload.currentUiEvidence.manager_actual_mouse_matrix.actionCount,
+  managerUiInteractionCount: payload.currentUiEvidence.manager_actual_mouse_matrix.uiInteraction?.verifiedCount ?? 0,
   modelSwitchCount: payload.currentUiEvidence.frontend_model_hot_switch.switchCount,
   shortcutRestoreRounds: payload.currentUiEvidence.shortcut_restore_single_window_no_blank_frames.roundCount,
   report: reportPaths,

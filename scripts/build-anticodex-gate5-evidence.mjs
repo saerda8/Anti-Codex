@@ -38,7 +38,7 @@ Offline normalization only. This command never launches UI, processes, or model 
 Required raw evidence:
   --task-receipt <path>             Signed single-submit handoff receipt
   --task-artifact <path>            Current task artifact (repeat at least 3 times)
-  --manager-matrix <path>           Signed Manager 20-action UI-only matrix
+  --manager-matrix <path>           Signed Manager 20-action UI-interaction matrix
   --manager-profile <path>          Signed Manager profile-entry mouse probe
   --manager-close <path>            Signed Manager three-height close mouse probe
   --manager-protocol <path>         Signed Manager protocol round-trip mouse probe
@@ -95,6 +95,42 @@ const managerActions = Object.freeze([
   "overallNoTraffic",
   "postVerificationFull",
 ]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const managerHandlerContractByAction = Object.freeze({
+  refreshStatus: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  refreshModels: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  accountSwitch: ["script", "scripts/anticodex-manager-service.mjs", "open-antigravity-account-switch.ps1"],
+  accountProxy: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-account-proxy-readiness.ps1"],
+  syncReadiness: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-sync-readiness.ps1"],
+  repairShortcuts: ["script", "scripts/anticodex-manager-service.mjs", "repair-anticodex-shortcuts.ps1"],
+  updateCheck: ["script", "scripts/anticodex-manager-service.mjs", "check-anticodex-update.ps1"],
+  sourcePreflight: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-source-preflight.ps1"],
+  mcpSkills: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-mcp-skills.ps1"],
+  pluginCapabilities: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-plugin-capabilities.ps1"],
+  diagnosticsBundle: ["script", "scripts/anticodex-manager-service.mjs", "collect-anticodex-diagnostics.ps1"],
+  viewLatestReports: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  syncHost: ["script", "scripts/anticodex-manager-service.mjs", "sync-anticodex-launcher.ps1"],
+  upstreamConfig: ["ui-function", "scripts/anticodex-manager-inject.js", "ui-function"],
+  refreshFeatures: ["script", "scripts/anticodex-manager-service.mjs", "refresh-anticodex-local-features.ps1"],
+  stabilitySoak: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-stability-soak.ps1"],
+  coldRelaunch: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-cold-relaunch.ps1"],
+  fastOverallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  overallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  postVerificationFull: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-post-verification.ps1"],
+});
+
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
+}
 const requiredSingleFlags = [
   "--task-receipt",
   "--manager-matrix",
@@ -624,6 +660,11 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
   requireCondition(wrapper?.ok === true && (wrapper?.managerButton ? wrapper.managerButton?.ok === true : true),
     "manager-matrix: wrapper reported failure");
   const actions = Array.isArray(matrix?.actions) ? matrix.actions : [];
+  const uiInteraction = matrix?.uiInteractionEvidence || {};
+  const handlerContracts = matrix?.handlerContractEvidence || {};
+  const contractEntries = handlerContracts?.contracts && typeof handlerContracts.contracts === "object"
+    ? Object.entries(handlerContracts.contracts)
+    : [];
   requireCondition(matrix?.ok === true
     && matrix?.mode === "ui-only-matrix"
     && matrix?.zeroSideEffects === true
@@ -637,7 +678,28 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
         && entry?.actionActualMouseOk === true
         && entry?.managerOpenedNewPage === false;
     }),
-  "manager-matrix: exact 20 unique action coverage or actual-mouse zero-side-effect evidence is incomplete");
+  "manager-matrix: exact 20 unique UI interactions or actual-mouse zero-side-effect evidence is incomplete");
+  requireCondition(uiInteraction?.schema === "anticodex-manager-ui-interaction-v1"
+    && uiInteraction?.scope === "ui-interaction-only"
+    && Number(uiInteraction?.passedCount) === managerActions.length
+    && exactStringList(uiInteraction?.verifiedActions, managerActions),
+  "manager-matrix: 20/20 UI interaction evidence is incomplete");
+  requireCondition(handlerContracts?.schema === "anticodex-manager-handler-contract-v1"
+    && exactStringList(handlerContracts?.offlineContractVerifiedActions, managerActions)
+    && exactStringList(handlerContracts?.safeRealActionAllowlist, safeRealManagerActions)
+    && exactStringList(handlerContracts?.liveExecutedActions, [])
+    && exactStringList(handlerContracts?.pendingAuthorizedActions, highImpactManagerActions)
+    && handlerContracts?.allFunctionsVerified === false
+    && contractEntries.length === managerActions.length
+    && contractEntries.every(([action, entry], index) => {
+      const expected = managerHandlerContractByAction[action];
+      return action === managerActions[index]
+        && entry?.verified === true
+        && String(entry?.kind || "") === expected?.[0]
+        && String(entry?.source || "") === expected?.[1]
+        && String(entry?.handler || "") === expected?.[2];
+    }),
+  "manager-matrix: offline handler contract mapping is missing or UI-only evidence claims functional execution");
 
   const profile = profileSource.data?.profileEntry || profileSource.data;
   requireCondition(profileSource.data?.ok === true
@@ -699,12 +761,24 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
   requireCondition(trayIconPreserved === true, "manager evidence: current Anti-Codex tray icon is not preserved");
 
   return {
-    schema: "anticodex-manager-actual-mouse-matrix-v1",
+    schema: "anticodex-manager-actual-mouse-matrix-v2",
     ok: true,
     requestedRealTraffic: false,
     usedRealTraffic: false,
     actionCount: actions.length,
     zeroSideEffects: true,
+    uiInteraction: {
+      scope: "ui-interaction-only",
+      verifiedActionIds: [...managerActions],
+      verifiedCount: managerActions.length,
+    },
+    handlerVerification: {
+      offlineContractVerifiedActionIds: [...managerActions],
+      safeRealActionIds: [...safeRealManagerActions],
+      realExecutedActionIds: [],
+      pendingAuthorizedActionIds: [...highImpactManagerActions],
+      allFunctionsVerified: false,
+    },
     actualMouse: true,
     profileEntryText: "管理",
     forbiddenEnglishVisible: false,

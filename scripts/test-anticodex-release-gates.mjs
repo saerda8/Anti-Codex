@@ -54,6 +54,27 @@ const reportRoot = resolve(args.get("--report-root") || join(process.env.APPDATA
 const maxAgeHours = Math.max(0.01, Number(args.get("--max-age-hours") || 48));
 const strict = args.has("--strict");
 const compactOutput = args.has("--summary") || args.has("--compact") || args.has("--compact-status") || args.has("--status");
+const managerActions = Object.freeze([
+  "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+  "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+  "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+  "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+  "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+const safeRealManagerActions = Object.freeze([
+  "updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities",
+  "viewLatestReports", "diagnosticsBundle",
+]);
+const highImpactManagerActions = Object.freeze([
+  "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
+  "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
+]);
+
+function exactStringList(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index]);
+}
 
 function sha256Buffer(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -203,11 +224,21 @@ function validateGate5CurrentUiEvidence(report, failures) {
   const closeProbes = Array.isArray(manager?.closeProbes) ? manager.closeProbes : [];
   const closeByName = Object.fromEntries(closeProbes.map((entry) => [String(entry?.name || ""), entry]));
   const protocol = manager?.protocolInteraction || {};
+  const uiInteraction = manager?.uiInteraction || {};
+  const handlerVerification = manager?.handlerVerification || {};
   if (manager?.ok !== true
     || manager?.usedRealTraffic !== false
     || manager?.actualMouse !== true
     || Number(manager?.actionCount) < 20
     || manager?.zeroSideEffects !== true
+    || uiInteraction?.scope !== "ui-interaction-only"
+    || Number(uiInteraction?.verifiedCount) !== managerActions.length
+    || !exactStringList(uiInteraction?.verifiedActionIds, managerActions)
+    || !exactStringList(handlerVerification?.offlineContractVerifiedActionIds, managerActions)
+    || !exactStringList(handlerVerification?.safeRealActionIds, safeRealManagerActions)
+    || !exactStringList(handlerVerification?.realExecutedActionIds, [])
+    || !exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
+    || handlerVerification?.allFunctionsVerified !== false
     || manager?.profileEntryText !== "管理"
     || manager?.forbiddenEnglishVisible !== false
     || manager?.trayIconPreserved !== true
@@ -788,6 +819,13 @@ function selfTest() {
       currentUiEvidence: {
         manager_actual_mouse_matrix: {
           ok: true, usedRealTraffic: false, actualMouse: true, actionCount: 20, zeroSideEffects: true,
+          uiInteraction: {
+            scope: "ui-interaction-only", verifiedActionIds: [...managerActions], verifiedCount: managerActions.length,
+          },
+          handlerVerification: {
+            offlineContractVerifiedActionIds: [...managerActions], safeRealActionIds: [...safeRealManagerActions],
+            realExecutedActionIds: [], pendingAuthorizedActionIds: [...highImpactManagerActions], allFunctionsVerified: false,
+          },
           profileEntryText: "管理", forbiddenEnglishVisible: false, trayIconPreserved: true,
           closeUpper: true, closeCenter: true, closeLower: true, closeHasTextNode: false,
           closeProbes: ["upper-center", "center", "lower-center"].map((name) => ({ name, ok: true, actualMouse: true, closed: true, hasTextNode: false })),

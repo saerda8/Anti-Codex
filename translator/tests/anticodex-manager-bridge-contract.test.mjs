@@ -1279,7 +1279,7 @@ test("Manager zero-side-effect matrix covers every action in the five-group cont
   const actionsBlock = managerInject.match(/const ACTIONS = \[([\s\S]*?)\n  \];/)?.[1] ?? "";
   const injectedActions = [...actionsBlock.matchAll(/\["([^"]+)",/g)].map((entry) => entry[1]);
   const parsePowerShellList = (name) => {
-    const block = managerRealButtonsTest.match(new RegExp(`\\$${name} = @\\(([\\s\\S]*?)\\n    \\)`))?.[1] ?? "";
+    const block = managerRealButtonsTest.match(new RegExp(`\\$${name} = @\\(([\\s\\S]*?)\\r?\\n\\)`))?.[1] ?? "";
     return [...block.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
   };
 
@@ -1524,6 +1524,14 @@ test("Manager real-buttons wrapper exposes a dedicated safe UI-only matrix entry
   assert.match(managerRealButtonsTest, /manager-ui-only-button-matrix/);
   assert.match(managerRealButtonsTest, /usedRealTraffic -ne \$false/);
   assert.match(managerRealButtonsTest, /zeroSideEffects -ne \$true/);
+  assert.match(managerRealButtonsTest, /uiInteractionEvidence/);
+  assert.match(managerRealButtonsTest, /handlerContractEvidence/);
+  assert.match(managerRealButtonsTest, /offlineContractVerifiedActions/);
+  assert.match(managerRealButtonsTest, /safeRealActionAllowlist/);
+  assert.match(managerRealButtonsTest, /liveExecutedActions\s*=\s*@\(\)/);
+  assert.match(managerRealButtonsTest, /pendingAuthorizedActions/);
+  assert.match(managerRealButtonsTest, /allFunctionsVerified\s*=\s*\$false/);
+  assert.doesNotMatch(managerRealButtonsTest, /complete 20-button contract/);
   assert.match(managerRealButtonsTest, /actionActualMouseExpectedClickCount/);
   assert.match(managerRealButtonsTest, /actionActualMouseConfirmationCleared/);
 });

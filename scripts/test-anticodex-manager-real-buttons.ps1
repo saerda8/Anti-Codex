@@ -238,6 +238,83 @@ function Test-TransientManagerButtonFailure {
     return ($haystack -match "ECONNRESET|manager bridge timed out|still running|仍在运行|正在收尾")
 }
 
+function Get-ManagerHandlerContractEvidence {
+    param([string]$ScriptsRoot, [string[]]$ActionNames)
+    $definitions = [ordered]@{
+        refreshStatus = @{ kind = "virtual"; sourceFile = "anticodex-manager-service.mjs"; anchors = @('    refreshStatus: {', 'virtual: true', 'if (actionName === "refreshStatus")') }
+        refreshModels = @{ kind = "virtual"; sourceFile = "anticodex-manager-service.mjs"; anchors = @('    refreshModels: {', 'virtual: true', 'if (actionName === "refreshModels")') }
+        accountSwitch = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "open-antigravity-account-switch.ps1"; anchors = @('    accountSwitch: {', 'script: "open-antigravity-account-switch.ps1"') }
+        accountProxy = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-account-proxy-readiness.ps1"; anchors = @('    accountProxy: {', 'script: "test-anticodex-account-proxy-readiness.ps1"') }
+        syncReadiness = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-sync-readiness.ps1"; anchors = @('    syncReadiness: {', 'script: "test-anticodex-sync-readiness.ps1"') }
+        repairShortcuts = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "repair-anticodex-shortcuts.ps1"; anchors = @('    repairShortcuts: {', 'script: "repair-anticodex-shortcuts.ps1"') }
+        updateCheck = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "check-anticodex-update.ps1"; anchors = @('    updateCheck: {', 'script: "check-anticodex-update.ps1"') }
+        sourcePreflight = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-source-preflight.ps1"; anchors = @('    sourcePreflight: {', 'script: "test-anticodex-source-preflight.ps1"') }
+        upstreamConfig = @{ kind = "ui-function"; sourceFile = "anticodex-manager-inject.js"; anchors = @('["upstreamConfig",', 'if (action === "upstreamConfig") {', 'await showUpstreamConfig();') }
+        mcpSkills = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-mcp-skills.ps1"; anchors = @('    mcpSkills: {', 'script: "test-anticodex-mcp-skills.ps1"') }
+        pluginCapabilities = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-plugin-capabilities.ps1"; anchors = @('    pluginCapabilities: {', 'script: "test-anticodex-plugin-capabilities.ps1"') }
+        diagnosticsBundle = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "collect-anticodex-diagnostics.ps1"; anchors = @('    diagnosticsBundle: {', 'script: "collect-anticodex-diagnostics.ps1"') }
+        viewLatestReports = @{ kind = "virtual"; sourceFile = "anticodex-manager-service.mjs"; anchors = @('    viewLatestReports: {', 'virtual: true', 'if (actionName === "viewLatestReports")') }
+        syncHost = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "sync-anticodex-launcher.ps1"; anchors = @('    syncHost: {', 'script: "sync-anticodex-launcher.ps1"') }
+        refreshFeatures = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "refresh-anticodex-local-features.ps1"; anchors = @('    refreshFeatures: {', 'script: "refresh-anticodex-local-features.ps1"') }
+        stabilitySoak = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-stability-soak.ps1"; anchors = @('    stabilitySoak: {', 'script: "test-anticodex-stability-soak.ps1"') }
+        coldRelaunch = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-cold-relaunch.ps1"; anchors = @('    coldRelaunch: {', 'script: "test-anticodex-cold-relaunch.ps1"') }
+        fastOverallNoTraffic = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-installed-overall.ps1"; anchors = @('    fastOverallNoTraffic: {', 'script: "test-anticodex-installed-overall.ps1"') }
+        overallNoTraffic = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-installed-overall.ps1"; anchors = @('    overallNoTraffic: {', 'script: "test-anticodex-installed-overall.ps1"') }
+        postVerificationFull = @{ kind = "script"; sourceFile = "anticodex-manager-service.mjs"; script = "test-anticodex-post-verification.ps1"; anchors = @('    postVerificationFull: {', 'script: "test-anticodex-post-verification.ps1"') }
+    }
+    $sourceCache = @{}
+    $contracts = [ordered]@{}
+    foreach ($actionName in $ActionNames) {
+        $definition = $definitions[$actionName]
+        if (-not $definition) {
+            Add-Failure "Manager handler contract definition missing: $actionName"
+            continue
+        }
+        $sourcePath = Join-Path $ScriptsRoot ([string]$definition.sourceFile)
+        if (-not $sourceCache.ContainsKey($sourcePath)) {
+            $sourceCache[$sourcePath] = if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+                Get-Content -LiteralPath $sourcePath -Raw
+            } else { "" }
+        }
+        $sourceText = [string]$sourceCache[$sourcePath]
+        $anchors = @($definition.anchors)
+        $anchorsPresent = $true
+        if ([string]$definition.sourceFile -eq "anticodex-manager-service.mjs") {
+            $actionStart = $sourceText.IndexOf([string]$anchors[0], [StringComparison]::Ordinal)
+            if ($actionStart -lt 0) {
+                $anchorsPresent = $false
+            } else {
+                $afterActionStart = $actionStart + ([string]$anchors[0]).Length
+                $remainingSource = $sourceText.Substring($afterActionStart)
+                $nextActionMatch = [regex]::Match($remainingSource, '(?m)^    [A-Za-z][A-Za-z0-9]*:\s*\{')
+                $actionBlockLength = if ($nextActionMatch.Success) { $nextActionMatch.Index } else { $remainingSource.Length }
+                $actionBlock = $sourceText.Substring($actionStart, ([string]$anchors[0]).Length + $actionBlockLength)
+                if (-not $actionBlock.Contains([string]$anchors[1])) { $anchorsPresent = $false }
+                foreach ($anchor in @($anchors | Select-Object -Skip 2)) {
+                    if (-not $sourceText.Contains([string]$anchor)) { $anchorsPresent = $false }
+                }
+            }
+        } else {
+            foreach ($anchor in $anchors) {
+                if (-not $sourceText.Contains([string]$anchor)) { $anchorsPresent = $false }
+            }
+        }
+        $handlerFilePresent = $true
+        if ($definition.script) {
+            $handlerFilePresent = Test-Path -LiteralPath (Join-Path $ScriptsRoot ([string]$definition.script)) -PathType Leaf
+        }
+        $verified = [bool]($sourceText -and $anchorsPresent -and $handlerFilePresent)
+        if (-not $verified) { Add-Failure "Manager offline handler contract could not be verified: $actionName" }
+        $contracts[$actionName] = [pscustomobject]@{
+            verified = $verified
+            kind = [string]$definition.kind
+            source = "scripts/$($definition.sourceFile)"
+            handler = if ($definition.script) { [string]$definition.script } else { [string]$definition.kind }
+        }
+    }
+    return [pscustomobject]$contracts
+}
+
 $runtimeRootFull = [IO.Path]::GetFullPath($RuntimeRoot)
 $installRoot = [IO.Path]::GetFullPath((Split-Path -Parent $runtimeRootFull))
 $managerButtonScript = Join-Path $PSScriptRoot "test-anticodex-manager-button.mjs"
@@ -250,19 +327,32 @@ if (-not (Test-Path -LiteralPath $managerButtonScript -PathType Leaf)) {
 
 $node = Resolve-Node $installRoot
 $resolvedCdpPort = Resolve-CdpPort $CdpPort
+$contractScriptsRoot = if (Test-Path -LiteralPath (Join-Path $PSScriptRoot "anticodex-manager-service.mjs") -PathType Leaf) {
+    $PSScriptRoot
+} else {
+    Join-Path $runtimeRootFull "scripts"
+}
+$dailyActions = @(
+    "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+    "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight", "upstreamConfig",
+    "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports"
+)
+$highImpactActions = @(
+    "syncHost", "refreshFeatures", "stabilitySoak",
+    "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull"
+)
+$expectedActions = @(
+    "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
+    "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
+    "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports",
+    "syncHost", "upstreamConfig", "refreshFeatures", "stabilitySoak",
+    "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull"
+)
+$allowedActions = @("updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")
 
 if ($UiOnlyMatrix) {
     $reportName = "manager-ui-only-button-matrix"
-    $dailyActions = @(
-        "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
-        "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight", "upstreamConfig",
-        "mcpSkills", "pluginCapabilities", "diagnosticsBundle", "viewLatestReports"
-    )
-    $highImpactActions = @(
-        "syncHost", "refreshFeatures", "stabilitySoak",
-        "coldRelaunch", "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull"
-    )
-    $expectedActions = @($dailyActions + $highImpactActions)
+    $handlerContracts = Get-ManagerHandlerContractEvidence -ScriptsRoot $contractScriptsRoot -ActionNames $expectedActions
     $matrixRun = Invoke-ManagerButtonAction -ActionName "ui-only-matrix" -RunUiOnlyMatrix
     $payload = $matrixRun.payload
 
@@ -296,7 +386,7 @@ if ($UiOnlyMatrix) {
         $actualActions = @($payload.actions | ForEach-Object { [string]$_ } | Sort-Object)
         $expectedActionSet = @($expectedActions | Sort-Object)
         if (($actualActions -join "|") -ne ($expectedActionSet -join "|")) {
-            Add-Failure "Manager UI-only button matrix action coverage drifted from the complete 20-button contract"
+            Add-Failure "Manager UI-only button matrix action coverage drifted from the 20 UI-interaction contract"
         }
         $actualGroupNames = @($payload.actionGroups.PSObject.Properties.Name | Sort-Object)
         $expectedGroupNames = @("status", "modelSources", "updates", "troubleshooting", "advanced" | Sort-Object)
@@ -334,6 +424,28 @@ if ($UiOnlyMatrix) {
                 if ($null -eq $point.x -or $null -eq $point.y) { Add-Failure "Manager live click point coordinates are missing: $actionName" }
             }
         }
+        $uiInteractionVerifiedActions = @($expectedActions | Where-Object {
+            $entry = $payload.results.PSObject.Properties[$_].Value
+            $entry -and $entry.ok -eq $true -and $entry.lastUiOnly -eq $true `
+                -and $entry.managerOpenedNewPage -eq $false -and $entry.actionActualMouseOk -eq $true
+        })
+        $payload | Add-Member -NotePropertyName uiInteractionEvidence -NotePropertyValue ([pscustomobject]@{
+            schema = "anticodex-manager-ui-interaction-v1"
+            scope = "ui-interaction-only"
+            verifiedActions = $uiInteractionVerifiedActions
+            passedCount = $uiInteractionVerifiedActions.Count
+        }) -Force
+        $payload | Add-Member -NotePropertyName handlerContractEvidence -NotePropertyValue ([pscustomobject]@{
+            schema = "anticodex-manager-handler-contract-v1"
+            contracts = $handlerContracts
+            offlineContractVerifiedActions = @($expectedActions | Where-Object {
+                $handlerContracts.PSObject.Properties[$_].Value.verified -eq $true
+            })
+            safeRealActionAllowlist = $allowedActions
+            liveExecutedActions = @()
+            pendingAuthorizedActions = $highImpactActions
+            allFunctionsVerified = $false
+        }) -Force
     }
 
     $checkedAt = [DateTime]::UtcNow.ToString("o")
@@ -367,7 +479,6 @@ $actionList = @($Actions |
     ForEach-Object { $_ -split "," } |
     ForEach-Object { $_.Trim() } |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-$allowedActions = @("updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabilities", "viewLatestReports", "diagnosticsBundle")
 $allowedActionSet = @{}
 foreach ($allowedAction in $allowedActions) { $allowedActionSet[$allowedAction] = $true }
 $invalidActions = @($actionList | Where-Object { -not $allowedActionSet.ContainsKey($_) })
