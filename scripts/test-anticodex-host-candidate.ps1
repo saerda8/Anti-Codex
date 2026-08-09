@@ -241,7 +241,7 @@ if ($manifest.schema -ne "anticodex-host-manifest-v2") {
 if (($manifest.PSObject.Properties.Name -notcontains "patchProfile") -or [string]$manifest.patchProfile -ne "fixed-shell-v1") {
     throw "Anti-Codex candidate marker patch profile is invalid."
 }
-if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "8") {
+if (($manifest.PSObject.Properties.Name -notcontains "hostPatchRevision") -or [string]$manifest.hostPatchRevision -ne "7") {
     throw "Anti-Codex candidate marker patch revision is invalid."
 }
 $expectedFixedShellCriticalPatches = @(
@@ -250,7 +250,6 @@ $expectedFixedShellCriticalPatches = @(
     "app-name",
     "app-user-model-id",
     "session-title",
-    "primary-window-background-throttling",
     "startup-mcp-config-reload",
     "app-server-managed-session-flags",
     "config-write",
@@ -343,34 +342,6 @@ $antiCodexTrayGuidCount = [regex]::Matches($asarText, 'a91c0de5-7b42-4fa8-9d31-2
 if ($codexTraySelectorCount -lt 4 -or $alternateTraySelectorCount -ne 0 -or
     $officialTrayGuidCount -ne 0 -or $antiCodexTrayGuidCount -ne 1) {
     throw "Anti-Codex candidate Windows tray icon/GUID identity is invalid."
-}
-$primaryWindowBackgroundThrottlingOriginalPattern = 'backgroundThrottling:[A-Za-z_$][\w$]*!==`avatarOverlay`&&void 0'
-$primaryWindowBackgroundThrottlingPatchedPattern = 'backgroundThrottling:\(\{primary:!1,avatarOverlay:!1\}\)\[(?<appearance>[A-Za-z_$][\w$]*)\]'
-$primaryWindowBackgroundThrottlingRegionPattern = "(?s)async createWindow\([^)]*\)\{(?:(?!async createWindow\()[\s\S]){0,6000}?(?<preferences>[A-Za-z_$][\w$]*)=\{preload:(?:(?!\},\{backgroundColor:)[\s\S]){0,500}?$primaryWindowBackgroundThrottlingPatchedPattern(?:(?!\},\{backgroundColor:)[\s\S]){0,220}?\},\{backgroundColor:(?:(?!async createWindow\()[\s\S]){0,3000}?(?<window>[A-Za-z_$][\w$]*)=new [A-Za-z_$][\w$]*\.BrowserWindow\((?:(?!\}\);)[\s\S]){0,3000}?webPreferences:\k<preferences>(?![\w$])(?:(?!\}\);)[\s\S]){0,500}?\}\);(?:(?!async createWindow\()[\s\S]){0,1200}?let (?<contents>[A-Za-z_$][\w$]*)=\k<window>\.webContents;\k<appearance>===``avatarOverlay``&&\k<contents>\.setBackgroundThrottling\(!1\)"
-$primaryWindowFactoryPattern = 'async createPrimaryWindow\([^)]*\)\{return this\.createWindow\(\{\.\.\.[A-Za-z_$][\w$]*,appearance:`primary`\}\)\}'
-$primaryWindowCallPattern = 'let (?<window>[A-Za-z_$][\w$]*)=await (?<manager>[A-Za-z_$][\w$]*)\.createPrimaryWindow\(\{title:(?:[A-Za-z_$][\w$]*\.app\.getName\(\)|`Anti-Codex`\s*),show:(?<show>[A-Za-z_$][\w$]*),initialRoute:(?<route>[A-Za-z_$][\w$]*)===`/`\?void 0:\k<route>\}\);return \k<show>\|\|[A-Za-z_$][\w$]*\(\k<window>\),\k<window>\};return\{windowIconPath:[A-Za-z_$][\w$]*,windowManager:\k<manager>,'
-$primaryWindowRegionMatches = [regex]::Matches($asarText, $primaryWindowBackgroundThrottlingRegionPattern)
-$primaryWindowFactoryMatches = [regex]::Matches($asarText, $primaryWindowFactoryPattern)
-$primaryWindowCallMatches = [regex]::Matches($asarText, $primaryWindowCallPattern)
-$primaryWindowFactoryAdjacent = $false
-if ($primaryWindowRegionMatches.Count -eq 1 -and $primaryWindowFactoryMatches.Count -eq 1) {
-    $nextPrimaryWindowFactoryIndex = $asarText.IndexOf('async createPrimaryWindow(', $primaryWindowRegionMatches[0].Index, [StringComparison]::Ordinal)
-    $primaryWindowFactoryAdjacent = $nextPrimaryWindowFactoryIndex -eq $primaryWindowFactoryMatches[0].Index
-}
-$primaryWindowCallInInitializer = $false
-if ($primaryWindowFactoryMatches.Count -eq 1 -and $primaryWindowCallMatches.Count -eq 1) {
-    $primaryWindowInitializerEnd = $asarText.IndexOf('return{windowIconPath:', $primaryWindowFactoryMatches[0].Index, [StringComparison]::Ordinal)
-    $primaryWindowCallInInitializer = $primaryWindowCallMatches[0].Index -gt $primaryWindowFactoryMatches[0].Index -and
-        $primaryWindowInitializerEnd -gt $primaryWindowCallMatches[0].Index
-}
-if ([regex]::Matches($asarText, $primaryWindowBackgroundThrottlingOriginalPattern).Count -ne 0 -or
-    [regex]::Matches($asarText, $primaryWindowBackgroundThrottlingPatchedPattern).Count -ne 1 -or
-    $primaryWindowRegionMatches.Count -ne 1 -or
-    $primaryWindowFactoryMatches.Count -ne 1 -or
-    -not $primaryWindowFactoryAdjacent -or
-    $primaryWindowCallMatches.Count -ne 1 -or
-    -not $primaryWindowCallInInitializer) {
-    throw "Anti-Codex candidate primary-window background throttling anchors are invalid."
 }
 $primaryDeferredRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
 $primaryFocusRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\),\3\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
