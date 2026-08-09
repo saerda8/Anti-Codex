@@ -14,6 +14,16 @@ const REQUIRED_SNAPSHOT_LAYERS = new Set([
   "Anti-Codex Antigravity tool compatibility",
   "Anti-Codex Antigravity text-only compatibility",
 ]);
+const REQUIRED_LOCAL_PROMPT_LAYERS = Object.freeze([Object.freeze({
+  id: "codexPlusPlusPatchToolCompatibility",
+  title: "CodexPlusPlus apply_patch compatibility",
+  source: "Anti-Codex",
+  editable: false,
+  required: true,
+  routes: Object.freeze(["antigravity", "third-party"]),
+  activeWhen: "Chat Completions conversion includes an apply_patch tool",
+  content: "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits.",
+})]);
 const AUDITABLE_SNAPSHOT_LAYERS = new Set([
   ...Object.keys(EDITABLE_LAYERS),
   "Anti-Codex user instructions",
@@ -113,6 +123,10 @@ export function promptPolicyPayload(stateRoot, codexHome = join(resolve(stateRoo
     defaults: defaultPromptPolicy(),
     snapshot,
     nativePromptSnapshot,
+    requiredLocalLayers: REQUIRED_LOCAL_PROMPT_LAYERS.map((layer) => ({
+      ...layer,
+      routes: [...layer.routes],
+    })),
     nativeCustomInstructions: {
       source: "AGENTS.md",
       enabled: Boolean(nativeContent.trim()),

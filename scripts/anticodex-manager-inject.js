@@ -2100,6 +2100,7 @@
       const policy = structuredClone(payload.policy || payload.defaults || {});
       const defaults = structuredClone(payload.defaults || {});
       const snapshotLayers = Array.isArray(payload.snapshot?.layers) ? payload.snapshot.layers : [];
+      const requiredLocalLayers = Array.isArray(payload.requiredLocalLayers) ? payload.requiredLocalLayers : [];
       const layerById = new Map(snapshotLayers.map((layer) => [String(layer.id || ""), layer]));
       const nativePromptSnapshot = payload.nativePromptSnapshot || null;
       const fieldStyle = "width:100%;min-height:150px;resize:vertical;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-input-bg);color:var(--ac-text);padding:10px 11px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace";
@@ -2182,6 +2183,10 @@
         await load();
       };
       const required = snapshotLayers.filter((layer) => layer.required).map((layer) => card(layer.title || "必需兼容层", el("pre", { className: "anticodex-result", text: layer.effectiveContent || "" })));
+      const requiredLocal = requiredLocalLayers.map((layer) => card(`只读本地兼容提示词：${layer.title || "必需兼容层"}`, el("div", { style: "display:grid;gap:9px" }, [
+        el("pre", { className: "anticodex-result", text: layer.content || "" }),
+        el("div", { className: "anticodex-result anticodex-warn", text: `适用线路：${(layer.routes || []).join(" / ") || "未声明"}；生效条件：${layer.activeWhen || "始终"}。此层只保证工具协议兼容，不会恢复已被关闭或替换的 Codex 官方规则。` }),
+      ])));
       grid.replaceChildren(
         system.node,
         card("本地快照说明", el("div", { className: "anticodex-result anticodex-warn", text: "完整提示词快照只保存在 Anti-Codex 隔离目录；只采集 system/developer 层，不采集 user 消息、AGENTS.md、工具参数或请求密钥。内容可能包含你的个性化和项目规则。" })),
@@ -2196,6 +2201,7 @@
         ])),
         card("适用范围", el("div", { className: "anticodex-result anticodex-warn", text: "合并提示词、Anti-Codex 附加提示词和原生 AGENTS.md 均适用于 Gemini、Claude 和第三方线路；下一次新模型请求读取，正在进行的流不会中途改写。恢复默认会继续跟随当前 Codex；旧任务若已固化旧版本提示，需要重启后新建任务才会取得新版本默认。" })),
         card("模型提供方隐藏提示词", el("div", { className: "anticodex-result anticodex-warn", text: payload.providerBase?.message || "提供方未暴露。" })),
+        ...requiredLocal,
         ...required,
         card("操作", el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [saveButton, restoreButton, backButton])),
       );

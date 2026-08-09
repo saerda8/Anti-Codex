@@ -137,6 +137,45 @@ test("prompt payload exposes the pre-policy native snapshot and the adapter does
   }
 });
 
+test("all required local prompt layers stay visible without a second policy injection", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-required-prompt-layers-"));
+  try {
+    const payload = promptPolicyPayload(root);
+    assert.ok(Array.isArray(payload.requiredLocalLayers));
+    const patchToolLayer = payload.requiredLocalLayers.find(
+      (layer) => layer.id === "codexPlusPlusPatchToolCompatibility",
+    );
+    assert.deepEqual(patchToolLayer?.routes, ["antigravity", "third-party"]);
+    assert.equal(patchToolLayer?.editable, false);
+    assert.equal(patchToolLayer?.required, true);
+
+    const patchSource = readFileSync(
+      new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+      "utf8",
+    );
+    const patchGuidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1];
+    assert.ok(patchGuidance, "the pinned CodexPlusPlus patch must expose its compatibility guidance");
+    assert.equal(patchToolLayer.content, patchGuidance);
+
+    const commonPolicyPatch = readFileSync(
+      new URL("../../third_party/codexplusplus/patches/0011-apply-anticodex-prompt-policy-at-common-request-entry.patch", import.meta.url),
+      "utf8",
+    );
+    assert.equal(
+      (commonPolicyPatch.match(/\+\s*let request_json = apply_anticodex_prompt_policy\(relay, request_json\);/g) || []).length,
+      1,
+    );
+    const cascadeSource = readFileSync(new URL("../provider/antigravity-cascade-client.mjs", import.meta.url), "utf8");
+    assert.doesNotMatch(cascadeSource, /applyPromptPolicy/);
+
+    const managerSource = readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+    assert.match(managerSource, /requiredLocalLayers/);
+    assert.match(managerSource, /只读本地兼容提示词/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("prompt policy rejects non-text and oversized edits", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-invalid-"));
   try {
