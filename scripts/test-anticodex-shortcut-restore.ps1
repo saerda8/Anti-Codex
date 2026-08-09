@@ -16,6 +16,7 @@ param(
     [string]$ExternalReadyPath = "",
     [ValidateRange(1000, 5000)]
     [int]$SampleDurationMs = 3000,
+    [switch]$CaptureRendererOnFirstPureWhiteFrame,
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports")
 )
 
@@ -638,6 +639,7 @@ function Get-AppPageIdentity {
         count = $pages.Count
         targetId = if ($target) { [string]$target.id } else { "" }
         targetUrl = if ($target) { [string]$target.url } else { "" }
+        webSocketDebuggerUrl = if ($target) { [string]$target.webSocketDebuggerUrl } else { "" }
     }
 }
 
@@ -665,6 +667,159 @@ function Get-FrameMetric {
         darkRatio = [Math]::Round([double]$metric[2], 4)
         sampleCount = [int]$metric[3]
     }
+}
+
+function Get-PngFrameMetric {
+    param([Parameter(Mandatory = $true)][byte[]]$PngBytes)
+
+    Add-Type -AssemblyName System.Drawing
+    $stream = [IO.MemoryStream]::new($PngBytes, $false)
+    $image = $null
+    $bitmap = $null
+    try {
+        $image = [Drawing.Image]::FromStream($stream)
+        $bitmap = [Drawing.Bitmap]::new($image)
+        [double]$sum = 0
+        [double]$sumSquares = 0
+        [int]$dark = 0
+        [int]$samples = 0
+        for ($row = 0; $row -lt 20; $row++) {
+            $y = [Math]::Min($bitmap.Height - 1, [int][Math]::Floor((($row + 0.5) * $bitmap.Height) / 20))
+            for ($column = 0; $column -lt 32; $column++) {
+                $x = [Math]::Min($bitmap.Width - 1, [int][Math]::Floor((($column + 0.5) * $bitmap.Width) / 32))
+                $color = $bitmap.GetPixel($x, $y)
+                $luminance = (0.2126 * $color.R) + (0.7152 * $color.G) + (0.0722 * $color.B)
+                $sum += $luminance
+                $sumSquares += $luminance * $luminance
+                if ($luminance -lt 245) { $dark += 1 }
+                $samples += 1
+            }
+        }
+        $mean = $sum / $samples
+        $standardDeviation = [Math]::Sqrt([Math]::Max(0, ($sumSquares / $samples) - ($mean * $mean)))
+        $darkRatio = [double]$dark / $samples
+        return [pscustomobject]@{
+            mean = [Math]::Round($mean, 2)
+            standardDeviation = [Math]::Round($standardDeviation, 2)
+            darkRatio = [Math]::Round($darkRatio, 4)
+            sampleCount = $samples
+            rendererIsNearWhite = $mean -ge 250 -and $standardDeviation -lt 5 -and $darkRatio -lt 0.005
+        }
+    } finally {
+        if ($null -ne $bitmap) { $bitmap.Dispose() }
+        if ($null -ne $image) { $image.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+function Invoke-CdpPageScreenshotEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string]$WebSocketDebuggerUrl,
+        [Parameter(Mandatory = $true)][string]$ExpectedTargetId,
+        [Parameter(Mandatory = $true)][Diagnostics.Stopwatch]$Stopwatch,
+        [Parameter(Mandatory = $true)][int]$ForegroundAtMs,
+        [Parameter(Mandatory = $true)][int]$ScreenFrameElapsedMs,
+        [Parameter(Mandatory = $true)]$ScreenMetric
+    )
+
+    $captureStartedAtMs = [int]$Stopwatch.ElapsedMilliseconds
+    $evidence = [ordered]@{
+        requested = $true
+        attempted = $true
+        targetId = $ExpectedTargetId
+        screenFrameElapsedMs = $ScreenFrameElapsedMs
+        screenFrameRelativeToForegroundMs = $ScreenFrameElapsedMs - $ForegroundAtMs
+        screenMean = $ScreenMetric.mean
+        screenStandardDeviation = $ScreenMetric.standardDeviation
+        screenDarkRatio = $ScreenMetric.darkRatio
+        captureStartedAtMs = $captureStartedAtMs
+        captureStartedRelativeToForegroundMs = $captureStartedAtMs - $ForegroundAtMs
+        captureCompletedAtMs = $null
+        captureCompletedRelativeToForegroundMs = $null
+        pngSha256 = ""
+        pngByteLength = 0
+        rendererMean = $null
+        rendererStandardDeviation = $null
+        rendererDarkRatio = $null
+        rendererIsNearWhite = $null
+        error = ""
+    }
+    $socket = $null
+    $cancellation = $null
+    try {
+        $uri = [Uri]$WebSocketDebuggerUrl
+        $expectedPath = "/devtools/page/$ExpectedTargetId"
+        if (-not $uri.AbsolutePath.Equals($expectedPath, [StringComparison]::Ordinal)) {
+            throw "CDP websocket does not belong to the expected existing page target"
+        }
+        $socket = [Net.WebSockets.ClientWebSocket]::new()
+        $cancellation = [Threading.CancellationTokenSource]::new()
+        $cancellation.CancelAfter(3000)
+        $socket.ConnectAsync($uri, $cancellation.Token).GetAwaiter().GetResult()
+
+        $requestId = 1
+        $requestJson = @{
+            id = $requestId
+            method = "Page.captureScreenshot"
+            params = @{ format = "png"; fromSurface = $true; captureBeyondViewport = $false }
+        } | ConvertTo-Json -Depth 4 -Compress
+        $requestBytes = [Text.Encoding]::UTF8.GetBytes($requestJson)
+        $socket.SendAsync(
+            [ArraySegment[byte]]::new($requestBytes),
+            [Net.WebSockets.WebSocketMessageType]::Text,
+            $true,
+            $cancellation.Token
+        ).GetAwaiter().GetResult()
+
+        $response = $null
+        $buffer = [byte[]]::new(65536)
+        while ($null -eq $response) {
+            $message = [IO.MemoryStream]::new()
+            try {
+                do {
+                    $received = $socket.ReceiveAsync(
+                        [ArraySegment[byte]]::new($buffer),
+                        $cancellation.Token
+                    ).GetAwaiter().GetResult()
+                    if ($received.MessageType -eq [Net.WebSockets.WebSocketMessageType]::Close) {
+                        throw "CDP websocket closed before screenshot response"
+                    }
+                    $message.Write($buffer, 0, $received.Count)
+                } while (-not $received.EndOfMessage)
+                $candidate = [Text.Encoding]::UTF8.GetString($message.ToArray()) | ConvertFrom-Json
+                if ($candidate.PSObject.Properties.Name -contains "id" -and [int]$candidate.id -eq $requestId) {
+                    $response = $candidate
+                }
+            } finally {
+                $message.Dispose()
+            }
+        }
+        if ($response.PSObject.Properties.Name -contains "error") {
+            throw "Page.captureScreenshot failed: $($response.error.message)"
+        }
+        $pngBytes = [Convert]::FromBase64String([string]$response.result.data)
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try {
+            $evidence.pngSha256 = [BitConverter]::ToString($sha256.ComputeHash($pngBytes)).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $sha256.Dispose()
+        }
+        $metric = Get-PngFrameMetric -PngBytes $pngBytes
+        $evidence.pngByteLength = $pngBytes.Length
+        $evidence.rendererMean = $metric.mean
+        $evidence.rendererStandardDeviation = $metric.standardDeviation
+        $evidence.rendererDarkRatio = $metric.darkRatio
+        $evidence.rendererIsNearWhite = [bool]$metric.rendererIsNearWhite
+    } catch {
+        $evidence.error = $_.Exception.Message
+    } finally {
+        $captureCompletedAtMs = [int]$Stopwatch.ElapsedMilliseconds
+        $evidence.captureCompletedAtMs = $captureCompletedAtMs
+        $evidence.captureCompletedRelativeToForegroundMs = $captureCompletedAtMs - $ForegroundAtMs
+        if ($null -ne $socket) { $socket.Dispose() }
+        if ($null -ne $cancellation) { $cancellation.Dispose() }
+    }
+    return [pscustomobject]$evidence
 }
 
 function Wait-AntiCodexExternalActivation {
@@ -864,8 +1019,56 @@ $appPageWatcherStopRequestedAtUtcTicks = [int64]0
 $appPageWatcherFirstSampleAtUtc = $null
 $appPageWatcherLastSampleAtUtc = $null
 $appPageWatcherTailGapMs = $null
+$rendererCaptureStarted = $false
+$rendererCaptureRunspace = $null
+$rendererCapturePowerShell = $null
+$rendererCaptureAsync = $null
+$rendererCaptureWaitTimeoutMs = 4000
+$firstPureWhiteFrameRendererCapture = [pscustomobject][ordered]@{
+    requested = [bool]$CaptureRendererOnFirstPureWhiteFrame
+    attempted = $false
+    targetId = [string]$sessionBefore.targetId
+    screenFrameElapsedMs = $null
+    screenFrameRelativeToForegroundMs = $null
+    captureStartedAtMs = $null
+    captureStartedRelativeToForegroundMs = $null
+    captureCompletedAtMs = $null
+    captureCompletedRelativeToForegroundMs = $null
+    pngSha256 = ""
+    pngByteLength = 0
+    rendererIsNearWhite = $null
+    error = ""
+}
 
 try {
+    if ($CaptureRendererOnFirstPureWhiteFrame) {
+        try {
+            $rendererCaptureSessionState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+            foreach ($functionName in @("Get-PngFrameMetric", "Invoke-CdpPageScreenshotEvidence")) {
+                $rendererCaptureSessionState.Commands.Add(
+                    [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
+                        $functionName,
+                        (Get-Item "function:$functionName").Definition
+                    )
+                )
+            }
+            $rendererCaptureRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($rendererCaptureSessionState)
+            $rendererCaptureRunspace.Open()
+            $rendererCapturePowerShell = [System.Management.Automation.PowerShell]::Create()
+            $rendererCapturePowerShell.Runspace = $rendererCaptureRunspace
+        } catch {
+            $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture setup failed: $($_.Exception.Message)"
+            if ($null -ne $rendererCapturePowerShell) {
+                try { $rendererCapturePowerShell.Dispose() } catch {}
+                $rendererCapturePowerShell = $null
+            }
+            if ($null -ne $rendererCaptureRunspace) {
+                try { $rendererCaptureRunspace.Close() } catch {}
+                try { $rendererCaptureRunspace.Dispose() } catch {}
+                $rendererCaptureRunspace = $null
+            }
+        }
+    }
     $topologyWatcherRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
     $topologyWatcherRunspace.Open()
     $topologyWatcherPowerShell = [System.Management.Automation.PowerShell]::Create()
@@ -1139,6 +1342,28 @@ try {
                     darkRatio = $metric.darkRatio
                     sampleCount = $metric.sampleCount
                 }) | Out-Null
+                $isPureWhitePhysicalFrame = $metric.mean -ge 250 -and $metric.standardDeviation -lt 5 -and $metric.darkRatio -lt 0.005
+                if ($CaptureRendererOnFirstPureWhiteFrame -and $isPureWhitePhysicalFrame -and -not $rendererCaptureStarted -and $null -ne $rendererCapturePowerShell) {
+                    $rendererCaptureStarted = $true
+                    $firstPureWhiteFrameRendererCapture.attempted = $true
+                    try {
+                        [void]$rendererCapturePowerShell.AddCommand("Invoke-CdpPageScreenshotEvidence")
+                        [void]$rendererCapturePowerShell.AddParameter("WebSocketDebuggerUrl", [string]$sessionBefore.webSocketDebuggerUrl)
+                        [void]$rendererCapturePowerShell.AddParameter("ExpectedTargetId", [string]$sessionBefore.targetId)
+                        [void]$rendererCapturePowerShell.AddParameter("Stopwatch", $stopwatch)
+                        [void]$rendererCapturePowerShell.AddParameter("ForegroundAtMs", [int]$frameCaptureOriginMs)
+                        [void]$rendererCapturePowerShell.AddParameter("ScreenFrameElapsedMs", $frameStartedAtMs)
+                        [void]$rendererCapturePowerShell.AddParameter("ScreenMetric", $metric)
+                        $rendererCaptureAsync = $rendererCapturePowerShell.BeginInvoke()
+                    } catch {
+                        $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture start failed: $($_.Exception.Message)"
+                        try { $rendererCapturePowerShell.Dispose() } catch {}
+                        $rendererCapturePowerShell = $null
+                        try { $rendererCaptureRunspace.Close() } catch {}
+                        try { $rendererCaptureRunspace.Dispose() } catch {}
+                        $rendererCaptureRunspace = $null
+                    }
+                }
             }
         }
 
@@ -1258,6 +1483,36 @@ try {
     if ($topologyWatcherTerminated -and $null -ne $topologyWatcherRunspace) {
         $topologyWatcherRunspace.Close()
         $topologyWatcherRunspace.Dispose()
+    }
+    if ($null -ne $rendererCapturePowerShell) {
+        if ($null -ne $rendererCaptureAsync) {
+            try {
+                if ($rendererCaptureAsync.AsyncWaitHandle.WaitOne($rendererCaptureWaitTimeoutMs)) {
+                    $rendererCaptureOutput = @($rendererCapturePowerShell.EndInvoke($rendererCaptureAsync))
+                    if ($rendererCaptureOutput.Count -gt 0) {
+                        $firstPureWhiteFrameRendererCapture = $rendererCaptureOutput[-1]
+                    } else {
+                        $firstPureWhiteFrameRendererCapture.attempted = $true
+                        $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture returned no evidence"
+                    }
+                } else {
+                    $firstPureWhiteFrameRendererCapture.attempted = $true
+                    $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture did not finish within $rendererCaptureWaitTimeoutMs ms"
+                    $rendererCaptureStopAsync = $rendererCapturePowerShell.BeginStop($null, $null)
+                    if ($rendererCaptureStopAsync.AsyncWaitHandle.WaitOne(1000)) {
+                        $rendererCapturePowerShell.EndStop($rendererCaptureStopAsync)
+                    }
+                }
+            } catch {
+                $firstPureWhiteFrameRendererCapture.attempted = $true
+                $firstPureWhiteFrameRendererCapture.error = $_.Exception.Message
+            }
+        }
+        $rendererCapturePowerShell.Dispose()
+    }
+    if ($null -ne $rendererCaptureRunspace) {
+        $rendererCaptureRunspace.Close()
+        $rendererCaptureRunspace.Dispose()
     }
 }
 
@@ -1581,6 +1836,7 @@ $result = [ordered]@{
     foregroundAfter = $foregroundAfter
     frameCount = $frames.Count
     blankFrameCount = $blankFrames.Count
+    firstPureWhiteFrameRendererCapture = $firstPureWhiteFrameRendererCapture
     firstFrame = $firstFrame
     firstFrameDelayMs = $firstFrameDelayMs
     firstNonBlankFrame = $firstNonBlankFrame

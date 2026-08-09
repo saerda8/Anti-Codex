@@ -142,6 +142,62 @@ test("installed shortcut restore acceptance proves one process, one page, and no
   assert.doesNotMatch(shortcutRestoreAcceptance, /Stop-Process|taskkill|TerminateProcess/);
 });
 
+test("shortcut restore can capture one same-page CDP screenshot for the first physical pure-white frame without changing acceptance", () => {
+  assert.match(shortcutRestoreAcceptance, /\[switch\]\$CaptureRendererOnFirstPureWhiteFrame/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /CaptureRendererOnFirstBlankFrame|rendererIsBlank/);
+  assert.match(shortcutRestoreAcceptance, /webSocketDebuggerUrl/);
+  assert.match(shortcutRestoreAcceptance, /Page\.captureScreenshot/);
+  assert.match(shortcutRestoreAcceptance, /\$sessionBefore\.targetId/);
+  assert.match(shortcutRestoreAcceptance, /\$sessionBefore\.webSocketDebuggerUrl/);
+  assert.match(
+    shortcutRestoreAcceptance,
+    /rendererIsNearWhite\s*=\s*\$mean\s+-ge\s+250\s+-and\s+\$standardDeviation\s+-lt\s+5\s+-and\s+\$darkRatio\s+-lt\s+0\.005/,
+  );
+  assert.match(
+    shortcutRestoreAcceptance,
+    /\$isPureWhitePhysicalFrame\s*=\s*\$metric\.mean\s+-ge\s+250\s+-and\s+\$metric\.standardDeviation\s+-lt\s+5\s+-and\s+\$metric\.darkRatio\s+-lt\s+0\.005[\s\S]*?if \(\$CaptureRendererOnFirstPureWhiteFrame -and \$isPureWhitePhysicalFrame -and -not \$rendererCaptureStarted -and \$null -ne \$rendererCapturePowerShell\)[\s\S]*?\$rendererCaptureAsync\s*=\s*\$rendererCapturePowerShell\.BeginInvoke\(\)/,
+  );
+  assert.match(shortcutRestoreAcceptance, /captureStartedRelativeToForegroundMs/);
+  assert.match(shortcutRestoreAcceptance, /pngSha256/);
+  assert.match(shortcutRestoreAcceptance, /rendererIsNearWhite/);
+  assert.match(shortcutRestoreAcceptance, /firstPureWhiteFrameRendererCapture = \$firstPureWhiteFrameRendererCapture/);
+
+  const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
+  const runspaceOpen = shortcutRestoreAcceptance.indexOf("$rendererCaptureRunspace.Open()");
+  assert.ok(runspaceOpen >= 0 && runspaceOpen < samplingStart, "renderer capture runspace must be armed before sampling");
+  const setupStart = shortcutRestoreAcceptance.indexOf("if ($CaptureRendererOnFirstPureWhiteFrame) {");
+  const setupEnd = shortcutRestoreAcceptance.indexOf("$topologyWatcherRunspace =", setupStart);
+  const setup = shortcutRestoreAcceptance.slice(setupStart, setupEnd);
+  assert.match(setup, /try \{[\s\S]*?CreateRunspace[\s\S]*?\.Open\(\)[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error/);
+  assert.match(setup, /rendererCapturePowerShell\.Dispose\(\)/);
+  assert.match(setup, /rendererCaptureRunspace\.Close\(\)[\s\S]*?rendererCaptureRunspace\.Dispose\(\)/);
+  assert.doesNotMatch(setup, /\$probeError|\$failures/);
+
+  const sampling = shortcutRestoreAcceptance.slice(
+    samplingStart,
+    shortcutRestoreAcceptance.indexOf("if ($taskbarActivationObserved -and $frames.Count", samplingStart),
+  );
+  assert.match(
+    sampling,
+    /if \(\$CaptureRendererOnFirstPureWhiteFrame[\s\S]*?\$rendererCaptureStarted = \$true[\s\S]*?try \{[\s\S]*?BeginInvoke\(\)[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error[\s\S]*?rendererCapturePowerShell\.Dispose\(\)[\s\S]*?rendererCaptureRunspace\.Close\(\)[\s\S]*?rendererCaptureRunspace\.Dispose\(\)/,
+  );
+  assert.doesNotMatch(sampling, /\$probeError\s*=/);
+  const probeFinally = shortcutRestoreAcceptance.slice(
+    shortcutRestoreAcceptance.indexOf("} finally {", samplingStart),
+    shortcutRestoreAcceptance.indexOf("$after = $null", samplingStart),
+  );
+  assert.match(probeFinally, /AsyncWaitHandle\.WaitOne\(\$rendererCaptureWaitTimeoutMs\)/);
+  assert.match(probeFinally, /\$rendererCapturePowerShell\.Dispose\(\)/);
+  assert.match(probeFinally, /\$rendererCaptureRunspace\.Close\(\)/);
+  assert.match(probeFinally, /\$rendererCaptureRunspace\.Dispose\(\)/);
+
+  const failureBlock = shortcutRestoreAcceptance.slice(
+    shortcutRestoreAcceptance.indexOf("$failures = New-Object"),
+    shortcutRestoreAcceptance.indexOf("$checkedAt ="),
+  );
+  assert.doesNotMatch(failureBlock, /firstPureWhiteFrameRendererCapture|rendererCapture(?:Error|Started|Completed)/);
+});
+
 test("external shortcut observation arms existing watchers without driving user input", () => {
   assert.match(shortcutRestoreAcceptance, /ValidateSet\("DesktopShortcut", "TaskbarButton", "ExternalObserved"\)/);
   assert.match(shortcutRestoreAcceptance, /ValidateSet\("Desktop", "StartMenu", "Tray"\)/);
