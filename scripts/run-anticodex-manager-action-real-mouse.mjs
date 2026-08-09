@@ -6,6 +6,9 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   classifyNativeSettingsCrashSnapshot,
   classifyUnsupportedExternalSettingsTarget,
+  compareNativeSettingsSlugSets,
+  promptSettingsStatesEqual,
+  readNativeSettingsRegistrationSlugs,
 } from "./anticodex-native-settings-contract.mjs";
 
 const args = new Map();
@@ -27,18 +30,25 @@ const promptClosePosition = String(args.get("--prompt-close-position") || "").to
 const promptSettingsUiOnly = Boolean(promptClosePosition) || promptSettingsSaveRestore || promptSettingsRestoreDefault
   || String(args.get("--prompt-settings-ui-only") || "false").toLowerCase() === "true";
 const promptSettingsAcceptanceValue = "Anti-Codex 原生自定义指令实体按钮测试；本次立即恢复默认。";
+const promptSettingsAgentsPath = promptSettingsUiOnly && process.env.APPDATA
+  ? resolve(String(process.env.APPDATA), "anticodex", "codex-home-deepseek-app", "AGENTS.md")
+  : "";
 const promptSettingsRecoveryFile = promptSettingsRestoreDefault
-  ? resolve(String(process.env.APPDATA || ""), "anticodex", "codex-home-deepseek-app", "AGENTS.md")
+  ? promptSettingsAgentsPath
   : "";
 const promptSettingsRecoveryFileValue = promptSettingsRecoveryFile && existsSync(promptSettingsRecoveryFile)
   ? readFileSync(promptSettingsRecoveryFile, "utf8")
   : "";
 const timeoutMs = Number(args.get("--timeout-ms") || 35_000);
+const nativeSettingsAsarPath = nativeSettingsAcceptance
+  ? resolve(String(args.get("--app-asar") || join(import.meta.dirname, "..", "codex-patched-app", "resources", "app.asar")))
+  : "";
 
 if (promptClosePosition && !["top", "middle", "bottom"].includes(promptClosePosition)) throw new Error(`Invalid prompt close position: ${promptClosePosition}`);
 if (action !== "syncHost" && !promptSettingsUiOnly && !nativeSettingsAcceptance) throw new Error(`Only the built-in syncHost action is allowed, received: ${action}`);
 if (!confirmed && !inspectOnly && (!promptSettingsUiOnly || promptSettingsSaveRestore || promptSettingsRestoreDefault)) throw new Error("Refusing to arm a write-capable real-mouse action without --confirm true.");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`Invalid CDP port: ${port}`);
+if (promptSettingsUiOnly && !process.env.APPDATA) throw new Error("Refusing prompt acceptance without the isolated Anti-Codex state root.");
 
 const stateRoot = nativeSettingsAcceptance
   ? resolve(String(args.get("--state-root") || join(process.env.APPDATA || "", "anticodex")))
@@ -51,6 +61,7 @@ if (nativeSettingsAcceptance) {
   if (!process.env.APPDATA || !codexHomeRelative || codexHomeRelative.startsWith("..") || isAbsolute(codexHomeRelative)) {
     throw new Error("Refusing to inspect custom instructions outside the isolated Anti-Codex state root.");
   }
+  if (!existsSync(nativeSettingsAsarPath)) throw new Error(`Native Settings registration source is missing: ${nativeSettingsAsarPath}`);
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -368,6 +379,150 @@ async function saveNativeInstructions() {
   await realMouseClick(point);
 }
 
+const promptSettingsStateExpression = `(() => {
+  const root = document.querySelector('#anticodex-manager-overlay');
+  const section = (title) => Array.from(root?.querySelectorAll('section') || [])
+    .find((node) => String(node.querySelector('h2')?.textContent || '').trim() === title);
+  const editor = (node) => {
+    const inputs = Array.from(node?.querySelectorAll('input[type="checkbox"]') || []);
+    return {
+      enabled: inputs[0]?.checked === true,
+      useDefault: inputs[1]?.checked === true,
+      content: String(node?.querySelector('textarea')?.value || ''),
+    };
+  };
+  const systemNode = section('Codex 完整合并提示词（Gemini / Claude / 第三方）');
+  const developerNode = section('Codex 开发者提示词');
+  const nativeNode = section('Codex 原生自定义指令 (AGENTS.md)');
+  const userNode = section('Anti-Codex 附加提示词（Gemini / Claude / 第三方）');
+  return {
+    ok: Boolean(root && systemNode?.querySelectorAll('input[type="checkbox"]').length === 2
+      && developerNode?.querySelectorAll('input[type="checkbox"]').length === 2
+      && userNode?.querySelectorAll('input[type="checkbox"]').length === 1
+      && systemNode?.querySelector('textarea') && developerNode?.querySelector('textarea')
+      && userNode?.querySelector('textarea') && nativeNode?.querySelector('textarea')),
+    codexSystem: editor(systemNode),
+    codexDeveloper: editor(developerNode),
+    user: {
+      enabled: userNode?.querySelector('input[type="checkbox"]')?.checked === true,
+      content: String(userNode?.querySelector('textarea')?.value || ''),
+    },
+    nativeCustomInstructions: { content: String(nativeNode?.querySelector('textarea')?.value || '') },
+  };
+})()`;
+
+async function capturePromptSettingsState() {
+  const state = await evaluate(promptSettingsStateExpression);
+  if (!state?.ok) throw new Error("Prompt settings are incomplete; refusing a write-capable acceptance.");
+  const existed = existsSync(promptSettingsAgentsPath);
+  const contents = existed ? readFileSync(promptSettingsAgentsPath, "utf8") : "";
+  if (state.nativeCustomInstructions.content !== contents) {
+    throw new Error("Prompt UI and isolated AGENTS.md differ; refusing a write-capable acceptance.");
+  }
+  state.nativeCustomInstructions.existed = existed;
+  return state;
+}
+
+async function applyPromptSettingsState(state) {
+  const applied = await evaluate(`(() => {
+    const desired = ${JSON.stringify(state)};
+    const root = document.querySelector('#anticodex-manager-overlay');
+    const section = (title) => Array.from(root?.querySelectorAll('section') || [])
+      .find((node) => String(node.querySelector('h2')?.textContent || '').trim() === title);
+    const setChecked = (node, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set;
+      setter?.call(node, value === true);
+      node?.dispatchEvent(new Event('input', { bubbles: true }));
+      node?.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const setText = (node, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      setter?.call(node, String(value || ''));
+      node?.dispatchEvent(new Event('input', { bubbles: true }));
+      node?.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const setEditor = (title, value) => {
+      const node = section(title);
+      const inputs = Array.from(node?.querySelectorAll('input[type="checkbox"]') || []);
+      setChecked(inputs[0], value.enabled);
+      setChecked(inputs[1], value.useDefault);
+      setText(node?.querySelector('textarea'), value.content);
+    };
+    setEditor('Codex 完整合并提示词（Gemini / Claude / 第三方）', desired.codexSystem);
+    setEditor('Codex 开发者提示词', desired.codexDeveloper);
+    const userNode = section('Anti-Codex 附加提示词（Gemini / Claude / 第三方）');
+    setChecked(userNode?.querySelector('input[type="checkbox"]'), desired.user.enabled);
+    setText(userNode?.querySelector('textarea'), desired.user.content);
+    setText(section('Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea'), desired.nativeCustomInstructions.content);
+    return Boolean(root);
+  })()`);
+  if (!applied) throw new Error("Could not restore the complete prompt settings form.");
+  const appliedState = await evaluate(promptSettingsStateExpression);
+  if (!appliedState?.ok) throw new Error("Prompt settings form became incomplete while applying the transaction.");
+  appliedState.nativeCustomInstructions.existed = state.nativeCustomInstructions.existed === true;
+  if (!promptSettingsStatesEqual(state, appliedState)) {
+    throw new Error("Prompt settings form did not accept the complete transactional state.");
+  }
+}
+
+async function savePromptSettingsForm() {
+  await evaluate(`(() => {
+    const button = Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存');
+    button?.scrollIntoView({ block: 'center' });
+    return Boolean(button);
+  })()`);
+  await sleep(150);
+  const savePoint = await waitFor(
+    visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
+    (value) => value?.ok === true,
+  );
+  await realMouseClick(savePoint, "保存");
+  await waitFor(`(() => ({
+    busy: document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-busy') || '',
+    text: document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || '',
+  }))()`, (value) => value?.busy === "false" && String(value?.text || "").includes("已保存"), 15_000);
+}
+
+async function ensurePromptSettingsView() {
+  const view = await evaluate(`document.querySelector('#anticodex-manager-overlay')?.getAttribute('data-anticodex-manager-view') || ''`);
+  if (view === "prompts") return;
+  if (view !== "status") throw new Error("Manager prompt view is unavailable for transactional restoration.");
+  const point = await waitFor(
+    visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
+    (value) => value?.ok === true,
+  );
+  await realMouseClick(point, "提示词");
+  await waitFor(promptSettingsStateExpression, (value) => value?.ok === true);
+}
+
+async function reopenPromptSettingsView() {
+  await ensurePromptSettingsView();
+  const backPoint = await waitFor(
+    visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
+    (value) => value?.ok === true,
+  );
+  await realMouseClick(backPoint, "返回状态");
+  await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
+  const promptPoint = await waitFor(
+    visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
+    (value) => value?.ok === true,
+  );
+  await realMouseClick(promptPoint, "提示词");
+  await waitFor(promptSettingsStateExpression, (value) => value?.ok === true);
+}
+
+async function restorePromptSettingsState(promptStateBefore) {
+  await ensurePromptSettingsView();
+  await applyPromptSettingsState(promptStateBefore);
+  await savePromptSettingsForm();
+  await reopenPromptSettingsView();
+  const promptStateAfterRestore = await capturePromptSettingsState();
+  if (!promptSettingsStatesEqual(promptStateBefore, promptStateAfterRestore)) {
+    throw new Error("Prompt settings did not restore exactly after physical acceptance.");
+  }
+  return promptStateAfterRestore;
+}
+
 async function restoreNativeInstructions(originalUiValue, originalFile) {
   await openNativeSettingsSection("personalization");
   await replaceNativeInstructions(originalUiValue);
@@ -460,6 +615,7 @@ async function auditNativePersonalization({ allowWrite }) {
 }
 
 async function runNativeSettingsAcceptance() {
+  const expectedSlugs = readNativeSettingsRegistrationSlugs(nativeSettingsAsarPath);
   const nav = await waitFor(`(() => {
     const node = ${nativeSettingsNavExpression};
     const rect = node?.getBoundingClientRect?.();
@@ -485,6 +641,16 @@ async function runNativeSettingsAcceptance() {
   })()`, (value) => value?.ok === true);
   if (nav.externalTargets.length > 0) {
     throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings navigation: ${JSON.stringify(nav.externalTargets)}`);
+  }
+  const slugComparison = compareNativeSettingsSlugSets(expectedSlugs, nav.entries.map((entry) => entry.slug));
+  if (!slugComparison.ok) {
+    throw new Error(`Native Settings registration mismatch: ${JSON.stringify({
+      expectedSlugs: slugComparison.expected,
+      visibleSlugs: slugComparison.visible,
+      missingSlugs: slugComparison.missing,
+      duplicateSlugs: slugComparison.duplicates,
+      unexpectedSlugs: slugComparison.unexpected,
+    })}`);
   }
 
   const pages = [];
@@ -515,6 +681,11 @@ async function runNativeSettingsAcceptance() {
     ok: pages.length === nav.entries.length && pages.every((page) => page.ok),
     inspectOnly,
     pages,
+    expectedSlugs: slugComparison.expected,
+    visibleSlugs: slugComparison.visible,
+    missingSlugs: slugComparison.missing,
+    duplicateSlugs: slugComparison.duplicates,
+    unexpectedSlugs: slugComparison.unexpected,
     externalChatGptSettingsHidden: nav.externalTargets.length === 0 && pageExternalTargets.length === 0,
     pageExternalTargets,
     localSecurityLabels,
@@ -659,28 +830,20 @@ try {
     })()`);
     if (!panelPoint?.ok) throw new Error("Manager prompt panel is not visible for physical scrolling.");
     if (promptSettingsRestoreDefault) {
-      const nativeCurrent = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')?.value || ''`);
-      if (promptSettingsRecoveryFileValue !== promptSettingsAcceptanceValue || !["", promptSettingsAcceptanceValue].includes(nativeCurrent.trim())) {
+      const promptStateBefore = await capturePromptSettingsState();
+      const nativeCurrent = promptStateBefore.nativeCustomInstructions.content;
+      if (promptSettingsRecoveryFileValue !== promptSettingsAcceptanceValue || nativeCurrent !== promptSettingsAcceptanceValue) {
         throw new Error("Refusing to restore unknown native custom instructions during recovery.");
       }
-      await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
-      await sleep(150);
-      const restorePoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
-        (value) => value?.ok === true,
-        5_000,
-      );
-      await realMouseClick(restorePoint, "恢复默认");
-      await sleep(3_000);
-      const restoredMessage = await waitFor(
-        `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
-        (value) => String(value).includes("已保存"),
-        15_000,
-      );
-      const restoredValue = await waitFor(`(() => {
-        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
-        return { value: section?.querySelector('textarea')?.value || '' };
-      })()`, (value) => value?.value === "", 15_000);
+      const expectedRecoveredState = structuredClone(promptStateBefore);
+      expectedRecoveredState.nativeCustomInstructions = { content: "", existed: false };
+      await applyPromptSettingsState(expectedRecoveredState);
+      await savePromptSettingsForm();
+      await reopenPromptSettingsView();
+      const promptStateAfterRestore = await capturePromptSettingsState();
+      if (!promptSettingsStatesEqual(expectedRecoveredState, promptStateAfterRestore)) {
+        throw new Error("Known prompt acceptance sentinel was not recovered without changing the other prompt layers.");
+      }
       const closePoint = await waitFor(
         visiblePoint(`document.querySelector('#anticodex-manager-overlay button.anticodex-close[aria-label="关闭"]')`),
         (value) => value?.ok === true,
@@ -689,13 +852,14 @@ try {
       await realMouseClick(closePoint, "关闭");
       await waitFor(`(() => !document.querySelector('#anticodex-manager-overlay'))()`, (value) => value === true, 5_000);
       result = {
-        ok: restoredValue.value === "" && String(restoredMessage).includes("已保存"),
+        ok: promptSettingsStatesEqual(expectedRecoveredState, promptStateAfterRestore),
         port,
         target: { id: target.id, title: target.title, url: target.url },
         profileEntry: settledManagerEntryPoint.text,
         promptButton: promptButtonPoint.text,
         recoveredKnownTestValue: true,
-        restoredMessage,
+        promptStateBefore,
+        promptStateAfterRestore,
         overlayClosed: true,
       };
     } else if (promptClosePosition) {
@@ -755,109 +919,34 @@ try {
     }
     if (promptSettingsSaveRestore) {
       const testValue = promptSettingsAcceptanceValue;
-      const nativeBefore = await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')?.value || ''`);
-      if (nativeBefore !== "") throw new Error("Refusing to overwrite non-empty native custom instructions during physical acceptance.");
-      await evaluate(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.scrollIntoView({ block: 'center' })`);
-      await sleep(150);
-      const nativeTextareaPoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)')?.querySelector('textarea')`),
-        (value) => value?.ok === true,
-      );
-      await realMouseClick(nativeTextareaPoint);
-      for (const type of ["keyDown", "keyUp"]) {
-        await call("Input.dispatchKeyEvent", { type, key: "a", code: "KeyA", modifiers: 2, windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 });
-      }
-      await call("Input.insertText", { text: testValue });
-      await evaluate(`(() => {
-        const button = Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存');
-        button?.scrollIntoView({ block: 'center' });
-        return Boolean(button);
-      })()`);
-      await sleep(150);
-      await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
-        (value) => value?.ok === true,
-      );
-      await sleep(200);
-      const savePoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '保存')`),
-        (value) => value?.ok === true,
-      );
-      const saveHitBeforeClick = await evaluate(`(() => {
-        const hit = document.elementFromPoint(${JSON.stringify(savePoint.x)}, ${JSON.stringify(savePoint.y)});
-        return String(hit?.closest?.('button')?.innerText || hit?.closest?.('button')?.textContent || '').trim();
-      })()`);
-      if (saveHitBeforeClick !== "保存") throw new Error(`Prompt save target moved before click: ${saveHitBeforeClick}`);
-      await realMouseClick(savePoint);
-      await sleep(3_000);
-      let savedMessage;
+      const promptStateBefore = await capturePromptSettingsState();
+      const expectedAfterSave = structuredClone(promptStateBefore);
+      expectedAfterSave.nativeCustomInstructions = { content: testValue, existed: true };
+      let promptStateAfterSave = null;
+      let promptStateAfterRestore = null;
+      let transactionFailure = null;
       try {
-        savedMessage = await waitFor(
-          `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
-          (value) => String(value).includes("已保存"),
-        );
-      } catch {
-        const saveState = await evaluate(`(() => ({
-          result: document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || '',
-          headings: Array.from(document.querySelectorAll('#anticodex-manager-overlay section h2')).map((node) => node.textContent || ''),
-          promptButtonVisible: Boolean(document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')),
-        }))()`);
-        throw new Error(`Prompt save did not complete: ${JSON.stringify({ savePoint, saveHitBeforeClick, saveState })}`);
+        await applyPromptSettingsState(expectedAfterSave);
+        await savePromptSettingsForm();
+        await reopenPromptSettingsView();
+        promptStateAfterSave = await capturePromptSettingsState();
+        if (!promptSettingsStatesEqual(expectedAfterSave, promptStateAfterSave)) {
+          throw new Error("Prompt settings did not persist exactly during physical acceptance.");
+        }
+      } catch (error) {
+        transactionFailure = error;
+      } finally {
+        try {
+          promptStateAfterRestore = await restorePromptSettingsState(promptStateBefore);
+        } catch (restoreError) {
+          transactionFailure = new AggregateError(
+            [transactionFailure, restoreError].filter(Boolean),
+            "Prompt settings acceptance failed and transactional restoration was incomplete.",
+          );
+        }
       }
-
-      const backAfterSavePoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
-        (value) => value?.ok === true,
-      );
-      await realMouseClick(backAfterSavePoint);
-      await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
-      await realMouseClick(await waitFor(
-        visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
-        (value) => value?.ok === true,
-      ));
-      const reloadedValue = await waitFor(`(() => {
-        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
-        return { value: section?.querySelector('textarea')?.value || '' };
-      })()`, (value) => value?.value === testValue);
-      const promptReadyAfterReload = await waitFor(`(() => {
-        const root = document.querySelector('#anticodex-manager-overlay');
-        const restore = Array.from(root?.querySelectorAll('button') || []).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认');
-        return {
-          view: root?.getAttribute('data-anticodex-manager-view') || '',
-          busy: root?.getAttribute('data-anticodex-busy') || '',
-          restoreDisabled: Boolean(restore?.disabled),
-          result: root?.querySelector('[data-anticodex-result="action"]')?.textContent || '',
-        };
-      })()`, (value) => value?.view === 'prompts'
-        && value?.busy === 'false'
-        && value?.restoreDisabled === false
-        && !String(value?.result || '').startsWith('正在'));
-      await evaluate(`document.querySelector('#anticodex-manager-overlay .anticodex-panel')?.scrollTo(0, 999999)`);
-      const restorePoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '恢复默认')`),
-        (value) => value?.ok === true,
-      );
-      await realMouseClick(restorePoint, "恢复默认");
-      await sleep(3_000);
-      const restoredMessage = await waitFor(
-        `document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]')?.textContent || ''`,
-        (value) => String(value).includes("已保存"),
-      );
-      const backAfterRestorePoint = await waitFor(
-        visiblePoint(`Array.from(document.querySelectorAll('#anticodex-manager-overlay button')).find((node) => String(node.innerText || node.textContent || '').trim() === '返回状态')`),
-        (value) => value?.ok === true,
-      );
-      await realMouseClick(backAfterRestorePoint);
-      await waitFor(`(() => Boolean(document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')))()`, (value) => value === true);
-      await realMouseClick(await waitFor(
-        visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-anticodex-prompt-settings="true"]')`),
-        (value) => value?.ok === true,
-      ));
-      const restoredValue = await waitFor(`(() => {
-        const section = Array.from(document.querySelectorAll('#anticodex-manager-overlay section')).find((node) => node.querySelector('h2')?.textContent === 'Codex 原生自定义指令 (AGENTS.md)');
-        return { value: section?.querySelector('textarea')?.value || '' };
-      })()`, (value) => value?.value === "");
-      saveRestore = { testValue, nativeBefore, savedMessage, reloadedValue, promptReadyAfterReload, restoredMessage, restoredValue };
+      if (transactionFailure) throw transactionFailure;
+      saveRestore = { testValue, promptStateBefore, promptStateAfterSave, promptStateAfterRestore };
     }
 
     const backPoint = await waitFor(

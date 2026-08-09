@@ -2041,7 +2041,8 @@ test("Manager exposes prompt layers without weakening required compatibility pro
   assert.match(managerRealMouseAction, /promptClosePosition/);
   assert.match(managerRealMouseAction, /textareaCount === 4/);
   assert.match(managerRealMouseAction, /\["top", "middle", "bottom"\]/);
-  assert.match(managerRealMouseAction, /await sleep\(3_000\)/);
+  assert.match(managerRealMouseAction, /async function savePromptSettingsForm/);
+  assert.match(managerRealMouseAction, /promptSettingsStatesEqual/);
 });
 
 test("Manager prompt editor bypasses a stale snapshot after saving", () => {
@@ -2061,7 +2062,8 @@ test("Manager prompt editor bypasses a stale snapshot after saving", () => {
 });
 
 test("physical prompt restore waits for the prompt view to unlock", () => {
-  assert.match(managerRealMouseAction, /const promptReadyAfterReload = await waitFor/);
+  assert.match(managerRealMouseAction, /async function reopenPromptSettingsView/);
+  assert.match(managerRealMouseAction, /await waitFor\(promptSettingsStateExpression/);
   assert.match(managerRealMouseAction, /getAttribute\('data-anticodex-busy'\)/);
 });
 

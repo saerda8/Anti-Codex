@@ -1,3 +1,104 @@
+import { closeSync, openSync, readSync } from "node:fs";
+
+function normalizedPromptSettingsState(value = {}) {
+  const editor = (entry = {}) => ({
+    enabled: entry.enabled === true,
+    useDefault: entry.useDefault === true,
+    content: String(entry.content ?? ""),
+  });
+  return {
+    codexSystem: editor(value.codexSystem),
+    codexDeveloper: editor(value.codexDeveloper),
+    user: {
+      enabled: value.user?.enabled === true,
+      content: String(value.user?.content ?? ""),
+    },
+    nativeCustomInstructions: {
+      content: String(value.nativeCustomInstructions?.content ?? ""),
+      existed: value.nativeCustomInstructions?.existed === true,
+    },
+  };
+}
+
+export function promptSettingsStatesEqual(left, right) {
+  return JSON.stringify(normalizedPromptSettingsState(left)) === JSON.stringify(normalizedPromptSettingsState(right));
+}
+
+export function extractNativeSettingsRegistrationSlugs(source = "") {
+  const candidates = [];
+  for (const match of String(source).matchAll(/(?:^|[;,])(?:var |let |const )?[A-Za-z_$][\w$]*\s*=\s*\{([^{}]{1,1200})\}/g)) {
+    const keys = [...match[1].matchAll(/(?:"([^"]+)"|([A-Za-z_$][\w$-]*))\s*:\s*[A-Za-z_$][\w$]*/g)]
+      .map((entry) => String(entry[1] || entry[2] || ""))
+      .filter(Boolean);
+    if (!keys.includes("agent") || !keys.some((key) => key === "personalization" || key.endsWith("-settings"))) continue;
+    if (new Set(keys).size !== keys.length) continue;
+    candidates.push(keys);
+  }
+  const unique = [...new Map(candidates.map((keys) => [JSON.stringify(keys), keys])).values()];
+  if (unique.length > 1) throw new Error("Ambiguous native Settings registration contract.");
+  return unique[0] || [];
+}
+
+export function compareNativeSettingsSlugSets(expectedSlugs = [], visibleSlugs = []) {
+  const expected = [...new Set(expectedSlugs.map(String))].sort();
+  const visible = visibleSlugs.map(String);
+  const counts = new Map();
+  for (const slug of visible) counts.set(slug, (counts.get(slug) || 0) + 1);
+  const visibleSet = new Set(visible);
+  const expectedSet = new Set(expected);
+  const missing = expected.filter((slug) => !visibleSet.has(slug));
+  const duplicates = [...counts].filter(([, count]) => count > 1).map(([slug]) => slug).sort();
+  const unexpected = [...visibleSet].filter((slug) => !expectedSet.has(slug)).sort();
+  return { ok: missing.length === 0 && duplicates.length === 0 && unexpected.length === 0, expected, visible, missing, duplicates, unexpected };
+}
+
+function alignedAsarDataOffset(headerSize) {
+  const prefixSize = 16;
+  return prefixSize + headerSize + ((4 - ((prefixSize + headerSize) % 4)) % 4);
+}
+
+function walkAsarFiles(node, prefix, entries) {
+  for (const [name, child] of Object.entries(node?.files || {})) {
+    const itemPath = prefix ? `${prefix}/${name}` : name;
+    if (child?.files) walkAsarFiles(child, itemPath, entries);
+    else if (!child?.unpacked && /\.js$/i.test(itemPath)) entries.push({
+      path: itemPath,
+      offset: Number(child?.offset || 0),
+      size: Number(child?.size || 0),
+    });
+  }
+}
+
+export function readNativeSettingsRegistrationSlugs(asarPath) {
+  const fd = openSync(asarPath, "r");
+  try {
+    const prefix = Buffer.alloc(16);
+    readSync(fd, prefix, 0, prefix.length, 0);
+    const headerSize = prefix.readUInt32LE(12);
+    const headerBuffer = Buffer.alloc(headerSize);
+    readSync(fd, headerBuffer, 0, headerSize, 16);
+    const header = JSON.parse(headerBuffer.toString("utf8"));
+    const dataOffset = alignedAsarDataOffset(headerSize);
+    const entries = [];
+    walkAsarFiles(header, "", entries);
+    const contracts = [];
+    for (const entry of entries) {
+      if (entry.size <= 0 || entry.size > 20 * 1024 * 1024) continue;
+      const buffer = Buffer.alloc(entry.size);
+      readSync(fd, buffer, 0, buffer.length, dataOffset + entry.offset);
+      const text = buffer.toString("utf8");
+      if (!text.includes("settings") || !text.includes("agent")) continue;
+      const slugs = extractNativeSettingsRegistrationSlugs(text);
+      if (slugs.length > 0) contracts.push(slugs);
+    }
+    const unique = [...new Map(contracts.map((slugs) => [JSON.stringify(slugs), slugs])).values()];
+    if (unique.length !== 1) throw new Error(`Expected one native Settings registration contract, found ${unique.length}.`);
+    return unique[0];
+  } finally {
+    closeSync(fd);
+  }
+}
+
 export function classifyUnsupportedExternalSettingsTarget({ href = "", label = "" } = {}) {
   const normalizedHref = String(href).trim();
   const normalizedLabel = String(label).replace(/\s+/g, " ").trim();

@@ -5,6 +5,7 @@ import {
   classifyNativeSettingsCrashSnapshot,
   classifyUnsupportedExternalSettingsTarget,
 } from "../../scripts/anticodex-native-settings-contract.mjs";
+import * as nativeSettingsContract from "../../scripts/anticodex-native-settings-contract.mjs";
 
 const scriptUrl = new URL("../../scripts/run-anticodex-manager-action-real-mouse.mjs", import.meta.url);
 
@@ -99,6 +100,67 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.match(source, /inspectOnly/);
   assert.doesNotMatch(source, /Network\.setBlockedURLs|Fetch\.enable|Fetch\.requestPaused/);
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFileSync/);
+});
+
+test("prompt physical acceptance restores all four prompt layers transactionally", () => {
+  const source = readFileSync(scriptUrl, "utf8");
+  const start = source.indexOf("if (promptSettingsSaveRestore) {");
+  const end = source.indexOf("const backPoint =", start);
+  const block = source.slice(start, end);
+
+  assert.ok(start >= 0 && end > start);
+  assert.match(block, /promptStateBefore/);
+  assert.match(block, /capturePromptSettingsState/);
+  assert.match(block, /restorePromptSettingsState/);
+  assert.match(block, /promptStateAfterRestore/);
+  assert.match(block, /try\s*\{/);
+  assert.match(block, /finally\s*\{/);
+  assert.doesNotMatch(block, /realMouseClick\(restorePoint/);
+  const recoveryStart = source.indexOf("if (promptSettingsRestoreDefault) {");
+  const recoveryEnd = source.indexOf("} else if (promptClosePosition)", recoveryStart);
+  const recoveryBlock = source.slice(recoveryStart, recoveryEnd);
+  assert.ok(recoveryStart >= 0 && recoveryEnd > recoveryStart);
+  assert.match(recoveryBlock, /capturePromptSettingsState/);
+  assert.match(recoveryBlock, /applyPromptSettingsState/);
+  assert.match(recoveryBlock, /promptSettingsStatesEqual/);
+  assert.doesNotMatch(recoveryBlock, /realMouseClick\(restorePoint/);
+  assert.equal(typeof nativeSettingsContract.promptSettingsStatesEqual, "function");
+  const state = {
+    codexSystem: { enabled: true, useDefault: false, content: "system" },
+    codexDeveloper: { enabled: false, useDefault: true, content: "developer" },
+    user: { enabled: true, content: "user" },
+    nativeCustomInstructions: { content: "agents", existed: true },
+  };
+  assert.equal(nativeSettingsContract.promptSettingsStatesEqual(state, structuredClone(state)), true);
+  assert.equal(nativeSettingsContract.promptSettingsStatesEqual(state, {
+    ...structuredClone(state),
+    user: { enabled: true, content: "changed" },
+  }), false);
+});
+
+test("native Settings completeness comes from the current registration contract", () => {
+  assert.equal(typeof nativeSettingsContract.extractNativeSettingsRegistrationSlugs, "function");
+  assert.equal(typeof nativeSettingsContract.compareNativeSettingsSlugSets, "function");
+  const source = "var x={agent:A,personalization:B,\"plugins-settings\":C};";
+  assert.deepEqual(
+    nativeSettingsContract.extractNativeSettingsRegistrationSlugs(source),
+    ["agent", "personalization", "plugins-settings"],
+  );
+  const compared = nativeSettingsContract.compareNativeSettingsSlugSets(
+    ["agent", "personalization", "plugins-settings"],
+    ["agent", "agent", "personalization", "unexpected"],
+  );
+  assert.deepEqual(compared.missing, ["plugins-settings"]);
+  assert.deepEqual(compared.duplicates, ["agent"]);
+  assert.deepEqual(compared.unexpected, ["unexpected"]);
+  assert.equal(compared.ok, false);
+
+  const runner = readFileSync(scriptUrl, "utf8");
+  assert.match(runner, /readNativeSettingsRegistrationSlugs/);
+  assert.match(runner, /compareNativeSettingsSlugSets/);
+  assert.match(runner, /expectedSlugs/);
+  assert.match(runner, /missingSlugs/);
+  assert.match(runner, /duplicateSlugs/);
 });
 
 test("native Settings external-target policy rejects only account surfaces", () => {
