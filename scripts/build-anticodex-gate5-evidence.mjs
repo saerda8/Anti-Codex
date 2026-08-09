@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +11,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function parseArgs(values) {
   const parsed = new Map();
@@ -130,6 +134,12 @@ function exactStringList(value, expected) {
   return Array.isArray(value)
     && value.length === expected.length
     && value.every((entry, index) => entry === expected[index]);
+}
+
+function currentSourceGitHead() {
+  const child = spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true });
+  const head = String(child.stdout || "").trim().toLowerCase();
+  return child.status === 0 && /^[a-f0-9]{40}$/.test(head) ? head : "";
 }
 const requiredSingleFlags = [
   "--task-receipt",
@@ -654,6 +664,93 @@ function normalizeTaskReceipt(source, artifactPaths, releaseBinding) {
   };
 }
 
+function normalizedContractPath(value) {
+  const normalized = String(value || "").replaceAll("\\", "/");
+  return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries) {
+  const provenance = handlerContracts?.provenance || {};
+  const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
+  const scriptsRoot = resolve(String(provenance?.scriptsRoot || ""));
+  const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
+    normalizedContractPath(entry?.source),
+    String(entry?.handler || "").toLowerCase().endsWith(".ps1")
+      ? normalizedContractPath(`scripts/${entry.handler}`)
+      : "",
+  ]).filter(Boolean))];
+  const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  const sourceHead = currentSourceGitHead();
+  requireCondition(provenance?.schema === "anticodex-manager-handler-provenance-v1"
+    && provenance?.verified === true
+    && sameNativePath(wrapper?.runtimeRoot, runtimeRoot)
+    && sameNativePath(scriptsRoot, resolve(runtimeRoot, "scripts"))
+    && sameNativePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
+    && sameNativePath(provenance?.sourceRoot, sourceRoot)
+    && provenance?.sourceGitClean === true
+    && provenance?.sourceRevisionProvenance === "git"
+    && /^[a-f0-9]{40}$/i.test(String(provenance?.sourceGitHead || ""))
+    && String(provenance.sourceGitHead).toLowerCase() === sourceHead
+    && files.length === expectedFiles.length,
+  "manager-matrix: handler runtime/source provenance is incomplete or stale");
+  requireCondition(existsSync(manifestPath) && statSync(manifestPath).isFile()
+    && /^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
+    && sha256(readFileSync(manifestPath)) === String(provenance.manifestSha256).toLowerCase(),
+  "manager-matrix: handler runtime manifest hash is invalid");
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, ""));
+  } catch (error) {
+    throw new Error(`manager-matrix: handler runtime manifest is invalid JSON: ${error?.message || error}`);
+  }
+  requireCondition(manifest?.schema === "anticodex-runtime-manifest-v2"
+    && manifest?.state === "validated"
+    && sameNativePath(manifest?.activeRuntime, runtimeRoot)
+    && sameNativePath(manifest?.sourceRoot, sourceRoot)
+    && manifest?.sourceGitClean === true
+    && manifest?.sourceRevisionProvenance === "git"
+    && String(manifest?.sourceGitHead || "").toLowerCase() === sourceHead,
+  "manager-matrix: handler runtime manifest identity is stale");
+  const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
+  requireCondition(fileByPath.size === files.length && expectedFiles.every((path) => fileByPath.has(path)),
+    "manager-matrix: handler provenance file inventory is incomplete or duplicated");
+  for (const relativePath of expectedFiles) {
+    const entry = fileByPath.get(relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    const sourcePath = resolve(sourceRoot, relativePath);
+    const manifestEntry = Object.entries(manifest?.files || {}).find(([path]) => normalizedContractPath(path) === relativePath);
+    const expectedHash = String(entry?.fileSha256 || "").toLowerCase();
+    requireCondition(insideRoot(runtimePath, runtimeRoot)
+      && insideRoot(sourcePath, sourceRoot)
+      && existsSync(runtimePath) && statSync(runtimePath).isFile()
+      && existsSync(sourcePath) && statSync(sourcePath).isFile()
+      && /^[a-f0-9]{64}$/.test(expectedHash)
+      && String(entry?.manifestSha256 || "").toLowerCase() === expectedHash
+      && String(manifestEntry?.[1] || "").toLowerCase() === expectedHash
+      && sha256(readFileSync(runtimePath)) === expectedHash
+      && sha256(readFileSync(sourcePath)) === expectedHash,
+    `manager-matrix: handler provenance hash mismatch: ${relativePath}`);
+  }
+  return {
+    schema: provenance.schema,
+    verified: true,
+    runtimeRoot,
+    scriptsRoot,
+    manifestPath,
+    manifestSha256: String(provenance.manifestSha256).toLowerCase(),
+    sourceRoot,
+    sourceGitHead: sourceHead,
+    sourceGitClean: true,
+    sourceRevisionProvenance: "git",
+    files: expectedFiles.map((path) => ({
+      relativePath: path,
+      fileSha256: String(fileByPath.get(path).fileSha256).toLowerCase(),
+      manifestSha256: String(fileByPath.get(path).manifestSha256).toLowerCase(),
+    })),
+  };
+}
+
 function normalizeManager(matrixSource, profileSource, closeSource, protocolSource, releaseBinding, trayIconPreserved, runtimeIdentity) {
   const wrapper = matrixSource.data;
   const matrix = wrapper?.managerButton?.payload || wrapper;
@@ -700,6 +797,7 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
         && String(entry?.handler || "") === expected?.[2];
     }),
   "manager-matrix: offline handler contract mapping is missing or UI-only evidence claims functional execution");
+  const handlerProvenance = validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries);
 
   const profile = profileSource.data?.profileEntry || profileSource.data;
   requireCondition(profileSource.data?.ok === true
@@ -778,6 +876,8 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
       realExecutedActionIds: [],
       pendingAuthorizedActionIds: [...highImpactManagerActions],
       allFunctionsVerified: false,
+      contracts: handlerContracts.contracts,
+      provenance: handlerProvenance,
     },
     actualMouse: true,
     profileEntryText: "管理",

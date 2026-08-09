@@ -238,8 +238,73 @@ function Test-TransientManagerButtonFailure {
     return ($haystack -match "ECONNRESET|manager bridge timed out|still running|仍在运行|正在收尾")
 }
 
+function Get-ManagerFileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+}
+
 function Get-ManagerHandlerContractEvidence {
-    param([string]$ScriptsRoot, [string[]]$ActionNames)
+    param([string]$RuntimeRoot, [string[]]$ActionNames)
+    $runtimeFull = [IO.Path]::GetFullPath($RuntimeRoot).TrimEnd("\")
+    $scriptsRoot = Join-Path $runtimeFull "scripts"
+    $manifestPath = Join-Path $runtimeFull ".anticodex-runtime-manifest.json"
+    $manifest = $null
+    $manifestSourceRoot = ""
+    $provenanceVerified = $true
+    try {
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw "runtime manifest is missing"
+        }
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        $manifestRuntime = [IO.Path]::GetFullPath([string]$manifest.activeRuntime).TrimEnd("\")
+        $manifestSourceRoot = [IO.Path]::GetFullPath([string]$manifest.sourceRoot).TrimEnd("\")
+        if ([string]$manifest.schema -cne "anticodex-runtime-manifest-v2" -or
+            [string]$manifest.state -cne "validated" -or
+            -not $manifestRuntime.Equals($runtimeFull, [StringComparison]::OrdinalIgnoreCase) -or
+            -not $manifestSourceRoot -or
+            [string]$manifest.sourceRevisionProvenance -cne "git" -or
+            $manifest.sourceGitClean -ne $true -or
+            [string]$manifest.sourceGitHead -notmatch "^[a-fA-F0-9]{40}$" -or
+            -not $manifest.files) {
+            throw "runtime manifest identity is invalid"
+        }
+    } catch {
+        $provenanceVerified = $false
+        Add-Failure "Manager handler runtime provenance could not be verified: $($_.Exception.Message)"
+    }
+
+    $fileEvidence = [ordered]@{}
+    function Get-BoundRuntimeFile {
+        param([string]$FileName)
+        $relativePath = "scripts/$FileName"
+        if ($fileEvidence.Contains($relativePath)) { return $fileEvidence[$relativePath] }
+        $path = Join-Path $scriptsRoot $FileName
+        $actualHash = ""
+        $manifestHash = ""
+        try {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "file is missing" }
+            $actualHash = Get-ManagerFileSha256 -Path $path
+            if ($manifest) {
+                $manifestProperty = @($manifest.files.PSObject.Properties | Where-Object {
+                    ([string]$_.Name).Replace("\", "/").Equals($relativePath, [StringComparison]::OrdinalIgnoreCase)
+                })
+                if ($manifestProperty.Count -ne 1) { throw "manifest file identity is missing or ambiguous" }
+                $manifestHash = ([string]$manifestProperty[0].Value).ToLowerInvariant()
+            }
+            if ($manifestHash -notmatch "^[a-f0-9]{64}$" -or $actualHash -cne $manifestHash) {
+                throw "file hash does not match the runtime manifest"
+            }
+        } catch {
+            Add-Failure "Manager handler runtime file is not bound: $relativePath ($($_.Exception.Message))"
+        }
+        $entry = [pscustomobject]@{
+            relativePath = $relativePath
+            fileSha256 = $actualHash
+            manifestSha256 = $manifestHash
+        }
+        $fileEvidence[$relativePath] = $entry
+        return $entry
+    }
     $definitions = [ordered]@{
         refreshStatus = @{ kind = "virtual"; sourceFile = "anticodex-manager-service.mjs"; anchors = @('    refreshStatus: {', 'virtual: true', 'if (actionName === "refreshStatus")') }
         refreshModels = @{ kind = "virtual"; sourceFile = "anticodex-manager-service.mjs"; anchors = @('    refreshModels: {', 'virtual: true', 'if (actionName === "refreshModels")') }
@@ -270,7 +335,8 @@ function Get-ManagerHandlerContractEvidence {
             Add-Failure "Manager handler contract definition missing: $actionName"
             continue
         }
-        $sourcePath = Join-Path $ScriptsRoot ([string]$definition.sourceFile)
+        $sourcePath = Join-Path $scriptsRoot ([string]$definition.sourceFile)
+        $sourceBinding = Get-BoundRuntimeFile -FileName ([string]$definition.sourceFile)
         if (-not $sourceCache.ContainsKey($sourcePath)) {
             $sourceCache[$sourcePath] = if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
                 Get-Content -LiteralPath $sourcePath -Raw
@@ -301,9 +367,13 @@ function Get-ManagerHandlerContractEvidence {
         }
         $handlerFilePresent = $true
         if ($definition.script) {
-            $handlerFilePresent = Test-Path -LiteralPath (Join-Path $ScriptsRoot ([string]$definition.script)) -PathType Leaf
+            $handlerBinding = Get-BoundRuntimeFile -FileName ([string]$definition.script)
+            $handlerFilePresent = [string]$handlerBinding.fileSha256 -match "^[a-f0-9]{64}$" -and
+                [string]$handlerBinding.fileSha256 -ceq [string]$handlerBinding.manifestSha256
         }
-        $verified = [bool]($sourceText -and $anchorsPresent -and $handlerFilePresent)
+        $sourceFileBound = [string]$sourceBinding.fileSha256 -match "^[a-f0-9]{64}$" -and
+            [string]$sourceBinding.fileSha256 -ceq [string]$sourceBinding.manifestSha256
+        $verified = [bool]($sourceText -and $anchorsPresent -and $handlerFilePresent -and $sourceFileBound)
         if (-not $verified) { Add-Failure "Manager offline handler contract could not be verified: $actionName" }
         $contracts[$actionName] = [pscustomobject]@{
             verified = $verified
@@ -312,7 +382,27 @@ function Get-ManagerHandlerContractEvidence {
             handler = if ($definition.script) { [string]$definition.script } else { [string]$definition.kind }
         }
     }
-    return [pscustomobject]$contracts
+    $allFilesBound = @($fileEvidence.Values).Count -gt 0 -and @($fileEvidence.Values | Where-Object {
+        [string]$_.fileSha256 -notmatch "^[a-f0-9]{64}$" -or [string]$_.fileSha256 -cne [string]$_.manifestSha256
+    }).Count -eq 0
+    $provenanceVerified = $provenanceVerified -and $allFilesBound
+    $sourceRoot = $manifestSourceRoot
+    return [pscustomobject]@{
+        contracts = [pscustomobject]$contracts
+        provenance = [pscustomobject]@{
+            schema = "anticodex-manager-handler-provenance-v1"
+            verified = [bool]$provenanceVerified
+            runtimeRoot = $runtimeFull
+            scriptsRoot = $scriptsRoot
+            manifestPath = $manifestPath
+            manifestSha256 = if (Test-Path -LiteralPath $manifestPath -PathType Leaf) { Get-ManagerFileSha256 -Path $manifestPath } else { "" }
+            sourceRoot = $sourceRoot
+            sourceGitHead = if ($manifest) { ([string]$manifest.sourceGitHead).ToLowerInvariant() } else { "" }
+            sourceGitClean = if ($manifest) { [bool]$manifest.sourceGitClean } else { $false }
+            sourceRevisionProvenance = if ($manifest) { [string]$manifest.sourceRevisionProvenance } else { "" }
+            files = @($fileEvidence.Values)
+        }
+    }
 }
 
 $runtimeRootFull = [IO.Path]::GetFullPath($RuntimeRoot)
@@ -327,11 +417,6 @@ if (-not (Test-Path -LiteralPath $managerButtonScript -PathType Leaf)) {
 
 $node = Resolve-Node $installRoot
 $resolvedCdpPort = Resolve-CdpPort $CdpPort
-$contractScriptsRoot = if (Test-Path -LiteralPath (Join-Path $PSScriptRoot "anticodex-manager-service.mjs") -PathType Leaf) {
-    $PSScriptRoot
-} else {
-    Join-Path $runtimeRootFull "scripts"
-}
 $dailyActions = @(
     "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
     "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight", "upstreamConfig",
@@ -352,7 +437,8 @@ $allowedActions = @("updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabi
 
 if ($UiOnlyMatrix) {
     $reportName = "manager-ui-only-button-matrix"
-    $handlerContracts = Get-ManagerHandlerContractEvidence -ScriptsRoot $contractScriptsRoot -ActionNames $expectedActions
+    $handlerEvidence = Get-ManagerHandlerContractEvidence -RuntimeRoot $runtimeRootFull -ActionNames $expectedActions
+    $handlerContracts = $handlerEvidence.contracts
     $matrixRun = Invoke-ManagerButtonAction -ActionName "ui-only-matrix" -RunUiOnlyMatrix
     $payload = $matrixRun.payload
 
@@ -438,6 +524,7 @@ if ($UiOnlyMatrix) {
         $payload | Add-Member -NotePropertyName handlerContractEvidence -NotePropertyValue ([pscustomobject]@{
             schema = "anticodex-manager-handler-contract-v1"
             contracts = $handlerContracts
+            provenance = $handlerEvidence.provenance
             offlineContractVerifiedActions = @($expectedActions | Where-Object {
                 $handlerContracts.PSObject.Properties[$_].Value.verified -eq $true
             })

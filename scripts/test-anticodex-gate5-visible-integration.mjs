@@ -76,6 +76,28 @@ const highImpactManagerActions = Object.freeze([
   "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
   "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ]);
+const managerHandlerContractByAction = Object.freeze({
+  refreshStatus: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  refreshModels: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  accountSwitch: ["script", "scripts/anticodex-manager-service.mjs", "open-antigravity-account-switch.ps1"],
+  accountProxy: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-account-proxy-readiness.ps1"],
+  syncReadiness: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-sync-readiness.ps1"],
+  repairShortcuts: ["script", "scripts/anticodex-manager-service.mjs", "repair-anticodex-shortcuts.ps1"],
+  updateCheck: ["script", "scripts/anticodex-manager-service.mjs", "check-anticodex-update.ps1"],
+  sourcePreflight: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-source-preflight.ps1"],
+  mcpSkills: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-mcp-skills.ps1"],
+  pluginCapabilities: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-plugin-capabilities.ps1"],
+  diagnosticsBundle: ["script", "scripts/anticodex-manager-service.mjs", "collect-anticodex-diagnostics.ps1"],
+  viewLatestReports: ["virtual", "scripts/anticodex-manager-service.mjs", "virtual"],
+  syncHost: ["script", "scripts/anticodex-manager-service.mjs", "sync-anticodex-launcher.ps1"],
+  upstreamConfig: ["ui-function", "scripts/anticodex-manager-inject.js", "ui-function"],
+  refreshFeatures: ["script", "scripts/anticodex-manager-service.mjs", "refresh-anticodex-local-features.ps1"],
+  stabilitySoak: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-stability-soak.ps1"],
+  coldRelaunch: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-cold-relaunch.ps1"],
+  fastOverallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  overallNoTraffic: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-installed-overall.ps1"],
+  postVerificationFull: ["script", "scripts/anticodex-manager-service.mjs", "test-anticodex-post-verification.ps1"],
+});
 const missingArguments = Object.values(requiredInputs).filter((flag) => !String(args.get(flag) || "").trim());
 if (missingArguments.length > 0) {
   console.error(JSON.stringify({ ok: false, error: "missing_required_arguments", missingArguments }));
@@ -95,6 +117,67 @@ function exactStringList(value, expected) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function samePath(left, right) {
+  try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
+}
+
+function normalizedContractPath(value) {
+  const normalized = String(value || "").replaceAll("\\", "/");
+  return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
+}
+
+function validateManagerHandlerProvenance(handlerVerification) {
+  const contracts = handlerVerification?.contracts || {};
+  const contractEntries = Object.entries(contracts);
+  const provenance = handlerVerification?.provenance || {};
+  const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
+  const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const files = Array.isArray(provenance?.files) ? provenance.files : [];
+  if (contractEntries.length !== managerActions.length
+    || !contractEntries.every(([action, entry], index) => {
+      const expected = managerHandlerContractByAction[action];
+      return action === managerActions[index] && entry?.verified === true
+        && String(entry?.kind || "") === expected?.[0]
+        && String(entry?.source || "") === expected?.[1]
+        && String(entry?.handler || "") === expected?.[2];
+    })
+    || provenance?.schema !== "anticodex-manager-handler-provenance-v1"
+    || provenance?.verified !== true
+    || !samePath(provenance?.scriptsRoot, resolve(runtimeRoot, "scripts"))
+    || !samePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
+    || !samePath(provenance?.sourceRoot, sourceRoot)
+    || provenance?.sourceGitClean !== true
+    || provenance?.sourceRevisionProvenance !== "git"
+    || !/^[a-f0-9]{40}$/i.test(String(provenance?.sourceGitHead || ""))
+    || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
+    || !/^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
+    || sha256(readFileSync(manifestPath)) !== String(provenance.manifestSha256).toLowerCase()) return false;
+  let manifest;
+  try { manifest = JSON.parse(readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, "")); } catch { return false; }
+  if (manifest?.schema !== "anticodex-runtime-manifest-v2" || manifest?.state !== "validated"
+    || !samePath(manifest?.activeRuntime, runtimeRoot) || !samePath(manifest?.sourceRoot, sourceRoot)
+    || manifest?.sourceGitClean !== true || manifest?.sourceRevisionProvenance !== "git"
+    || String(manifest?.sourceGitHead || "").toLowerCase() !== String(provenance.sourceGitHead).toLowerCase()) return false;
+  const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
+    normalizedContractPath(entry?.source),
+    String(entry?.handler || "").toLowerCase().endsWith(".ps1") ? normalizedContractPath(`scripts/${entry.handler}`) : "",
+  ]).filter(Boolean))];
+  const fileByPath = new Map(files.map((entry) => [normalizedContractPath(entry?.relativePath), entry]));
+  if (files.length !== expectedFiles.length || fileByPath.size !== files.length) return false;
+  return expectedFiles.every((relativePath) => {
+    const entry = fileByPath.get(relativePath);
+    const expectedHash = String(entry?.fileSha256 || "").toLowerCase();
+    const manifestEntry = Object.entries(manifest?.files || {}).find(([path]) => normalizedContractPath(path) === relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    const sourcePath = resolve(sourceRoot, relativePath);
+    return /^[a-f0-9]{64}$/.test(expectedHash)
+      && String(entry?.manifestSha256 || "").toLowerCase() === expectedHash
+      && String(manifestEntry?.[1] || "").toLowerCase() === expectedHash
+      && existsSync(runtimePath) && statSync(runtimePath).isFile() && sha256(readFileSync(runtimePath)) === expectedHash
+      && existsSync(sourcePath) && statSync(sourcePath).isFile() && sha256(readFileSync(sourcePath)) === expectedHash;
+  });
 }
 
 function embeddedTimestampMs(data) {
@@ -294,6 +377,7 @@ function validateManager(data) {
     && exactStringList(handlerVerification?.realExecutedActionIds, [])
     && exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
     && handlerVerification?.allFunctionsVerified === false
+    && validateManagerHandlerProvenance(handlerVerification)
     && data?.actualMouse === true
     && data?.profileEntryText === "管理"
     && data?.forbiddenEnglishVisible === false

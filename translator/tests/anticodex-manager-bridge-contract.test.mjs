@@ -1526,6 +1526,12 @@ test("Manager real-buttons wrapper exposes a dedicated safe UI-only matrix entry
   assert.match(managerRealButtonsTest, /zeroSideEffects -ne \$true/);
   assert.match(managerRealButtonsTest, /uiInteractionEvidence/);
   assert.match(managerRealButtonsTest, /handlerContractEvidence/);
+  assert.match(managerRealButtonsTest, /Join-Path \$runtimeFull "scripts"/);
+  assert.doesNotMatch(managerRealButtonsTest, /\$contractScriptsRoot\s*=\s*if\s*\(Test-Path[\s\S]*?\$PSScriptRoot/);
+  assert.match(managerRealButtonsTest, /\.anticodex-runtime-manifest\.json/);
+  assert.match(managerRealButtonsTest, /sourceGitHead/);
+  assert.match(managerRealButtonsTest, /manifestSha256/);
+  assert.match(managerRealButtonsTest, /fileSha256/);
   assert.match(managerRealButtonsTest, /offlineContractVerifiedActions/);
   assert.match(managerRealButtonsTest, /safeRealActionAllowlist/);
   assert.match(managerRealButtonsTest, /liveExecutedActions\s*=\s*@\(\)/);

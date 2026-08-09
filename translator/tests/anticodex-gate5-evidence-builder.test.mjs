@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -58,6 +58,11 @@ const managerHandlerContracts = Object.fromEntries(managerActions.map((action) =
   source: action === "upstreamConfig" ? "scripts/anticodex-manager-inject.js" : "scripts/anticodex-manager-service.mjs",
   handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
 }]));
+const sourceRoot = resolve(dirname(builderPath), "..");
+const managerContractFiles = [...new Set(Object.values(managerHandlerContracts).flatMap((entry) => [
+  entry.source,
+  String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
+]).filter(Boolean))];
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -75,6 +80,25 @@ function buildRawEvidence(root) {
   const prompt = "只提交一次完整自主总目标。";
   const taskStartedAt = new Date(Date.now() - 60_000).toISOString();
   const checkedAt = new Date().toISOString();
+  const runtimeRoot = join(root, "runtime");
+  const runtimeScriptsRoot = join(runtimeRoot, "scripts");
+  mkdirSync(runtimeScriptsRoot, { recursive: true });
+  const runtimeFiles = managerContractFiles.map((relativePath) => {
+    const sourcePath = resolve(sourceRoot, relativePath);
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    mkdirSync(dirname(runtimePath), { recursive: true });
+    const bytes = readFileSync(sourcePath);
+    writeFileSync(runtimePath, bytes);
+    return { relativePath, fileSha256: sha256(bytes), manifestSha256: sha256(bytes) };
+  });
+  const sourceGitHead = String(spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout || "").trim().toLowerCase();
+  const manifestPath = join(runtimeRoot, ".anticodex-runtime-manifest.json");
+  const runtimeManifest = {
+    schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
+    sourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, "utf8");
   const projectRoot = join(root, "project");
   const promptPath = join(root, "total-goal.md");
   const rolloutPath = join(root, "rollout.jsonl");
@@ -205,6 +229,7 @@ function buildRawEvidence(root) {
     reportName: "manager-ui-only-button-matrix",
     processIdentity: runtimeProcessIdentity,
     sessionIdentity: runtimeSessionIdentity,
+    runtimeRoot,
     managerButton: {
       ok: true,
       payload: {
@@ -225,6 +250,12 @@ function buildRawEvidence(root) {
         handlerContractEvidence: {
           schema: "anticodex-manager-handler-contract-v1",
           contracts: managerHandlerContracts,
+          provenance: {
+            schema: "anticodex-manager-handler-provenance-v1", verified: true,
+            runtimeRoot, scriptsRoot: runtimeScriptsRoot, manifestPath,
+            manifestSha256: sha256(readFileSync(manifestPath)), sourceRoot, sourceGitHead,
+            sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
+          },
           offlineContractVerifiedActions: actions,
           safeRealActionAllowlist: safeRealActions,
           liveExecutedActions: [],
@@ -1018,6 +1049,35 @@ test("builder rejects a UI-only click matrix without separate handler truth", ()
     assert.match(result.payload.failures.join("\n"), /UI interaction|handler contract/i);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("builder rejects handler truth bound to the wrong runtime root or stale file hash", () => {
+  for (const [label, mutate] of [
+    ["wrong root", (evidence) => { evidence.provenance.runtimeRoot = "C:\\wrong-runtime"; }],
+    ["wrong hash", (evidence) => { evidence.provenance.files[0].fileSha256 = "f".repeat(64); }],
+  ]) {
+    const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-provenance-"));
+    try {
+      const state = buildRawEvidence(root);
+      const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+      matrix.managerButton.payload.handlerContractEvidence.provenance = {
+        schema: "anticodex-manager-handler-provenance-v1",
+        runtimeRoot: join(root, "runtime"),
+        scriptsRoot: join(root, "runtime", "scripts"),
+        manifestPath: join(root, "runtime", ".anticodex-runtime-manifest.json"),
+        manifestSha256: "a".repeat(64),
+        sourceGitHead: "b".repeat(40),
+        files: [{ relativePath: "scripts/anticodex-manager-service.mjs", fileSha256: "c".repeat(64) }],
+      };
+      mutate(matrix.managerButton.payload.handlerContractEvidence);
+      writeJson(state.paths.managerMatrix, matrix, { signed: true });
+      const result = runBuilder(root, state);
+      assert.equal(result.child.status, 1, `${label}: ${result.child.stderr || JSON.stringify(result.payload)}`);
+      assert.match(result.payload.failures.join("\n"), /handler.*provenance|runtime root|hash/i, label);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

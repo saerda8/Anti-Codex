@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -27,6 +27,27 @@ const highImpactActions = [
   "syncHost", "refreshFeatures", "stabilitySoak", "coldRelaunch",
   "fastOverallNoTraffic", "overallNoTraffic", "postVerificationFull",
 ];
+const sourceRoot = resolve(dirname(aggregateScriptPath), "..");
+const virtualManagerActions = new Set(["refreshStatus", "refreshModels", "viewLatestReports"]);
+const scriptHandlerByAction = {
+  accountSwitch: "open-antigravity-account-switch.ps1", accountProxy: "test-anticodex-account-proxy-readiness.ps1",
+  syncReadiness: "test-anticodex-sync-readiness.ps1", repairShortcuts: "repair-anticodex-shortcuts.ps1",
+  updateCheck: "check-anticodex-update.ps1", sourcePreflight: "test-anticodex-source-preflight.ps1",
+  mcpSkills: "test-anticodex-mcp-skills.ps1", pluginCapabilities: "test-anticodex-plugin-capabilities.ps1",
+  diagnosticsBundle: "collect-anticodex-diagnostics.ps1", syncHost: "sync-anticodex-launcher.ps1",
+  refreshFeatures: "refresh-anticodex-local-features.ps1", stabilitySoak: "test-anticodex-stability-soak.ps1",
+  coldRelaunch: "test-anticodex-cold-relaunch.ps1", fastOverallNoTraffic: "test-anticodex-installed-overall.ps1",
+  overallNoTraffic: "test-anticodex-installed-overall.ps1", postVerificationFull: "test-anticodex-post-verification.ps1",
+};
+const managerHandlerContracts = Object.fromEntries(managerActions.map((action) => [action, {
+  verified: true,
+  kind: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : "script"),
+  source: action === "upstreamConfig" ? "scripts/anticodex-manager-inject.js" : "scripts/anticodex-manager-service.mjs",
+  handler: action === "upstreamConfig" ? "ui-function" : (virtualManagerActions.has(action) ? "virtual" : scriptHandlerByAction[action]),
+}]));
+const managerContractFiles = [...new Set(Object.values(managerHandlerContracts).flatMap((entry) => [
+  entry.source, String(entry.handler).endsWith(".ps1") ? `scripts/${entry.handler}` : "",
+]).filter(Boolean))];
 
 test("Gate 5 is an offline explicit-evidence aggregate, not an old traffic/UI runner", async () => {
   const source = await readFile(aggregateScriptUrl, "utf8");
@@ -95,6 +116,22 @@ function writeSigned(path, value) {
 
 function fixture(root) {
   const checkedAt = new Date().toISOString();
+  const runtimeRoot = join(root, "runtime");
+  mkdirSync(join(runtimeRoot, "scripts"), { recursive: true });
+  const runtimeFiles = managerContractFiles.map((relativePath) => {
+    const bytes = readFileSync(resolve(sourceRoot, relativePath));
+    const runtimePath = resolve(runtimeRoot, relativePath);
+    mkdirSync(dirname(runtimePath), { recursive: true });
+    writeFileSync(runtimePath, bytes);
+    return { relativePath, fileSha256: hash(bytes), manifestSha256: hash(bytes) };
+  });
+  const sourceGitHead = String(spawnSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout || "").trim().toLowerCase();
+  const manifestPath = join(runtimeRoot, ".anticodex-runtime-manifest.json");
+  writeFileSync(manifestPath, `${JSON.stringify({
+    schema: "anticodex-runtime-manifest-v2", state: "validated", activeRuntime: runtimeRoot,
+    sourceRoot, sourceGitHead, sourceGitClean: true, sourceRevisionProvenance: "git",
+    files: Object.fromEntries(runtimeFiles.map((entry) => [entry.relativePath.replaceAll("/", "\\"), entry.fileSha256])),
+  }, null, 2)}\n`, "utf8");
   const taskId = "019f9000-1111-7222-8333-444444444444";
   const releaseBinding = {
     schema: "anticodex-release-binding-v1",
@@ -169,6 +206,13 @@ function fixture(root) {
       realExecutedActionIds: [],
       pendingAuthorizedActionIds: highImpactActions,
       allFunctionsVerified: false,
+      contracts: managerHandlerContracts,
+      provenance: {
+        schema: "anticodex-manager-handler-provenance-v1", verified: true,
+        runtimeRoot, scriptsRoot: join(runtimeRoot, "scripts"), manifestPath,
+        manifestSha256: hash(readFileSync(manifestPath)), sourceRoot, sourceGitHead,
+        sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
+      },
     },
     actualMouse: true,
     profileEntryText: "管理",
@@ -375,6 +419,17 @@ const rejectionCases = [
   ["English Manager label", ({ values }) => { values.managerEvidence.profileEntryText = "Manager"; values.managerEvidence.forbiddenEnglishVisible = true; }, /profile_menu_uses_exact_chinese_manager_label/],
   ["Manager has only 19 actions", ({ values }) => { values.managerEvidence.actionCount = 19; }, /manager_actual_mouse_matrix/],
   ["Manager records side effects", ({ values }) => { values.managerEvidence.zeroSideEffects = false; }, /manager_actual_mouse_matrix/],
+  ["Manager handler provenance points at the wrong runtime", ({ values }) => {
+    values.managerEvidence.handlerVerification.provenance = {
+      schema: "anticodex-manager-handler-provenance-v1",
+      runtimeRoot: "C:\\wrong-runtime",
+      scriptsRoot: "C:\\wrong-runtime\\scripts",
+      manifestPath: "C:\\wrong-runtime\\.anticodex-runtime-manifest.json",
+      manifestSha256: "a".repeat(64),
+      sourceGitHead: "b".repeat(40),
+      files: [{ relativePath: "scripts/anticodex-manager-service.mjs", fileSha256: "c".repeat(64) }],
+    };
+  }, /manager_actual_mouse_matrix|handler.*provenance/i],
   ["UI-only Manager claims all functions verified", ({ values }) => { values.managerEvidence.handlerVerification.allFunctionsVerified = true; }, /manager_actual_mouse_matrix/],
   ["close contains a real text node", ({ values }) => { values.managerEvidence.closeProbes[1].hasTextNode = true; }, /manager_close_full_height_actual_mouse/],
   ["model request count changed", ({ values }) => { values.modelSwitchEvidence.switches[1].requestCountAfter = 8; }, /frontend_model_hot_switch_zero_requests/],
