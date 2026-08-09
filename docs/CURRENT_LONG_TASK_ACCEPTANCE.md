@@ -341,3 +341,11 @@ Anti-Codex 使用体验必须与原生 Codex 一致：在同一个任务里持�
 - Source commit `51708a02` adds host patch revision 5 for both inherited desktop error pages. It removes the upstream update action, uses Anti-Codex branding, and preserves only the isolated Config, true Restart and true Retry actions. Focused crash/candidate/rollback coverage passes `56/56`, Manager bridge passes `75/75`, and the current active renderer bundle passes a read-only equal-length/idempotence check.
 - Clean checkpoint `87c46a0` passes the complete source gate: 13/13 aggregate checks and `962/962` translator tests, zero failures/warnings/skips, with no provider traffic. Report `20260809-074422-source-preflight.json` SHA-256 is `7f0182fe06a449d9df309c8099283a5702a934bf5514e77060bb082f82f650e2`.
 - This checkpoint is not installed acceptance. The active marker remains revision 4, so current project completion stays open until a fresh post-exit transaction is activated and the installed recovery UI plus outstanding external startup entries are physically verified.
+
+## 2026-08-09 final source audit checkpoint
+
+- Source commits `9b681f35` and `d8ba1c7` remove WindowsApps shortcut alias dependence and keep the broker readable under Windows PowerShell 5.1; startup coverage passes `83/83` and retains exact Anti-Codex single-instance isolation.
+- Source commits `1a282354` and `f9d980b` give every fallback Manager action a readable truthful result while keeping running/queued/updater-handoff work pending; the Manager suites pass `108/108`.
+- Source commit `18de6345` exposes the real CodexPlusPlus patch-tool compatibility guidance as a read-only prompt layer without changing or duplicating request policy.
+- Clean checkpoint `f9d980b` passes 13/13 aggregate checks and `964/964` translator tests, zero failures/warnings/skips, without provider traffic. Report `20260809-081909-source-preflight.json` SHA-256 is `e574271c0161288aa0531ec848a2ca4578de866b098401b4cd6a385c4f150cfb`.
+- These remain source-only facts. Installed acceptance and the project-wide 100% claim stay open until Anti-Codex naturally exits, one fresh current transaction activates the changes, and the real external-entry/Manager/prompt/recovery matrix passes.
