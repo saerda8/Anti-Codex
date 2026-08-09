@@ -371,7 +371,9 @@ Do not use the frozen media result to hide these product-release gaps, and do no
 
 ## 2026-08-09 Rev7 restore and tray override
 
-- Source revision 7 removes the stale restore/invalidate repaint hook responsible for the observed minimize/restore white flash. It remains pending deployment and three fresh physical restore rounds.
-- Gate 5 stays red. The only current same-name white tray item is owned by official Codex PID `23788`; the Anti-Codex revision 6 independent GUID is not currently registered.
-- The tray v2 verifier remains in development and must bind the observed item to the Anti-Codex main PID, notification owner and Anti-only GUID before acceptance.
-- The accepted media task remains frozen and no model/provider traffic was sent. A later smoke task must prefer Gemini, then Claude, and use MIMO 2.5 Pro only when both are explicitly unavailable.
+- Revision 7 is the current installed shell. It removes the suspected restore/invalidate repaint hook, but fresh physical A/B evidence still records a pure-white first frame; hook removal is not accepted as the flash fix.
+- Revision 8's single `backgroundThrottling:false` experiment failed its controlled A/B and has been reverted. Source and installed truth are back on revision 7.
+- Fresh tray-v2 evidence passes: the accepted Anti-Codex item is bound to the current Anti main PID, notification owner window and Anti-only GUID, and the official Codex same-name item is explicitly excluded.
+- Pausing the Manager watcher did not remove the pure-white first frame, and the watcher was restored. In the paired renderer/screen diagnostic, the renderer already contains content while the same attempt's physical screen frame is pure white; current evidence therefore supports a native-window/DWM presentation difference, not an empty renderer document.
+- The opacity-pulse candidate is still under evaluation, has not passed physical acceptance and is not deployed. The minimize/restore flash remains an open installed-product issue.
+- The accepted media task remains frozen and no model/provider traffic was sent. A later smoke task must prefer Gemini, then Claude, and use Xiaomi MIMO only when both are explicitly unavailable; its exact model ID is `mimo-v2.5-pro`, and no API credential may be recorded in this repository or its reports.

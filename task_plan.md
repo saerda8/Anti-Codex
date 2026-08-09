@@ -3660,7 +3660,10 @@ The running installed client remains revision 5 until that final activation. Do 
 
 ### 2026-08-09 Rev7 restore and tray acceptance status
 
-- [x] Host revision 7 removes the stale primary-window restore repaint hook that produced the minimize/restore white flash. This is source-only until deployment and three fresh physical restore rounds pass.
-- [ ] Keep Gate 5 red. The only current same-name white notification-area item belongs to official Codex PID `23788`; the installed Anti-Codex revision 6 GUID is not currently registered.
-- [ ] Finish the tray v2 verifier and require exact binding to the Anti-Codex main PID, notification owner and Anti-only GUID before accepting the tray result.
-- [x] Keep the accepted media task frozen and send no model/provider traffic. For any later autonomous smoke task, use Gemini first, Claude second, and MIMO 2.5 Pro only when both preferred providers are explicitly unavailable.
+- [x] Host revision 7 is the current installed shell. It removes the suspected primary-window restore repaint hook, but fresh physical A/B evidence still captures a pure-white first frame; removing that hook is therefore not an accepted flash fix.
+- [x] Reject the revision 8 `backgroundThrottling:false` experiment: its controlled A/B did not remove the white first frame, and source/installed state has been reverted to revision 7.
+- [x] Accept the fresh tray-v2 evidence. It binds the one Anti-Codex item to the current Anti main PID, notification owner window and Anti-only GUID, while the official same-name item is explicitly excluded.
+- [x] Pause and restore the Manager watcher in a controlled A/B. The pure-white first frame remains with the watcher paused, so the watcher is not the root cause and its original state is restored.
+- [x] Preserve the paired same-moment renderer/screen evidence: the renderer capture contains content while the physical screen capture is pure white, supporting a native-window/DWM presentation boundary rather than an empty renderer document.
+- [ ] Keep the single-variable opacity-pulse candidate source-only. It is still under evaluation, has not passed physical acceptance and is not deployed.
+- [x] Keep the accepted media task frozen and send no model/provider traffic. For any later autonomous smoke task, use Gemini first, Claude second, and Xiaomi MIMO only as fallback with exact model ID `mimo-v2.5-pro`; never write its credential to source, plans, findings, reports or logs.

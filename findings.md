@@ -4009,7 +4009,10 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 
 ## 2026-08-09 Rev7 and current Gate 5 findings
 
-- Revision 7 removes the stale primary-window restore repaint hook linked to the minimize/restore white flash. It is not installed acceptance; deployment and three fresh physical restore rounds remain required.
-- The only current same-name white tray item is owned by official Codex PID `23788`. The Anti-Codex revision 6 independent GUID is not currently registered, so Gate 5 remains red.
-- The tray v2 verifier is still under development and must bind evidence to the Anti-Codex main PID, notification owner and Anti-only GUID; a same-name item alone is not acceptable.
-- The accepted media task remains frozen and no model/provider traffic was sent. Future autonomous smoke traffic keeps the order Gemini, Claude, then MIMO 2.5 Pro only if both preferred providers are explicitly unavailable.
+- Revision 7 is now the current installed shell. It removes the suspected primary-window repaint hook, but fresh physical evidence still records a pure-white first frame; the old statement that hook removal fixed the flash is rejected.
+- Revision 8 tested only `backgroundThrottling:false` for the primary window. Its controlled A/B did not remove the white first frame, so the experiment failed and both source and installed state were returned to revision 7.
+- Tray v2 has now passed with fresh signed evidence: the accepted item is bound to the current Anti-Codex main PID, notification owner window and Anti-only GUID. The official Codex same-name item is present in the raw inventory but is explicitly excluded rather than counted as Anti-Codex.
+- A controlled Manager-watcher pause A/B still produced the pure-white first frame. The watcher was restored to its original state and is not supported as the root cause.
+- Paired evidence from the same restored-frame attempt shows renderer content while the physical screen frame is pure white. This supports a native-window/DWM presentation difference after the renderer has content; it does not yet identify a product fix.
+- The next single-variable opacity-pulse candidate is still under evaluation. It has not passed physical acceptance and has not been deployed.
+- The accepted media task remains frozen and no model/provider traffic was sent. Future autonomous smoke traffic keeps the order Gemini, Claude, then Xiaomi MIMO only if both preferred providers are explicitly unavailable; the exact request model ID is `mimo-v2.5-pro`, and no API credential may be written to source or documentation.
