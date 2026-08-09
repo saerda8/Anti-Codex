@@ -237,9 +237,18 @@ function startSuspendedSelfTestSupervisor(scriptPath) {
   return { child, snapshot };
 }
 
-function stopSelfTestSupervisor(supervisor) {
-  if (!supervisor?.child?.pid) return;
-  spawnSync("taskkill.exe", ["/PID", String(supervisor.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+function stopSelfTestSupervisor(supervisor, {
+  queryProcess = queryExactWindowsProcess,
+  killProcessTree = (processId) => spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], { windowsHide: true, stdio: "ignore" }),
+} = {}) {
+  const processId = Number(supervisor?.child?.pid || 0);
+  const capturedProcessId = Number(supervisor?.snapshot?.processId || 0);
+  const expectedCreationDateUtc = String(supervisor?.snapshot?.creationDateUtc || "");
+  if (!Number.isInteger(processId) || processId <= 0 || capturedProcessId !== processId || !expectedCreationDateUtc) return false;
+  const liveProcess = queryProcess(processId);
+  if (Number(liveProcess?.processId || 0) !== processId
+    || String(liveProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
+  return killProcessTree(processId)?.status === 0;
 }
 
 const codexPlusPlusMetadata = readJson(join(sourceRoot, "third_party", "codexplusplus", "upstream.json"));
@@ -828,6 +837,20 @@ function selfTest() {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
   let gate5Supervisor = null;
   try {
+    const cleanupIdentity = {
+      child: { pid: 999999999 },
+      snapshot: { processId: 999999999, creationDateUtc: "2026-08-09T00:00:00.0000000Z" },
+    };
+    let cleanupKillCalls = 0;
+    const cleanupKillProcessTree = () => { cleanupKillCalls += 1; return { status: 0 }; };
+    if (stopSelfTestSupervisor(cleanupIdentity, {
+      queryProcess: () => ({ processId: cleanupIdentity.child.pid, creationDateUtc: "2026-08-09T00:00:01.0000000Z" }),
+      killProcessTree: cleanupKillProcessTree,
+    }) !== false || cleanupKillCalls !== 0) throw new Error("self-test supervisor cleanup accepted a reused PID identity");
+    if (stopSelfTestSupervisor(cleanupIdentity, {
+      queryProcess: () => cleanupIdentity.snapshot,
+      killProcessTree: cleanupKillProcessTree,
+    }) !== true || cleanupKillCalls !== 1) throw new Error("self-test supervisor cleanup rejected its captured process identity");
     const path = join(temporaryRoot, "latest-legacy-zero-hit.json");
     const valid = {
       reportName: "legacy-zero-hit",
@@ -1092,6 +1115,7 @@ function selfTest() {
       "gate8_deleted_artifact_rejection",
       "gate8_current_component_binding",
       "gate8_autonomous_video_semantics",
+      "self_test_supervisor_pid_reuse_guard",
     ] }));
   } finally {
     stopSelfTestSupervisor(gate5Supervisor);

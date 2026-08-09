@@ -78,33 +78,69 @@ function writeJson(path, value, { signed = false } = {}) {
   return sha256(body);
 }
 
+function queryExactWindowsProcessIdentity(processId) {
+  if (!Number.isInteger(processId) || processId <= 0 || process.platform !== "win32") return null;
+  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script = `$rows = @(Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction Stop); if ($rows.Count -ne 1) { throw "exact process not found" }; $row = $rows[0]; [pscustomobject]@{ processId = [int]$row.ProcessId; creationDateUtc = ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture) } | ConvertTo-Json -Compress`;
+  const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8", windowsHide: true, timeout: 5000,
+  });
+  if (result.error || result.status !== 0) return null;
+  try { return JSON.parse(String(result.stdout || "").trim()); } catch { return null; }
+}
+
 function startSuspendedSupervisor(scriptPath) {
   const child = spawn(process.execPath, [scriptPath], {
     env: { ...process.env, NODE_OPTIONS: "--inspect-brk=0" },
     stdio: "ignore",
     windowsHide: true,
   });
-  const powershellPath = resolve(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const script = `$row = Get-CimInstance Win32_Process -Filter "ProcessId = ${child.pid}" -ErrorAction Stop; ([DateTime]$row.CreationDate).ToUniversalTime().ToString("o", [Globalization.CultureInfo]::InvariantCulture)`;
-  let creationDateUtc = "";
-  for (let attempt = 0; attempt < 20 && !creationDateUtc; attempt += 1) {
-    const result = spawnSync(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script], {
-      encoding: "utf8", windowsHide: true, timeout: 5000,
-    });
-    if (!result.error && result.status === 0) creationDateUtc = String(result.stdout || "").trim();
-    if (!creationDateUtc) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  let snapshot = null;
+  for (let attempt = 0; attempt < 20 && !snapshot; attempt += 1) {
+    snapshot = queryExactWindowsProcessIdentity(child.pid);
+    if (!snapshot) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   }
-  if (!creationDateUtc) {
+  if (!snapshot) {
     child.kill();
     throw new Error("could not observe suspended fixed-route test supervisor");
   }
-  return { child, creationDateUtc };
+  return { child, creationDateUtc: snapshot.creationDateUtc };
 }
 
-function stopTestSupervisor(supervisor) {
-  if (!supervisor?.child?.pid) return;
-  spawnSync("taskkill.exe", ["/PID", String(supervisor.child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+function stopTestSupervisor(supervisor, {
+  queryProcess = queryExactWindowsProcessIdentity,
+  killProcessTree = (processId) => spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], { windowsHide: true, stdio: "ignore" }),
+} = {}) {
+  const processId = Number(supervisor?.child?.pid || 0);
+  const expectedCreationDateUtc = String(supervisor?.creationDateUtc || "");
+  if (!Number.isInteger(processId) || processId <= 0 || !expectedCreationDateUtc) return false;
+  const liveProcess = queryProcess(processId);
+  if (Number(liveProcess?.processId || 0) !== processId
+    || String(liveProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
+  return killProcessTree(processId)?.status === 0;
 }
+
+test("paused builder supervisor cleanup rejects a reused PID identity", () => {
+  const supervisor = {
+    child: { pid: 999999999 },
+    creationDateUtc: "2026-08-09T00:00:00.0000000Z",
+  };
+  let killCalls = 0;
+  const killProcessTree = () => { killCalls += 1; return { status: 0 }; };
+  assert.equal(stopTestSupervisor(supervisor, {
+    queryProcess: () => ({
+      processId: supervisor.child.pid,
+      creationDateUtc: "2026-08-09T00:00:01.0000000Z",
+    }),
+    killProcessTree,
+  }), false);
+  assert.equal(killCalls, 0);
+  assert.equal(stopTestSupervisor(supervisor, {
+    queryProcess: () => ({ processId: supervisor.child.pid, creationDateUtc: supervisor.creationDateUtc }),
+    killProcessTree,
+  }), true);
+  assert.equal(killCalls, 1);
+});
 
 function replaceFixtureSupervisorIdentity(value, actualPid) {
   if (!value || typeof value !== "object") return;
