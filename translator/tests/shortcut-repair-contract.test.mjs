@@ -155,22 +155,35 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
   );
   assert.match(
     shortcutRestoreAcceptance,
-    /\$isPureWhitePhysicalFrame\s*=\s*\$metric\.mean\s+-ge\s+250\s+-and\s+\$metric\.standardDeviation\s+-lt\s+5\s+-and\s+\$metric\.darkRatio\s+-lt\s+0\.005[\s\S]*?if \(\$CaptureRendererOnFirstPureWhiteFrame -and \$isPureWhitePhysicalFrame -and -not \$rendererCaptureStarted -and \$null -ne \$rendererCapturePowerShell\)[\s\S]*?\$rendererCaptureAsync\s*=\s*\$rendererCapturePowerShell\.BeginInvoke\(\)/,
+    /\$isPureWhitePhysicalFrame\s*=\s*\$metric\.mean\s+-ge\s+250\s+-and\s+\$metric\.standardDeviation\s+-lt\s+5\s+-and\s+\$metric\.darkRatio\s+-lt\s+0\.005[\s\S]*?if \(\$CaptureRendererOnFirstPureWhiteFrame -and \$isPureWhitePhysicalFrame -and -not \$rendererCaptureStarted -and \$null -ne \$rendererCaptureSocket\)[\s\S]*?Invoke-CdpPageScreenshotEvidence[\s\S]*?-Socket \$rendererCaptureSocket/,
   );
   assert.match(shortcutRestoreAcceptance, /captureStartedRelativeToForegroundMs/);
+  assert.match(shortcutRestoreAcceptance, /requestSendStartedAtMs/);
+  assert.match(shortcutRestoreAcceptance, /requestSendStartedRelativeToForegroundMs/);
+  assert.match(shortcutRestoreAcceptance, /requestSendCompletedAtMs/);
+  assert.match(shortcutRestoreAcceptance, /requestSendCompletedRelativeToForegroundMs/);
+  assert.match(shortcutRestoreAcceptance, /requestSent = \$true/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /requestSentAtMs|requestSentRelativeMs/);
   assert.match(shortcutRestoreAcceptance, /pngSha256/);
   assert.match(shortcutRestoreAcceptance, /rendererIsNearWhite/);
   assert.match(shortcutRestoreAcceptance, /firstPureWhiteFrameRendererCapture = \$firstPureWhiteFrameRendererCapture/);
+  assert.match(shortcutRestoreAcceptance, /postBlankCadencePerturbed = \$postBlankCadencePerturbed/);
+  assert.match(shortcutRestoreAcceptance, /cdpPreconnectedBeforeActivation = \$cdpPreconnectedBeforeActivation/);
+  assert.doesNotMatch(shortcutRestoreAcceptance, /rendererCaptureRunspace|rendererCapturePowerShell|rendererCaptureAsync/);
+  const openSocket = shortcutRestoreAcceptance.match(/function Open-CdpPageScreenshotSocket[\s\S]*?\n\}/)?.[0] ?? "";
+  const captureScreenshot = shortcutRestoreAcceptance.match(/function Invoke-CdpPageScreenshotEvidence[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(openSocket, /\[void\]\$socket\.ConnectAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
+  assert.match(captureScreenshot, /\[void\]\$Socket\.SendAsync\([\s\S]*?\.GetAwaiter\(\)\.GetResult\(\)/);
 
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
-  const runspaceOpen = shortcutRestoreAcceptance.indexOf("$rendererCaptureRunspace.Open()");
-  assert.ok(runspaceOpen >= 0 && runspaceOpen < samplingStart, "renderer capture runspace must be armed before sampling");
+  const socketConnect = shortcutRestoreAcceptance.indexOf("$rendererCaptureSocket = Open-CdpPageScreenshotSocket");
+  assert.ok(socketConnect >= 0 && socketConnect < samplingStart, "renderer CDP socket must be connected before sampling");
+  assert.match(shortcutRestoreAcceptance.slice(socketConnect, samplingStart), /\$cdpPreconnectedBeforeActivation = \$true/);
   const setupStart = shortcutRestoreAcceptance.indexOf("if ($CaptureRendererOnFirstPureWhiteFrame) {");
   const setupEnd = shortcutRestoreAcceptance.indexOf("$topologyWatcherRunspace =", setupStart);
   const setup = shortcutRestoreAcceptance.slice(setupStart, setupEnd);
-  assert.match(setup, /try \{[\s\S]*?CreateRunspace[\s\S]*?\.Open\(\)[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error/);
-  assert.match(setup, /rendererCapturePowerShell\.Dispose\(\)/);
-  assert.match(setup, /rendererCaptureRunspace\.Close\(\)[\s\S]*?rendererCaptureRunspace\.Dispose\(\)/);
+  assert.match(setup, /try \{[\s\S]*?Open-CdpPageScreenshotSocket[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error/);
+  assert.match(setup, /rendererCaptureSocket\.Dispose\(\)/);
   assert.doesNotMatch(setup, /\$probeError|\$failures/);
 
   const sampling = shortcutRestoreAcceptance.slice(
@@ -179,17 +192,14 @@ test("shortcut restore can capture one same-page CDP screenshot for the first ph
   );
   assert.match(
     sampling,
-    /if \(\$CaptureRendererOnFirstPureWhiteFrame[\s\S]*?\$rendererCaptureStarted = \$true[\s\S]*?try \{[\s\S]*?BeginInvoke\(\)[\s\S]*?\} catch \{[\s\S]*?firstPureWhiteFrameRendererCapture\.error[\s\S]*?rendererCapturePowerShell\.Dispose\(\)[\s\S]*?rendererCaptureRunspace\.Close\(\)[\s\S]*?rendererCaptureRunspace\.Dispose\(\)/,
+    /if \(\$CaptureRendererOnFirstPureWhiteFrame[\s\S]*?\$rendererCaptureStarted = \$true[\s\S]*?\$postBlankCadencePerturbed = \$true[\s\S]*?Invoke-CdpPageScreenshotEvidence[\s\S]*?-Socket \$rendererCaptureSocket/,
   );
   assert.doesNotMatch(sampling, /\$probeError\s*=/);
   const probeFinally = shortcutRestoreAcceptance.slice(
     shortcutRestoreAcceptance.indexOf("} finally {", samplingStart),
     shortcutRestoreAcceptance.indexOf("$after = $null", samplingStart),
   );
-  assert.match(probeFinally, /AsyncWaitHandle\.WaitOne\(\$rendererCaptureWaitTimeoutMs\)/);
-  assert.match(probeFinally, /\$rendererCapturePowerShell\.Dispose\(\)/);
-  assert.match(probeFinally, /\$rendererCaptureRunspace\.Close\(\)/);
-  assert.match(probeFinally, /\$rendererCaptureRunspace\.Dispose\(\)/);
+  assert.match(probeFinally, /\$rendererCaptureSocket\.Dispose\(\)/);
 
   const failureBlock = shortcutRestoreAcceptance.slice(
     shortcutRestoreAcceptance.indexOf("$failures = New-Object"),

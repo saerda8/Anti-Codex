@@ -712,9 +712,33 @@ function Get-PngFrameMetric {
     }
 }
 
-function Invoke-CdpPageScreenshotEvidence {
+function Open-CdpPageScreenshotSocket {
     param(
         [Parameter(Mandatory = $true)][string]$WebSocketDebuggerUrl,
+        [Parameter(Mandatory = $true)][string]$ExpectedTargetId
+    )
+
+    $uri = [Uri]$WebSocketDebuggerUrl
+    if (-not $uri.AbsolutePath.Equals("/devtools/page/$ExpectedTargetId", [StringComparison]::Ordinal)) {
+        throw "CDP websocket does not belong to the expected existing page target"
+    }
+    $socket = [Net.WebSockets.ClientWebSocket]::new()
+    $cancellation = [Threading.CancellationTokenSource]::new()
+    try {
+        $cancellation.CancelAfter(3000)
+        [void]$socket.ConnectAsync($uri, $cancellation.Token).GetAwaiter().GetResult()
+        return $socket
+    } catch {
+        $socket.Dispose()
+        throw
+    } finally {
+        $cancellation.Dispose()
+    }
+}
+
+function Invoke-CdpPageScreenshotEvidence {
+    param(
+        [Parameter(Mandatory = $true)][Net.WebSockets.ClientWebSocket]$Socket,
         [Parameter(Mandatory = $true)][string]$ExpectedTargetId,
         [Parameter(Mandatory = $true)][Diagnostics.Stopwatch]$Stopwatch,
         [Parameter(Mandatory = $true)][int]$ForegroundAtMs,
@@ -734,6 +758,11 @@ function Invoke-CdpPageScreenshotEvidence {
         screenDarkRatio = $ScreenMetric.darkRatio
         captureStartedAtMs = $captureStartedAtMs
         captureStartedRelativeToForegroundMs = $captureStartedAtMs - $ForegroundAtMs
+        requestSendStartedAtMs = $null
+        requestSendStartedRelativeToForegroundMs = $null
+        requestSendCompletedAtMs = $null
+        requestSendCompletedRelativeToForegroundMs = $null
+        requestSent = $false
         captureCompletedAtMs = $null
         captureCompletedRelativeToForegroundMs = $null
         pngSha256 = ""
@@ -744,18 +773,13 @@ function Invoke-CdpPageScreenshotEvidence {
         rendererIsNearWhite = $null
         error = ""
     }
-    $socket = $null
     $cancellation = $null
     try {
-        $uri = [Uri]$WebSocketDebuggerUrl
-        $expectedPath = "/devtools/page/$ExpectedTargetId"
-        if (-not $uri.AbsolutePath.Equals($expectedPath, [StringComparison]::Ordinal)) {
-            throw "CDP websocket does not belong to the expected existing page target"
+        if ($Socket.State -ne [Net.WebSockets.WebSocketState]::Open) {
+            throw "Preconnected CDP websocket is not open"
         }
-        $socket = [Net.WebSockets.ClientWebSocket]::new()
         $cancellation = [Threading.CancellationTokenSource]::new()
         $cancellation.CancelAfter(3000)
-        $socket.ConnectAsync($uri, $cancellation.Token).GetAwaiter().GetResult()
 
         $requestId = 1
         $requestJson = @{
@@ -764,12 +788,19 @@ function Invoke-CdpPageScreenshotEvidence {
             params = @{ format = "png"; fromSurface = $true; captureBeyondViewport = $false }
         } | ConvertTo-Json -Depth 4 -Compress
         $requestBytes = [Text.Encoding]::UTF8.GetBytes($requestJson)
-        $socket.SendAsync(
+        $requestSendStartedAtMs = [int]$Stopwatch.ElapsedMilliseconds
+        $evidence.requestSendStartedAtMs = $requestSendStartedAtMs
+        $evidence.requestSendStartedRelativeToForegroundMs = $requestSendStartedAtMs - $ForegroundAtMs
+        [void]$Socket.SendAsync(
             [ArraySegment[byte]]::new($requestBytes),
             [Net.WebSockets.WebSocketMessageType]::Text,
             $true,
             $cancellation.Token
         ).GetAwaiter().GetResult()
+        $requestSendCompletedAtMs = [int]$Stopwatch.ElapsedMilliseconds
+        $evidence.requestSendCompletedAtMs = $requestSendCompletedAtMs
+        $evidence.requestSendCompletedRelativeToForegroundMs = $requestSendCompletedAtMs - $ForegroundAtMs
+        $evidence.requestSent = $true
 
         $response = $null
         $buffer = [byte[]]::new(65536)
@@ -777,7 +808,7 @@ function Invoke-CdpPageScreenshotEvidence {
             $message = [IO.MemoryStream]::new()
             try {
                 do {
-                    $received = $socket.ReceiveAsync(
+                    $received = $Socket.ReceiveAsync(
                         [ArraySegment[byte]]::new($buffer),
                         $cancellation.Token
                     ).GetAwaiter().GetResult()
@@ -816,7 +847,6 @@ function Invoke-CdpPageScreenshotEvidence {
         $captureCompletedAtMs = [int]$Stopwatch.ElapsedMilliseconds
         $evidence.captureCompletedAtMs = $captureCompletedAtMs
         $evidence.captureCompletedRelativeToForegroundMs = $captureCompletedAtMs - $ForegroundAtMs
-        if ($null -ne $socket) { $socket.Dispose() }
         if ($null -ne $cancellation) { $cancellation.Dispose() }
     }
     return [pscustomobject]$evidence
@@ -1020,10 +1050,9 @@ $appPageWatcherFirstSampleAtUtc = $null
 $appPageWatcherLastSampleAtUtc = $null
 $appPageWatcherTailGapMs = $null
 $rendererCaptureStarted = $false
-$rendererCaptureRunspace = $null
-$rendererCapturePowerShell = $null
-$rendererCaptureAsync = $null
-$rendererCaptureWaitTimeoutMs = 4000
+$rendererCaptureSocket = $null
+$cdpPreconnectedBeforeActivation = $false
+$postBlankCadencePerturbed = $false
 $firstPureWhiteFrameRendererCapture = [pscustomobject][ordered]@{
     requested = [bool]$CaptureRendererOnFirstPureWhiteFrame
     attempted = $false
@@ -1032,6 +1061,11 @@ $firstPureWhiteFrameRendererCapture = [pscustomobject][ordered]@{
     screenFrameRelativeToForegroundMs = $null
     captureStartedAtMs = $null
     captureStartedRelativeToForegroundMs = $null
+    requestSendStartedAtMs = $null
+    requestSendStartedRelativeToForegroundMs = $null
+    requestSendCompletedAtMs = $null
+    requestSendCompletedRelativeToForegroundMs = $null
+    requestSent = $false
     captureCompletedAtMs = $null
     captureCompletedRelativeToForegroundMs = $null
     pngSha256 = ""
@@ -1043,29 +1077,15 @@ $firstPureWhiteFrameRendererCapture = [pscustomobject][ordered]@{
 try {
     if ($CaptureRendererOnFirstPureWhiteFrame) {
         try {
-            $rendererCaptureSessionState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-            foreach ($functionName in @("Get-PngFrameMetric", "Invoke-CdpPageScreenshotEvidence")) {
-                $rendererCaptureSessionState.Commands.Add(
-                    [System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new(
-                        $functionName,
-                        (Get-Item "function:$functionName").Definition
-                    )
-                )
-            }
-            $rendererCaptureRunspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($rendererCaptureSessionState)
-            $rendererCaptureRunspace.Open()
-            $rendererCapturePowerShell = [System.Management.Automation.PowerShell]::Create()
-            $rendererCapturePowerShell.Runspace = $rendererCaptureRunspace
+            $rendererCaptureSocket = Open-CdpPageScreenshotSocket `
+                -WebSocketDebuggerUrl ([string]$sessionBefore.webSocketDebuggerUrl) `
+                -ExpectedTargetId ([string]$sessionBefore.targetId)
+            $cdpPreconnectedBeforeActivation = $true
         } catch {
             $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture setup failed: $($_.Exception.Message)"
-            if ($null -ne $rendererCapturePowerShell) {
-                try { $rendererCapturePowerShell.Dispose() } catch {}
-                $rendererCapturePowerShell = $null
-            }
-            if ($null -ne $rendererCaptureRunspace) {
-                try { $rendererCaptureRunspace.Close() } catch {}
-                try { $rendererCaptureRunspace.Dispose() } catch {}
-                $rendererCaptureRunspace = $null
+            if ($null -ne $rendererCaptureSocket) {
+                try { $rendererCaptureSocket.Dispose() } catch {}
+                $rendererCaptureSocket = $null
             }
         }
     }
@@ -1343,25 +1363,20 @@ try {
                     sampleCount = $metric.sampleCount
                 }) | Out-Null
                 $isPureWhitePhysicalFrame = $metric.mean -ge 250 -and $metric.standardDeviation -lt 5 -and $metric.darkRatio -lt 0.005
-                if ($CaptureRendererOnFirstPureWhiteFrame -and $isPureWhitePhysicalFrame -and -not $rendererCaptureStarted -and $null -ne $rendererCapturePowerShell) {
+                if ($CaptureRendererOnFirstPureWhiteFrame -and $isPureWhitePhysicalFrame -and -not $rendererCaptureStarted -and $null -ne $rendererCaptureSocket) {
                     $rendererCaptureStarted = $true
+                    $postBlankCadencePerturbed = $true
                     $firstPureWhiteFrameRendererCapture.attempted = $true
                     try {
-                        [void]$rendererCapturePowerShell.AddCommand("Invoke-CdpPageScreenshotEvidence")
-                        [void]$rendererCapturePowerShell.AddParameter("WebSocketDebuggerUrl", [string]$sessionBefore.webSocketDebuggerUrl)
-                        [void]$rendererCapturePowerShell.AddParameter("ExpectedTargetId", [string]$sessionBefore.targetId)
-                        [void]$rendererCapturePowerShell.AddParameter("Stopwatch", $stopwatch)
-                        [void]$rendererCapturePowerShell.AddParameter("ForegroundAtMs", [int]$frameCaptureOriginMs)
-                        [void]$rendererCapturePowerShell.AddParameter("ScreenFrameElapsedMs", $frameStartedAtMs)
-                        [void]$rendererCapturePowerShell.AddParameter("ScreenMetric", $metric)
-                        $rendererCaptureAsync = $rendererCapturePowerShell.BeginInvoke()
+                        $firstPureWhiteFrameRendererCapture = Invoke-CdpPageScreenshotEvidence `
+                            -Socket $rendererCaptureSocket `
+                            -ExpectedTargetId ([string]$sessionBefore.targetId) `
+                            -Stopwatch $stopwatch `
+                            -ForegroundAtMs ([int]$frameCaptureOriginMs) `
+                            -ScreenFrameElapsedMs $frameStartedAtMs `
+                            -ScreenMetric $metric
                     } catch {
                         $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture start failed: $($_.Exception.Message)"
-                        try { $rendererCapturePowerShell.Dispose() } catch {}
-                        $rendererCapturePowerShell = $null
-                        try { $rendererCaptureRunspace.Close() } catch {}
-                        try { $rendererCaptureRunspace.Dispose() } catch {}
-                        $rendererCaptureRunspace = $null
                     }
                 }
             }
@@ -1484,35 +1499,13 @@ try {
         $topologyWatcherRunspace.Close()
         $topologyWatcherRunspace.Dispose()
     }
-    if ($null -ne $rendererCapturePowerShell) {
-        if ($null -ne $rendererCaptureAsync) {
-            try {
-                if ($rendererCaptureAsync.AsyncWaitHandle.WaitOne($rendererCaptureWaitTimeoutMs)) {
-                    $rendererCaptureOutput = @($rendererCapturePowerShell.EndInvoke($rendererCaptureAsync))
-                    if ($rendererCaptureOutput.Count -gt 0) {
-                        $firstPureWhiteFrameRendererCapture = $rendererCaptureOutput[-1]
-                    } else {
-                        $firstPureWhiteFrameRendererCapture.attempted = $true
-                        $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture returned no evidence"
-                    }
-                } else {
-                    $firstPureWhiteFrameRendererCapture.attempted = $true
-                    $firstPureWhiteFrameRendererCapture.error = "CDP screenshot capture did not finish within $rendererCaptureWaitTimeoutMs ms"
-                    $rendererCaptureStopAsync = $rendererCapturePowerShell.BeginStop($null, $null)
-                    if ($rendererCaptureStopAsync.AsyncWaitHandle.WaitOne(1000)) {
-                        $rendererCapturePowerShell.EndStop($rendererCaptureStopAsync)
-                    }
-                }
-            } catch {
-                $firstPureWhiteFrameRendererCapture.attempted = $true
-                $firstPureWhiteFrameRendererCapture.error = $_.Exception.Message
+    if ($null -ne $rendererCaptureSocket) {
+        try { $rendererCaptureSocket.Dispose() } catch {
+            if (-not $firstPureWhiteFrameRendererCapture.error) {
+                $firstPureWhiteFrameRendererCapture.error = "CDP screenshot socket cleanup failed: $($_.Exception.Message)"
             }
         }
-        $rendererCapturePowerShell.Dispose()
-    }
-    if ($null -ne $rendererCaptureRunspace) {
-        $rendererCaptureRunspace.Close()
-        $rendererCaptureRunspace.Dispose()
+        $rendererCaptureSocket = $null
     }
 }
 
@@ -1837,6 +1830,8 @@ $result = [ordered]@{
     frameCount = $frames.Count
     blankFrameCount = $blankFrames.Count
     firstPureWhiteFrameRendererCapture = $firstPureWhiteFrameRendererCapture
+    cdpPreconnectedBeforeActivation = $cdpPreconnectedBeforeActivation
+    postBlankCadencePerturbed = $postBlankCadencePerturbed
     firstFrame = $firstFrame
     firstFrameDelayMs = $firstFrameDelayMs
     firstNonBlankFrame = $firstNonBlankFrame
