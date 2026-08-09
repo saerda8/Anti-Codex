@@ -2092,6 +2092,22 @@ test("Manager waits for its initial status load before accepting an exclusive op
   assert.match(openManagerBlock, /managerInitialLoadPromise = null;/);
 });
 
+test("Manager action buttons wait for initial status before checking or dispatching", () => {
+  const openManagerBlock = extractNamedFunction(managerInject, "openManager");
+  const installActionsBlock = extractNamedFunction(openManagerBlock, "installActions");
+  const clickStart = installActionsBlock.indexOf('button.addEventListener("click", async () => {');
+  const clickEnd = installActionsBlock.indexOf("if (requireHighImpactConfirmation", clickStart);
+  const clickPrelude = installActionsBlock.slice(clickStart, clickEnd);
+  const waitIndex = clickPrelude.indexOf("if (managerInitialLoadPromise) await managerInitialLoadPromise;");
+  const pendingIndex = clickPrelude.indexOf("const pendingAction =");
+  const reportedIndex = clickPrelude.indexOf("const reportedAction =");
+
+  assert.ok(clickStart >= 0 && clickEnd > clickStart, "main Manager action click handler must be discoverable");
+  assert.ok(waitIndex >= 0, "main Manager actions must wait for the initial status load");
+  assert.ok(waitIndex < pendingIndex, "initial status must settle before pending-action checks");
+  assert.ok(waitIndex < reportedIndex, "initial status must settle before reported-action checks");
+});
+
 test("physical prompt restore waits for the prompt view to unlock", () => {
   assert.match(managerRealMouseAction, /async function reopenPromptSettingsView/);
   assert.match(managerRealMouseAction, /data-anticodex-prompt-generation/);
