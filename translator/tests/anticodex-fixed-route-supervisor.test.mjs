@@ -17,6 +17,7 @@ import {
   clientSessionRequiresShutdown,
   liveOwnedClientPids,
   observeCopiedClientSession,
+  ownedClientStopError,
   proxyModelCatalogReady,
   readCompatibilityModelAliases,
   refreshAntigravityRelayModelList,
@@ -633,6 +634,40 @@ test("owned-process shutdown waits for every unique process and reports survivor
   assert.match(source, /state: stoppedNormally && fullyStopped \? "stopped" : "error"/);
   assert.doesNotMatch(source, /process\.kill\(pid,\s*signal\)|child\.kill\(signal\)/);
   assert.match(source, /TerminateProcess\(process,\s*1\)/);
+});
+
+test("a transient termination failure is not a shutdown error after exact scans prove zero survivors", () => {
+  const transientFailure = [{ stopped: false, processId: 17172, reason: "kill_failed" }];
+  assert.equal(
+    ownedClientStopError({ ok: true }, { ok: true }, transientFailure, []),
+    null,
+  );
+  assert.match(
+    ownedClientStopError({ ok: true }, { ok: true }, transientFailure, [17172]),
+    /17172: kill_failed/,
+  );
+  assert.match(
+    ownedClientStopError(
+      { ok: true },
+      { ok: true },
+      [{ stopped: false, processId: 303, reason: "missing_identity" }],
+      [],
+    ),
+    /303: missing_identity/,
+  );
+  assert.match(
+    ownedClientStopError({ ok: false, error: "before scan failed" }, { ok: true }, [], []),
+    /before scan failed/,
+  );
+  assert.equal(
+    ownedClientStopError(
+      { ok: true },
+      { ok: true },
+      [{ stopped: true, processId: 101, reason: "killed" }, { stopped: false, processId: 202, reason: "already_exited" }],
+      [],
+    ),
+    null,
+  );
 });
 
 test("a timed-out startup process scan fails closed before a second client can launch", () => {

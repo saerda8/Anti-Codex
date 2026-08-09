@@ -648,16 +648,7 @@ async function runSupervisor(plan) {
     for (const pid of survivors) ownedClients.add(pid);
     return {
       survivors,
-      scanError: beforeStop.ok && afterStop.ok
-        && stopResults.every((result) => result.stopped || result.reason === "already_exited")
-        ? null
-        : [
-            beforeStop.error,
-            afterStop.error,
-            ...stopResults
-              .filter((result) => !result.stopped && result.reason !== "already_exited")
-              .map((result) => `${result.processId || "unknown PID"}: ${result.reason}`),
-          ].filter(Boolean).join("; ") || "process termination could not be proven safe",
+      scanError: ownedClientStopError(beforeStop, afterStop, stopResults, survivors),
     };
   };
 
@@ -2638,6 +2629,22 @@ export async function waitForOwnedProcessExit(processIds = [], options = {}) {
     survivors = pids.filter((pid) => isAlive(pid));
   }
   return survivors;
+}
+
+export function ownedClientStopError(beforeStop, afterStop, stopResults = [], survivors = []) {
+  const identityFailures = stopResults.filter((result) => (
+    !result.stopped
+    && result.reason !== "already_exited"
+    && result.reason !== "kill_failed"
+  ));
+  if (beforeStop?.ok && afterStop?.ok && survivors.length === 0 && identityFailures.length === 0) return null;
+  return [
+    beforeStop?.error,
+    afterStop?.error,
+    ...stopResults
+      .filter((result) => !result.stopped && result.reason !== "already_exited")
+      .map((result) => `${result.processId || "unknown PID"}: ${result.reason}`),
+  ].filter(Boolean).join("; ") || "process termination could not be proven safe";
 }
 
 function writeTextAtomic(path, text) {
