@@ -10,6 +10,91 @@ const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asa
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+test("revision 8 disables background throttling only for the primary window", () => {
+  const primaryWindowCall = "let n=await L.createPrimaryWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,";
+  const original = [
+    "async createWindow(e={}){let {appearance:o=`primary`}=e,j={preload:p,backgroundThrottling:o!==`avatarOverlay`&&void 0,contextIsolation:!0,nodeIntegration:!1,sandbox:!0,spellcheck:!1,webSecurity:!0,devTools:!0,additionalArguments:[`--anti-test`],enableBlinkFeatures:`CSSGridLayout`},{backgroundColor:M,backgroundMaterial:N}=I(o),P=new l.BrowserWindow({title:n??l.app.getName(),...process.platform===`win32`?{icon:`icon.ico`,autoHideMenuBar:!0}:{},            backgroundMaterial:N,webPreferences:j});let F=P.webContents;o===`avatarOverlay`&&F.setBackgroundThrottling(!1)}",
+    "async createPrimaryWindow(e={}){return this.createWindow({...e,appearance:`primary`})}",
+    primaryWindowCall,
+  ].join("");
+
+  const patched = brandPatchCompat.patchPrimaryWindowBackgroundThrottling(original);
+  assert.equal(patched.length, original.length);
+  assert.match(patched, /backgroundThrottling:\(\{primary:!1,avatarOverlay:!1\}\)\[o\]/);
+  assert.doesNotMatch(patched, /backgroundThrottling:o!==`avatarOverlay`&&void 0/);
+  assert.match(patched, /o===`avatarOverlay`&&F\.setBackgroundThrottling\(!1\)/);
+  const expression = patched.match(/backgroundThrottling:(\(\{primary:!1,avatarOverlay:!1\}\)\[o\])/)?.[1];
+  assert.equal(Function("o", `return ${expression}`)("primary"), false);
+  assert.equal(Function("o", `return ${expression}`)("avatarOverlay"), false);
+  assert.equal(Function("o", `return ${expression}`)("secondary"), undefined);
+  assert.equal(brandPatchCompat.patchPrimaryWindowBackgroundThrottling(patched), patched);
+  assert.equal(brandPatchCompat.hasPrimaryWindowBackgroundThrottling(patched), true);
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(original.repeat(2)),
+    /exactly one supported primary window background throttling anchor/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(
+      original.replace(primaryWindowCall, ""),
+    ),
+    /exactly one supported primary window/i,
+  );
+  const crossScope = original.replace(
+    "let F=P.webContents;o===`avatarOverlay`&&F.setBackgroundThrottling(!1)",
+    "let F=P.webContents",
+  ) + "async createWindow(e={}){let {appearance:o=`primary`}=e,F=P.webContents;o===`avatarOverlay`&&F.setBackgroundThrottling(!1)}";
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(crossScope),
+    /exactly one supported primary window/i,
+  );
+  const unusedPreferenceDecoy = original
+    .replace("webPreferences:j", "webPreferences:q")
+    .replace("let F=P.webContents", "new x.BrowserWindow({webPreferences:j});let F=P.webContents");
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(unusedPreferenceDecoy),
+    /exactly one supported primary window/i,
+  );
+  const wrongWindowDecoy = original.replace("let F=P.webContents", "let F=Q.webContents");
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(wrongWindowDecoy),
+    /exactly one supported primary window/i,
+  );
+  const displacedFactoryDecoy = original.replace(
+    "async createPrimaryWindow(e={}){return this.createWindow({...e,appearance:`primary`})}",
+    "async createPrimaryWindow(e={}){return this.otherWindow(e)}",
+  ) + "async createPrimaryWindow(e={}){return this.createWindow({...e,appearance:`primary`})}";
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(displacedFactoryDecoy),
+    /exactly one supported primary window/i,
+  );
+  const displacedCallDecoy = original.replace(
+    primaryWindowCall,
+    "let n=await L.otherWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,",
+  ) + `function unused(){${primaryWindowCall}}`;
+  assert.throws(
+    () => brandPatchCompat.patchPrimaryWindowBackgroundThrottling(displacedCallDecoy),
+    /exactly one supported primary window/i,
+  );
+  const drifted = original.replace("F.setBackgroundThrottling(!1)", "F.setBackgroundThrottling(!0)");
+  assert.throws(
+    () => brandPatchCompat.selectPrimaryWindowBackgroundThrottlingCandidate([
+      { rel: "main-valid.js", text: original },
+      { rel: "main-drifted.js", text: drifted },
+    ]),
+    /found 2/i,
+  );
+  assert.throws(
+    () => brandPatchCompat.selectPrimaryWindowBackgroundThrottlingCandidate([
+      { rel: "main-drifted.js", text: drifted },
+    ]),
+    /supported primary window/i,
+  );
+
+  assert.match(brandPatcherSource, /const hostPatchRevision = 8;/);
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\n\]\);/)?.[0] ?? "";
+  assert.match(criticalBlock, /"primary-window-background-throttling"/);
+});
+
 const crashRecoveryBundle = [
   'function U(e){if(e===`idle`)return A.appUpdates?.checkForUpdates(),j(Z,{id:`appUpdate.recovery.updateCodex`,defaultMessage:`Update {appName}`,description:`Button label shown on the full-screen error page to install a desktop app update`,values:{appName:P}});if(e===`ready`)return A.appUpdates?.installUpdate()}',
   'function C(e){let {fatalError:n,onReset:R}=e;let c;c=j(`h1`,{children:j(Z,{id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`Title shown when the Codex app-server process crashes`,values:{appName:P}})});let l;l=jsxs(`div`,{children:[c,j(`p`,{children:j(Z,{id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`,description:`Recovery guidance shown when the Codex app-server process crashes`,values:{appName:P,documentationLink:j(`button`,{onClick:D,children:`documentation`})}})})]});let u;u=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let d;d=j(B,{onClick:O,children:j(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`,description:`Button label to open the Config.toml file`})});let f;f=j(Z,{id:`appServerCrash.restart`,defaultMessage:`Restart`,description:`Button label that restarts the Codex app-server after a crash`});let p;p=j(B,{onClick:R,children:f});let m;m=jsxs(`div`,{children:[u,d,p]});return jsxs(`main`,{children:[s,l,m,h]})}',
@@ -120,7 +205,7 @@ test("wires the crash recovery page as one fixed-shell critical patch", () => {
   assert.match(brandPatcherSource, /\["crash-recovery-page",\s*\(\)\s*=>\s*findCrashRecoveryPagePatch/);
   const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
   assert.equal((criticalBlock.match(/"crash-recovery-page"/g) ?? []).length, 1);
-  assert.match(brandPatcherSource, /const hostPatchRevision = 7;/);
+  assert.match(brandPatcherSource, /const hostPatchRevision = 8;/);
 });
 
 test("selects exactly one signed crash bundle and never hides a partial second bundle", () => {
@@ -486,8 +571,8 @@ test("does not accept a generic app.getName reference as session-title proof", (
   );
 });
 
-test("keeps Codex's official primary BrowserWindow throttling policy", () => {
-  assert.doesNotMatch(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
+test("revision 8 patches the primary BrowserWindow throttling policy", () => {
+  assert.match(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
 });
 
 test("revision 7 leaves the official primary-window tracker unpatched", () => {

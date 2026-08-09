@@ -17,19 +17,21 @@ import {
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchCrashRecoveryPage,
   patchLocalModelAvailability,
+  patchPrimaryWindowBackgroundThrottling,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchSettingsExternalNavigation,
   patchSettingsExternalNavigationRender,
   patchWindowsTrayIconSelection,
   selectCrashRecoveryBundleCandidate,
+  selectPrimaryWindowBackgroundThrottlingCandidate,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
 
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 7;
+const hostPatchRevision = 8;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -466,6 +468,18 @@ function findMainSessionPatch(fd, header, dataOffset) {
   throw new Error("Could not find Codex session title bundle under .vite/build/*.js");
 }
 
+function findPrimaryWindowBackgroundThrottlingPatch(fd, header, dataOffset) {
+  const candidates = [];
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    candidates.push({ rel, text });
+  }
+  const candidate = selectPrimaryWindowBackgroundThrottlingCandidate(candidates);
+  return [candidate.rel, patchPrimaryWindowBackgroundThrottling];
+}
+
 function findWindowsClosePatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
@@ -889,6 +903,7 @@ const patchSpecs = [
   ["settings-external-links", () => findSettingsExternalLinksPatch(fd, header, dataOffset)],
   ["crash-recovery-page", () => findCrashRecoveryPagePatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
+  ["primary-window-background-throttling", () => findPrimaryWindowBackgroundThrottlingPatch(fd, header, dataOffset)],
   ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
   ["computer-use-legacy-notify-opt-out", () => findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset)],
   ["local-model-availability", () => findLocalModelAvailabilityPatch(fd, header, dataOffset)],
@@ -906,6 +921,7 @@ const fixedShellCriticalPatchNames = new Set([
   "app-name",
   "app-user-model-id",
   "session-title",
+  "primary-window-background-throttling",
   "startup-mcp-config-reload",
   "app-server-managed-session-flags",
   "config-write",

@@ -190,14 +190,16 @@ function runRollbackHostPatchMatrix() {
     "local-model-availability",
   ];
   const revision6 = [...revision4, "crash-recovery-page"];
-  const current = revision6.filter((name) => name !== "primary-window-restore-repaint");
+  const revision7 = revision6.filter((name) => name !== "primary-window-restore-repaint");
+  const current = [...revision7, "primary-window-background-throttling"];
   const previous = revision4.filter((name) => ![
     "app-server-managed-session-flags",
     "settings-external-links",
   ].includes(name));
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
-    ["current", current, true, 7],
+    ["current", current, true, 8],
+    ["revisionSeven", revision7, true, 7],
     ["revisionSix", revision6, true, 6],
     ["revisionFive", revision6, true, 5],
     ["revision2Current", revision4, true, 2],
@@ -284,7 +286,7 @@ function Test-AntiCodexAsarPatches {
         [int]$ExpectedHostPatchRevision = 0
     )
     $actualConfigWriteBridgeCount = if ((Get-Content -LiteralPath $Path -Raw) -eq "with-config-bridge") { 1 } else { 0 }
-    $shapeMatches = if ($ExpectedHostPatchRevision -eq 7) {
+    $shapeMatches = if ($ExpectedHostPatchRevision -in @(7, 8)) {
         $ExpectedPrimaryWindowDeferredRestoreRepaintCount -eq 0 -and
         $ExpectedPrimaryWindowFocusRestoreRepaintCount -eq 0 -and
         $ExpectedLegacyPrimaryWindowRestoreRepaintCount -eq 0
@@ -542,6 +544,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /currentHostPatchRevision/);
   assert.match(validator, /legacyHostPatchRevision/);
   assert.match(validator, /expectedCriticalPatches/);
+  assert.match(validator, /revision7CriticalPatches/);
+  assert.match(validator, /revision7ManifestCompatible/);
   assert.match(validator, /previousCriticalPatches/);
   assert.match(validator, /legacyWithoutConfigWriteCriticalPatches/);
   const previousCriticalPatches = validator.match(
@@ -582,6 +586,7 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "app-name",
     "app-user-model-id",
     "session-title",
+    "primary-window-background-throttling",
     "startup-mcp-config-reload",
     "app-server-managed-session-flags",
     "config-write",
@@ -601,6 +606,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(asarValidator, /\[int\]\$ExpectedLegacyPrimaryWindowRestoreRepaintCount/);
   assert.match(asarValidator, /primaryFocusRestoreRepaintPattern/);
   assert.match(asarValidator, /primaryDeferredRestoreRepaintPattern/);
+  assert.match(asarValidator, /primaryWindowBackgroundThrottlingOriginalCount/);
+  assert.match(asarValidator, /primaryWindowBackgroundThrottlingPatchedCount/);
   assert.match(asarValidator, /\$primaryDeferredRestoreRepaintPattern\)\.Count -ne \$ExpectedPrimaryWindowDeferredRestoreRepaintCount/);
   assert.match(asarValidator, /\$primaryFocusRestoreRepaintPattern\)\.Count -ne \$ExpectedPrimaryWindowFocusRestoreRepaintCount/);
   assert.match(asarValidator, /anyPrimaryWindowRepaintPattern/);
@@ -639,10 +646,30 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const configWriteBridge = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
     const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
     const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
+    const officialBackgroundThrottlingProperty = "backgroundThrottling:o!==`avatarOverlay`&&void 0";
+    const patchedBackgroundThrottlingProperty = "backgroundThrottling:({primary:!1,avatarOverlay:!1})[o]";
+    const primaryWindowFactory = "async createPrimaryWindow(e={}){return this.createWindow({...e,appearance:`primary`})}";
+    const primaryWindowCall = "let n=await L.createPrimaryWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,";
+    const primaryWindowBackgroundThrottlingChain = (property) => [
+      `async createWindow(e={}){let {appearance:o=\`primary\`}=e,j={preload:p,${property},contextIsolation:!0,nodeIntegration:!1,spellcheck:!0,devTools:!0},{backgroundColor:M,backgroundMaterial:N}=I(o),P=new l.BrowserWindow({backgroundColor:M,webPreferences:j});let F=P.webContents;o===\`avatarOverlay\`&&F.setBackgroundThrottling(!1)}`,
+      primaryWindowFactory,
+      primaryWindowCall,
+    ].join("");
+    const officialBackgroundThrottling = primaryWindowBackgroundThrottlingChain(officialBackgroundThrottlingProperty);
+    const patchedBackgroundThrottling = primaryWindowBackgroundThrottlingChain(patchedBackgroundThrottlingProperty);
+    const displacedFactoryBackgroundThrottling = patchedBackgroundThrottling.replace(
+      primaryWindowFactory,
+      "async createPrimaryWindow(e={}){return this.otherWindow(e)}",
+    ) + primaryWindowFactory;
+    const displacedCallBackgroundThrottling = patchedBackgroundThrottling.replace(
+      primaryWindowCall,
+      "let n=await L.otherWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,",
+    ) + `function unused(){${primaryWindowCall}}`;
     const currentBase = `${base};${antiCodexTrayGuid}`;
     const predecessorBase = `${base};${officialTrayGuid}`;
-    const patchedBase = `${currentBase};${configWriteBridge}`;
-    const predecessorPatchedBase = `${predecessorBase};${configWriteBridge}`;
+    const patchedBase = `${currentBase};${configWriteBridge};${patchedBackgroundThrottling}`;
+    const revision7PatchedBase = `${currentBase};${configWriteBridge};${officialBackgroundThrottling}`;
+    const predecessorPatchedBase = `${predecessorBase};${configWriteBridge};${officialBackgroundThrottling}`;
     const currentSettingsPatch = 'q={/*anticodex-local-settings-only*/account:{href:`about:blank`,icon:a,message:m.account},securitySettings:{href:`about:blank`,icon:b,message:m.securitySettings}};/*anticodex-hide-external-account*/null;(0,Q.jsx)(Zt,{...e,securitySettingsEnabled:0});Z.securitySettings.message';
     const paddedCurrentSettingsPatch = currentSettingsPatch.replace("securitySettingsEnabled:0}", "securitySettingsEnabled:0          }");
     const missingAccountMessagePatch = currentSettingsPatch.replace("message:m.account", "missing:m.account");
@@ -681,6 +708,14 @@ test("rollback patch compatibility accepts the current and supported predecessor
       zero: join(fixture, "zero.asar"),
       one: join(fixture, "one.asar"),
       two: join(fixture, "two.asar"),
+      revision7: join(fixture, "revision7.asar"),
+      revision6: join(fixture, "revision6.asar"),
+      currentMissingBackgroundThrottling: join(fixture, "current-missing-background-throttling.asar"),
+      currentOriginalBackgroundThrottling: join(fixture, "current-original-background-throttling.asar"),
+      currentDuplicateBackgroundThrottling: join(fixture, "current-duplicate-background-throttling.asar"),
+      currentDecoyBackgroundThrottling: join(fixture, "current-decoy-background-throttling.asar"),
+      currentDisplacedFactoryBackgroundThrottling: join(fixture, "current-displaced-factory-background-throttling.asar"),
+      currentDisplacedCallBackgroundThrottling: join(fixture, "current-displaced-call-background-throttling.asar"),
       revision5: join(fixture, "revision5.asar"),
       revision2: join(fixture, "revision2.asar"),
       focusOnly: join(fixture, "focus-only.asar"),
@@ -719,13 +754,21 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.zero, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.two, `${patchedBase};${hook};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.revision7, `${revision7PatchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.revision6, `${revision7PatchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentMissingBackgroundThrottling, `${currentBase};${configWriteBridge};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentOriginalBackgroundThrottling, `${revision7PatchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentDuplicateBackgroundThrottling, `${patchedBase};${patchedBackgroundThrottling};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentDecoyBackgroundThrottling, `${currentBase};${configWriteBridge};${patchedBackgroundThrottlingProperty};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentDisplacedFactoryBackgroundThrottling, `${currentBase};${configWriteBridge};${displacedFactoryBackgroundThrottling};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentDisplacedCallBackgroundThrottling, `${currentBase};${configWriteBridge};${displacedCallBackgroundThrottling};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.revision5, `${predecessorPatchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.revision2, `${predecessorPatchedBase};${revision2Hook};${currentSettingsPatch};${crashRecoveryOriginal}`);
     writeFileSync(paths.focusOnly, `${patchedBase};${officialTracker};${focusOnlyHook};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.splitCross, `${patchedBase};${officialTracker};${focusOnlyHook};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.legacyRestoreOnly, `${patchedBase};${legacyRestoreOnlyHook}`);
     writeFileSync(paths.missingConfigBridge, `${base};${revision2Hook}`);
-    writeFileSync(paths.currentMissingConfigBridge, `${base};${antiCodexTrayGuid};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
+    writeFileSync(paths.currentMissingConfigBridge, `${base};${antiCodexTrayGuid};${patchedBackgroundThrottling};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.duplicateConfigBridge, `${patchedBase};${configWriteBridge};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.currentSettings, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.paddedCurrentSettings, `${patchedBase};${officialTracker};${paddedCurrentSettingsPatch};${crashRecoveryPatch}`);
@@ -766,51 +809,60 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDef
         return $false
     }
 }
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
-$revision6 = @($current + "primary-window-restore-repaint")
+$revision7 = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
+$current = @($revision7 + "primary-window-background-throttling")
+$revision6 = @($revision7 + "primary-window-restore-repaint")
 $revision4 = @($revision6 | Where-Object { $_ -ne "crash-recovery-page" })
 $previous = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
 $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })
 [pscustomobject]@{
-    currentOfficial = Accept-Asar ${quote(paths.zero)} 1 0 0 0 7
-    revision6Hook = Accept-Asar ${quote(paths.one)} 1 1 0 0 6
+    currentOfficial = Accept-Asar ${quote(paths.zero)} 1 0 0 0 8
+    revision7Official = Accept-Asar ${quote(paths.revision7)} 1 0 0 0 7
+    revision7RejectsCurrent = Accept-Asar ${quote(paths.zero)} 1 0 0 0 7
+    revision6Hook = Accept-Asar ${quote(paths.revision6)} 1 1 0 0 6
     revision6MissingHook = Accept-Asar ${quote(paths.zero)} 1 1 0 0 6
-    currentUnexpectedHook = Accept-Asar ${quote(paths.one)} 1 0 0 0 7
-    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 0 0 0 7
+    currentUnexpectedHook = Accept-Asar ${quote(paths.one)} 1 0 0 0 8
+    currentDuplicateHook = Accept-Asar ${quote(paths.two)} 1 0 0 0 8
+    currentMissingBackgroundThrottling = Accept-Asar ${quote(paths.currentMissingBackgroundThrottling)} 1 0 0 0 8
+    currentOriginalBackgroundThrottling = Accept-Asar ${quote(paths.currentOriginalBackgroundThrottling)} 1 0 0 0 8
+    currentDuplicateBackgroundThrottling = Accept-Asar ${quote(paths.currentDuplicateBackgroundThrottling)} 1 0 0 0 8
+    currentDecoyBackgroundThrottling = Accept-Asar ${quote(paths.currentDecoyBackgroundThrottling)} 1 0 0 0 8
+    currentDisplacedFactoryBackgroundThrottling = Accept-Asar ${quote(paths.currentDisplacedFactoryBackgroundThrottling)} 1 0 0 0 8
+    currentDisplacedCallBackgroundThrottling = Accept-Asar ${quote(paths.currentDisplacedCallBackgroundThrottling)} 1 0 0 0 8
     revision5Hook = Accept-Asar ${quote(paths.revision5)} 1 1 0 0 5
-    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 0 0 7
-    currentMissingCrash = Accept-Asar ${quote(paths.currentMissingCrash)} 1 0 0 0 7
-    currentWithOriginalCrash = Accept-Asar ${quote(paths.currentWithOriginalCrash)} 1 0 0 0 7
+    currentRevision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 0 0 8
+    currentMissingCrash = Accept-Asar ${quote(paths.currentMissingCrash)} 1 0 0 0 8
+    currentWithOriginalCrash = Accept-Asar ${quote(paths.currentWithOriginalCrash)} 1 0 0 0 8
     revision4PartialCrash = Accept-Asar ${quote(paths.revision4PartialCrash)} 1 1 0 0 4
-    currentConfigHandlerSwap = Accept-Asar ${quote(paths.currentConfigHandlerSwap)} 1 0 0 0 7
-    currentMemoHandlers = Accept-Asar ${quote(paths.currentMemoHandlers)} 1 0 0 0 7
-    currentRestartHandlerSwap = Accept-Asar ${quote(paths.currentRestartHandlerSwap)} 1 0 0 0 7
-    currentGenericRetryHandlerSwap = Accept-Asar ${quote(paths.currentGenericRetryHandlerSwap)} 1 0 0 0 7
-    currentConfigHandlerReassign = Accept-Asar ${quote(paths.currentConfigHandlerReassign)} 1 0 0 0 7
-    currentRestartHandlerReassign = Accept-Asar ${quote(paths.currentRestartHandlerReassign)} 1 0 0 0 7
-    currentGenericRetryHandlerReassign = Accept-Asar ${quote(paths.currentGenericRetryHandlerReassign)} 1 0 0 0 7
-    currentConfigCacheDecoy = Accept-Asar ${quote(paths.currentConfigCacheDecoy)} 1 0 0 0 7
-    currentRestartCacheDecoy = Accept-Asar ${quote(paths.currentRestartCacheDecoy)} 1 0 0 0 7
-    currentGenericRetryCacheDecoy = Accept-Asar ${quote(paths.currentGenericRetryCacheDecoy)} 1 0 0 0 7
-    currentConfigCompoundWriteDecoy = Accept-Asar ${quote(paths.currentConfigCompoundWriteDecoy)} 1 0 0 0 7
-    currentRestartCompoundWriteDecoy = Accept-Asar ${quote(paths.currentRestartCompoundWriteDecoy)} 1 0 0 0 7
-    currentGenericRetryCompoundWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryCompoundWriteDecoy)} 1 0 0 0 7
-    currentConfigDestructureWriteDecoy = Accept-Asar ${quote(paths.currentConfigDestructureWriteDecoy)} 1 0 0 0 7
-    currentGenericRetryForOfWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryForOfWriteDecoy)} 1 0 0 0 7
-    currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 0 0 0 7
-    currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 0 0 0 7
-    currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 0 0 0 7
+    currentConfigHandlerSwap = Accept-Asar ${quote(paths.currentConfigHandlerSwap)} 1 0 0 0 8
+    currentMemoHandlers = Accept-Asar ${quote(paths.currentMemoHandlers)} 1 0 0 0 8
+    currentRestartHandlerSwap = Accept-Asar ${quote(paths.currentRestartHandlerSwap)} 1 0 0 0 8
+    currentGenericRetryHandlerSwap = Accept-Asar ${quote(paths.currentGenericRetryHandlerSwap)} 1 0 0 0 8
+    currentConfigHandlerReassign = Accept-Asar ${quote(paths.currentConfigHandlerReassign)} 1 0 0 0 8
+    currentRestartHandlerReassign = Accept-Asar ${quote(paths.currentRestartHandlerReassign)} 1 0 0 0 8
+    currentGenericRetryHandlerReassign = Accept-Asar ${quote(paths.currentGenericRetryHandlerReassign)} 1 0 0 0 8
+    currentConfigCacheDecoy = Accept-Asar ${quote(paths.currentConfigCacheDecoy)} 1 0 0 0 8
+    currentRestartCacheDecoy = Accept-Asar ${quote(paths.currentRestartCacheDecoy)} 1 0 0 0 8
+    currentGenericRetryCacheDecoy = Accept-Asar ${quote(paths.currentGenericRetryCacheDecoy)} 1 0 0 0 8
+    currentConfigCompoundWriteDecoy = Accept-Asar ${quote(paths.currentConfigCompoundWriteDecoy)} 1 0 0 0 8
+    currentRestartCompoundWriteDecoy = Accept-Asar ${quote(paths.currentRestartCompoundWriteDecoy)} 1 0 0 0 8
+    currentGenericRetryCompoundWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryCompoundWriteDecoy)} 1 0 0 0 8
+    currentConfigDestructureWriteDecoy = Accept-Asar ${quote(paths.currentConfigDestructureWriteDecoy)} 1 0 0 0 8
+    currentGenericRetryForOfWriteDecoy = Accept-Asar ${quote(paths.currentGenericRetryForOfWriteDecoy)} 1 0 0 0 8
+    currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 0 0 0 8
+    currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 0 0 0 8
+    currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 0 0 0 8
     revision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 1 0 2
     revision2RejectsCurrent = Accept-Asar ${quote(paths.one)} 1 0 1 0 2
-    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 0 0 0 7
-    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 0 0 0 7
-    currentMissingConfigBridge = Accept-Asar ${quote(paths.currentMissingConfigBridge)} 1 0 0 0 7
-    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 0 0 0 7
-    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 0 0 0 7
-    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 0 0 0 7
-    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 0 0 0 7
-    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 0 0 0 7
-    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 0 0 0 7
+    currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 0 0 0 8
+    currentSplitCrossHook = Accept-Asar ${quote(paths.splitCross)} 1 0 0 0 8
+    currentMissingConfigBridge = Accept-Asar ${quote(paths.currentMissingConfigBridge)} 1 0 0 0 8
+    currentDuplicateConfigBridge = Accept-Asar ${quote(paths.duplicateConfigBridge)} 1 0 0 0 8
+    currentSettingsRevision = Accept-Asar ${quote(paths.currentSettings)} 1 0 0 0 8
+    paddedCurrentSettingsRevision = Accept-Asar ${quote(paths.paddedCurrentSettings)} 1 0 0 0 8
+    missingAccountMessageRejected = Accept-Asar ${quote(paths.missingAccountMessage)} 1 0 0 0 8
+    missingSecurityMessageRejected = Accept-Asar ${quote(paths.missingSecurityMessage)} 1 0 0 0 8
+    previousSettingsRejectedAsCurrent = Accept-Asar ${quote(paths.previousSettings)} 1 0 0 0 8
     legacyWithoutConfigWrite = Accept-Asar ${quote(paths.missingConfigBridge)} 0 0 1 0
     predecessorRejectsCurrent = Accept-Asar ${quote(paths.one)} 0 0 1 0
     previousNoHook = Accept-Asar ${quote(paths.zero)} 0 0 1 0
@@ -831,10 +883,18 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.deepEqual(JSON.parse(result.stdout.trim()), {
       currentOfficial: true,
+      revision7Official: true,
+      revision7RejectsCurrent: false,
       revision6Hook: true,
       revision6MissingHook: false,
       currentUnexpectedHook: false,
       currentDuplicateHook: false,
+      currentMissingBackgroundThrottling: false,
+      currentOriginalBackgroundThrottling: false,
+      currentDuplicateBackgroundThrottling: false,
+      currentDecoyBackgroundThrottling: false,
+      currentDisplacedFactoryBackgroundThrottling: false,
+      currentDisplacedCallBackgroundThrottling: false,
       revision5Hook: true,
       currentRevision2Hook: false,
       currentMissingCrash: false,
@@ -893,6 +953,7 @@ test("complete rollback host validation maps immutable predecessor matrices to t
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
       current: true,
+      revisionSeven: true,
       revisionSix: true,
       revisionFive: true,
       revision2Current: true,

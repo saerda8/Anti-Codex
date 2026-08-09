@@ -11,7 +11,26 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$expectedHostPatchRevision = 7
+$expectedHostPatchRevision = 8
+$expectedFixedShellCriticalPatches = @(
+    "package-json",
+    "webview-html-title",
+    "app-name",
+    "app-user-model-id",
+    "session-title",
+    "primary-window-background-throttling",
+    "startup-mcp-config-reload",
+    "app-server-managed-session-flags",
+    "config-write",
+    "auth-requirement",
+    "app-route-gate",
+    "profile-dropdown-settings",
+    "settings-external-links",
+    "crash-recovery-page",
+    "browser-window-icon",
+    "windows-tray-icon",
+    "local-model-availability"
+)
 
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex" }
 if (-not $StateRoot) { $StateRoot = Join-Path $env:APPDATA "anticodex" }
@@ -320,6 +339,12 @@ function Test-ActiveHostGuardrails {
         if ([string](Get-ObjectPropertyValue -InputObject $Manifest -Name "hostPatchRevision") -ne [string]$expectedHostPatchRevision) {
             $failures.Add("active host patch revision is not current") | Out-Null
         }
+        $recordedCriticalPatchesValue = Get-ObjectPropertyValue -InputObject $Manifest -Name "criticalPatches"
+        $recordedCriticalPatches = @($recordedCriticalPatchesValue)
+        if ($recordedCriticalPatches.Count -ne $expectedFixedShellCriticalPatches.Count -or
+            @($expectedFixedShellCriticalPatches | Where-Object { $_ -notin $recordedCriticalPatches }).Count -ne 0) {
+            $failures.Add("active host critical patch inventory is not current") | Out-Null
+        }
     }
     $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"
     $manifestSource = Get-ObjectPropertyValue -InputObject $Manifest -Name "source"
@@ -353,6 +378,41 @@ function Test-ActiveHostGuardrails {
             if (-not $recorded -or [string]$recorded -ne [string]$actual) {
                 $failures.Add("active host marker hash mismatch: $name") | Out-Null
             }
+        }
+    }
+    if (Test-Path -LiteralPath $required.appAsar -PathType Leaf) {
+        try {
+            $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($required.appAsar))
+            $originalBackgroundThrottlingPattern = 'backgroundThrottling:[A-Za-z_$][\w$]*!==`avatarOverlay`&&void 0'
+            $patchedBackgroundThrottlingPattern = 'backgroundThrottling:\(\{primary:!1,avatarOverlay:!1\}\)\[(?<appearance>[A-Za-z_$][\w$]*)\]'
+            $backgroundThrottlingRegionPattern = "(?s)async createWindow\([^)]*\)\{(?:(?!async createWindow\()[\s\S]){0,6000}?(?<preferences>[A-Za-z_$][\w$]*)=\{preload:(?:(?!\},\{backgroundColor:)[\s\S]){0,500}?$patchedBackgroundThrottlingPattern(?:(?!\},\{backgroundColor:)[\s\S]){0,220}?\},\{backgroundColor:(?:(?!async createWindow\()[\s\S]){0,3000}?(?<window>[A-Za-z_$][\w$]*)=new [A-Za-z_$][\w$]*\.BrowserWindow\((?:(?!\}\);)[\s\S]){0,3000}?webPreferences:\k<preferences>(?![\w$])(?:(?!\}\);)[\s\S]){0,500}?\}\);(?:(?!async createWindow\()[\s\S]){0,1200}?let (?<contents>[A-Za-z_$][\w$]*)=\k<window>\.webContents;\k<appearance>===``avatarOverlay``&&\k<contents>\.setBackgroundThrottling\(!1\)"
+            $primaryWindowFactoryPattern = 'async createPrimaryWindow\([^)]*\)\{return this\.createWindow\(\{\.\.\.[A-Za-z_$][\w$]*,appearance:`primary`\}\)\}'
+            $primaryWindowCallPattern = 'let (?<window>[A-Za-z_$][\w$]*)=await (?<manager>[A-Za-z_$][\w$]*)\.createPrimaryWindow\(\{title:(?:[A-Za-z_$][\w$]*\.app\.getName\(\)|`Anti-Codex`\s*),show:(?<show>[A-Za-z_$][\w$]*),initialRoute:(?<route>[A-Za-z_$][\w$]*)===`/`\?void 0:\k<route>\}\);return \k<show>\|\|[A-Za-z_$][\w$]*\(\k<window>\),\k<window>\};return\{windowIconPath:[A-Za-z_$][\w$]*,windowManager:\k<manager>,'
+            $backgroundThrottlingRegionMatches = [regex]::Matches($asarText, $backgroundThrottlingRegionPattern)
+            $primaryWindowFactoryMatches = [regex]::Matches($asarText, $primaryWindowFactoryPattern)
+            $primaryWindowCallMatches = [regex]::Matches($asarText, $primaryWindowCallPattern)
+            $primaryWindowFactoryAdjacent = $false
+            if ($backgroundThrottlingRegionMatches.Count -eq 1 -and $primaryWindowFactoryMatches.Count -eq 1) {
+                $nextPrimaryWindowFactoryIndex = $asarText.IndexOf('async createPrimaryWindow(', $backgroundThrottlingRegionMatches[0].Index, [StringComparison]::Ordinal)
+                $primaryWindowFactoryAdjacent = $nextPrimaryWindowFactoryIndex -eq $primaryWindowFactoryMatches[0].Index
+            }
+            $primaryWindowCallInInitializer = $false
+            if ($primaryWindowFactoryMatches.Count -eq 1 -and $primaryWindowCallMatches.Count -eq 1) {
+                $primaryWindowInitializerEnd = $asarText.IndexOf('return{windowIconPath:', $primaryWindowFactoryMatches[0].Index, [StringComparison]::Ordinal)
+                $primaryWindowCallInInitializer = $primaryWindowCallMatches[0].Index -gt $primaryWindowFactoryMatches[0].Index -and
+                    $primaryWindowInitializerEnd -gt $primaryWindowCallMatches[0].Index
+            }
+            if ([regex]::Matches($asarText, $originalBackgroundThrottlingPattern).Count -ne 0 -or
+                [regex]::Matches($asarText, $patchedBackgroundThrottlingPattern).Count -ne 1 -or
+                $backgroundThrottlingRegionMatches.Count -ne 1 -or
+                $primaryWindowFactoryMatches.Count -ne 1 -or
+                -not $primaryWindowFactoryAdjacent -or
+                $primaryWindowCallMatches.Count -ne 1 -or
+                -not $primaryWindowCallInInitializer) {
+                $failures.Add("active host primary-window background throttling patch is invalid") | Out-Null
+            }
+        } catch {
+            $failures.Add("active host primary-window background throttling validation failed: $($_.Exception.Message)") | Out-Null
         }
     }
 

@@ -39,6 +39,7 @@ $fixedShellCriticalPatches = @(
     "app-name",
     "app-user-model-id",
     "session-title",
+    "primary-window-background-throttling",
     "startup-mcp-config-reload",
     "app-server-managed-session-flags",
     "config-write",
@@ -539,7 +540,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Critical Anti-Codex compatibility patches failed. No valid host marker was created."
 }
 $brandResult = try { (($brandOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex compatibility patch receipt is invalid." }
-if ([string]$brandResult.hostPatchRevision -ne "7") {
+if ([string]$brandResult.hostPatchRevision -ne "8") {
     throw "Anti-Codex compatibility patch revision is invalid."
 }
 if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path $antiCodexHost)) {

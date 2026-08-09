@@ -14,6 +14,42 @@ const hostSync = resolve(projectRoot, "scripts", "sync-anticodex.ps1");
 const runtimeSync = resolve(projectRoot, "scripts", "sync-anticodex-runtime.ps1");
 const syncReadiness = resolve(projectRoot, "scripts", "test-anticodex-sync-readiness.ps1");
 const POWERSHELL_TIMEOUT_MS = 30_000;
+const CURRENT_CRITICAL_PATCHES = [
+  "package-json",
+  "webview-html-title",
+  "app-name",
+  "app-user-model-id",
+  "session-title",
+  "primary-window-background-throttling",
+  "startup-mcp-config-reload",
+  "app-server-managed-session-flags",
+  "config-write",
+  "auth-requirement",
+  "app-route-gate",
+  "profile-dropdown-settings",
+  "settings-external-links",
+  "crash-recovery-page",
+  "browser-window-icon",
+  "windows-tray-icon",
+  "local-model-availability",
+];
+const patchedBackgroundThrottling = "backgroundThrottling:({primary:!1,avatarOverlay:!1})[o]";
+const primaryWindowFactory = "async createPrimaryWindow(e={}){return this.createWindow({...e,appearance:`primary`})}";
+const primaryWindowCall = "let n=await L.createPrimaryWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,";
+const primaryWindowBackgroundThrottlingChain = (property) => [
+  `async createWindow(e={}){let {appearance:o=\`primary\`}=e,j={preload:p,${property},contextIsolation:!0,nodeIntegration:!1,spellcheck:!0,devTools:!0},{backgroundColor:M,backgroundMaterial:N}=I(o),P=new l.BrowserWindow({backgroundColor:M,webPreferences:j});let F=P.webContents;o===\`avatarOverlay\`&&F.setBackgroundThrottling(!1)}`,
+  primaryWindowFactory,
+  primaryWindowCall,
+].join("");
+const CURRENT_PATCHED_ASAR = primaryWindowBackgroundThrottlingChain(patchedBackgroundThrottling);
+const CURRENT_DISPLACED_FACTORY_ASAR = CURRENT_PATCHED_ASAR.replace(
+  primaryWindowFactory,
+  "async createPrimaryWindow(e={}){return this.otherWindow(e)}",
+) + primaryWindowFactory;
+const CURRENT_DISPLACED_CALL_ASAR = CURRENT_PATCHED_ASAR.replace(
+  primaryWindowCall,
+  "let n=await L.otherWindow({title:l.app.getName(),show:e,initialRoute:t===`/`?void 0:t});return e||oe(n),n};return{windowIconPath:j,windowManager:L,",
+) + `function unused(){${primaryWindowCall}}`;
 
 test("Windows maintenance scripts delegate to Windows PowerShell when hosted by PowerShell Core", () => {
   for (const scriptPath of [installer, hostSync, runtimeSync]) {
@@ -429,7 +465,7 @@ test("update check clears stale running operation when active host is already sy
     const activeRoot = resolve(installRoot, "codex-patched-app");
     const fileContents = {
       antiCodexExe: "same-host",
-      appAsar: "patched-asar",
+      appAsar: CURRENT_PATCHED_ASAR,
       codexCli: "same-cli",
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
@@ -460,7 +496,8 @@ test("update check clears stale running operation when active host is already sy
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
       patchProfile: "fixed-shell-v1",
-      hostPatchRevision: 7,
+      hostPatchRevision: 8,
+      criticalPatches: CURRENT_CRITICAL_PATCHES,
       source: {
         packageName: "explicit",
         packageVersion: "test-version",
@@ -525,7 +562,7 @@ test("v1 or v2 without a full unpacked inventory requires migration even when so
     const activeRoot = resolve(installRoot, "codex-patched-app");
     const fileContents = {
       antiCodexExe: "same-host",
-      appAsar: "patched-asar",
+      appAsar: CURRENT_PATCHED_ASAR,
       codexCli: "same-cli",
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
@@ -587,7 +624,7 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     const unpackedRoot = resolve(activeRoot, "resources", "app.asar.unpacked");
     const fileContents = {
       antiCodexExe: "same-host",
-      appAsar: "patched-asar",
+      appAsar: CURRENT_PATCHED_ASAR,
       codexCli: "same-cli",
       hostIcon: "fake-icon",
       trayIcon: "fake-tray-icon",
@@ -625,7 +662,8 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
       patchProfile: "fixed-shell-v1",
-      hostPatchRevision: 7,
+      hostPatchRevision: 8,
+      criticalPatches: CURRENT_CRITICAL_PATCHES,
       source: {
         packageName: "explicit",
         codexHost: sha256(fileContents.antiCodexExe),
@@ -661,6 +699,45 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
 
     const initial = runCheck();
     assert.equal(initial.updateNeeded, false, JSON.stringify(initial));
+    const originalThrottleAsar = "backgroundThrottling:o!==`avatarOverlay`&&void 0";
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), originalThrottleAsar);
+    fs.writeFileSync(markerPath, JSON.stringify({
+      ...validManifest,
+      files: { ...validManifest.files, appAsar: sha256(originalThrottleAsar) },
+    }));
+    const staleBackgroundThrottling = runCheck();
+    assert.equal(staleBackgroundThrottling.updateNeeded, true, JSON.stringify(staleBackgroundThrottling));
+    assert.equal(staleBackgroundThrottling.reason, "active_host_guardrail_failed");
+    assert.ok(staleBackgroundThrottling.guardrails.failures.some((failure) => /background throttling/i.test(failure)));
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), patchedBackgroundThrottling);
+    fs.writeFileSync(markerPath, JSON.stringify({
+      ...validManifest,
+      files: { ...validManifest.files, appAsar: sha256(patchedBackgroundThrottling) },
+    }));
+    const decoyBackgroundThrottling = runCheck();
+    assert.equal(decoyBackgroundThrottling.updateNeeded, true, JSON.stringify(decoyBackgroundThrottling));
+    assert.equal(decoyBackgroundThrottling.reason, "active_host_guardrail_failed");
+    assert.ok(decoyBackgroundThrottling.guardrails.failures.some((failure) => /background throttling/i.test(failure)));
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), CURRENT_DISPLACED_FACTORY_ASAR);
+    fs.writeFileSync(markerPath, JSON.stringify({
+      ...validManifest,
+      files: { ...validManifest.files, appAsar: sha256(CURRENT_DISPLACED_FACTORY_ASAR) },
+    }));
+    const displacedFactory = runCheck();
+    assert.equal(displacedFactory.updateNeeded, true, JSON.stringify(displacedFactory));
+    assert.equal(displacedFactory.reason, "active_host_guardrail_failed");
+    assert.ok(displacedFactory.guardrails.failures.some((failure) => /background throttling/i.test(failure)));
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), CURRENT_DISPLACED_CALL_ASAR);
+    fs.writeFileSync(markerPath, JSON.stringify({
+      ...validManifest,
+      files: { ...validManifest.files, appAsar: sha256(CURRENT_DISPLACED_CALL_ASAR) },
+    }));
+    const displacedCall = runCheck();
+    assert.equal(displacedCall.updateNeeded, true, JSON.stringify(displacedCall));
+    assert.equal(displacedCall.reason, "active_host_guardrail_failed");
+    assert.ok(displacedCall.guardrails.failures.some((failure) => /background throttling/i.test(failure)));
+    fs.writeFileSync(resolve(activeRoot, "resources", "app.asar"), fileContents.appAsar);
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
     fs.writeFileSync(markerPath, JSON.stringify({ ...validManifest, hostPatchRevision: 2 }));
     const previousPatchRevision = runCheck();
     assert.equal(previousPatchRevision.updateNeeded, true, JSON.stringify(previousPatchRevision));

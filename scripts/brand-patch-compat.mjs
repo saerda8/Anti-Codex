@@ -598,6 +598,147 @@ export function patchPrimaryWindowRestoreRepaint(text) {
     + source.slice(match.index + original.length);
 }
 
+const PRIMARY_WINDOW_BACKGROUND_THROTTLING_ORIGINAL_PATTERN =
+  /backgroundThrottling:(?<appearance>[\w$]+)!==`avatarOverlay`&&void 0/g;
+const PRIMARY_WINDOW_BACKGROUND_THROTTLING_PATCHED_PATTERN =
+  /backgroundThrottling:\(\{primary:!1,avatarOverlay:!1\}\)\[(?<appearance>[\w$]+)\]/g;
+const PRIMARY_WINDOW_FACTORY_PATTERN =
+  /async createPrimaryWindow\([^)]*\)\{return this\.createWindow\(\{\.\.\.[\w$]+,appearance:`primary`\}\)\}/g;
+const PRIMARY_WINDOW_CALL_PATTERN =
+  /let (?<window>[\w$]+)=await (?<manager>[\w$]+)\.createPrimaryWindow\(\{title:(?:[\w$]+\.app\.getName\(\)|`Anti-Codex`\s*),show:(?<show>[\w$]+),initialRoute:(?<route>[\w$]+)===`\/`\?void 0:\k<route>\}\);return \k<show>\|\|[\w$]+\(\k<window>\),\k<window>\};return\{windowIconPath:[\w$]+,windowManager:\k<manager>,/g;
+const AVATAR_OVERLAY_BACKGROUND_THROTTLING_PATTERN =
+  /let (?<contents>[\w$]+)=(?<window>[\w$]+)\.webContents;(?<appearance>[\w$]+)===`avatarOverlay`&&\k<contents>\.setBackgroundThrottling\(!1\)/g;
+const PRIMARY_WINDOW_ICON_PADDING_PATTERN =
+  /(?<prefix>\.\.\.process\.platform===`win32`\?\{icon:`icon\.ico`,autoHideMenuBar:!0\}:\{\},)(?<padding> *)(?<suffix>backgroundMaterial:)/g;
+
+function primaryWindowBackgroundThrottlingRegion(source, propertyMatch) {
+  const start = source.lastIndexOf("async createWindow(", propertyMatch.index);
+  const end = source.indexOf("async createPrimaryWindow(", propertyMatch.index);
+  if (start < 0 || end <= propertyMatch.index) return null;
+  return { start, end, text: source.slice(start, end) };
+}
+
+function primaryWindowBackgroundThrottlingState(source) {
+  const original = allMatches(source, PRIMARY_WINDOW_BACKGROUND_THROTTLING_ORIGINAL_PATTERN);
+  const patched = allMatches(source, PRIMARY_WINDOW_BACKGROUND_THROTTLING_PATCHED_PATTERN);
+  const factories = allMatches(source, PRIMARY_WINDOW_FACTORY_PATTERN);
+  const calls = allMatches(source, PRIMARY_WINDOW_CALL_PATTERN);
+  const propertyMatch = original[0] ?? patched[0] ?? null;
+  const region = propertyMatch ? primaryWindowBackgroundThrottlingRegion(source, propertyMatch) : null;
+  const avatar = region ? allMatches(region.text, AVATAR_OVERLAY_BACKGROUND_THROTTLING_PATTERN) : [];
+  const iconPadding = region ? allMatches(region.text, PRIMARY_WINDOW_ICON_PADDING_PATTERN) : [];
+  const appearance = propertyMatch?.groups?.appearance ?? "";
+  const initializerEnd = factories[0]
+    ? source.indexOf("return{windowIconPath:", factories[0].index)
+    : -1;
+  const callInInitializer = calls.length === 1
+    && factories.length === 1
+    && calls[0].index > factories[0].index
+    && initializerEnd > calls[0].index;
+  const preferenceBinding = region
+    ? allMatches(
+      region.text,
+      /(?<preferences>[A-Za-z_$][\w$]*)=\{preload:[\s\S]{0,400}?backgroundThrottling:[\s\S]{0,220}?\},\{backgroundColor:/g,
+    )
+    : [];
+  const preferences = preferenceBinding[0]?.groups?.preferences ?? "";
+  const browserWindows = region && preferences
+    ? allMatches(
+      region.text,
+      new RegExp(`(?<window>[\\w$]+)=new [\\w$]+\\.BrowserWindow\\((?:(?!\\}\\);)[\\s\\S]){0,3000}?webPreferences:${preferences}(?![\\w$])(?:(?!\\}\\);)[\\s\\S]){0,500}?\\}\\);`, "g"),
+    )
+    : [];
+  return {
+    original,
+    patched,
+    factories,
+    calls,
+    avatar,
+    iconPadding,
+    preferenceBinding,
+    browserWindows,
+    region,
+    appearance,
+    avatarAppearance: avatar[0]?.groups?.appearance ?? "",
+    avatarWindow: avatar[0]?.groups?.window ?? "",
+    browserWindow: browserWindows[0]?.groups?.window ?? "",
+    factoryAdjacent: Boolean(region && factories[0]?.index === region.end),
+    callInInitializer,
+  };
+}
+
+function supportedPrimaryWindowBackgroundThrottlingState(state) {
+  return state.original.length + state.patched.length === 1
+    && state.factories.length === 1
+    && state.calls.length === 1
+    && state.avatar.length === 1
+    && state.iconPadding.length === 1
+    && state.preferenceBinding.length === 1
+    && state.browserWindows.length === 1
+    && state.region
+    && state.appearance
+    && state.appearance === state.avatarAppearance
+    && state.browserWindow
+    && state.browserWindow === state.avatarWindow
+    && state.factoryAdjacent
+    && state.callInInitializer;
+}
+
+export function hasPrimaryWindowBackgroundThrottling(text) {
+  const state = primaryWindowBackgroundThrottlingState(String(text ?? ""));
+  return Boolean(supportedPrimaryWindowBackgroundThrottlingState(state)
+    && state.original.length === 0
+    && state.patched.length === 1);
+}
+
+export function patchPrimaryWindowBackgroundThrottling(text) {
+  const source = String(text ?? "");
+  const state = primaryWindowBackgroundThrottlingState(source);
+  if (!supportedPrimaryWindowBackgroundThrottlingState(state)) {
+    throw new Error("Expected exactly one supported primary window background throttling anchor");
+  }
+  if (state.original.length === 0 && state.patched.length === 1) return source;
+  if (state.original.length !== 1 || state.patched.length !== 0) {
+    throw new Error("Expected exactly one supported primary window background throttling anchor");
+  }
+
+  const match = state.original[0];
+  const replacement = `backgroundThrottling:({primary:!1,avatarOverlay:!1})[${state.appearance}]`;
+  const growth = replacement.length - match[0].length;
+  const iconMatch = state.iconPadding[0];
+  const padding = iconMatch.groups.padding;
+  if (growth <= 0 || padding.length < growth) {
+    throw new Error("Primary window background throttling patch does not fit the BrowserWindow compatibility padding");
+  }
+  const region = state.region;
+  const propertyOffset = match.index - region.start;
+  const iconReplacement = `${iconMatch.groups.prefix}${padding.slice(growth)}${iconMatch.groups.suffix}`;
+  let nextRegion = region.text.slice(0, propertyOffset)
+    + replacement
+    + region.text.slice(propertyOffset + match[0].length);
+  const iconOffset = iconMatch.index + growth;
+  nextRegion = nextRegion.slice(0, iconOffset)
+    + iconReplacement
+    + nextRegion.slice(iconOffset + iconMatch[0].length);
+  const next = source.slice(0, region.start) + nextRegion + source.slice(region.end);
+  if (next.length !== source.length || !hasPrimaryWindowBackgroundThrottling(next)) {
+    throw new Error("Primary window background throttling patch did not reach the required state");
+  }
+  return next;
+}
+
+export function selectPrimaryWindowBackgroundThrottlingCandidate(candidates) {
+  const plausible = Array.from(candidates ?? []).filter((candidate) => {
+    const text = String(candidate?.text ?? "");
+    return text.includes("backgroundThrottling:") && text.includes("async createPrimaryWindow(");
+  });
+  if (plausible.length !== 1) {
+    throw new Error(`Expected exactly one primary window background throttling bundle, found ${plausible.length}`);
+  }
+  patchPrimaryWindowBackgroundThrottling(plausible[0].text);
+  return plausible[0];
+}
+
 export function hasPatchedAuthRequirement(text) {
   return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===`chatgpt`\?\1\.account\.email:null/.test(
     String(text ?? ""),
