@@ -1872,6 +1872,7 @@
 
     async function runManagerExclusive(operation) {
       if (managerInitialLoadPromise) await managerInitialLoadPromise;
+      if (!root.isConnected) return false;
       const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
       const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
       if (managerOperationInFlight || actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {
@@ -2431,6 +2432,7 @@
         });
         button.addEventListener("click", async () => {
           if (managerInitialLoadPromise) await managerInitialLoadPromise;
+          if (!root.isConnected) return;
           const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
           const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
           if (managerOperationInFlight || actionInFlight || window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__ || pendingAction || reportedAction) {

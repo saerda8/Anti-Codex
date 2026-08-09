@@ -2088,6 +2088,7 @@ test("Manager waits for its initial status load before accepting an exclusive op
   const runManagerExclusiveBlock = extractNamedFunction(openManagerBlock, "runManagerExclusive");
   assert.match(openManagerBlock, /let managerInitialLoadPromise = null;/);
   assert.match(runManagerExclusiveBlock, /if \(managerInitialLoadPromise\) await managerInitialLoadPromise;/);
+  assert.match(runManagerExclusiveBlock, /if \(!root\.isConnected\) return false;/);
   assert.match(openManagerBlock, /managerInitialLoadPromise = load\(\{ updateResult: !preserveLastActionResult \}\)/);
   assert.match(openManagerBlock, /managerInitialLoadPromise = null;/);
 });
@@ -2099,11 +2100,14 @@ test("Manager action buttons wait for initial status before checking or dispatch
   const clickEnd = installActionsBlock.indexOf("if (requireHighImpactConfirmation", clickStart);
   const clickPrelude = installActionsBlock.slice(clickStart, clickEnd);
   const waitIndex = clickPrelude.indexOf("if (managerInitialLoadPromise) await managerInitialLoadPromise;");
+  const connectedIndex = clickPrelude.indexOf("if (!root.isConnected) return;");
   const pendingIndex = clickPrelude.indexOf("const pendingAction =");
   const reportedIndex = clickPrelude.indexOf("const reportedAction =");
 
   assert.ok(clickStart >= 0 && clickEnd > clickStart, "main Manager action click handler must be discoverable");
   assert.ok(waitIndex >= 0, "main Manager actions must wait for the initial status load");
+  assert.ok(connectedIndex > waitIndex, "closed Manager actions must be cancelled after the wait");
+  assert.ok(connectedIndex < pendingIndex, "Manager lifetime must be checked before pending-action checks");
   assert.ok(waitIndex < pendingIndex, "initial status must settle before pending-action checks");
   assert.ok(waitIndex < reportedIndex, "initial status must settle before reported-action checks");
 });
