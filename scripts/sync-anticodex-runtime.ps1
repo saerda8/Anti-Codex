@@ -276,6 +276,7 @@ $requiredSourceFiles = @(
     "scripts\start-anticodex-update-task.mjs",
     "scripts\start-anticodex-fixed-route.mjs",
     "scripts\anticodex-manager-service.mjs",
+    "scripts\open-antigravity-account-switch.ps1",
     "scripts\build-anticodex-gate5-evidence.mjs",
     "scripts\build-anticodex-gate8-autonomous-video-evidence.mjs",
     "scripts\install-codexplusplus-component.ps1",

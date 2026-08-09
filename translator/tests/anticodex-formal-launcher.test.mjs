@@ -572,6 +572,22 @@ test("runtime sync restarts only the fixed three-layer supervisor", () => {
   assert.doesNotMatch(runtimeSync, /Start-AntiCodexTranslatorDirect|Set-AntiCodexTranslatorRestartEnvironment|Get-AntiCodexTranslatorProcesses|ANTICODEX_TRANSLATOR_RESTART/);
 });
 
+test("runtime sync inventories every local Manager action handler", () => {
+  const requiredList = runtimeSync.match(/\$requiredSourceFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
+  const requiredFiles = new Set(
+    [...requiredList.matchAll(/"([^"]+)"/g)].map((match) => match[1].toLowerCase()),
+  );
+  const managerScripts = [...managerService.matchAll(/\bscript:\s*"([^"]+)"/g)]
+    .map((match) => `scripts\\${match[1]}`.toLowerCase());
+
+  assert.ok(managerScripts.length > 0, "Manager action scripts must be discoverable");
+  assert.deepEqual(
+    managerScripts.filter((relativePath) => !requiredFiles.has(relativePath)),
+    [],
+    "every local Manager action handler must be cryptographically bound by the runtime manifest",
+  );
+});
+
 test("runtime sync relaunches through the durable isolated Launcher task", () => {
   const start = runtimeSync.indexOf("function Invoke-AntiCodexFixedRouteLauncher");
   const end = runtimeSync.indexOf("$syntaxCheckedJavaScriptFiles", start);
