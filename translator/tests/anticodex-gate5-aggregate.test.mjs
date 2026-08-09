@@ -213,6 +213,8 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
         runtimeRoot, scriptsRoot: join(runtimeRoot, "scripts"), manifestPath,
         manifestSha256: hash(readFileSync(manifestPath)), sourceRoot: fixtureSourceRoot, sourceGitHead,
         sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
+        taskRuntimePid: 101,
+        taskRuntimeScriptPath: join(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"),
       },
     },
     actualMouse: true,
@@ -228,6 +230,7 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
       restoredOriginal: true,
       profileUnchanged: true,
     },
+    runtimeIdentity: { supervisorPid: 101 },
     releaseBinding,
   };
   const switches = ["gemini", "claude", "third-party"].map((provider) => ({
@@ -451,6 +454,7 @@ const rejectionCases = [
   ["English Manager label", ({ values }) => { values.managerEvidence.profileEntryText = "Manager"; values.managerEvidence.forbiddenEnglishVisible = true; }, /profile_menu_uses_exact_chinese_manager_label/],
   ["Manager has only 19 actions", ({ values }) => { values.managerEvidence.actionCount = 19; }, /manager_actual_mouse_matrix/],
   ["Manager records side effects", ({ values }) => { values.managerEvidence.zeroSideEffects = false; }, /manager_actual_mouse_matrix/],
+  ["Manager handler PID is not the clicked UI supervisor", ({ values }) => { values.managerEvidence.handlerVerification.provenance.taskRuntimePid = 999; }, /manager_actual_mouse_matrix/],
   ["Manager handler provenance points at the wrong runtime", ({ values }) => {
     values.managerEvidence.handlerVerification.provenance = {
       schema: "anticodex-manager-handler-provenance-v1",

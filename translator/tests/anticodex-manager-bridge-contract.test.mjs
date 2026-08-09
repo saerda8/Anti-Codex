@@ -1532,6 +1532,10 @@ test("Manager real-buttons wrapper exposes a dedicated safe UI-only matrix entry
   assert.match(managerRealButtonsTest, /sourceGitHead/);
   assert.match(managerRealButtonsTest, /manifestSha256/);
   assert.match(managerRealButtonsTest, /fileSha256/);
+  assert.match(managerRealButtonsTest, /Get-CimInstance Win32_Process -Filter "ProcessId = \$TaskRuntimePid"/);
+  assert.match(managerRealButtonsTest, /CommandLineToArgvW/);
+  assert.match(managerRealButtonsTest, /taskRuntimePid\s*=\s*\$TaskRuntimePid/);
+  assert.match(managerRealButtonsTest, /taskRuntimeScriptPath\s*=\s*\$taskRuntimeScriptPath/);
   assert.match(managerRealButtonsTest, /offlineContractVerifiedActions/);
   assert.match(managerRealButtonsTest, /safeRealActionAllowlist/);
   assert.match(managerRealButtonsTest, /liveExecutedActions\s*=\s*@\(\)/);

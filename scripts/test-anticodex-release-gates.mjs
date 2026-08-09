@@ -105,12 +105,13 @@ function normalizedContractPath(value) {
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
 }
 
-function validateManagerHandlerProvenance(handlerVerification) {
+function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
   const contracts = handlerVerification?.contracts || {};
   const entries = Object.entries(contracts);
   const provenance = handlerVerification?.provenance || {};
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
   const sourceGit = currentSourceGitState();
   if (entries.length !== managerActions.length || !entries.every(([action, entry], index) => {
     const expected = managerHandlerContractByAction[action];
@@ -120,6 +121,8 @@ function validateManagerHandlerProvenance(handlerVerification) {
     || !samePath(provenance?.scriptsRoot, resolve(runtimeRoot, "scripts"))
     || !samePath(manifestPath, resolve(runtimeRoot, ".anticodex-runtime-manifest.json"))
     || !samePath(provenance?.sourceRoot, sourceRoot) || sourceGit.ok !== true
+    || taskRuntimePid <= 0 || taskRuntimePid !== Number(runtimeIdentity?.supervisorPid || 0)
+    || !samePath(provenance?.taskRuntimeScriptPath, resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"))
     || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
     || provenance?.sourceGitClean !== true || provenance?.sourceRevisionProvenance !== "git"
     || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
@@ -304,7 +307,7 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || !exactStringList(handlerVerification?.realExecutedActionIds, [])
     || !exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
     || handlerVerification?.allFunctionsVerified !== false
-    || !validateManagerHandlerProvenance(handlerVerification)
+    || !validateManagerHandlerProvenance(handlerVerification, manager?.runtimeIdentity)
     || manager?.profileEntryText !== "管理"
     || manager?.forbiddenEnglishVisible !== false
     || manager?.trayIconPreserved !== true
@@ -921,6 +924,8 @@ function selfTest() {
               runtimeRoot: gate5RuntimeRoot, scriptsRoot: join(gate5RuntimeRoot, "scripts"), manifestPath: gate5ManifestPath,
               manifestSha256: sha256File(gate5ManifestPath), sourceRoot, sourceGitHead: gate5SourceHead,
               sourceGitClean: true, sourceRevisionProvenance: "git", files: gate5RuntimeFiles,
+              taskRuntimePid: 101,
+              taskRuntimeScriptPath: join(gate5RuntimeRoot, "scripts", "start-anticodex-fixed-route.mjs"),
             },
           },
           profileEntryText: "管理", forbiddenEnglishVisible: false, trayIconPreserved: true,
@@ -930,6 +935,7 @@ function selfTest() {
             before: "chatCompletions", alternate: "responses", restored: "chatCompletions",
             selectedAlternate: true, restoredOriginal: true, profileUnchanged: true,
           },
+          runtimeIdentity: { supervisorPid: 101 },
         },
         frontend_model_hot_switch: {
           ok: true, usedRealTraffic: false, sameTask: true, taskId: gate5TaskId,
@@ -964,6 +970,7 @@ function selfTest() {
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.protocolInteraction.restored = "responses"; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted an unrestored protocol");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.protocolInteraction.profileUnchanged = false; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a changed profile");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.runtimeRoot = join(temporaryRoot, "wrong-runtime"); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from the wrong runtime root");
+    expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.taskRuntimePid = 999; }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted Manager handler evidence from a different supervisor PID");
     expectUiFailure((ui) => { ui.manager_actual_mouse_matrix.handlerVerification.provenance.files[0].fileSha256 = "f".repeat(64); }, "gate5_current_ui_manager_actual_mouse_matrix", "Gate 5 accepted a stale Manager handler file hash");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");

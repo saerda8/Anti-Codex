@@ -145,12 +145,13 @@ function currentSourceGitState() {
   return { ok: true, head, clean: String(statusResult.stdout || "").trim() === "" };
 }
 
-function validateManagerHandlerProvenance(handlerVerification) {
+function validateManagerHandlerProvenance(handlerVerification, runtimeIdentity) {
   const contracts = handlerVerification?.contracts || {};
   const contractEntries = Object.entries(contracts);
   const provenance = handlerVerification?.provenance || {};
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
   const files = Array.isArray(provenance?.files) ? provenance.files : [];
   const sourceGit = currentSourceGitState();
   if (contractEntries.length !== managerActions.length
@@ -168,6 +169,9 @@ function validateManagerHandlerProvenance(handlerVerification) {
     || !samePath(provenance?.sourceRoot, sourceRoot)
     || sourceGit.ok !== true || sourceGit.clean !== true
     || provenance?.sourceGitClean !== sourceGit.clean
+    || taskRuntimePid <= 0
+    || taskRuntimePid !== Number(runtimeIdentity?.supervisorPid || 0)
+    || !samePath(provenance?.taskRuntimeScriptPath, resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs"))
     || provenance?.sourceRevisionProvenance !== "git"
     || String(provenance?.sourceGitHead || "").toLowerCase() !== sourceGit.head
     || !existsSync(manifestPath) || !statSync(manifestPath).isFile()
@@ -396,7 +400,7 @@ function validateManager(data) {
     && exactStringList(handlerVerification?.realExecutedActionIds, [])
     && exactStringList(handlerVerification?.pendingAuthorizedActionIds, highImpactManagerActions)
     && handlerVerification?.allFunctionsVerified === false
-    && validateManagerHandlerProvenance(handlerVerification)
+    && validateManagerHandlerProvenance(handlerVerification, data?.runtimeIdentity)
     && data?.actualMouse === true
     && data?.profileEntryText === "管理"
     && data?.forbiddenEnglishVisible === false

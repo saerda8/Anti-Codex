@@ -243,14 +243,72 @@ function Get-ManagerFileSha256 {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
 }
 
+if (-not ("AntiCodex.ManagerEvidence.WindowsCommandLine" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace AntiCodex.ManagerEvidence
+{
+    public static class WindowsCommandLine
+    {
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CommandLineToArgvW(string commandLine, out int argumentCount);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr LocalFree(IntPtr value);
+
+        public static string[] Parse(string commandLine)
+        {
+            if (String.IsNullOrWhiteSpace(commandLine)) return new string[0];
+            int argumentCount;
+            IntPtr argumentVector = CommandLineToArgvW(commandLine, out argumentCount);
+            if (argumentVector == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not parse the Manager runtime command line.");
+            try
+            {
+                string[] arguments = new string[argumentCount];
+                for (int index = 0; index < argumentCount; index++)
+                    arguments[index] = Marshal.PtrToStringUni(Marshal.ReadIntPtr(argumentVector, index * IntPtr.Size)) ?? String.Empty;
+                return arguments;
+            }
+            finally
+            {
+                LocalFree(argumentVector);
+            }
+        }
+    }
+}
+'@
+}
+
 function Get-ManagerHandlerContractEvidence {
-    param([string]$RuntimeRoot, [string[]]$ActionNames)
+    param([string]$RuntimeRoot, [string[]]$ActionNames, [int]$TaskRuntimePid)
     $runtimeFull = [IO.Path]::GetFullPath($RuntimeRoot).TrimEnd("\")
     $scriptsRoot = Join-Path $runtimeFull "scripts"
     $manifestPath = Join-Path $runtimeFull ".anticodex-runtime-manifest.json"
+    $taskRuntimeScriptPath = [IO.Path]::GetFullPath((Join-Path $scriptsRoot "start-anticodex-fixed-route.mjs"))
     $manifest = $null
     $manifestSourceRoot = ""
     $provenanceVerified = $true
+    try {
+        if ($TaskRuntimePid -le 0) { throw "fixed-route supervisor PID is missing" }
+        $taskRuntimeProcesses = @(Get-CimInstance Win32_Process -Filter "ProcessId = $TaskRuntimePid" -ErrorAction Stop)
+        if ($taskRuntimeProcesses.Count -ne 1) { throw "exact fixed-route supervisor PID did not resolve to one process" }
+        $taskRuntimeArguments = @([AntiCodex.ManagerEvidence.WindowsCommandLine]::Parse([string]$taskRuntimeProcesses[0].CommandLine))
+        $matchingScriptArguments = @($taskRuntimeArguments | Where-Object {
+            try {
+                ([IO.Path]::GetFullPath([string]$_)).Equals($taskRuntimeScriptPath, [StringComparison]::OrdinalIgnoreCase)
+            } catch { $false }
+        })
+        if ($matchingScriptArguments.Count -ne 1) {
+            throw "exact fixed-route supervisor command line does not identify the bound runtime script"
+        }
+    } catch {
+        $provenanceVerified = $false
+        Add-Failure "Manager task runtime provenance could not be verified: $($_.Exception.Message)"
+    }
     try {
         if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
             throw "runtime manifest is missing"
@@ -400,6 +458,8 @@ function Get-ManagerHandlerContractEvidence {
             sourceGitHead = if ($manifest) { ([string]$manifest.sourceGitHead).ToLowerInvariant() } else { "" }
             sourceGitClean = if ($manifest) { [bool]$manifest.sourceGitClean } else { $false }
             sourceRevisionProvenance = if ($manifest) { [string]$manifest.sourceRevisionProvenance } else { "" }
+            taskRuntimePid = $TaskRuntimePid
+            taskRuntimeScriptPath = $taskRuntimeScriptPath
             files = @($fileEvidence.Values)
         }
     }
@@ -437,10 +497,11 @@ $allowedActions = @("updateCheck", "repairShortcuts", "mcpSkills", "pluginCapabi
 
 if ($UiOnlyMatrix) {
     $reportName = "manager-ui-only-button-matrix"
-    $handlerEvidence = Get-ManagerHandlerContractEvidence -RuntimeRoot $runtimeRootFull -ActionNames $expectedActions
-    $handlerContracts = $handlerEvidence.contracts
     $matrixRun = Invoke-ManagerButtonAction -ActionName "ui-only-matrix" -RunUiOnlyMatrix
     $payload = $matrixRun.payload
+    $taskRuntimePid = if ($payload) { [int]$payload.processIdentity.supervisorPid } else { 0 }
+    $handlerEvidence = Get-ManagerHandlerContractEvidence -RuntimeRoot $runtimeRootFull -ActionNames $expectedActions -TaskRuntimePid $taskRuntimePid
+    $handlerContracts = $handlerEvidence.contracts
 
     if ($matrixRun.exitCode -eq -1) {
         Add-Failure "Manager UI-only button matrix timed out"

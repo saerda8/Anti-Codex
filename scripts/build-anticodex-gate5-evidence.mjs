@@ -669,11 +669,14 @@ function normalizedContractPath(value) {
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
 }
 
-function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries) {
+function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries, runtimeIdentity) {
   const provenance = handlerContracts?.provenance || {};
   const runtimeRoot = resolve(String(provenance?.runtimeRoot || ""));
   const scriptsRoot = resolve(String(provenance?.scriptsRoot || ""));
   const manifestPath = resolve(String(provenance?.manifestPath || ""));
+  const taskRuntimePid = Number(provenance?.taskRuntimePid || 0);
+  const taskRuntimeScriptPath = resolve(String(provenance?.taskRuntimeScriptPath || ""));
+  const expectedTaskRuntimeScriptPath = resolve(runtimeRoot, "scripts", "start-anticodex-fixed-route.mjs");
   const expectedFiles = [...new Set(contractEntries.flatMap(([, entry]) => [
     normalizedContractPath(entry?.source),
     String(entry?.handler || "").toLowerCase().endsWith(".ps1")
@@ -694,6 +697,11 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
     && String(provenance.sourceGitHead).toLowerCase() === sourceHead
     && files.length === expectedFiles.length,
   "manager-matrix: handler runtime/source provenance is incomplete or stale");
+  requireCondition(taskRuntimePid > 0
+    && taskRuntimePid === Number(wrapper?.processIdentity?.supervisorPid || 0)
+    && taskRuntimePid === Number(runtimeIdentity?.supervisorPid || 0)
+    && sameNativePath(taskRuntimeScriptPath, expectedTaskRuntimeScriptPath),
+  "manager-matrix: handler task runtime PID/script does not match the fixed-route supervisor command line");
   requireCondition(existsSync(manifestPath) && statSync(manifestPath).isFile()
     && /^[a-f0-9]{64}$/i.test(String(provenance?.manifestSha256 || ""))
     && sha256(readFileSync(manifestPath)) === String(provenance.manifestSha256).toLowerCase(),
@@ -743,6 +751,8 @@ function validateManagerHandlerProvenance(wrapper, handlerContracts, contractEnt
     sourceGitHead: sourceHead,
     sourceGitClean: true,
     sourceRevisionProvenance: "git",
+    taskRuntimePid,
+    taskRuntimeScriptPath,
     files: expectedFiles.map((path) => ({
       relativePath: path,
       fileSha256: String(fileByPath.get(path).fileSha256).toLowerCase(),
@@ -797,7 +807,7 @@ function normalizeManager(matrixSource, profileSource, closeSource, protocolSour
         && String(entry?.handler || "") === expected?.[2];
     }),
   "manager-matrix: offline handler contract mapping is missing or UI-only evidence claims functional execution");
-  const handlerProvenance = validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries);
+  const handlerProvenance = validateManagerHandlerProvenance(wrapper, handlerContracts, contractEntries, runtimeIdentity);
 
   const profile = profileSource.data?.profileEntry || profileSource.data;
   requireCondition(profileSource.data?.ok === true

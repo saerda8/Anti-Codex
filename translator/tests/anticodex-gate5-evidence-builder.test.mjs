@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -255,6 +256,8 @@ function buildRawEvidence(root) {
             runtimeRoot, scriptsRoot: runtimeScriptsRoot, manifestPath,
             manifestSha256: sha256(readFileSync(manifestPath)), sourceRoot, sourceGitHead,
             sourceGitClean: true, sourceRevisionProvenance: "git", files: runtimeFiles,
+            taskRuntimePid: runtimeProcessIdentity.supervisorPid,
+            taskRuntimeScriptPath: join(runtimeScriptsRoot, "start-anticodex-fixed-route.mjs"),
           },
           offlineContractVerifiedActions: actions,
           safeRealActionAllowlist: safeRealActions,
@@ -1078,6 +1081,34 @@ test("builder rejects handler truth bound to the wrong runtime root or stale fil
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  }
+});
+
+test("builder rejects self-consistent handler truth from a runtime copy not owned by the clicked UI supervisor", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-manager-runtime-owner-"));
+  try {
+    const state = buildRawEvidence(root);
+    const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
+    const copiedRuntimeRoot = join(root, "copied-runtime");
+    cpSync(join(root, "runtime"), copiedRuntimeRoot, { recursive: true });
+    const copiedManifestPath = join(copiedRuntimeRoot, ".anticodex-runtime-manifest.json");
+    const copiedManifest = JSON.parse(readFileSync(copiedManifestPath, "utf8"));
+    copiedManifest.activeRuntime = copiedRuntimeRoot;
+    writeFileSync(copiedManifestPath, `${JSON.stringify(copiedManifest, null, 2)}\n`, "utf8");
+    matrix.runtimeRoot = copiedRuntimeRoot;
+    Object.assign(matrix.managerButton.payload.handlerContractEvidence.provenance, {
+      runtimeRoot: copiedRuntimeRoot,
+      scriptsRoot: join(copiedRuntimeRoot, "scripts"),
+      manifestPath: copiedManifestPath,
+      manifestSha256: sha256(readFileSync(copiedManifestPath)),
+    });
+    writeJson(state.paths.managerMatrix, matrix, { signed: true });
+
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /task runtime pid|fixed-route supervisor|command line/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
