@@ -6,7 +6,6 @@ import {
   hasAppServerManagedSessionFlags,
   hasCrashRecoveryPageSignature,
   hasPatchedAuthRequirement,
-  hasPrimaryWindowRestoreRepaint,
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
   hasSettingsExternalNavigationPatch,
@@ -18,7 +17,6 @@ import {
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchCrashRecoveryPage,
   patchLocalModelAvailability,
-  patchPrimaryWindowRestoreRepaint,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
   patchSettingsExternalNavigation,
@@ -31,7 +29,7 @@ import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.m
 const argv = process.argv.slice(2);
 const profileIndex = argv.indexOf("--profile");
 const patchProfile = profileIndex >= 0 ? String(argv[profileIndex + 1] || "") : "fixed-shell-v1";
-const hostPatchRevision = 6;
+const hostPatchRevision = 7;
 const asarPath = argv[0];
 const forcedFailurePatch = String(process.env.ANTICODEX_TEST_FAIL_CRITICAL_PATCH || "").trim();
 
@@ -735,19 +733,6 @@ function findCrashRecoveryPagePatch(fd, header, dataOffset) {
   return [selected.rel, patchCrashRecoveryPage];
 }
 
-function findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset) {
-  for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
-    const { buf } = readFileFromAsar(fd, entry, dataOffset);
-    const text = buf.toString("utf8");
-    if (hasPrimaryWindowRestoreRepaint(text) || text.includes("trackPrimaryWindow(")) {
-      patchPrimaryWindowRestoreRepaint(text);
-      return [rel, patchPrimaryWindowRestoreRepaint];
-    }
-  }
-  throw new Error("Could not find the supported primary-window tracker under .vite/build/main-*.js");
-}
-
 function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
   const candidates = [];
   for (const [rel, entry] of walkFiles(header)) {
@@ -904,7 +889,6 @@ const patchSpecs = [
   ["settings-external-links", () => findSettingsExternalLinksPatch(fd, header, dataOffset)],
   ["crash-recovery-page", () => findCrashRecoveryPagePatch(fd, header, dataOffset)],
   ["browser-window-icon", () => findBrowserWindowIconPatch(fd, header, dataOffset)],
-  ["primary-window-restore-repaint", () => findPrimaryWindowRestoreRepaintPatch(fd, header, dataOffset)],
   ["windows-tray-icon", () => findWindowsTrayIconPatch(fd, header, dataOffset)],
   ["computer-use-legacy-notify-opt-out", () => findComputerUseLegacyNotifyOptOutPatch(fd, header, dataOffset)],
   ["local-model-availability", () => findLocalModelAvailabilityPatch(fd, header, dataOffset)],
@@ -931,7 +915,6 @@ const fixedShellCriticalPatchNames = new Set([
   "settings-external-links",
   "crash-recovery-page",
   "browser-window-icon",
-  "primary-window-restore-repaint",
   "windows-tray-icon",
   "local-model-availability",
 ]);

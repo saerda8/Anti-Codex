@@ -460,7 +460,7 @@ test("update check clears stale running operation when active host is already sy
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
       patchProfile: "fixed-shell-v1",
-      hostPatchRevision: 6,
+      hostPatchRevision: 7,
       source: {
         packageName: "explicit",
         packageVersion: "test-version",
@@ -625,7 +625,7 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
       patchProfile: "fixed-shell-v1",
-      hostPatchRevision: 6,
+      hostPatchRevision: 7,
       source: {
         packageName: "explicit",
         codexHost: sha256(fileContents.antiCodexExe),

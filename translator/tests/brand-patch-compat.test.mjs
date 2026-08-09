@@ -120,7 +120,7 @@ test("wires the crash recovery page as one fixed-shell critical patch", () => {
   assert.match(brandPatcherSource, /\["crash-recovery-page",\s*\(\)\s*=>\s*findCrashRecoveryPagePatch/);
   const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
   assert.equal((criticalBlock.match(/"crash-recovery-page"/g) ?? []).length, 1);
-  assert.match(brandPatcherSource, /const hostPatchRevision = 6;/);
+  assert.match(brandPatcherSource, /const hostPatchRevision = 7;/);
 });
 
 test("selects exactly one signed crash bundle and never hides a partial second bundle", () => {
@@ -142,7 +142,7 @@ test("selects exactly one signed crash bundle and never hides a partial second b
     ]),
     /exactly one.*signature/i,
   );
-  const finder = brandPatcherSource.match(/function findCrashRecoveryPagePatch[\s\S]*?(?=function findPrimaryWindowRestoreRepaintPatch)/)?.[0] ?? "";
+  const finder = brandPatcherSource.match(/function findCrashRecoveryPagePatch[\s\S]*?(?=function findLocalModelAvailabilityPatch)/)?.[0] ?? "";
   assert.match(finder, /hasCrashRecoveryPageSignature\(text\)/);
   assert.match(finder, /if\s*\(hasCrashRecoveryPageSignature\(text\)\)\s*\{\s*bundles\.push/);
 });
@@ -490,39 +490,16 @@ test("keeps Codex's official primary BrowserWindow throttling policy", () => {
   assert.doesNotMatch(brandPatcherSource, /patchPrimaryWindowBackgroundThrottling/);
 });
 
-test("defers the primary-window repaint until restore without changing bundle size", () => {
+test("revision 7 leaves the official primary-window tracker unpatched", () => {
   const method = "trackPrimaryWindow(e){this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
   const source = `before:${method}:after`;
 
+  const patchSpecs = brandPatcherSource.match(/const patchSpecs = \[[\s\S]*?\n\];/)?.[0] ?? "";
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+  assert.doesNotMatch(patchSpecs, /primary-window-restore-repaint/);
+  assert.doesNotMatch(criticalBlock, /primary-window-restore-repaint/);
   assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(source), false);
-  const patched = brandPatchCompat.patchPrimaryWindowRestoreRepaint(source);
-  const patchedMethod = patched.slice(patched.indexOf("trackPrimaryWindow"), patched.indexOf(":after"));
-
-  assert.equal(patched.length, source.length);
-  assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(patched), true);
-  assert.equal((patchedMethod.match(/on\(`restore`/g) || []).length, 1);
-  assert.match(patchedMethod, /let t=.*?,n=\(\)=>\{try\{e\.webContents\.invalidate\(\)\}catch\{\}\};/);
-  assert.doesNotMatch(patchedMethod, /on\(`focus`,\(\)=>\{[^}]*n\(\)\}\)/);
-  assert.match(patchedMethod, /on\(`restore`,\(\)=>setImmediate\(n\)\)/);
-  assert.equal((patchedMethod.match(/webContents\.invalidate/g) ?? []).length, 1);
-  assert.doesNotMatch(patchedMethod, /on\(`(?:show|hide)`[^}]*invalidate/);
-  assert.equal(brandPatchCompat.patchPrimaryWindowRestoreRepaint(patched), patched);
-  assert.match(brandPatcherSource, /\["primary-window-restore-repaint",\s*\(\)\s*=>\s*findPrimaryWindowRestoreRepaintPatch/);
-  assert.match(brandPatcherSource, /"primary-window-restore-repaint",[\s\S]*?const selectedPatchNames/);
-  assert.throws(
-    () => brandPatchCompat.patchPrimaryWindowRestoreRepaint("trackPrimaryWindow(e){broken}"),
-    /exactly one supported primary-window tracker/i,
-  );
-  assert.throws(
-    () => brandPatchCompat.patchPrimaryWindowRestoreRepaint(`${source}${source}`),
-    /exactly one supported primary-window tracker/i,
-  );
-  for (const windowAlias of ["t", "n"]) {
-    const aliasedMethod = `trackPrimaryWindow(${windowAlias}){this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,()=>{this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())})}`;
-    const aliasedPatched = brandPatchCompat.patchPrimaryWindowRestoreRepaint(aliasedMethod);
-    assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(aliasedPatched), true);
-    assert.doesNotMatch(aliasedPatched, new RegExp(`let ${windowAlias}=`));
-  }
+  assert.doesNotMatch(method, /on\(`restore`|webContents\.invalidate|setImmediate/);
 });
 
 test("routes every Windows tray brand to the Anti-Codex tray resource", () => {

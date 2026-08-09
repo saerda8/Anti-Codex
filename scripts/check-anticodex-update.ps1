@@ -11,7 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$expectedHostPatchRevision = 6
+$expectedHostPatchRevision = 7
 
 if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Anti-Codex" }
 if (-not $StateRoot) { $StateRoot = Join-Path $env:APPDATA "anticodex" }

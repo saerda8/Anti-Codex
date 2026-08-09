@@ -56,37 +56,38 @@ test("host gates require the local node_repl runtime and sandbox helper", () => 
   }
 });
 
-test("candidate validation requires one complete deferred restore repaint", () => {
+test("revision 7 candidate validation requires the official no-repaint tracker", () => {
   assert.match(candidateValidator, /"config-write"/);
   assert.match(candidateValidator, /"app-server-managed-session-flags"/);
   assert.match(candidateValidator, /"settings-external-links"/);
   assert.match(candidateValidator, /configWriteBridgePattern/);
   assert.match(candidateValidator, /\$configWriteBridgePattern\)\.Count -ne 1/);
   assert.match(candidateValidator, /primaryDeferredRestoreRepaintPattern/);
-  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryDeferredRestoreRepaintPattern\)\.Count -ne 1/);
+  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryDeferredRestoreRepaintPattern\)\.Count -ne 0/);
   assert.match(candidateValidator, /primaryFocusRestoreRepaintPattern/);
   assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryFocusRestoreRepaintPattern\)\.Count -ne 0/);
   assert.match(candidateValidator, /anyPrimaryWindowRepaintPattern/);
-  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$anyPrimaryWindowRepaintPattern\)\.Count -ne 1/);
+  assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$anyPrimaryWindowRepaintPattern\)\.Count -ne 0/);
   assert.match(candidateValidator, /legacyPrimaryRestoreRepaintPattern/);
   assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$legacyPrimaryRestoreRepaintPattern\)\.Count -ne 0/);
 });
 
 test("host patch revision is release-bound without changing the fixed-shell profile", () => {
-  assert.match(brandPatcher, /const hostPatchRevision = 6/);
+  assert.match(brandPatcher, /const hostPatchRevision = 7/);
   assert.match(brandPatcher, /hostPatchRevision,/);
   assert.match(installer, /hostPatchRevision\s*=\s*\$HostPatchRevision/);
-  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"6"/);
-  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*6/);
+  assert.match(installer, /\[string\]\$brandResult\.hostPatchRevision\s+-ne\s+"7"/);
+  assert.match(updateChecker, /\$expectedHostPatchRevision\s*=\s*7/);
   assert.match(updateChecker, /active host patch revision is not current/);
   assert.match(updateChecker, /\$sourceFingerprint[\s\S]{0,260}hostPatchRevision=/);
-  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"6"/);
+  assert.match(candidateValidator, /\[string\]\$manifest\.hostPatchRevision\s+-ne\s+"7"/);
   assert.match(candidateValidator, /anticodex-local-settings-only/);
   assert.match(candidateValidator, /securitySettingsEnabled:0/);
   assert.match(candidateValidator, /anticodex-crash-recovery-actions/);
   assert.match(candidateValidator, /appServerCrash\\\.title/);
   assert.match(installer, /"crash-recovery-page"/);
-  assert.match(rollback, /\$currentHostPatchRevision\s*=\s*6/);
+  assert.match(rollback, /\$currentHostPatchRevision\s*=\s*7/);
+  assert.match(rollback, /\$revision6ManifestCompatible/);
   assert.match(rollback, /\$revision5ManifestCompatible/);
   assert.match(rollback, /\$revision4CriticalPatches/);
   for (const source of [brandPatcher, installer, candidateValidator, updateChecker, rollback]) {

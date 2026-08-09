@@ -349,7 +349,7 @@ function Test-AntiCodexAsarPatches {
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowDeferredRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedPrimaryWindowFocusRestoreRepaintCount,
         [Parameter(Mandatory = $true)][ValidateSet(0, 1)][int]$ExpectedLegacyPrimaryWindowRestoreRepaintCount,
-        [ValidateSet(0, 2, 3, 4, 5, 6)][int]$ExpectedHostPatchRevision = 0
+        [ValidateSet(0, 2, 3, 4, 5, 6, 7)][int]$ExpectedHostPatchRevision = 0
     )
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
@@ -365,7 +365,7 @@ function Test-AntiCodexAsarPatches {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
         }
     }
-    if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5, 6)) {
+    if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5, 6, 7)) {
         $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
         if ([regex]::Matches($text, $settingsDefinitionPattern).Count -ne 1 -or
             [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count -ne 1 -or
@@ -454,7 +454,7 @@ function Test-AntiCodexAsarPatches {
                 (Test-SupportedControlAssignments -Region $genericRegion -Variable $retryHandlerVariable -MemoPattern $retryMemoPattern)
         }
     }
-    if ($ExpectedHostPatchRevision -in @(5, 6)) {
+    if ($ExpectedHostPatchRevision -in @(5, 6, 7)) {
         if ($crashTitleOriginalCount -ne 0 -or $crashDescriptionOriginalCount -ne 0 -or
             $crashTitlePatchedCount -ne 1 -or $crashDescriptionPatchedCount -ne 1 -or $crashRecoveryMarkerCount -ne 1 -or
             $genericErrorOriginalCount -ne 1 -or $genericRetryOriginalCount -ne 1 -or
@@ -493,7 +493,7 @@ function Test-AntiCodexAsarPatches {
     }
     $officialTrayGuidCount = [regex]::Matches($text, 'e5768d8b-6936-4f45-b1ad-4c5fb414cb35').Count
     $antiCodexTrayGuidCount = [regex]::Matches($text, 'a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3').Count
-    if ($ExpectedHostPatchRevision -eq 6 -and ($officialTrayGuidCount -ne 0 -or $antiCodexTrayGuidCount -ne 1)) {
+    if ($ExpectedHostPatchRevision -in @(6, 7) -and ($officialTrayGuidCount -ne 0 -or $antiCodexTrayGuidCount -ne 1)) {
         throw "Anti-Codex current host Windows tray GUID identity is invalid."
     }
     if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5) -and ($officialTrayGuidCount -ne 1 -or $antiCodexTrayGuidCount -ne 0)) {
@@ -503,6 +503,10 @@ function Test-AntiCodexAsarPatches {
     $primaryFocusRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),([\w$]+)=\(\)=>\{try\{\1\.webContents\.invalidate\(\)\}catch\{\}\};this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\),\3\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>setImmediate\(\3\)\)\}'
     $legacyPrimaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$]+)=\(\)=>this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\);this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,\2\(\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,\2\(\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\2\),\1\.on\(`restore`,\(\)=>\1\.webContents\.invalidate\?\.\(\)\)\}'
     $anyPrimaryWindowRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.webContents\.invalidate(?:\?\.)?\(\)'
+    $officialPrimaryWindowTrackerPattern = 'trackPrimaryWindow\(([\w$]+)\)\{this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\(\)=>\{this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\}\)\}'
+    if ($ExpectedHostPatchRevision -eq 7 -and [regex]::Matches($text, $officialPrimaryWindowTrackerPattern).Count -ne 1) {
+        throw "Anti-Codex current host does not preserve the official primary-window tracker."
+    }
     if ([regex]::Matches($text, $primaryDeferredRestoreRepaintPattern).Count -ne $ExpectedPrimaryWindowDeferredRestoreRepaintCount) {
         throw "Anti-Codex host app.asar primary-window deferred restore repaint count is invalid."
     }
@@ -547,7 +551,6 @@ function Test-AntiCodexHost {
         "settings-external-links",
         "crash-recovery-page",
         "browser-window-icon",
-        "primary-window-restore-repaint",
         "windows-tray-icon",
         "local-model-availability"
     )
@@ -561,15 +564,16 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host marker patch profile is invalid: $MarkerPath"
     }
     $patchProfile = "fixed-shell-v1"
-    $currentHostPatchRevision = 6
+    $currentHostPatchRevision = 7
     $hostPatchRevisionProperty = $manifest.PSObject.Properties["hostPatchRevision"]
     $legacyHostPatchRevision = $null -eq $hostPatchRevisionProperty
     $hostPatchRevisionText = if ($legacyHostPatchRevision) { "0" } else { [string]$hostPatchRevisionProperty.Value }
-    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", "3", "4", "5", [string]$currentHostPatchRevision)) {
+    if (-not $legacyHostPatchRevision -and $hostPatchRevisionText -notin @("2", "3", "4", "5", "6", [string]$currentHostPatchRevision)) {
         throw "Anti-Codex host marker patch revision is invalid: $MarkerPath"
     }
     $hostPatchRevision = [int]$hostPatchRevisionText
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
+    $revision6CriticalPatches = @($fixedShellCriticalPatches + "primary-window-restore-repaint")
     $revision4CriticalPatches = @(
         "package-json",
         "webview-html-title",
@@ -647,9 +651,12 @@ function Test-AntiCodexHost {
     $currentManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq $currentHostPatchRevision
+    $revision6ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
+        -Recorded $recordedCriticalPatches `
+        -Expected $revision6CriticalPatches) -and $hostPatchRevision -eq 6
     $revision5ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
-        -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq 5
+        -Expected $revision6CriticalPatches) -and $hostPatchRevision -eq 5
     $revision2To4ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $revision4CriticalPatches) -and $hostPatchRevision -in @(2, 3, 4)
@@ -660,6 +667,7 @@ function Test-AntiCodexHost {
         -Recorded $recordedCriticalPatches `
         -Expected $legacyWithoutConfigWriteCriticalPatches)
     if (-not $currentManifestCompatible -and
+        -not $revision6ManifestCompatible -and
         -not $revision5ManifestCompatible -and
         -not $revision2To4ManifestCompatible -and
         -not $previousManifestCompatible -and
@@ -705,6 +713,15 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host unpacked file inventory is incomplete."
     }
     if ($currentManifestCompatible) {
+        Test-AntiCodexAsarPatches `
+            -Path $required.appAsar `
+            -PatchProfile $patchProfile `
+            -ExpectedConfigWriteBridgeCount 1 `
+            -ExpectedPrimaryWindowDeferredRestoreRepaintCount 0 `
+            -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
+            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
+            -ExpectedHostPatchRevision $hostPatchRevision
+    } elseif ($revision6ManifestCompatible) {
         Test-AntiCodexAsarPatches `
             -Path $required.appAsar `
             -PatchProfile $patchProfile `
