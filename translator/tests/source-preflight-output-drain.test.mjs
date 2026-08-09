@@ -15,6 +15,9 @@ test("source preflight keeps translator test concurrency below the Windows proce
   const source = await readFile(new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url), "utf8");
 
   assert.match(source, /@\("--test",\s*"--test-concurrency=2"\)\s*\+\s*\$testFiles/);
+  assert.match(source, /\[int\]\$TranslatorTimeoutSec\s*=\s*600/);
+  assert.match(source, /\$translatorTimeout\s*=\s*\[Math\]::Max\(600,\s*\$TranslatorTimeoutSec\)/);
+  assert.match(source, /translator source regression[\s\S]{0,500}-TimeoutSec\s+\$translatorTimeout/);
 });
 
 test("source preflight leaves patch-format whitespace to hash and replay verification", async () => {

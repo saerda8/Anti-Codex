@@ -3638,3 +3638,6 @@ The accepted media task remains frozen. Current source closure is not installed 
 - [ ] Commit the current source, run one exact clean no-traffic preflight, then use one controlled shutdown to activate revision 6. Restart exactly one Anti-Codex and repeat installed Settings, prompt, Manager, Desktop, Start, taskbar and live pink-tray acceptance before any new autonomous smoke task.
 
 The running installed client remains revision 5 until that final activation. Do not claim project-wide 100% from source-only tests.
+
+- [x] Reject the first `cbe1f53` full preflight as an activation checkpoint: all reported checks stayed green but the 63-file translator regression exceeded the inherited 240-second process limit and was terminated at 240,505 ms. Give only the translator regression a fixed 600-second floor; focused timeout-contract coverage is RED then `4/4` GREEN.
+- [ ] Commit the timeout correction and obtain one replacement exact-HEAD no-traffic preflight before activation.

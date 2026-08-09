@@ -3,6 +3,7 @@ param(
     [string]$SourceRoot = "",
     [string]$ReportRoot = "",
     [int]$SubcheckTimeoutSec = 240,
+    [int]$TranslatorTimeoutSec = 600,
     [switch]$SkipFullRegression,
     [switch]$SelfTestProcessLauncher
 )
@@ -620,7 +621,8 @@ function Test-TranslatorRegression {
         Add-Failure "No translator test files found"
         return [pscustomobject]@{ ok = $false; testFiles = 0 }
     }
-    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=2") + $testFiles) -TimeoutSec $SubcheckTimeoutSec
+    $translatorTimeout = [Math]::Max(600, $TranslatorTimeoutSec)
+    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=2") + $testFiles) -TimeoutSec $translatorTimeout
     if (-not $result.ok) { Add-Failure "Translator source regression failed" }
     $summary = ($result.stdoutTail + $result.stderrTail) -join "`n"
     return [pscustomobject]@{
