@@ -6,11 +6,17 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "..", "..");
 const plan = readFileSync(resolve(root, "task_plan.md"), "utf8");
 const findings = readFileSync(resolve(root, "findings.md"), "utf8");
+const acceptance = readFileSync(resolve(root, "docs", "CURRENT_LONG_TASK_ACCEPTANCE.md"), "utf8");
 
 const installedSource = "20bcdefc307d1ecd7bb2966e6311be9aab1c6dad";
 const priorSignedCandidate = "f7ec81f57875f6c6ebcbd423342dafac048098e4";
 const compatibilityReplay = "7dc0ae34ada6168ccde6e2922b595e06b348b761";
 const rev9PatchId = "82b24d6665d9707d64cc913ccc43fa733fc2b387";
+const rejectedFinalCandidate = "5b590b443fd0f71f25dd052dbc74ee11ba06d4c8";
+const finalCandidateParent = "21c4efb6c85de59809366144b1f23b0fcb35dabd";
+const rev7ControlReport = "20260810-133920411-shortcut-restore-c2145848b6774098b2c18e60ae60208b.json";
+const rev9FailureReport = "20260810-135242746-shortcut-restore-aa223b2c43714a99b54d095ee664a132.json";
+const rev9FailureSha256 = "0530087aa23ad0aec45f5d206d3c44c44808db5c297e8fdb5b58a4084b258879";
 
 function sectionAfterHeading(text, heading, nextHeadingPrefix) {
   const start = text.lastIndexOf(heading);
@@ -27,65 +33,68 @@ function appendToSection(text, heading, nextHeadingPrefix, line) {
   return `${text.slice(0, end)}\n${line}${text.slice(end)}`;
 }
 
-function assertCurrentInstalledTruth(planText, findingsText) {
-  const authorization = sectionAfterHeading(planText, "### 2026-08-10 current authorization boundary", "### ");
-  const checkpoint = sectionAfterHeading(planText, "### 2026-08-10 current source checkpoint", "### ");
-  const authorizationLines = authorization.split(/\r?\n/);
+function assertCurrentInstalledTruth(planText, findingsText, acceptanceText = acceptance) {
+  const current = sectionAfterHeading(planText, "### 2026-08-10 Rev9 physical rejection and Rev7 rollback", "### ");
+  const checkpoint = sectionAfterHeading(planText, "### 2026-08-10 pre-A/B source checkpoint", "### ");
+  const currentLines = current.split(/\r?\n/);
   const checkpointLines = checkpoint.split(/\r?\n/);
-  const installedLines = authorizationLines.filter((line) => line.includes(installedSource) && /current installed experimental shell/i.test(line));
+  const candidateLines = currentLines.filter((line) => line.includes(rejectedFinalCandidate));
+  const controlLines = currentLines.filter((line) => line.includes(rev7ControlReport));
+  const failureLines = currentLines.filter((line) => line.includes(rev9FailureReport));
+  const rollbackLines = currentLines.filter((line) => /revision 7 is the current active shell/i.test(line));
+  const futureAuthorizationLines = currentLines.filter((line) => /^\s*- \[ \] Do not repeat shutdown, synchronization, restart or physical UI testing/i.test(line));
   const priorCandidateLines = checkpointLines.filter((line) => line.includes(priorSignedCandidate) && /prior signed candidate checkpoint/i.test(line));
   const replayLines = checkpointLines.filter((line) => line.includes(compatibilityReplay) && /compatibility replay/i.test(line));
-  const authorizationGateLines = authorizationLines.filter((line) => /^\s*- \[ \] Before any replacement of installed /i.test(line));
 
-  assert.equal(installedLines.length, 1);
-  assert.match(installedLines[0], /\[x\].*revision 9 is the current installed experimental shell.*Rev9 is not physically accepted/i);
-  assert.match(installedLines[0], /validated revision 7 is the rollback release/i);
+  assert.equal(candidateLines.length, 1);
+  assert.match(candidateLines[0], new RegExp(`${finalCandidateParent}.*${rev9PatchId}.*13 checks.*1007/1007.*no traffic`, "i"));
+  assert.equal(controlLines.length, 1);
+  assert.match(controlLines[0], /one blank frame at `9 ms`.*first content at `81 ms`.*same PID\/HWND\/CDP/i);
+  assert.equal(failureLines.length, 1);
+  assert.match(failureLines[0], /first eight valid taskbar rounds had zero blank frames.*one blank frame at `7 ms`.*first content at `86 ms`.*PID, HWND, executable, CDP target and exact deadline foreground/i);
+  assert.equal(rollbackLines.length, 1);
+  assert.match(rollbackLines[0], /revision 9 is only the rejected rollback slot.*root PID `47220`.*core PID `19464`.*No model\/provider traffic/i);
+  assert.equal(futureAuthorizationLines.length, 1);
+  assert.match(futureAuthorizationLines[0], /Gate 5 remains red.*not 100%/i);
   assert.equal(priorCandidateLines.length, 1);
   assert.match(priorCandidateLines[0], /not deployed.*not physically accepted.*not the current activation candidate/i);
   assert.equal(replayLines.length, 1);
   assert.match(replayLines[0], /not an activation candidate/i);
-  assert.equal(authorizationGateLines.length, 1);
-  assert.match(authorizationGateLines[0], new RegExp(`20bcdefc.*parent.*then-current clean main.*${rev9PatchId}.*fresh signed no-traffic preflight.*controlled-shutdown.*synchronization.*restart.*physical-UI authorization`, "i"));
+  assert.doesNotMatch(current, new RegExp(installedSource, "i"));
+  assert.equal(currentLines.filter((line) => /revision 9 is (?:the )?current active|Rev9.*physically accepted|eight clean rounds.*(?:pass|accepted)|Gate 5.*green|project is 100%/i.test(line)).length, 0);
+  assert.equal(currentLines.filter((line) => /^\s*- \[x\].*(?:further|future|repeat).*(?:shutdown|synchroniz|restart|physical UI).*(?:authorized|allowed|granted)/i.test(line)).length, 0);
+  assert.equal(checkpointLines.filter((line) => /f7ec81f5/i.test(line) && /(?:latest|current) candidate/i.test(line) && !/not the current activation candidate/i.test(line)).length, 0);
+  assert.equal(checkpointLines.filter((line) => /7dc0ae34/i.test(line) && /\b(?:is|as)\s+(?:the\s+)?activation candidate/i.test(line) && !/not an activation candidate/i.test(line)).length, 0);
 
-  const current = `${authorization}\n${checkpoint}`;
-  const currentLines = current.split(/\r?\n/);
-  const rev9Identity = /\bRev(?:ision)?\s*9\b/i;
-  const priorCandidateIdentity = new RegExp(`(?:${priorSignedCandidate}|f7ec81f5)`, "i");
-  const replayIdentity = new RegExp(`(?:${compatibilityReplay}|7dc0ae34)`, "i");
-  const candidateIdentity = new RegExp(`(?:${priorSignedCandidate}|f7ec81f5|${compatibilityReplay}|7dc0ae34|activation candidate)`, "i");
-  const checkedHighImpactAuthorization = /^\s*- \[x\](?=.*(?:controlled-)?shutdown)(?=.*synchroniz)(?=.*restart)(?=.*physical[- ]UI)/i;
-  assert.doesNotMatch(current, /revision 7 is current|running installation remains revision 7/i);
-  assert.equal(currentLines.filter((line) => priorCandidateIdentity.test(line) && /(?:latest|current) candidate/i.test(line) && !/not the current activation candidate/i.test(line)).length, 0);
-  assert.equal(currentLines.filter((line) => replayIdentity.test(line) && /\b(?:is|as)\s+(?:the\s+)?activation candidate/i.test(line) && !/not an activation candidate/i.test(line)).length, 0);
-  assert.equal(currentLines.filter((line) => checkedHighImpactAuthorization.test(line)).length, 0);
-  assert.equal(currentLines.filter((line) => rev9Identity.test(line) && /physically accepted/i.test(line) && !/not physically accepted/i.test(line)).length, 0);
-  assert.equal(currentLines.filter((line) => candidateIdentity.test(line) && /(?:has been|is|was) deployed|deployed and accepted/i.test(line) && !/not deployed/i.test(line)).length, 0);
-
-  const currentFindings = sectionAfterHeading(findingsText, "## 2026-08-10 installed Rev9 plan-truth findings", "## ");
+  const currentFindings = sectionAfterHeading(findingsText, "## 2026-08-10 Rev9 physical rejection and Rev7 rollback findings", "## ");
   const findingLines = currentFindings.split(/\r?\n/);
-  const installedFindingLines = findingLines.filter((line) => line.includes(installedSource));
-  const candidateFindingLines = findingLines.filter((line) => line.includes(priorSignedCandidate));
-  const replayFindingLines = findingLines.filter((line) => line.includes(compatibilityReplay));
-  const identityFindingLines = findingLines.filter((line) => line.includes(rev9PatchId) && /signed preflight/i.test(line));
-  const authorizationFindingLines = findingLines.filter((line) => /grants no shutdown, synchronization, restart, UI or provider authorization/i.test(line));
+  const candidateFindingLines = findingLines.filter((line) => line.includes(rejectedFinalCandidate));
+  const controlFindingLines = findingLines.filter((line) => line.includes(rev7ControlReport));
+  const failureFindingLines = findingLines.filter((line) => line.includes(rev9FailureReport));
+  const rollbackFindingLines = findingLines.filter((line) => /revision 7 is current and ready/i.test(line));
 
-  assert.equal(installedFindingLines.length, 1);
-  assert.match(installedFindingLines[0], /active host marker is Rev9.*Rev7 rollback pair/i);
   assert.equal(candidateFindingLines.length, 1);
-  assert.match(candidateFindingLines[0], /prior signed candidate.*not current/i);
-  assert.equal(replayFindingLines.length, 1);
-  assert.match(replayFindingLines[0], /compatibility replay.*not an activation candidate/i);
-  assert.equal(identityFindingLines.length, 1);
-  assert.match(identityFindingLines[0], /parent.*current clean main.*exact HEAD.*signed preflight/i);
-  assert.equal(authorizationFindingLines.length, 1);
-  assert.equal(findingLines.filter((line) => rev9Identity.test(line) && /physically accepted/i.test(line) && !/not physically accepted/i.test(line)).length, 0);
-  assert.equal(findingLines.filter((line) => replayIdentity.test(line) && /\b(?:is|as)\s+(?:the\s+)?activation candidate/i.test(line) && !/not an activation candidate/i.test(line)).length, 0);
-  assert.equal(findingLines.filter((line) => candidateIdentity.test(line) && /(?:has been|is|was) deployed/i.test(line) && !/not deployed/i.test(line)).length, 0);
-  assert.equal(findingLines.filter((line) => /(?=.*(?:grants|authoriz))(?=.*shutdown)(?=.*synchroniz)(?=.*restart)(?=.*\bUI\b)/i.test(line) && !/grants no shutdown/i.test(line)).length, 0);
+  assert.match(candidateFindingLines[0], new RegExp(`${finalCandidateParent}.*${rev9PatchId}.*13/13.*1007/1007`, "i"));
+  assert.equal(controlFindingLines.length, 1);
+  assert.match(controlFindingLines[0], /pure-white frame `9 ms`.*first content at `81 ms`/i);
+  assert.equal(failureFindingLines.length, 1);
+  assert.match(failureFindingLines[0], new RegExp(`${rev9FailureSha256}.*blank frame at \`7 ms\`.*first content at \`86 ms\`.*same PID/HWND/executable/CDP.*exact deadline foreground`, "i"));
+  assert.equal(rollbackFindingLines.length, 1);
+  assert.match(rollbackFindingLines[0], /rejected Rev9 is in the rollback slot.*root PID `47220`.*core PID `19464`.*No model\/provider traffic/i);
+  assert.equal(findingLines.filter((line) => /Rev9.*physically accepted|revision 9 is current|eight clean rounds.*(?:pass|accepted)|grants future.*shutdown/i.test(line)).length, 0);
+
+  const currentAcceptance = sectionAfterHeading(acceptanceText, "## 2026-08-09 Rev7 restore and tray override", "## ");
+  assert.match(currentAcceptance, /revision 7 is current and ready.*revision 9 is only the rejected rollback slot.*root PID `47220`.*core PID `19464`.*No model\/provider traffic.*new explicit authorization.*not 100%/is);
+  assert.doesNotMatch(planText, /the current installed Rev9 runtime was built from/i);
+  assert.doesNotMatch(findingsText, /opacity-pulse candidate is still under evaluation.*has not been deployed/is);
+
+  const currentTruth = `${current}\n${currentFindings}\n${currentAcceptance}`;
+  assert.doesNotMatch(currentTruth, /provider traffic (?:was|is) used|used real traffic/i);
+  assert.doesNotMatch(currentTruth, /(?:future|further|repeat).*(?:shutdown|synchroniz|restart|physical UI).*(?:is authorized|is allowed|is granted|may proceed)/i);
 }
 
 test("current revision truth cannot coexist with superseded unchecked activation instructions", () => {
-  assert.match(plan, /\[x\].*revision 9 is the current installed experimental shell/i);
+  assert.match(plan, /\[x\].*Revision 7 is the current active shell.*revision 9 is only the rejected rollback slot/i);
 
   const unchecked = plan.split(/\r?\n/).filter((line) => /^\s*- \[ \]/.test(line));
   const supersededActivationPatterns = [
@@ -100,15 +109,29 @@ test("current revision truth cannot coexist with superseded unchecked activation
   assert.deepEqual(conflicts, [], `superseded activation instructions remain unchecked:\n${conflicts.join("\n")}`);
 });
 
-test("current plan distinguishes installed Rev9 from historical replays and self-hash-free candidate identity", () => {
+test("current plan distinguishes rejected Rev9 from restored Rev7 and historical replays", () => {
   assertCurrentInstalledTruth(plan, findings);
 });
 
 test("current plan truth fails closed on promotion, authorization, or role drift", () => {
-  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 current authorization boundary", "### ", "- [x] Controlled-shutdown, synchronization, restart and physical-UI authorization is granted."), findings));
-  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 current authorization boundary", "### ", "- [x] Revision 9 is physically accepted."), findings));
-  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 current source checkpoint", "### ", "- [x] Candidate f7ec81f5 is the latest candidate."), findings));
-  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 current source checkpoint", "### ", "- [x] Compatibility replay 7dc0ae34 is the activation candidate."), findings));
-  assert.throws(() => assertCurrentInstalledTruth(plan, appendToSection(findings, "## 2026-08-10 installed Rev9 plan-truth findings", "## ", "- The current plan grants shutdown, synchronization, restart, UI and provider authorization.")));
-  assert.throws(() => assertCurrentInstalledTruth(plan, findings.replace("Rev7 rollback pair", "rollback pair")));
+  const currentHeading = "### 2026-08-10 Rev9 physical rejection and Rev7 rollback";
+  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, currentHeading, "### ", "- [x] Further shutdown, synchronization, restart and physical UI testing is authorized."), findings));
+  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, currentHeading, "### ", "- [x] Revision 9 is the current active shell and is physically accepted."), findings));
+  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, currentHeading, "### ", "- [x] Eight clean rounds make Rev9 accepted despite the ninth valid failure."), findings));
+  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 pre-A/B source checkpoint", "### ", "- [x] Candidate f7ec81f5 is the latest candidate."), findings));
+  assert.throws(() => assertCurrentInstalledTruth(appendToSection(plan, "### 2026-08-10 pre-A/B source checkpoint", "### ", "- [x] Compatibility replay 7dc0ae34 is the activation candidate."), findings));
+  assert.throws(() => assertCurrentInstalledTruth(plan, appendToSection(findings, "## 2026-08-10 Rev9 physical rejection and Rev7 rollback findings", "## ", "- Revision 9 is current and physically accepted after eight clean rounds.")));
+  assert.throws(() => assertCurrentInstalledTruth(plan, findings.replace("same PID/HWND/executable/CDP and exact deadline foreground", "changed PID/HWND/CDP and lost foreground")));
+  assert.throws(() => assertCurrentInstalledTruth(plan, findings.replace("root PID `47220` and core PID `19464`", "root PID `1` and core PID `2`")));
+  assert.throws(() => assertCurrentInstalledTruth(plan, findings, appendToSection(acceptance, "## 2026-08-09 Rev7 restore and tray override", "## ", "- Provider traffic was used during the Rev9 experiment.")));
+  assert.throws(() => assertCurrentInstalledTruth(plan, appendToSection(findings, "## 2026-08-10 Rev9 physical rejection and Rev7 rollback findings", "## ", "- Further shutdown, synchronization, restart and physical UI testing is authorized.")));
+});
+
+test("current truth records the rejected Rev9 physical A/B and restored Rev7", () => {
+  const current = sectionAfterHeading(plan, "### 2026-08-10 Rev9 physical rejection and Rev7 rollback", "### ");
+  assert.match(current, new RegExp(`${rejectedFinalCandidate}.*Physically reject Rev9`, "is"));
+  assert.match(current, /revision 7 is the current active shell.*revision 9 is only the rejected rollback slot/i);
+  assert.match(current, new RegExp(`${rev7ControlReport}.*blank.*9 ms.*81 ms`, "i"));
+  assert.match(current, new RegExp(`${rev9FailureReport}.*blank.*7 ms.*86 ms`, "i"));
+  assert.match(current, /no model\/provider traffic/i);
 });

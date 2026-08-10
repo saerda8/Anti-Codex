@@ -4014,7 +4014,7 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - Tray v2 has now passed with fresh signed evidence: the accepted item is bound to the current Anti-Codex main PID, notification owner window and Anti-only GUID. The official Codex same-name item is present in the raw inventory but is explicitly excluded rather than counted as Anti-Codex.
 - A controlled Manager-watcher pause A/B still produced the pure-white first frame. The watcher was restored to its original state and is not supported as the root cause.
 - Paired evidence from the same restored-frame attempt shows renderer content while the physical screen frame is pure white. This supports a native-window/DWM presentation difference after the renderer has content; it does not yet identify a product fix.
-- The next single-variable opacity-pulse candidate is still under evaluation. It has not passed physical acceptance and has not been deployed.
+- Historical pre-A/B note: the next single-variable opacity-pulse candidate was then under evaluation, had not passed physical acceptance and had not yet been deployed. The final A/B result below supersedes this checkpoint.
 
 ## 2026-08-10 plan truth reconciliation
 
@@ -4049,10 +4049,19 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - The verifier rejected that state before reaching its later minimized-window check. `ExternalObserved` was therefore self-contradictory: it required the window to be minimized but first rejected the normal Windows minimized geometry.
 - The initial gate now accepts either the original exact presentable window or one exact minimized product window. Both paths remain bound to the expected root PID, product-window identity and HWND; duplicate/wrong product windows still fail closed, and all restore-time foreground, topology and frame checks are unchanged.
 
-## 2026-08-10 installed Rev9 plan-truth findings
+## 2026-08-10 pre-A/B installed Rev9 plan-truth findings
 
-- The current-plan tail still described Rev7 as active and Rev9 as undeployed. The installed runtime manifest instead binds the running runtime to clean source `20bcdefc307d1ecd7bb2966e6311be9aab1c6dad`; the active host marker is Rev9 and the installed rollback validator accepts the Rev7 rollback pair.
+- At that pre-A/B checkpoint, the plan tail still described Rev7 as active and Rev9 as undeployed. The then-running installation instead bound to clean source `20bcdefc307d1ecd7bb2966e6311be9aab1c6dad`; its active host marker was Rev9 and its installed rollback validator accepted the Rev7 rollback pair.
 - `f7ec81f57875f6c6ebcbd423342dafac048098e4` is a prior signed candidate checkpoint. It passed focused `116/116` and an isolated 13/13 no-traffic preflight with translator `1005/1005`, but it was not deployed, was not physically accepted and is not current after main advanced.
 - `7dc0ae34ada6168ccde6e2922b595e06b348b761` is a compatibility replay of the same Rev9 patch on main `413a4f76`; its direct offline contracts pass, but it has no fresh full candidate preflight and is not an activation candidate.
 - Activation candidate identity is self-hash-free in source: its parent must be the current clean main, its stable patch-id must be `82b24d6665d9707d64cc913ccc43fa733fc2b387`, and its exact HEAD comes only from its signed preflight. A later documentation commit cannot silently keep an older candidate labeled current.
-- The repaired plan now distinguishes installed experimental bytes, validated rollback bytes, prior signed checkpoints and the next candidate contract. It grants no shutdown, synchronization, restart, UI or provider authorization.
+- At that pre-A/B checkpoint, the repaired plan distinguished installed experimental bytes, validated rollback bytes, prior signed checkpoints and the next candidate contract; it granted no shutdown, synchronization, restart, UI or provider authorization. The later authorization and result are recorded in the current section below.
+
+## 2026-08-10 Rev9 physical rejection and Rev7 rollback findings
+
+- Final candidate `5b590b443fd0f71f25dd052dbc74ee11ba06d4c8` was built on clean-main parent `21c4efb6c85de59809366144b1f23b0fcb35dabd` with stable patch-id `82b24d6665d9707d64cc913ccc43fa733fc2b387`. Its isolated signed preflight passed 13/13 and translator `1007/1007` with `noTraffic:true`, `usedRealTraffic:false`; report SHA-256 is `dd43514c6ed3b106c7871ebd2492aaf8ee136cf8e9afecac01d9e6be103b49b0`.
+- Rev7 control report `20260810-133920411-shortcut-restore-c2145848b6774098b2c18e60ae60208b.json` recorded one pure-white frame `9 ms` after foreground and first content at `81 ms`. The later QQ foreground change happened near two seconds and therefore did not cause the first-frame failure.
+- Rev9 produced eight valid zero-blank taskbar rounds before failing the ninth valid round. Signed report `20260810-135242746-shortcut-restore-aa223b2c43714a99b54d095ee664a132.json` has SHA-256 `0530087aa23ad0aec45f5d206d3c44c44808db5c297e8fdb5b58a4084b258879` and records a blank frame at `7 ms`, first content at `86 ms`, same PID/HWND/executable/CDP and exact deadline foreground. This rejects the opacity pulse as a reliable fix.
+- A separate attempted round moved the mouse before the click. The safety interlock sent no click, restored the window and produced no frames; it is environment interference, not product evidence, and is excluded from the valid count.
+- The validated rollback completed after the first Rev9 product failure. Revision 7 is current and ready; the rejected Rev9 is in the rollback slot. The official Codex root PID `47220` and core PID `19464` retained their original paths and creation times. No model/provider traffic or Docker action occurred.
+- The one-time shutdown, synchronization, restart and taskbar physical-A/B authorization was consumed by this experiment. Any future shutdown, synchronization, restart or physical UI test requires new explicit user authorization. Gate 5 remains red and the project is not 100%.
