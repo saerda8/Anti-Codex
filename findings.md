@@ -4048,3 +4048,9 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - The shortcut verifier classified only on-screen, non-cloaked windows as initially visible. A real minimized Chromium window remains visible to Win32 but is moved outside the virtual screen, so it was present in the raw window inventory and absent from the presentable inventory.
 - The verifier rejected that state before reaching its later minimized-window check. `ExternalObserved` was therefore self-contradictory: it required the window to be minimized but first rejected the normal Windows minimized geometry.
 - The initial gate now accepts either the original exact presentable window or one exact minimized product window. Both paths remain bound to the expected root PID, product-window identity and HWND; duplicate/wrong product windows still fail closed, and all restore-time foreground, topology and frame checks are unchanged.
+
+## 2026-08-10 installed Rev9 plan-truth findings
+
+- The current-plan tail still described Rev7 as active and Rev9 as undeployed. The installed runtime manifest instead binds the running runtime to clean source `20bcdefc307d1ecd7bb2966e6311be9aab1c6dad`; the active host marker is Rev9 and the installed rollback validator accepts the Rev7 rollback pair.
+- The newer source candidate `f7ec81f57875f6c6ebcbd423342dafac048098e4` carries the identical Rev9 patch-id on top of current main, including the release-action and minimized-window verifier repairs. It is clean, passes focused `116/116`, release self-test, and an isolated 13/13 no-traffic source preflight with translator `1005/1005`, but it is not deployed and not physically accepted.
+- The repaired plan now distinguishes installed experimental bytes, validated rollback bytes, latest undeployed source and their separate signed preflights. It grants no shutdown, synchronization, restart, UI or provider authorization.

@@ -3658,28 +3658,29 @@ The running installed client remains revision 5 until that final activation. Do 
 - [x] Superseded as a combined item: the trusted-root correction is committed in `8f0a23c`, included in the later installed revision, and tray v2 passed. Desktop/Start/taskbar remain separately open below.
 - [ ] Only after installed acceptance passes, resume autonomous smoke testing. Provider priority is fixed to Antigravity Gemini, then Claude; Xiaomi MIMO 2.5 Pro is a third-party fallback only when both are explicitly unavailable. Do not persist credentials in source, plans, findings or logs.
 
-### 2026-08-09 Rev7 restore and tray acceptance status
+### 2026-08-09 restore, tray and Rev9 experimental status
 
-- [x] Host revision 7 is the current installed shell. It removes the suspected primary-window restore repaint hook, but fresh physical A/B evidence still captures a pure-white first frame; removing that hook is therefore not an accepted flash fix.
-- [x] Reject the revision 8 `backgroundThrottling:false` experiment: its controlled A/B did not remove the white first frame, and source/installed state has been reverted to revision 7.
+- [x] Historical Rev7 checkpoint: removing the suspected primary-window restore repaint hook did not eliminate the pure-white first frame, so that change was not an accepted flash fix. Rev7 is now the validated rollback release rather than the active shell.
+- [x] Historical Rev8 rejection: its controlled A/B did not remove the white first frame, and that run reverted to revision 7. A later separately authorized experiment installed Rev9; Rev7 is now its validated rollback.
 - [x] Accept the fresh tray-v2 evidence. It binds the one Anti-Codex item to the current Anti main PID, notification owner window and Anti-only GUID, while the official same-name item is explicitly excluded.
 - [x] Pause and restore the Manager watcher in a controlled A/B. The pure-white first frame remains with the watcher paused, so the watcher is not the root cause and its original state is restored.
 - [x] Preserve the paired same-attempt renderer/screen evidence: the renderer capture contains content while the physical screen capture is pure white, supporting a native-window/DWM presentation boundary rather than an empty renderer document; the capture timings are not exact simultaneity.
-- [ ] Keep the single-variable opacity-pulse candidate source-only. It is still under evaluation, has not passed physical acceptance and is not deployed.
+- [x] Record the experimental deployment truth without promoting it: the current installed Rev9 runtime was built from `20bcdefc307d1ecd7bb2966e6311be9aab1c6dad`, has not passed physical acceptance, and retains validated Rev7 rollback. The newer source candidate `f7ec81f57875f6c6ebcbd423342dafac048098e4` is not deployed.
 - [x] Keep the accepted media task frozen and send no model/provider traffic. For any later autonomous smoke task, use Gemini first, Claude second, and Xiaomi MIMO only as fallback with exact model ID `mimo-v2.5-pro`; never write its credential to source, plans, findings, reports or logs.
 
 ### 2026-08-10 current authorization boundary
 
-- [x] Reconcile the historical activation checkboxes with the later installed truth: revision 7 is current, revision 8 was rejected, CodexPlusPlus `v1.2.45` and Montage/parity are already active, and the trusted-root correction and tray v2 acceptance are complete. Historical revision-5/6 and natural-exit instructions are superseded and must not be replayed.
-- [ ] Before any future installed-source activation, obtain explicit controlled-shutdown authorization and create one exact-HEAD clean no-traffic preflight for the then-current commit. Do not close, restart, synchronize or activate Anti-Codex from this documentation task.
+- [x] Revision 9 is the current installed experimental shell from source `20bcdefc307d1ecd7bb2966e6311be9aab1c6dad`; revision 8 was rejected, validated revision 7 is the rollback release, and CodexPlusPlus `v1.2.45`, Montage/parity, the trusted-root correction and tray v2 remain active. Rev9 is not physically accepted and must not be promoted from this source-only checkpoint.
+- [x] Create the exact clean no-traffic preflight for the newer Rev9 source candidate `f7ec81f57875f6c6ebcbd423342dafac048098e4`: all 13 checks and translator `1005/1005` pass with zero failures, warnings, skips or real traffic. This evidence does not authorize activation.
+- [ ] Before replacing installed `20bcdefc` with candidate `f7ec81f5`, obtain explicit controlled-shutdown, synchronization, restart and physical-UI authorization. Do not close, restart, synchronize or activate Anti-Codex from this documentation task.
 - [ ] After such an authorized activation, perform only the still-current installed observations: Desktop and Start-menu launch, taskbar restore/single-instance behavior, and acceptance of the newly installed source verifier. The accepted media task remains frozen unless separately authorized.
 
 ### 2026-08-10 current source checkpoint
 
 - [x] Commit the plan-truth reconciliation as `0724e9ce58a3c9fc5f22b51e0be8c6bf15d96f19` and run exactly one complete clean no-traffic source preflight for that commit. All 13 checks and translator `1001/1001` pass, with zero failures, warnings or skips, `noTraffic:true` and `usedRealTraffic:false`. Report `20260810-100444-source-preflight.json` is 123,257 bytes with SHA-256 `226f2e6cdfbed4275faba14a639c76e18309e87542ff27ef2ca926ac36e00637`.
-- [x] Replay the source-only revision-9 opacity-pulse candidate onto the then-current code base in isolated branch `fix/primary-opacity-pulse-rev9-d723-20260810` at `109e420108bc91b6a92ab961d460b3588c8c869f`. Its offline suites pass, but it remains unmerged, undeployed and unaccepted until a separately authorized physical A/B.
-- [x] Preserve the installed boundary: the running installation remains revision 7 and predates the current native-Settings verifier. No shutdown, restart, synchronization, activation, UI action, provider request or Docker action occurred in this checkpoint.
-- [ ] Treat any documentation commit after `0724e9ce` as non-activating metadata only. A future activation still requires explicit authorization and a fresh exact-HEAD no-traffic preflight if HEAD has moved.
+- [x] Replay the unchanged Rev9 opacity-pulse patch onto current main `dccb7ef7d12b6c628727316d8ab30efdc07909db` as isolated candidate `f7ec81f57875f6c6ebcbd423342dafac048098e4`. Its patch-id matches installed-source commit `20bcdefc`, focused coverage passes `116/116`, release self-test passes, and its separate signed source preflight is 13/13 with translator `1005/1005`; it remains unmerged, not deployed and unaccepted until a separately authorized physical A/B.
+- [x] Preserve the installed boundary: the running installation remains experimental Rev9 from `20bcdefc`, the validated rollback remains Rev7, and the latest main release/shortcut fixes exist only in source candidate `f7ec81f5`. No shutdown, restart, synchronization, activation, UI action, provider request or Docker action occurred in this checkpoint.
+- [x] Keep both exact source checkpoints distinct: main `dccb7ef7` has signed 13/13, `1002/1002` no-traffic evidence, and candidate `f7ec81f5` has separate signed 13/13, `1005/1005` no-traffic evidence. Any later source commit still requires a fresh exact-HEAD preflight before activation.
 
 ### 2026-08-10 release-preflight completeness repair
 
