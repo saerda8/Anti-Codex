@@ -4015,4 +4015,10 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - A controlled Manager-watcher pause A/B still produced the pure-white first frame. The watcher was restored to its original state and is not supported as the root cause.
 - Paired evidence from the same restored-frame attempt shows renderer content while the physical screen frame is pure white. This supports a native-window/DWM presentation difference after the renderer has content; it does not yet identify a product fix.
 - The next single-variable opacity-pulse candidate is still under evaluation. It has not passed physical acceptance and has not been deployed.
+
+## 2026-08-10 plan truth reconciliation
+
+- The plan still contained unchecked instructions to wait for a natural exit, activate revision 6, activate the trusted-root correction and repeat older runtime transactions even though later evidence records controlled activation, revision 7 as current, CodexPlusPlus `v1.2.45`, Montage/parity, the trusted-root correction and tray v2 acceptance. Leaving those lines open could cause a future operator to repeat high-impact work.
+- Historical activation steps are now explicitly marked superseded or completed and point to one current authorization boundary. No current process, UI, provider, runtime or installed file was inspected or changed by this documentation-only repair.
+- A static contract now rejects coexistence between the current revision-7 truth and any unchecked copy of the known superseded activation instructions. It does not authorize a preflight, shutdown, sync, restart or activation.
 - The accepted media task remains frozen and no model/provider traffic was sent. Future autonomous smoke traffic keeps the order Gemini, Claude, then Xiaomi MIMO only if both preferred providers are explicitly unavailable; the exact request model ID is `mimo-v2.5-pro`, and no API credential may be written to source or documentation.
