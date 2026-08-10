@@ -4042,3 +4042,9 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - The release summary could report seven missing gates while exposing only `refreshGate5`, claiming no hidden actions and counting one required action. Gates 1-4 and 6 therefore had no actionable nested entry even though they remained release blockers.
 - The same summary also omitted Gates 3 and 4 from `requiredRealTrafficBlockedGates`, although their formal contracts require a bounded real model/tool round trip. Gate-level real-traffic blockers are now Gates 3, 4, 5 and 8; Gate 1/2 isolated-client checks and Gate 6 aggregation require no real provider traffic.
 - The repair derives one action for every missing gate, binds each nested `orderedActions` entry by `gateId`, preserves Gate 6's Gate 5 dependency and keeps Gate 8's existing offline-after-task verifier semantics. Both gaps were captured by failing self-tests before the implementation passed.
+
+## 2026-08-10 minimized shortcut precondition findings
+
+- The shortcut verifier classified only on-screen, non-cloaked windows as initially visible. A real minimized Chromium window remains visible to Win32 but is moved outside the virtual screen, so it was present in the raw window inventory and absent from the presentable inventory.
+- The verifier rejected that state before reaching its later minimized-window check. `ExternalObserved` was therefore self-contradictory: it required the window to be minimized but first rejected the normal Windows minimized geometry.
+- The initial gate now accepts either the original exact presentable window or one exact minimized product window. Both paths remain bound to the expected root PID, product-window identity and HWND; duplicate/wrong product windows still fail closed, and all restore-time foreground, topology and frame checks are unchanged.

@@ -965,14 +965,25 @@ $sessionBefore = Get-AppPageIdentity -CdpPort $cdpPort
 if (@($before.rootProcessIds).Count -ne 1 -or [int]$before.rootProcessIds[0] -ne $ExpectedMainPid) {
     throw "Initial Anti-Codex root process is not exactly PID $ExpectedMainPid"
 }
-if (@($before.visibleWindowProcessIds).Count -ne 1 -or [int]$before.visibleWindowProcessIds[0] -ne $ExpectedMainPid) {
-    throw "Initial Anti-Codex visible window is not exactly PID $ExpectedMainPid"
-}
-if (
-    @($before.visibleTopLevelWindowHandles).Count -ne 1 -or
-    [int64]$before.visibleTopLevelWindowHandles[0] -ne [int64]$windowHandle
-) {
-    throw "Initial Anti-Codex top-level window is not exactly HWND $([int64]$windowHandle)"
+$initialWindowIsMinimized = [AntiCodexShortcutRestoreProbe]::IsIconic($windowHandle)
+$initialProductWindows = @(
+    $before.allVisibleTopLevelWindows | Where-Object { [bool]$_.ProductWindow }
+)
+$initialProductWindowIsExact = (
+    $initialProductWindows.Count -eq 1 -and
+    [int]$initialProductWindows[0].ProcessId -eq $ExpectedMainPid -and
+    [int64]$initialProductWindows[0].Handle -eq [int64]$windowHandle
+)
+$initialPresentableWindowIsExact = (
+    $initialProductWindowIsExact -and
+    @($before.visibleWindowProcessIds).Count -eq 1 -and
+    [int]$before.visibleWindowProcessIds[0] -eq $ExpectedMainPid -and
+    @($before.visibleTopLevelWindowHandles).Count -eq 1 -and
+    [int64]$before.visibleTopLevelWindowHandles[0] -eq [int64]$windowHandle
+)
+$initialMinimizedWindowIsExact = $initialWindowIsMinimized -and $initialProductWindowIsExact
+if (-not ($initialPresentableWindowIsExact -or $initialMinimizedWindowIsExact)) {
+    throw "Initial Anti-Codex window is neither the exact presentable nor exact minimized HWND $([int64]$windowHandle) for PID $ExpectedMainPid"
 }
 if ($pagesBefore -ne 1) { throw "Initial Anti-Codex app page count is $pagesBefore, expected 1" }
 

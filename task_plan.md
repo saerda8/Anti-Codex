@@ -3692,3 +3692,9 @@ The running installed client remains revision 5 until that final activation. Do 
 - [x] Replace the single `else-if` release action with one truthful action per missing Gate, including per-gate traffic/high-impact metadata and Gate 6's Gate 5 dependency. Nested failure reasons now carry only their own Gate action.
 - [x] Include formal Gates 3 and 4 in the required-real-traffic blocker set alongside Gates 5 and 8; derive the real-traffic-only release state from the complete missing-gate set instead of a Gate 8-only special case.
 - [x] Prove both gaps RED then GREEN in the release self-test. This remains source-only and does not authorize client launch, UI interaction, synchronization, provider traffic or the frozen media task.
+
+### 2026-08-10 minimized shortcut precondition repair
+
+- [x] Reproduce the pre-click false negative: a minimized exact Anti-Codex HWND is excluded from the presentable window list before the verifier reaches its required `IsIconic` check.
+- [x] Add a minimized-exact initial identity path bound to the unique product window, expected main PID and original HWND while preserving the existing presentable-exact path and every post-restore Gate 5 check.
+- [x] Prove the contract RED then GREEN with the direct shortcut suite and PowerShell syntax validation. No mouse, focus, window-state, process, runtime or provider action is authorized or performed by this source-only repair.

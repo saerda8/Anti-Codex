@@ -252,6 +252,37 @@ test("external shortcut observation arms existing watchers without driving user 
   assert.match(shortcutRestoreAcceptance, /externalActivationObserved = \$externalActivationObserved/);
 });
 
+test("initial shortcut identity accepts only the exact minimized product window", () => {
+  const initialStart = shortcutRestoreAcceptance.indexOf("$before = Get-ExactAntiCodexSnapshot");
+  const initialEnd = shortcutRestoreAcceptance.indexOf("$frames = New-Object", initialStart);
+  const initial = initialStart >= 0 && initialEnd > initialStart
+    ? shortcutRestoreAcceptance.slice(initialStart, initialEnd)
+    : "";
+
+  assert.match(initial, /\$initialWindowIsMinimized\s*=\s*\[AntiCodexShortcutRestoreProbe\]::IsIconic\(\$windowHandle\)/);
+  assert.match(
+    initial,
+    /\$initialProductWindows\s*=\s*@\(\s*\$before\.allVisibleTopLevelWindows\s*\|\s*Where-Object\s*\{[\s\S]*?\$_\.ProductWindow[\s\S]*?\}\s*\)/,
+  );
+  assert.match(
+    initial,
+    /\$initialProductWindowIsExact\s*=\s*\(\s*\$initialProductWindows\.Count\s+-eq\s+1[\s\S]*?\[int\]\$initialProductWindows\[0\]\.ProcessId\s+-eq\s+\$ExpectedMainPid[\s\S]*?\[int64\]\$initialProductWindows\[0\]\.Handle\s+-eq\s+\[int64\]\$windowHandle/,
+  );
+  assert.match(
+    initial,
+    /\$initialMinimizedWindowIsExact\s*=\s*\$initialWindowIsMinimized\s+-and\s+\$initialProductWindowIsExact/,
+  );
+  assert.match(
+    initial,
+    /\$initialPresentableWindowIsExact\s*=\s*\(\s*\$initialProductWindowIsExact\s+-and/,
+  );
+  assert.match(
+    initial,
+    /if\s*\(-not\s*\(\$initialPresentableWindowIsExact\s+-or\s+\$initialMinimizedWindowIsExact\)\)/,
+  );
+  assert.doesNotMatch(initial, /-or\s+\$initialWindowIsMinimized\s*\)/);
+});
+
 test("taskbar restore keeps the cursor off hover-activated apps until the sampling deadline", () => {
   const samplingStart = shortcutRestoreAcceptance.indexOf("while ($stopwatch.ElapsedMilliseconds -lt $sampleDeadlineMs)");
   const finallyStart = shortcutRestoreAcceptance.indexOf("\n} finally {", samplingStart);
