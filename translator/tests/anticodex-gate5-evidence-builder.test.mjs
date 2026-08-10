@@ -773,6 +773,19 @@ function runBuilder(root, state, extraArgs = []) {
   return { child, payload, outputRoot };
 }
 
+function extendShortcutRounds(state, count) {
+  const template = JSON.parse(readFileSync(state.paths.shortcutRounds.at(-1), "utf8"));
+  while (state.paths.shortcutRounds.length < count) {
+    const probeId = state.paths.shortcutRounds.length + 1;
+    const path = join(dirname(state.paths.shortcutRounds[0]), `shortcut-round-${probeId}.json`);
+    const round = structuredClone(template);
+    round.probeId = probeId;
+    round.taskbarElement.childId = 15 + probeId;
+    writeJson(path, round, { signed: true });
+    state.paths.shortcutRounds.push(path);
+  }
+}
+
 function rewriteBoundRuntimeManifestCreatedAt(state, createdAt) {
   const matrix = JSON.parse(readFileSync(state.paths.managerMatrix, "utf8"));
   const provenance = matrix.managerButton.payload.handlerContractEvidence.provenance;
@@ -1218,20 +1231,24 @@ test("builder accepts only signed actual-mouse taskbar-button restore rounds", (
   }
 });
 
-test("builder requires exactly three signed taskbar-button restore rounds", () => {
+test("builder requires exactly ten signed taskbar-button restore rounds", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-taskbar-count-"));
+  let supervisor = null;
   try {
     const state = buildRawEvidence(root);
-    const fourthPath = join(root, "shortcut-round-4.json");
-    const fourth = JSON.parse(readFileSync(state.paths.shortcutRounds[2], "utf8"));
-    fourth.probeId = 4;
-    fourth.taskbarElement.automationId = "Anti-Codex-4";
-    writeJson(fourthPath, fourth, { signed: true });
-    state.paths.shortcutRounds.push(fourthPath);
-    const result = runBuilder(root, state);
-    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
-    assert.match(result.payload.failures.join("\n"), /exactly three.*taskbar|taskbar.*exactly three/i);
+    supervisor = startSuspendedSupervisor(join(root, "runtime", "scripts", "start-anticodex-fixed-route.mjs"));
+    bindStateToSupervisor(state, supervisor);
+    extendShortcutRounds(state, 10);
+    const accepted = runBuilder(root, state);
+    assert.equal(accepted.child.status, 0, accepted.child.stderr || JSON.stringify(accepted.payload));
+    assert.equal(accepted.payload.ok, true);
+
+    state.paths.shortcutRounds.pop();
+    const rejected = runBuilder(root, state);
+    assert.equal(rejected.child.status, 1, rejected.child.stderr || JSON.stringify(rejected.payload));
+    assert.match(rejected.payload.failures.join("\n"), /exactly ten.*taskbar|taskbar.*exactly ten/i);
   } finally {
+    stopTestSupervisor(supervisor);
     rmSync(root, { recursive: true, force: true });
   }
 });

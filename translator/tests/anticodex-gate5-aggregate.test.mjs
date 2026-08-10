@@ -85,7 +85,7 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
     /entry\?\.taskId !== modelSwitch\?\.taskId/,
     /entry\?\.requestCountBefore\) !== Number\(entry\?\.requestCountAfter/,
     /const pidNames = \["supervisor", "codexPlusPlus", "antiCodexMain"\]/,
-    /rounds\.length < 3/,
+    /rounds\.length < 10/,
     /round\?\.blankFrameCount/,
     /round\?\.maxVisibleWindowCount/,
     /const sourceTimestampMs = reportTimestampMs\(data\)/,
@@ -491,6 +491,24 @@ test("Gate 5 rehashes current artifacts and signs a successful offline aggregate
     assert.equal(report.usedRealTraffic, false);
     assert.equal(report.sourceEvidenceUsedRealTraffic, true);
     assert.ok(report.artifactEvidence.every((artifact) => artifact.ok && artifact.actualHash === artifact.expectedHash));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Gate 5 rejects nine clean shortcut rounds because the observed intermittent failure reached round nine", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-nine-rounds-"));
+  try {
+    const result = runFixture(root, ({ values }) => {
+      const template = values.shortcutRestoreEvidence.rounds[0];
+      values.shortcutRestoreEvidence.rounds = Array.from({ length: 9 }, (_, index) => ({
+        ...structuredClone(template),
+        probeId: index + 1,
+      }));
+    });
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /shortcut_restore_ten_rounds/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
