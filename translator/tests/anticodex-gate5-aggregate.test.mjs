@@ -88,6 +88,8 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
     /requiredShortcutRestoreRounds = 10/,
     /rounds\.length < requiredShortcutRestoreRounds/,
     /shortcut_restore_ten_rounds/,
+    /accepted duplicate shortcut restore event/,
+    /roundCount = ui\.shortcut_restore_single_window_no_blank_frames\.rounds\.length/,
     /round\?\.blankFrameCount/,
     /round\?\.maxVisibleWindowCount/,
     /const sourceTimestampMs = reportTimestampMs\(data\)/,
@@ -511,6 +513,33 @@ test("Gate 5 rejects nine clean shortcut rounds because the observed intermitten
     assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
     assert.equal(result.payload.ok, false);
     assert.match(result.payload.failures.join("\n"), /shortcut_restore_ten_rounds/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Gate 5 rejects ten files cloned from one shortcut restore event", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-cloned-rounds-"));
+  try {
+    const result = runFixture(root, ({ values }) => {
+      const template = structuredClone(values.shortcutRestoreEvidence.rounds[0]);
+      const checkedAt = new Date().toISOString();
+      values.shortcutRestoreEvidence.rounds = Array.from({ length: 10 }, (_, index) => {
+        const sourcePath = join(root, `shortcut-source-${index + 1}.json`);
+        return {
+          ...structuredClone(template),
+          generatedAt: checkedAt,
+          checkedAt,
+          probeId: (index + 1).toString(16).padStart(32, "0"),
+          sourcePath,
+          sourceSha256: (index + 1).toString(16).padStart(64, "0"),
+          report: { history: sourcePath },
+        };
+      });
+    });
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /shortcut_restore_single_window_no_blank_frames/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
