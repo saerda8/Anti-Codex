@@ -85,7 +85,9 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
     /entry\?\.taskId !== modelSwitch\?\.taskId/,
     /entry\?\.requestCountBefore\) !== Number\(entry\?\.requestCountAfter/,
     /const pidNames = \["supervisor", "codexPlusPlus", "antiCodexMain"\]/,
-    /rounds\.length < 10/,
+    /requiredShortcutRestoreRounds = 10/,
+    /rounds\.length < requiredShortcutRestoreRounds/,
+    /shortcut_restore_ten_rounds/,
     /round\?\.blankFrameCount/,
     /round\?\.maxVisibleWindowCount/,
     /const sourceTimestampMs = reportTimestampMs\(data\)/,
@@ -349,7 +351,7 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
     switches,
     releaseBinding,
   };
-  const rounds = [1, 2, 3].map(() => ({
+  const rounds = Array.from({ length: 10 }, () => ({
     ok: true,
     expectedMainPid: 103,
     expectedOriginalCodexPid: 201,
@@ -482,7 +484,7 @@ test("Gate 5 rehashes current artifacts and signs a successful offline aggregate
     assert.equal(result.payload.artifactCount, 3);
     assert.equal(result.payload.managerUiInteractionCount, 20);
     assert.equal(result.payload.modelSwitchCount, 3);
-    assert.equal(result.payload.shortcutRestoreRounds, 3);
+    assert.equal(result.payload.shortcutRestoreRounds, 10);
     const latest = join(result.reportRoot, "latest-gate5-visible-integration.json");
     const body = readFileSync(latest);
     assert.equal(readFileSync(`${latest}.sha256`, "ascii").trim(), `sha256:${hash(body)}`);
@@ -624,7 +626,7 @@ const rejectionCases = [
   ["model request count changed", ({ values }) => { values.modelSwitchEvidence.switches[1].requestCountAfter = 8; }, /frontend_model_hot_switch_zero_requests/],
   ["model switch restarted a process", ({ values }) => { values.modelSwitchEvidence.switches[1].antiCodexMainPidAfter = 999; }, /frontend_model_hot_switch_stable_processes/],
   ["model switch used another task", ({ values }) => { values.modelSwitchEvidence.switches[1].taskId = "019f9000-1111-7222-8333-555555555555"; }, /frontend_model_hot_switch_same_task/],
-  ["shortcut has fewer than three rounds", ({ values }) => { values.shortcutRestoreEvidence.rounds.pop(); }, /shortcut_restore_three_rounds/],
+  ["shortcut has fewer than ten rounds", ({ values }) => { values.shortcutRestoreEvidence.rounds.pop(); }, /shortcut_restore_ten_rounds/],
   ["shortcut shows a blank frame", ({ values }) => { values.shortcutRestoreEvidence.rounds[1].blankFrameCount = 1; }, /shortcut_restore_single_window_no_blank_frames/],
   ["shortcut opens a second window", ({ values }) => { values.shortcutRestoreEvidence.rounds[1].maxVisibleWindowCount = 2; }, /shortcut_restore_single_window_no_blank_frames/],
   ["artifact is missing", ({ artifacts }) => { unlinkSync(artifacts[1].path); }, /current_task_artifacts_rehashed/],

@@ -38,7 +38,7 @@ Required signed current evidence:
   --task-manifest <path>              New native autonomous task manifest
   --manager-evidence <path>           Manager actual-mouse matrix
   --model-switch-evidence <path>      Three-provider physical hot-switch matrix
-  --shortcut-restore-evidence <path>  Three-or-more shortcut restore rounds
+  --shortcut-restore-evidence <path>  Ten-or-more shortcut restore rounds
   --release-binding-evidence <path>   Current release binding report
 
 Output:
@@ -56,6 +56,7 @@ const reportRoot = resolve(args.get("--report-root") || `${process.env.APPDATA |
 const auditPath = resolve(args.get("--audit-out") || resolve(sourceRoot, "docs", "audits", "2026-07-15-gate5-visible-integration.json"));
 const maxSourceAgeHours = positiveNumber(args.get("--max-source-age-hours"), 48);
 const runtimeManifestClockToleranceMs = 1;
+const requiredShortcutRestoreRounds = 10;
 const requiredInputs = {
   taskManifest: "--task-manifest",
   managerEvidence: "--manager-evidence",
@@ -567,7 +568,7 @@ function validateShortcutRestore(data) {
     && data?.ok === true
     && data?.requestedRealTraffic === false
     && data?.usedRealTraffic === false
-    && rounds.length >= 3
+    && rounds.length >= requiredShortcutRestoreRounds
     && mainPid > 0
     && originalCodexPid > 0
     && rounds.every((round) => round?.ok === true
@@ -667,10 +668,10 @@ const shortcutRestore = sources.shortcutRestoreEvidence?.data || {};
 const restoreRounds = Array.isArray(shortcutRestore?.rounds) ? shortcutRestore.rounds : [];
 const shortcutOk = validateShortcutRestore(shortcutRestore);
 record("shortcut_restore_single_window_no_blank_frames", shortcutOk, { roundCount: restoreRounds.length });
-record("shortcut_restore_three_rounds", restoreRounds.length >= 3);
+record("shortcut_restore_ten_rounds", restoreRounds.length >= requiredShortcutRestoreRounds);
 record("original_codex_survived_all_ui_checks", switches.length >= 3
   && switches.every((entry) => entry?.originalCodexAlive === true)
-  && restoreRounds.length >= 3
+  && restoreRounds.length >= requiredShortcutRestoreRounds
   && restoreRounds.every((round) => round?.originalCodexAlive === true));
 record("aggregate_performed_no_traffic", true, { requestedRealTraffic: false, usedRealTraffic: false });
 
@@ -766,13 +767,13 @@ const payload = {
       ok: shortcutOk,
       usedRealTraffic: false,
       roundCount: restoreRounds.length,
-      sameMainPid: restoreRounds.length >= 3 && restoreRounds.every((round) => Number(round?.expectedMainPid) === Number(restoreRounds[0]?.expectedMainPid)),
+      sameMainPid: restoreRounds.length >= requiredShortcutRestoreRounds && restoreRounds.every((round) => Number(round?.expectedMainPid) === Number(restoreRounds[0]?.expectedMainPid)),
       mainPid: Number(restoreRounds[0]?.expectedMainPid || 0),
       maxRootProcessCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxRootProcessCount || 0))),
       maxVisibleWindowCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxVisibleWindowCount || 0))),
       maxAppPageCount: Math.max(0, ...restoreRounds.map((round) => Number(round?.maxAppPageCount || 0))),
       blankFrameCount: restoreRounds.reduce((sum, round) => sum + Number(round?.blankFrameCount || 0), 0),
-      originalCodexAlive: restoreRounds.length >= 3 && restoreRounds.every((round) => round?.originalCodexAlive === true),
+      originalCodexAlive: restoreRounds.length >= requiredShortcutRestoreRounds && restoreRounds.every((round) => round?.originalCodexAlive === true),
       rounds: restoreRounds,
     },
   },

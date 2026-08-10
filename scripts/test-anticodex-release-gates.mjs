@@ -55,6 +55,7 @@ const maxAgeHours = Math.max(0.01, Number(args.get("--max-age-hours") || 48));
 const strict = args.has("--strict");
 const compactOutput = args.has("--summary") || args.has("--compact") || args.has("--compact-status") || args.has("--status");
 const runtimeManifestClockToleranceMs = 1;
+const requiredShortcutRestoreRounds = 10;
 const sourcePreflightRequiredChecks = Object.freeze([
   "sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest",
   "logDbGuardSelfTest", "upstreamProfileStorage", "localConnectorVerifier", "managerRealButtonsReportContract",
@@ -513,7 +514,7 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || restore?.sameMainPid !== true
     || Number(restore?.mainPid) !== mainPid
     || Number(restore?.roundCount) !== rounds.length
-    || rounds.length < 3
+    || rounds.length < requiredShortcutRestoreRounds
     || mainPid <= 0
     || originalCodexPid <= 0
     || Number(restore?.maxRootProcessCount) !== 1
@@ -700,7 +701,7 @@ function validateGate5(report, failures) {
     "frontend_model_hot_switch_zero_requests",
     "frontend_model_hot_switch_stable_processes",
     "shortcut_restore_single_window_no_blank_frames",
-    "shortcut_restore_three_rounds",
+    "shortcut_restore_ten_rounds",
   ], failures, "gate5");
 }
 
@@ -1093,7 +1094,7 @@ function selfTest() {
       "frontend_model_hot_switch_zero_requests",
       "frontend_model_hot_switch_stable_processes",
       "shortcut_restore_single_window_no_blank_frames",
-      "shortcut_restore_three_rounds",
+      "shortcut_restore_ten_rounds",
       ...Array.from({ length: 10 }, (_, index) => `self_test_${index}`),
     ].map((id) => ({ id, ok: true }));
     const gate5TaskId = "019f9000-1111-7222-8333-444444444444";
@@ -1105,7 +1106,7 @@ function selfTest() {
       antiCodexMainPidBefore: 103, antiCodexMainPidAfter: 103,
       originalCodexAlive: true,
     }));
-    const gate5RestoreRounds = [1, 2, 3].map(() => ({
+    const gate5RestoreRounds = Array.from({ length: requiredShortcutRestoreRounds }, () => ({
       ok: true, expectedMainPid: 103, expectedOriginalCodexPid: 201,
       minimizedObserved: true, restoredAtMs: 900,
       maxRootProcessCount: 1, maxVisibleWindowCount: 1, maxAppPageCount: 1, appPagesAfter: 1,
@@ -1215,7 +1216,7 @@ function selfTest() {
           providers: ["gemini", "claude", "third-party"], originalCodexAlive: true, switches: gate5Switches,
         },
         shortcut_restore_single_window_no_blank_frames: {
-          ok: true, usedRealTraffic: false, sameMainPid: true, mainPid: 103, roundCount: 3,
+          ok: true, usedRealTraffic: false, sameMainPid: true, mainPid: 103, roundCount: requiredShortcutRestoreRounds,
           maxRootProcessCount: 1, maxVisibleWindowCount: 1, maxAppPageCount: 1,
           blankFrameCount: 0, originalCodexAlive: true, rounds: gate5RestoreRounds,
         },
@@ -1270,7 +1271,7 @@ function selfTest() {
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].taskId = "019f9000-1111-7222-8333-555555555555"; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a switch in another task");
-    expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds.pop(); }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted fewer than three restore rounds");
+    expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds.pop(); }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted fewer than ten restore rounds");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].blankFrameCount = 1; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a blank restore frame");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].maxVisibleWindowCount = 2; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a second visible window");
     const gate8ArtifactFailures = [];

@@ -472,7 +472,7 @@ function buildRawEvidence(root) {
     target,
   }));
 
-  const shortcutRounds = [1, 2, 3].map((probeId) => ({
+  const shortcutRounds = Array.from({ length: 10 }, (_, index) => index + 1).map((probeId) => ({
     ok: true,
     checkedAt,
     probeId,
@@ -1164,11 +1164,11 @@ test("builder rejects duplicate artifact paths instead of counting one artifact 
   }
 });
 
-test("builder rejects one shortcut probe repeated as three restore rounds", () => {
+test("builder rejects one shortcut probe repeated as ten restore rounds", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-shortcut-unique-"));
   try {
     const state = buildRawEvidence(root);
-    state.paths.shortcutRounds = Array(3).fill(state.paths.shortcutRounds[0]);
+    state.paths.shortcutRounds = Array(10).fill(state.paths.shortcutRounds[0]);
     const result = runBuilder(root, state);
     assert.equal(result.child.status, 1, result.child.stderr);
     assert.match(result.payload.failures.join("\n"), /shortcut.*unique|duplicate shortcut/i);

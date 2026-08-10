@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeManifestClockToleranceMs = 1;
+const requiredShortcutRestoreRounds = 10;
 
 function parseArgs(values) {
   const parsed = new Map();
@@ -48,7 +49,7 @@ Required raw evidence:
   --manager-close <path>            Signed Manager three-height close mouse probe
   --manager-protocol <path>         Signed Manager protocol round-trip mouse probe
   --model-switch <path>             Signed same-task model switch probe (repeat 3+)
-  --shortcut-restore <path>         Signed taskbar-button restore probe (repeat exactly 3)
+  --shortcut-restore <path>         Signed taskbar-button restore probe (repeat exactly 10)
   --live-tray-evidence <path>       Signed live notification-area accessibility probe
   --release-binding-evidence <path> Signed current release-binding report
   --sync-readiness-evidence <path>  Signed sync-readiness report bound by release hash
@@ -1062,7 +1063,7 @@ function normalizeModelSwitches(sources, taskId, releaseBinding, runtimeIdentity
 }
 
 function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
-  requireCondition(sources.length === 3, "shortcut-restore: exactly three signed taskbar-button probes are required");
+  requireCondition(sources.length === requiredShortcutRestoreRounds, "shortcut-restore: exactly ten signed taskbar-button probes are required");
   requireCondition(uniqueSourceFiles(sources), "shortcut-restore: source files and hashes must be unique");
   const rounds = sources.map((source, index) => {
     const raw = source.data;
@@ -1191,8 +1192,8 @@ async function main() {
     if (missing.length > 0) throw new Error(`missing or repeated required arguments: ${missing.join(", ")}`);
     if (values("--task-artifact").length < 3) throw new Error("--task-artifact must be supplied at least three times");
     if (values("--model-switch").length < 3) throw new Error("--model-switch must be supplied at least three times");
-    if (values("--shortcut-restore").length !== 3) {
-      throw new Error("--shortcut-restore must be supplied exactly three times for taskbar-button acceptance");
+    if (values("--shortcut-restore").length !== requiredShortcutRestoreRounds) {
+      throw new Error("--shortcut-restore must be supplied exactly ten times for taskbar-button acceptance");
     }
 
     const taskReceipt = readRaw(value("--task-receipt"), { requireSigned: true, label: "task-receipt" });
