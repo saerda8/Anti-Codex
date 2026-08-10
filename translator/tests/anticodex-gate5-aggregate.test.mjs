@@ -117,6 +117,26 @@ function hash(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function shortcutRestorePhysicalTraceSha256(round) {
+  const earlyFrames = round.earlyFrameTimeline.map((entry) => [
+    entry.relativeToForegroundMs, entry.mean, entry.standardDeviation, entry.darkRatio, entry.isBlank,
+  ]);
+  const windowTransitions = round.windowStateTransitions.map((entry) => [
+    entry.elapsedMs - round.activationSentAtMs,
+    entry.visible,
+    entry.minimized,
+    entry.exactForeground,
+    entry.foregroundWindowHandle === round.windowHandleBefore,
+    entry.foregroundProcessId === round.expectedMainPid,
+  ]);
+  const watcherSampling = [
+    round.topologyWatcherSampleCount, round.topologyWatcherMaxIntervalMs, round.topologyWatcherTailGapMs,
+    round.appPageSampleCount, round.appPageWatcherMinCount, round.appPageWatcherMaxCount,
+    round.appPageWatcherMaxIntervalMs, round.appPageWatcherTailGapMs,
+  ];
+  return hash(JSON.stringify({ earlyFrames, windowTransitions, watcherSampling }));
+}
+
 function writeSigned(path, value) {
   const body = `${JSON.stringify(value, null, 2)}\n`;
   writeFileSync(path, body, "utf8");
@@ -359,7 +379,7 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
     const roundCheckedAt = new Date(Date.parse(checkedAt) + roundNumber).toISOString();
     const probeId = roundNumber.toString(16).padStart(32, "0");
     const sourcePath = join(root, `fixture-shortcut-restore-${probeId}.json`);
-    return {
+    const round = {
       ok: true,
       generatedAt: roundCheckedAt,
       checkedAt: roundCheckedAt,
@@ -371,6 +391,8 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
       report: { history: sourcePath },
       expectedMainPid: 103,
       expectedOriginalCodexPid: 201,
+      activationSentAtMs: 25,
+      windowHandleBefore: 7001,
       minimizedObserved: true,
       restoredAtMs: 900,
       maxRootProcessCount: 1,
@@ -378,10 +400,42 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
       maxAppPageCount: 1,
       appPagesAfter: 1,
       blankFrameCount: 0,
-      frameCount: 3,
+      frameCount: 8,
+      earlyFrameCount: 8,
+      earlyFrameTimeline: Array.from({ length: 8 }, (_, frameIndex) => ({
+        relativeToForegroundMs: 15 + frameIndex * 45,
+        mean: 180 + roundNumber + frameIndex / 10,
+        standardDeviation: 25,
+        darkRatio: 0.5,
+        isBlank: false,
+      })),
+      windowStateTransitions: [{
+        elapsedMs: 30,
+        visible: true,
+        minimized: true,
+        foregroundWindowHandle: 0,
+        foregroundProcessId: 0,
+        exactForeground: false,
+      }, {
+        elapsedMs: 900,
+        visible: true,
+        minimized: false,
+        foregroundWindowHandle: 7001,
+        foregroundProcessId: 103,
+        exactForeground: true,
+      }],
+      topologyWatcherSampleCount: 50 + roundNumber,
+      topologyWatcherMaxIntervalMs: 55,
+      topologyWatcherTailGapMs: 25,
+      appPageSampleCount: 40 + roundNumber,
+      appPageWatcherMinCount: 1,
+      appPageWatcherMaxCount: 1,
+      appPageWatcherMaxIntervalMs: 100,
+      appPageWatcherTailGapMs: 50,
       originalCodexAlive: true,
       after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
     };
+    return { ...round, physicalTraceSha256: shortcutRestorePhysicalTraceSha256(round) };
   });
   const shortcutRestoreEvidence = {
     schema: "anticodex-shortcut-restore-matrix-v1",
@@ -548,6 +602,7 @@ test("Gate 5 rejects ten files cloned from one shortcut restore event", () => {
           probeId,
           sourcePath,
           sourceSha256: (index + 1).toString(16).padStart(64, "0"),
+          physicalTraceSha256: (index + 101).toString(16).padStart(64, "0"),
           report: { history: sourcePath },
         };
       });

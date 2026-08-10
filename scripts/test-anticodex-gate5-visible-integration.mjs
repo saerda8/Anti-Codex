@@ -126,6 +126,48 @@ function samePath(left, right) {
   try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
 }
 
+function shortcutRestorePhysicalTraceSha256(round) {
+  const finite = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+  const bool = (value) => typeof value === "boolean" ? value : null;
+  const activationSentAtMs = finite(round?.activationSentAtMs);
+  const expectedMainPid = finite(round?.expectedMainPid);
+  const windowHandleBefore = finite(round?.windowHandleBefore);
+  const earlyFrames = Array.isArray(round?.earlyFrameTimeline) ? round.earlyFrameTimeline.map((entry) => [
+    finite(entry?.relativeToForegroundMs), finite(entry?.mean), finite(entry?.standardDeviation), finite(entry?.darkRatio), bool(entry?.isBlank),
+  ]) : null;
+  const windowTransitions = Array.isArray(round?.windowStateTransitions) ? round.windowStateTransitions.map((entry) => {
+    const elapsedMs = finite(entry?.elapsedMs);
+    const foregroundWindowHandle = finite(entry?.foregroundWindowHandle);
+    const foregroundProcessId = finite(entry?.foregroundProcessId);
+    return [
+      elapsedMs === null || activationSentAtMs === null ? null : elapsedMs - activationSentAtMs,
+      bool(entry?.visible), bool(entry?.minimized), bool(entry?.exactForeground),
+      foregroundWindowHandle === null || windowHandleBefore === null ? null : foregroundWindowHandle === windowHandleBefore,
+      foregroundProcessId === null || expectedMainPid === null ? null : foregroundProcessId === expectedMainPid,
+    ];
+  }) : null;
+  const watcherSampling = [
+    finite(round?.topologyWatcherSampleCount), finite(round?.topologyWatcherMaxIntervalMs), finite(round?.topologyWatcherTailGapMs),
+    finite(round?.appPageSampleCount), finite(round?.appPageWatcherMinCount), finite(round?.appPageWatcherMaxCount),
+    finite(round?.appPageWatcherMaxIntervalMs), finite(round?.appPageWatcherTailGapMs),
+  ];
+  if (activationSentAtMs === null || activationSentAtMs < 0
+    || expectedMainPid === null || expectedMainPid <= 0
+    || windowHandleBefore === null || windowHandleBefore <= 0
+    || earlyFrames === null || earlyFrames.length < 1
+    || Number(round?.earlyFrameCount) !== earlyFrames.length
+    || earlyFrames.some((entry) => entry.some((value) => value === null) || entry[0] < 0)
+    || windowTransitions === null || windowTransitions.length < 1
+    || windowTransitions.some((entry) => entry.some((value) => value === null) || entry[0] < 0)
+    || watcherSampling.some((value) => value === null)
+    || !Number.isInteger(watcherSampling[0]) || watcherSampling[0] < 2
+    || watcherSampling[1] < 0 || watcherSampling[2] < 0
+    || !Number.isInteger(watcherSampling[3]) || watcherSampling[3] < 2
+    || watcherSampling[4] !== 1 || watcherSampling[5] !== 1
+    || watcherSampling[6] < 0 || watcherSampling[7] < 0) return "";
+  return sha256(JSON.stringify({ earlyFrames, windowTransitions, watcherSampling }));
+}
+
 function independentShortcutRestoreRounds(rounds) {
   const identities = rounds.map((round) => {
     const probeId = String(round?.probeId || "").toLowerCase();
@@ -135,6 +177,7 @@ function independentShortcutRestoreRounds(rounds) {
     const sourcePath = String(round?.sourcePath || "");
     const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
     const historyPath = String(round?.report?.history || "");
+    const physicalTraceSha256 = shortcutRestorePhysicalTraceSha256(round);
     const checkedAtMs = Date.parse(checkedAt);
     const topologyStartedAtMs = Date.parse(topologyStartedAt);
     const appPageStartedAtMs = Date.parse(appPageStartedAt);
@@ -144,10 +187,12 @@ function independentShortcutRestoreRounds(rounds) {
       || !Number.isFinite(appPageStartedAtMs) || appPageStartedAtMs > checkedAtMs
       || !sourcePath || !historyPath || !samePath(sourcePath, historyPath)
       || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
-      || !/^[a-f0-9]{64}$/.test(sourceSha256)) return null;
-    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256 };
+      || !/^[a-f0-9]{64}$/.test(sourceSha256)
+      || !/^[a-f0-9]{64}$/.test(physicalTraceSha256)
+      || String(round?.physicalTraceSha256 || "").toLowerCase() !== physicalTraceSha256) return null;
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256, physicalTraceSha256 };
   });
-  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256"]
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256", "physicalTraceSha256"]
     .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
 }
 

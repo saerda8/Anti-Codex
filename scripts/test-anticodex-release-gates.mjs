@@ -107,6 +107,48 @@ function samePath(left, right) {
   try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
 }
 
+function shortcutRestorePhysicalTraceSha256(round) {
+  const finite = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+  const bool = (value) => typeof value === "boolean" ? value : null;
+  const activationSentAtMs = finite(round?.activationSentAtMs);
+  const expectedMainPid = finite(round?.expectedMainPid);
+  const windowHandleBefore = finite(round?.windowHandleBefore);
+  const earlyFrames = Array.isArray(round?.earlyFrameTimeline) ? round.earlyFrameTimeline.map((entry) => [
+    finite(entry?.relativeToForegroundMs), finite(entry?.mean), finite(entry?.standardDeviation), finite(entry?.darkRatio), bool(entry?.isBlank),
+  ]) : null;
+  const windowTransitions = Array.isArray(round?.windowStateTransitions) ? round.windowStateTransitions.map((entry) => {
+    const elapsedMs = finite(entry?.elapsedMs);
+    const foregroundWindowHandle = finite(entry?.foregroundWindowHandle);
+    const foregroundProcessId = finite(entry?.foregroundProcessId);
+    return [
+      elapsedMs === null || activationSentAtMs === null ? null : elapsedMs - activationSentAtMs,
+      bool(entry?.visible), bool(entry?.minimized), bool(entry?.exactForeground),
+      foregroundWindowHandle === null || windowHandleBefore === null ? null : foregroundWindowHandle === windowHandleBefore,
+      foregroundProcessId === null || expectedMainPid === null ? null : foregroundProcessId === expectedMainPid,
+    ];
+  }) : null;
+  const watcherSampling = [
+    finite(round?.topologyWatcherSampleCount), finite(round?.topologyWatcherMaxIntervalMs), finite(round?.topologyWatcherTailGapMs),
+    finite(round?.appPageSampleCount), finite(round?.appPageWatcherMinCount), finite(round?.appPageWatcherMaxCount),
+    finite(round?.appPageWatcherMaxIntervalMs), finite(round?.appPageWatcherTailGapMs),
+  ];
+  if (activationSentAtMs === null || activationSentAtMs < 0
+    || expectedMainPid === null || expectedMainPid <= 0
+    || windowHandleBefore === null || windowHandleBefore <= 0
+    || earlyFrames === null || earlyFrames.length < 1
+    || Number(round?.earlyFrameCount) !== earlyFrames.length
+    || earlyFrames.some((entry) => entry.some((value) => value === null) || entry[0] < 0)
+    || windowTransitions === null || windowTransitions.length < 1
+    || windowTransitions.some((entry) => entry.some((value) => value === null) || entry[0] < 0)
+    || watcherSampling.some((value) => value === null)
+    || !Number.isInteger(watcherSampling[0]) || watcherSampling[0] < 2
+    || watcherSampling[1] < 0 || watcherSampling[2] < 0
+    || !Number.isInteger(watcherSampling[3]) || watcherSampling[3] < 2
+    || watcherSampling[4] !== 1 || watcherSampling[5] !== 1
+    || watcherSampling[6] < 0 || watcherSampling[7] < 0) return "";
+  return sha256Buffer(JSON.stringify({ earlyFrames, windowTransitions, watcherSampling }));
+}
+
 function independentShortcutRestoreRounds(rounds) {
   const identities = rounds.map((round) => {
     const probeId = String(round?.probeId || "").toLowerCase();
@@ -116,6 +158,7 @@ function independentShortcutRestoreRounds(rounds) {
     const sourcePath = String(round?.sourcePath || "");
     const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
     const historyPath = String(round?.report?.history || "");
+    const physicalTraceSha256 = shortcutRestorePhysicalTraceSha256(round);
     const checkedAtMs = Date.parse(checkedAt);
     const topologyStartedAtMs = Date.parse(topologyStartedAt);
     const appPageStartedAtMs = Date.parse(appPageStartedAt);
@@ -125,10 +168,12 @@ function independentShortcutRestoreRounds(rounds) {
       || !Number.isFinite(appPageStartedAtMs) || appPageStartedAtMs > checkedAtMs
       || !sourcePath || !historyPath || !samePath(sourcePath, historyPath)
       || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
-      || !/^[a-f0-9]{64}$/.test(sourceSha256)) return null;
-    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256 };
+      || !/^[a-f0-9]{64}$/.test(sourceSha256)
+      || !/^[a-f0-9]{64}$/.test(physicalTraceSha256)
+      || String(round?.physicalTraceSha256 || "").toLowerCase() !== physicalTraceSha256) return null;
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256, physicalTraceSha256 };
   });
-  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256"]
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256", "physicalTraceSha256"]
     .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
 }
 
@@ -1137,17 +1182,42 @@ function selfTest() {
       const roundCheckedAt = new Date(Date.now() - 60_000 + roundNumber).toISOString();
       const probeId = roundNumber.toString(16).padStart(32, "0");
       const sourcePath = join(temporaryRoot, `self-test-shortcut-restore-${probeId}.json`);
-      return {
+      const round = {
         ok: true, generatedAt: roundCheckedAt, checkedAt: roundCheckedAt, probeId,
         topologyWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 5_000).toISOString(),
         appPageWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 4_000).toISOString(),
         sourcePath, sourceSha256: roundNumber.toString(16).padStart(64, "0"), report: { history: sourcePath },
         expectedMainPid: 103, expectedOriginalCodexPid: 201,
+        activationSentAtMs: 25, windowHandleBefore: 7001,
         minimizedObserved: true, restoredAtMs: 900,
         maxRootProcessCount: 1, maxVisibleWindowCount: 1, maxAppPageCount: 1, appPagesAfter: 1,
-        blankFrameCount: 0, frameCount: 3, originalCodexAlive: true,
+        blankFrameCount: 0, frameCount: 8, earlyFrameCount: 8,
+        earlyFrameTimeline: Array.from({ length: 8 }, (_, frameIndex) => ({
+          relativeToForegroundMs: 15 + frameIndex * 45,
+          mean: 180 + roundNumber + frameIndex / 10,
+          standardDeviation: 25,
+          darkRatio: 0.5,
+          isBlank: false,
+        })),
+        windowStateTransitions: [{
+          elapsedMs: 30, visible: true, minimized: true,
+          foregroundWindowHandle: 0, foregroundProcessId: 0, exactForeground: false,
+        }, {
+          elapsedMs: 900, visible: true, minimized: false,
+          foregroundWindowHandle: 7001, foregroundProcessId: 103, exactForeground: true,
+        }],
+        topologyWatcherSampleCount: 50 + roundNumber,
+        topologyWatcherMaxIntervalMs: 55,
+        topologyWatcherTailGapMs: 25,
+        appPageSampleCount: 40 + roundNumber,
+        appPageWatcherMinCount: 1,
+        appPageWatcherMaxCount: 1,
+        appPageWatcherMaxIntervalMs: 100,
+        appPageWatcherTailGapMs: 50,
+        originalCodexAlive: true,
         after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
       };
+      return { ...round, physicalTraceSha256: shortcutRestorePhysicalTraceSha256(round) };
     });
     const gate5ManagerContracts = Object.fromEntries(managerActions.map((action) => {
       const expected = managerHandlerContractByAction[action];
@@ -1315,6 +1385,16 @@ function selfTest() {
       ui.shortcut_restore_single_window_no_blank_frames.rounds[1].generatedAt = ui.shortcut_restore_single_window_no_blank_frames.rounds[0].generatedAt;
       ui.shortcut_restore_single_window_no_blank_frames.rounds[1].checkedAt = ui.shortcut_restore_single_window_no_blank_frames.rounds[0].checkedAt;
     }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted duplicate shortcut restore event");
+    expectUiFailure((ui) => {
+      const source = ui.shortcut_restore_single_window_no_blank_frames.rounds[0];
+      const target = ui.shortcut_restore_single_window_no_blank_frames.rounds[1];
+      for (const key of [
+        "activationSentAtMs", "windowHandleBefore", "earlyFrameCount", "earlyFrameTimeline", "windowStateTransitions",
+        "topologyWatcherSampleCount", "topologyWatcherMaxIntervalMs", "topologyWatcherTailGapMs",
+        "appPageSampleCount", "appPageWatcherMinCount", "appPageWatcherMaxCount",
+        "appPageWatcherMaxIntervalMs", "appPageWatcherTailGapMs",
+      ]) target[key] = structuredClone(source[key]);
+    }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted duplicate shortcut restore physical trace");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].blankFrameCount = 1; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a blank restore frame");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].maxVisibleWindowCount = 2; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a second visible window");
     const gate8ArtifactFailures = [];
