@@ -55,6 +55,11 @@ const maxAgeHours = Math.max(0.01, Number(args.get("--max-age-hours") || 48));
 const strict = args.has("--strict");
 const compactOutput = args.has("--summary") || args.has("--compact") || args.has("--compact-status") || args.has("--status");
 const runtimeManifestClockToleranceMs = 1;
+const sourcePreflightRequiredChecks = Object.freeze([
+  "sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest",
+  "logDbGuardSelfTest", "upstreamProfileStorage", "localConnectorVerifier", "managerRealButtonsReportContract",
+  "managerMojibakeContracts", "publicDocumentation", "translatorRegression", "diffWhitespace",
+]);
 const managerActions = Object.freeze([
   "refreshStatus", "refreshModels", "accountSwitch", "accountProxy",
   "syncReadiness", "repairShortcuts", "updateCheck", "sourcePreflight",
@@ -716,7 +721,7 @@ function validateLegacyZeroHit(report, failures) {
 function validateSourcePreflight(report, failures, sourceGit = currentSourceGitState()) {
   if (report?.reportName !== "source-preflight" || report?.ok !== true || report?.noTraffic !== true || report?.usedRealTraffic !== false || report?.behaviorCovered !== true) failures.push("source_preflight_result");
   if (!empty(report?.failures)) failures.push("source_preflight_failures");
-  checkObjectOk(report, ["sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest", "localConnectorVerifier", "managerMojibakeContracts", "translatorRegression", "diffWhitespace"], failures, "source_preflight");
+  checkObjectOk(report, sourcePreflightRequiredChecks, failures, "source_preflight");
   if (report?.skipFullRegression !== false || report?.checks?.translatorRegression?.skipped === true) failures.push("source_preflight_full_regression");
   if (report?.sourceGitClean !== true || report?.checks?.sourceGitRevision?.clean !== true) failures.push("source_preflight_git_generated_dirty");
   if (sourceGit?.ok !== true) failures.push("source_preflight_git_state");
@@ -969,15 +974,25 @@ function selfTest() {
       sourceGitHead,
       sourceGitClean: true,
       failures: [],
-      checks: Object.fromEntries([
-        "sourceGitRevision", "javascriptSyntax", "powershellSyntax", "uiStateSelfTest", "managerBridgeSelfTest",
-        "localConnectorVerifier", "managerMojibakeContracts", "translatorRegression", "diffWhitespace",
-      ].map((name) => [name, { ok: true }])),
+      checks: Object.fromEntries(sourcePreflightRequiredChecks.map((name) => [name, { ok: true }])),
     };
     sourcePreflightFixture.checks.sourceGitRevision.clean = true;
     const validSourceFailures = [];
     validateSourcePreflight(sourcePreflightFixture, validSourceFailures, { ok: true, head: sourceGitHead, clean: true });
     if (validSourceFailures.length > 0) throw new Error(`valid source preflight rejected: ${validSourceFailures.join(",")}`);
+    for (const requiredCheck of Object.keys(sourcePreflightFixture.checks)) {
+      const missingChecks = { ...sourcePreflightFixture.checks };
+      delete missingChecks[requiredCheck];
+      const missingFailures = [];
+      validateSourcePreflight({ ...sourcePreflightFixture, checks: missingChecks }, missingFailures, { ok: true, head: sourceGitHead, clean: true });
+      if (!missingFailures.includes(`source_preflight_${requiredCheck}_not_ok`)) throw new Error(`source preflight accepted missing required check ${requiredCheck}`);
+      const failedFailures = [];
+      validateSourcePreflight({
+        ...sourcePreflightFixture,
+        checks: { ...sourcePreflightFixture.checks, [requiredCheck]: { ...sourcePreflightFixture.checks[requiredCheck], ok: false } },
+      }, failedFailures, { ok: true, head: sourceGitHead, clean: true });
+      if (!failedFailures.includes(`source_preflight_${requiredCheck}_not_ok`)) throw new Error(`source preflight accepted failed required check ${requiredCheck}`);
+    }
     for (const [name, candidate, gitState, expectedFailure] of [
       ["skipped regression", { ...sourcePreflightFixture, skipFullRegression: true }, { ok: true, head: sourceGitHead, clean: true }, "source_preflight_full_regression"],
       ["old revision", sourcePreflightFixture, { ok: true, head: "b".repeat(40), clean: true }, "source_preflight_git_revision"],
