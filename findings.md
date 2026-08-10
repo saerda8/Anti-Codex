@@ -4022,3 +4022,10 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - Historical activation steps are now explicitly marked superseded or completed and point to one current authorization boundary. No current process, UI, provider, runtime or installed file was inspected or changed by this documentation-only repair.
 - A static contract now rejects coexistence between the current revision-7 truth and any unchecked copy of the known superseded activation instructions. It does not authorize a preflight, shutdown, sync, restart or activation.
 - The accepted media task remains frozen and no model/provider traffic was sent. Future autonomous smoke traffic keeps the order Gemini, Claude, then Xiaomi MIMO only if both preferred providers are explicitly unavailable; the exact request model ID is `mimo-v2.5-pro`, and no API credential may be written to source or documentation.
+
+## 2026-08-10 exact source checkpoint
+
+- Commit `0724e9ce58a3c9fc5f22b51e0be8c6bf15d96f19` was clean before and after its one complete source preflight. The report records `ok:true`, `noTraffic:true`, `usedRealTraffic:false`, all 13 checks green, and translator `1001/1001` with zero failures, warnings or skips. `20260810-100444-source-preflight.json` is 123,257 bytes and its SHA-256 is `226f2e6cdfbed4275faba14a639c76e18309e87542ff27ef2ca926ac36e00637`.
+- The revision-9 opacity-pulse experiment has been replayed only in isolated source branch `fix/primary-opacity-pulse-rev9-d723-20260810` at `109e420108bc91b6a92ab961d460b3588c8c869f`; its direct offline coverage is green, but it is not merged, deployed or physically accepted.
+- The installed shell remains revision 7 and does not contain the current native-Settings evidence repair. This checkpoint did not inspect or manipulate the UI, did not close or restart either client, did not synchronize runtime files, and sent no provider traffic.
+- This documentation record necessarily follows the tested source commit. It is not itself an activation checkpoint; if repository HEAD changes before a future authorized activation, the exact-HEAD no-traffic preflight must be created again for that then-current commit.
