@@ -472,10 +472,11 @@ function buildRawEvidence(root) {
     target,
   }));
 
-  const shortcutRounds = Array.from({ length: 10 }, (_, index) => index + 1).map((probeId) => ({
+  const shortcutRounds = Array.from({ length: 10 }, (_, index) => index + 1).map((roundNumber) => ({
     ok: true,
-    checkedAt,
-    probeId,
+    generatedAt: new Date(Date.parse(checkedAt) + roundNumber).toISOString(),
+    checkedAt: new Date(Date.parse(checkedAt) + roundNumber).toISOString(),
+    probeId: roundNumber.toString(16).padStart(32, "0"),
     schema: "anticodex-shortcut-restore-acceptance-v1",
     activationMode: "taskbar-button",
     actualMouse: true,
@@ -559,6 +560,8 @@ function buildRawEvidence(root) {
       presentable: false,
       productWindow: false,
     }],
+    topologyWatcherFirstSampleAtUtc: new Date(Date.parse(checkedAt) - 5_000 + roundNumber).toISOString(),
+    appPageWatcherFirstSampleAtUtc: new Date(Date.parse(checkedAt) - 4_000 + roundNumber).toISOString(),
     processIdentity: runtimeProcessIdentity,
     sessionIdentity: runtimeSessionIdentity,
   }));
@@ -570,7 +573,7 @@ function buildRawEvidence(root) {
     managerClose: join(root, "manager-close.json"),
     managerProtocol: join(root, "manager-protocol.json"),
     modelSwitches: modelSwitches.map((_, index) => join(root, `model-switch-${index + 1}.json`)),
-    shortcutRounds: shortcutRounds.map((_, index) => join(root, `shortcut-round-${index + 1}.json`)),
+    shortcutRounds: shortcutRounds.map((round) => join(root, `fixture-shortcut-restore-${round.probeId}.json`)),
     liveTray: join(root, "live-tray.json"),
     syncReadiness: join(root, "sync-readiness.json"),
     releaseBinding: join(root, "release-binding.json"),
@@ -582,7 +585,10 @@ function buildRawEvidence(root) {
   writeJson(paths.managerClose, managerClose, { signed: true });
   writeJson(paths.managerProtocol, managerProtocol, { signed: true });
   modelSwitches.forEach((value, index) => writeJson(paths.modelSwitches[index], value, { signed: true }));
-  shortcutRounds.forEach((value, index) => writeJson(paths.shortcutRounds[index], value, { signed: true }));
+  shortcutRounds.forEach((value, index) => {
+    value.report = { history: paths.shortcutRounds[index] };
+    writeJson(paths.shortcutRounds[index], value, { signed: true });
+  });
   writeJson(paths.liveTray, {
     schema: "anticodex-live-tray-icon-v2",
     ok: true,
@@ -776,11 +782,17 @@ function runBuilder(root, state, extraArgs = []) {
 function extendShortcutRounds(state, count) {
   const template = JSON.parse(readFileSync(state.paths.shortcutRounds.at(-1), "utf8"));
   while (state.paths.shortcutRounds.length < count) {
-    const probeId = state.paths.shortcutRounds.length + 1;
-    const path = join(dirname(state.paths.shortcutRounds[0]), `shortcut-round-${probeId}.json`);
+    const roundNumber = state.paths.shortcutRounds.length + 1;
+    const probeId = roundNumber.toString(16).padStart(32, "0");
+    const path = join(dirname(state.paths.shortcutRounds[0]), `fixture-shortcut-restore-${probeId}.json`);
     const round = structuredClone(template);
     round.probeId = probeId;
-    round.taskbarElement.childId = 15 + probeId;
+    round.generatedAt = new Date(Date.parse(template.checkedAt) + roundNumber).toISOString();
+    round.checkedAt = round.generatedAt;
+    round.topologyWatcherFirstSampleAtUtc = new Date(Date.parse(template.topologyWatcherFirstSampleAtUtc) + roundNumber).toISOString();
+    round.appPageWatcherFirstSampleAtUtc = new Date(Date.parse(template.appPageWatcherFirstSampleAtUtc) + roundNumber).toISOString();
+    round.report = { history: path };
+    round.taskbarElement.childId = 15 + roundNumber;
     writeJson(path, round, { signed: true });
     state.paths.shortcutRounds.push(path);
   }

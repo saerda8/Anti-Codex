@@ -303,6 +303,32 @@ function sameNativePath(left, right) {
     === resolve(String(right || "")).replace(/\\/g, "/").toLowerCase();
 }
 
+function independentShortcutRestoreRounds(rounds) {
+  const identities = rounds.map((round) => {
+    const probeId = String(round?.probeId || "").toLowerCase();
+    const checkedAt = String(round?.checkedAt || "");
+    const generatedAt = String(round?.generatedAt || "");
+    const topologyStartedAt = String(round?.topologyWatcherFirstSampleAtUtc || "");
+    const appPageStartedAt = String(round?.appPageWatcherFirstSampleAtUtc || "");
+    const sourcePath = String(round?.sourcePath || "");
+    const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
+    const historyPath = String(round?.report?.history || "");
+    const checkedAtMs = Date.parse(checkedAt);
+    const topologyStartedAtMs = Date.parse(topologyStartedAt);
+    const appPageStartedAtMs = Date.parse(appPageStartedAt);
+    if (!/^[a-f0-9]{32}$/.test(probeId)
+      || !Number.isFinite(checkedAtMs) || generatedAt !== checkedAt
+      || !Number.isFinite(topologyStartedAtMs) || topologyStartedAtMs > checkedAtMs
+      || !Number.isFinite(appPageStartedAtMs) || appPageStartedAtMs > checkedAtMs
+      || !sourcePath || !historyPath || !sameNativePath(sourcePath, historyPath)
+      || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
+      || !/^[a-f0-9]{64}$/.test(sourceSha256)) return null;
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256 };
+  });
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256"]
+    .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
+}
+
 function insideRoot(path, root) {
   const child = resolve(path);
   const parent = resolve(root);
@@ -1172,6 +1198,8 @@ function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
   requireCondition(rounds.every((round) => Number(round.expectedMainPid) === Number(rounds[0].expectedMainPid)
     && Number(round.expectedOriginalCodexPid) === Number(rounds[0].expectedOriginalCodexPid)),
   "shortcut-restore: process baseline changed between rounds");
+  requireCondition(independentShortcutRestoreRounds(rounds),
+    "shortcut-restore: ten independent physical restore events with unique probe IDs, timestamps, histories, and hashes are required");
   return {
     schema: "anticodex-shortcut-restore-matrix-v1",
     ok: true,

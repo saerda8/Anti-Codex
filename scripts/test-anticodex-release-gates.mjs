@@ -107,6 +107,31 @@ function samePath(left, right) {
   try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
 }
 
+function independentShortcutRestoreRounds(rounds) {
+  const identities = rounds.map((round) => {
+    const probeId = String(round?.probeId || "").toLowerCase();
+    const checkedAt = String(round?.checkedAt || "");
+    const topologyStartedAt = String(round?.topologyWatcherFirstSampleAtUtc || "");
+    const appPageStartedAt = String(round?.appPageWatcherFirstSampleAtUtc || "");
+    const sourcePath = String(round?.sourcePath || "");
+    const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
+    const historyPath = String(round?.report?.history || "");
+    const checkedAtMs = Date.parse(checkedAt);
+    const topologyStartedAtMs = Date.parse(topologyStartedAt);
+    const appPageStartedAtMs = Date.parse(appPageStartedAt);
+    if (!/^[a-f0-9]{32}$/.test(probeId)
+      || !Number.isFinite(checkedAtMs) || String(round?.generatedAt || "") !== checkedAt
+      || !Number.isFinite(topologyStartedAtMs) || topologyStartedAtMs > checkedAtMs
+      || !Number.isFinite(appPageStartedAtMs) || appPageStartedAtMs > checkedAtMs
+      || !sourcePath || !historyPath || !samePath(sourcePath, historyPath)
+      || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
+      || !/^[a-f0-9]{64}$/.test(sourceSha256)) return null;
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256 };
+  });
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256"]
+    .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
+}
+
 function normalizedContractPath(value) {
   const normalized = String(value || "").replaceAll("\\", "/");
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
@@ -515,6 +540,7 @@ function validateGate5CurrentUiEvidence(report, failures) {
     || Number(restore?.mainPid) !== mainPid
     || Number(restore?.roundCount) !== rounds.length
     || rounds.length < requiredShortcutRestoreRounds
+    || !independentShortcutRestoreRounds(rounds)
     || mainPid <= 0
     || originalCodexPid <= 0
     || Number(restore?.maxRootProcessCount) !== 1
@@ -1106,13 +1132,23 @@ function selfTest() {
       antiCodexMainPidBefore: 103, antiCodexMainPidAfter: 103,
       originalCodexAlive: true,
     }));
-    const gate5RestoreRounds = Array.from({ length: requiredShortcutRestoreRounds }, () => ({
-      ok: true, expectedMainPid: 103, expectedOriginalCodexPid: 201,
-      minimizedObserved: true, restoredAtMs: 900,
-      maxRootProcessCount: 1, maxVisibleWindowCount: 1, maxAppPageCount: 1, appPagesAfter: 1,
-      blankFrameCount: 0, frameCount: 3, originalCodexAlive: true,
-      after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
-    }));
+    const gate5RestoreRounds = Array.from({ length: requiredShortcutRestoreRounds }, (_, index) => {
+      const roundNumber = index + 1;
+      const roundCheckedAt = new Date(Date.now() - 60_000 + roundNumber).toISOString();
+      const probeId = roundNumber.toString(16).padStart(32, "0");
+      const sourcePath = join(temporaryRoot, `self-test-shortcut-restore-${probeId}.json`);
+      return {
+        ok: true, generatedAt: roundCheckedAt, checkedAt: roundCheckedAt, probeId,
+        topologyWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 5_000).toISOString(),
+        appPageWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 4_000).toISOString(),
+        sourcePath, sourceSha256: roundNumber.toString(16).padStart(64, "0"), report: { history: sourcePath },
+        expectedMainPid: 103, expectedOriginalCodexPid: 201,
+        minimizedObserved: true, restoredAtMs: 900,
+        maxRootProcessCount: 1, maxVisibleWindowCount: 1, maxAppPageCount: 1, appPagesAfter: 1,
+        blankFrameCount: 0, frameCount: 3, originalCodexAlive: true,
+        after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
+      };
+    });
     const gate5ManagerContracts = Object.fromEntries(managerActions.map((action) => {
       const expected = managerHandlerContractByAction[action];
       return [action, { verified: true, kind: expected[0], source: expected[1], handler: expected[2] }];
@@ -1271,7 +1307,14 @@ function selfTest() {
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].requestCountAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted model traffic during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].antiCodexMainPidAfter += 1; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a client restart during a switch");
     expectUiFailure((ui) => { ui.frontend_model_hot_switch.switches[1].taskId = "019f9000-1111-7222-8333-555555555555"; }, "gate5_current_ui_frontend_model_hot_switch", "Gate 5 accepted a switch in another task");
-    expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds.pop(); }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted fewer than ten restore rounds");
+    expectUiFailure((ui) => {
+      ui.shortcut_restore_single_window_no_blank_frames.rounds.pop();
+      ui.shortcut_restore_single_window_no_blank_frames.roundCount = ui.shortcut_restore_single_window_no_blank_frames.rounds.length;
+    }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted fewer than ten restore rounds");
+    expectUiFailure((ui) => {
+      ui.shortcut_restore_single_window_no_blank_frames.rounds[1].generatedAt = ui.shortcut_restore_single_window_no_blank_frames.rounds[0].generatedAt;
+      ui.shortcut_restore_single_window_no_blank_frames.rounds[1].checkedAt = ui.shortcut_restore_single_window_no_blank_frames.rounds[0].checkedAt;
+    }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted duplicate shortcut restore event");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].blankFrameCount = 1; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a blank restore frame");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].maxVisibleWindowCount = 2; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a second visible window");
     const gate8ArtifactFailures = [];

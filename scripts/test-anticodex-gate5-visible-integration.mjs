@@ -126,6 +126,31 @@ function samePath(left, right) {
   try { return resolve(String(left || "")).toLowerCase() === resolve(String(right || "")).toLowerCase(); } catch { return false; }
 }
 
+function independentShortcutRestoreRounds(rounds) {
+  const identities = rounds.map((round) => {
+    const probeId = String(round?.probeId || "").toLowerCase();
+    const checkedAt = String(round?.checkedAt || "");
+    const topologyStartedAt = String(round?.topologyWatcherFirstSampleAtUtc || "");
+    const appPageStartedAt = String(round?.appPageWatcherFirstSampleAtUtc || "");
+    const sourcePath = String(round?.sourcePath || "");
+    const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
+    const historyPath = String(round?.report?.history || "");
+    const checkedAtMs = Date.parse(checkedAt);
+    const topologyStartedAtMs = Date.parse(topologyStartedAt);
+    const appPageStartedAtMs = Date.parse(appPageStartedAt);
+    if (!/^[a-f0-9]{32}$/.test(probeId)
+      || !Number.isFinite(checkedAtMs) || String(round?.generatedAt || "") !== checkedAt
+      || !Number.isFinite(topologyStartedAtMs) || topologyStartedAtMs > checkedAtMs
+      || !Number.isFinite(appPageStartedAtMs) || appPageStartedAtMs > checkedAtMs
+      || !sourcePath || !historyPath || !samePath(sourcePath, historyPath)
+      || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
+      || !/^[a-f0-9]{64}$/.test(sourceSha256)) return null;
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256 };
+  });
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256"]
+    .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
+}
+
 function normalizedContractPath(value) {
   const normalized = String(value || "").replaceAll("\\", "/");
   return normalized && !normalized.startsWith("/") && !normalized.split("/").includes("..") ? normalized : "";
@@ -569,6 +594,7 @@ function validateShortcutRestore(data) {
     && data?.requestedRealTraffic === false
     && data?.usedRealTraffic === false
     && rounds.length >= requiredShortcutRestoreRounds
+    && independentShortcutRestoreRounds(rounds)
     && mainPid > 0
     && originalCodexPid > 0
     && rounds.every((round) => round?.ok === true

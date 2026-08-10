@@ -353,21 +353,35 @@ function fixture(root, fixtureSourceRoot = sourceRoot) {
     switches,
     releaseBinding,
   };
-  const rounds = Array.from({ length: 10 }, () => ({
-    ok: true,
-    expectedMainPid: 103,
-    expectedOriginalCodexPid: 201,
-    minimizedObserved: true,
-    restoredAtMs: 900,
-    maxRootProcessCount: 1,
-    maxVisibleWindowCount: 1,
-    maxAppPageCount: 1,
-    appPagesAfter: 1,
-    blankFrameCount: 0,
-    frameCount: 3,
-    originalCodexAlive: true,
-    after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
-  }));
+  const rounds = Array.from({ length: 10 }, (_, index) => {
+    const roundNumber = index + 1;
+    const roundCheckedAt = new Date(Date.parse(checkedAt) + roundNumber).toISOString();
+    const probeId = roundNumber.toString(16).padStart(32, "0");
+    const sourcePath = join(root, `fixture-shortcut-restore-${probeId}.json`);
+    return {
+      ok: true,
+      generatedAt: roundCheckedAt,
+      checkedAt: roundCheckedAt,
+      probeId,
+      topologyWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 5_000).toISOString(),
+      appPageWatcherFirstSampleAtUtc: new Date(Date.parse(roundCheckedAt) - 4_000).toISOString(),
+      sourcePath,
+      sourceSha256: roundNumber.toString(16).padStart(64, "0"),
+      report: { history: sourcePath },
+      expectedMainPid: 103,
+      expectedOriginalCodexPid: 201,
+      minimizedObserved: true,
+      restoredAtMs: 900,
+      maxRootProcessCount: 1,
+      maxVisibleWindowCount: 1,
+      maxAppPageCount: 1,
+      appPagesAfter: 1,
+      blankFrameCount: 0,
+      frameCount: 3,
+      originalCodexAlive: true,
+      after: { rootProcessIds: [103], visibleWindowProcessIds: [103] },
+    };
+  });
   const shortcutRestoreEvidence = {
     schema: "anticodex-shortcut-restore-matrix-v1",
     checkedAt,
@@ -504,11 +518,7 @@ test("Gate 5 rejects nine clean shortcut rounds because the observed intermitten
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-nine-rounds-"));
   try {
     const result = runFixture(root, ({ values }) => {
-      const template = values.shortcutRestoreEvidence.rounds[0];
-      values.shortcutRestoreEvidence.rounds = Array.from({ length: 9 }, (_, index) => ({
-        ...structuredClone(template),
-        probeId: index + 1,
-      }));
+      values.shortcutRestoreEvidence.rounds = values.shortcutRestoreEvidence.rounds.slice(0, 9);
     });
     assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
     assert.equal(result.payload.ok, false);
