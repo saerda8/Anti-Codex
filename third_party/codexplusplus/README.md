@@ -5,8 +5,8 @@ This directory pins the separately licensed CodexPlusPlus component and carries 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Version: `v1.2.44`
-- Commit: `77091ccaee4423f35a1b2c51c4ecd703e6201092`
+- Accepted version: `v1.2.45`
+- Accepted commit: `055302664af09e6e3bb76a00b36d318132094ee3`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -53,7 +53,7 @@ Apply the patch to the pinned upstream commit:
 
 ```powershell
 git clone https://github.com/BigPizzaV3/CodexPlusPlus.git
-git -C CodexPlusPlus checkout 77091ccaee4423f35a1b2c51c4ecd703e6201092
+git -C CodexPlusPlus checkout 055302664af09e6e3bb76a00b36d318132094ee3
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch
@@ -76,13 +76,16 @@ Run `scripts\prepare-codexplusplus-candidate.ps1 -Tag vX.Y.Z` from the Anti-Code
 
 The candidate contains clean patched source, the release launcher, `candidate.json` and `upstream.proposed.json`. It never changes the project patches or `upstream.json`, never installs or activates a component, and never stops or restarts Anti-Codex. A patch conflict therefore requires an explicit patch review and project commit. After that commit, the component installer accepts only the candidate whose version, upstream commit, patch commit and binary hash exactly match the committed metadata; the existing guarded sync remains the sole activation and rollback path.
 
+`docs/audits/codexplusplus/v1.2.46-source-replay/source-replay.json` is deliberately weaker evidence. It records a clean 13-patch source replay, locked Cargo metadata, stable rustfmt and the isolation audit without claiming a managed Windows build, a launchable binary, candidate publication, installation eligibility or activation. It cannot replace `upstream.json` or enter runtime synchronization.
+
 ## Current Verification Boundary
 
 - All twelve patches replay without conflict on pinned upstream `v1.2.45` to head `65cbc08be3dc7390bdd61f9236d6c266b61d3f40` and tree `359271c6a0c807a8914be9d1a0bdc25e1430212c`.
 - The managed candidate runner passes format, protocol-proxy, watcher, Windows x64 Manager check, release build, Windows process creation, source cleanliness and Docker pre/postflight checks. The resulting 17,789,440-byte launcher has SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922`.
 - The focused component-install and security-boundary contracts pass 42/42. Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- The prior 10-patch release launcher SHA-256 `f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be` is historical evidence only and is not accepted for this 11-patch source.
-- The 11-patch candidate is built but not installed or activated. The active installed component remains `v1.2.43`; current-client release gates remain separate later verification.
+- The prior 10-patch release launcher SHA-256 `f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be` is historical evidence only and is not accepted for the current `v1.2.45` twelve-patch source.
+- The accepted project metadata remains `v1.2.45` with twelve patches and the managed launcher hash above.
+- The newer `v1.2.46` source-only replay reaches head `d84bd4274ec72ce1f5347731cdfe5a11c8761469` and tree `8037e005b80a2fb09c7784b02bbd8c0889156316` after a proposal-only rustfmt patch. Its managed build, Windows launchability, publication, installation and activation remain intentionally unverified.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

@@ -3715,3 +3715,10 @@ The running installed client remains revision 5 until that final activation. Do 
 - [x] Raise the current taskbar-restore evidence threshold from three to ten rounds because the rejected Rev9 candidate remained clean for eight valid rounds and failed on the ninth. The builder now requires exactly ten signed raw rounds; aggregate and release validation require ten or more.
 - [x] Reject repeated files, repeated event envelopes and envelope-only clones. Each normalized round now carries a deterministic fingerprint of its early physical frames, window-state transitions and topology/page watcher sampling; builder, aggregate and release layers all recompute the fingerprint and require every physical trace to be distinct.
 - [x] Prove the change offline with TDD and independent review: builder `37/37`, aggregate `42/42`, release self-test, syntax and diff checks pass with no P0-P2. No client, runtime, mouse, official Codex or model/provider traffic was touched. The eight successful historical Rev9 rounds remain insufficient and Gate 5 stays red.
+
+### 2026-08-11 Codex and CodexPlusPlus update watch
+
+- [x] Check both upstream layers without changing either installed product. The Microsoft Store currently offers no update beyond installed official Codex `26.803.5235.0`; official Codex remains untouched.
+- [x] Replay the accepted twelve Anti-Codex patches plus one proposal-only rustfmt patch on CodexPlusPlus `v1.2.46`. The clean source reaches `d84bd4274ec72ce1f5347731cdfe5a11c8761469`, stable rustfmt and the nine-check isolation audit pass, and no provider traffic or Docker is used.
+- [ ] Keep `v1.2.46` source-only and ineligible for installation until a managed Windows build, launcher hash, launchability check and full candidate publication succeed. Accepted metadata and installed runtime stay on CodexPlusPlus `v1.2.45`; do not synchronize, activate or restart for this source replay.
+- [ ] Before ever enabling the full upstream Manager, close or explicitly accept the two open DreamSkin P2 findings recorded in the source-replay manifest. Anti-Codex helper-only mode does not enter those Manager paths.

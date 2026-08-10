@@ -1,0 +1,68 @@
+{
+  "schema": "codexplusplus-source-replay-v1",
+  "component": "CodexPlusPlus",
+  "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+  "license": "AGPL-3.0-only",
+  "accepted": false,
+  "candidatePublished": false,
+  "installEligible": false,
+  "baseAccepted": {
+    "metadataPath": "../../../../third_party/codexplusplus/upstream.json",
+    "metadataSha256": "68c105bbf33ce07e16ad83649af9b19c3c2e2e35879ea300c23c67cf21617b2a",
+    "version": "1.2.45",
+    "tag": "v1.2.45",
+    "upstreamCommit": "055302664af09e6e3bb76a00b36d318132094ee3",
+    "patchCommit": "65cbc08be3dc7390bdd61f9236d6c266b61d3f40",
+    "patchCount": 12
+  },
+  "target": {
+    "version": "1.2.46",
+    "tag": "v1.2.46",
+    "upstreamCommit": "a30b550135fb678bab600da59af153a403b285ee"
+  },
+  "replay": {
+    "patchCount": 13,
+    "acceptedPatchFilesChanged": false,
+    "isolationPatchCommit": "d8082c26f116761de89a2ef3342057d54a9e1eb6",
+    "patchCommit": "d84bd4274ec72ce1f5347731cdfe5a11c8761469",
+    "patchTree": "8037e005b80a2fb09c7784b02bbd8c0889156316",
+    "additionalPatches": [
+      {
+        "file": "patches/0013-fix-format-dreamskin-installer-test.patch",
+        "sha256": "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
+        "scope": "normalize only the upstream v1.2.46 DreamSkin installer metadata assertion required by stable rustfmt; runtime behavior is unchanged"
+      }
+    ]
+  },
+  "verification": {
+    "patchReplay": "passed",
+    "cargoMetadataLocked": "passed",
+    "cargoFmt": "passed",
+    "sourceIsolationAudit": "passed",
+    "managedBuild": "not_run",
+    "windowsLaunchability": "not_run",
+    "dockerUsed": false,
+    "providerTrafficUsed": false,
+    "activated": false
+  },
+  "securityReview": {
+    "antiHelperOnlyBoundary": "passed",
+    "antiHelperOnlyEvidence": "Anti-Codex installs only codex-plus-plus.exe and starts --helper-only with enhancements disabled; the helper-only branch returns before update checks, Manager startup, DreamSkin API calls or dreamskin scheme registration.",
+    "upstreamManagerFindings": [
+      {
+        "severity": "P2",
+        "id": "dreamskin-confirmation-race",
+        "scope": "upstream-manager-only",
+        "status": "open-upstream",
+        "summary": "A second dreamskin link can replace the pending package between confirmation display and confirmation handling."
+      },
+      {
+        "severity": "P2",
+        "id": "dreamskin-publisher-replacement",
+        "scope": "upstream-manager-only",
+        "status": "open-upstream",
+        "summary": "A package with the same theme ID can replace a theme from another publisher because publisher identity and manifest signatures are not enforced."
+      }
+    ]
+  }
+}
