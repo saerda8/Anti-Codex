@@ -3686,3 +3686,9 @@ The running installed client remains revision 5 until that final activation. Do 
 - [x] Close the release-gate false green that accepted a source-preflight report with only 9 of the current 13 required checks. The validator and its self-test now share one exact list that also requires `logDbGuardSelfTest`, `upstreamProfileStorage`, `managerRealButtonsReportContract` and `publicDocumentation`.
 - [x] Prove the defect and repair with TDD: the old validator accepts a report missing `logDbGuardSelfTest`; the repaired self-test rejects every required check when missing or explicitly false while top-level `ok:true` remains unchanged. The direct release self-test passes, the clean focused Gate 5/Gate 8/component matrix passes `183/183`, syntax and diff hygiene are green, and independent review finds no P0-P2.
 - [x] Merge the isolated repair to `main` as `b22232f935b8eb353c50c0ad19132e1b6f7bfac1`. No client, runtime, UI, provider or Docker action occurred. The next and only checkpoint action is one complete exact-HEAD no-traffic source preflight after this documentation update; its signed external report remains the authoritative result so no post-preflight source commit is needed.
+
+### 2026-08-10 release action inventory repair
+
+- [x] Replace the single `else-if` release action with one truthful action per missing Gate, including per-gate traffic/high-impact metadata and Gate 6's Gate 5 dependency. Nested failure reasons now carry only their own Gate action.
+- [x] Include formal Gates 3 and 4 in the required-real-traffic blocker set alongside Gates 5 and 8; derive the real-traffic-only release state from the complete missing-gate set instead of a Gate 8-only special case.
+- [x] Prove both gaps RED then GREEN in the release self-test. This remains source-only and does not authorize client launch, UI interaction, synchronization, provider traffic or the frozen media task.

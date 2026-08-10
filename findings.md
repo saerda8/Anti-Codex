@@ -4036,3 +4036,9 @@ Operator-only failures during the re-entry audit: two read-only PowerShell proje
 - The repair defines one frozen 13-check list used by both validation and the deterministic fixture. The self-test deletes and then explicitly fails every required check in turn, so missing, `null`, non-object and `ok:false` values all remain fail-closed and unrelated decoy keys cannot substitute for an exact required key.
 - The TDD RED was `source preflight accepted missing required check logDbGuardSelfTest`. After the repair, the release self-test and the clean related matrix pass `183/183`; an independent review confirms exact producer parity and no remaining P0-P2 in this scope.
 - Operator-only notes: the first worktree metadata probe called `.Trim()` on an empty superproject value and emitted a non-terminating read-only error after the worktree was still created correctly; the first cherry-pick wrapper had a PowerShell parser error and exited before Git ran. Both commands were corrected, no partial Git action occurred, and no product state was touched.
+
+## 2026-08-10 release action inventory findings
+
+- The release summary could report seven missing gates while exposing only `refreshGate5`, claiming no hidden actions and counting one required action. Gates 1-4 and 6 therefore had no actionable nested entry even though they remained release blockers.
+- The same summary also omitted Gates 3 and 4 from `requiredRealTrafficBlockedGates`, although their formal contracts require a bounded real model/tool round trip. Gate-level real-traffic blockers are now Gates 3, 4, 5 and 8; Gate 1/2 isolated-client checks and Gate 6 aggregation require no real provider traffic.
+- The repair derives one action for every missing gate, binds each nested `orderedActions` entry by `gateId`, preserves Gate 6's Gate 5 dependency and keeps Gate 8's existing offline-after-task verifier semantics. Both gaps were captured by failing self-tests before the implementation passed.

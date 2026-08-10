@@ -903,6 +903,81 @@ function gate8NextAction(missingEvidence = []) {
   return null;
 }
 
+const releaseActionByGate = Object.freeze({
+  gate1: Object.freeze({
+    id: "refreshGate1",
+    phase: "architecture",
+    command: "Refresh the signed Gate 1 CodexPlusPlus runtime-isolation report with the current isolated candidate launcher; this starts a temporary copied client but sends no model traffic.",
+    requiresRealTraffic: false,
+    highImpact: true,
+  }),
+  gate2: Object.freeze({
+    id: "refreshGate2",
+    phase: "architecture",
+    command: "Refresh the signed Gate 2 third-party route report against the current isolated candidate and loopback fake provider; this starts temporary copied-client processes but sends no real model traffic.",
+    requiresRealTraffic: false,
+    highImpact: true,
+  }),
+  gate3: Object.freeze({
+    id: "refreshGate3",
+    phase: "architecture",
+    command: "Refresh the signed Gate 3 adapter contract with one bounded real native tool round trip after explicit traffic approval.",
+    requiresRealTraffic: true,
+    highImpact: true,
+  }),
+  gate4: Object.freeze({
+    id: "refreshGate4",
+    phase: "architecture",
+    command: "Refresh the signed Gate 4 isolated route-switch report with one bounded real Antigravity tool task and temporary copied-client processes after explicit approval.",
+    requiresRealTraffic: true,
+    highImpact: true,
+  }),
+  gate5: Object.freeze({
+    id: "refreshGate5",
+    phase: "integration",
+    command: "Generate one fresh signed Gate 5 aggregate bound to the current shell/component and include Manager actual-mouse, same-task model hot-switch, and single-window shortcut-restore evidence.",
+    requiresRealTraffic: true,
+    highImpact: true,
+  }),
+  gate6: Object.freeze({
+    id: "refreshGate6",
+    phase: "integration",
+    command: "After current Gate 5 and recovery receipts pass, rebuild the signed Gate 6 edge matrix; the aggregation step sends no new model traffic.",
+    requiresRealTraffic: false,
+    highImpact: false,
+    dependsOn: ["gate5"],
+  }),
+  gate7: Object.freeze({
+    id: "completeGate7",
+    phase: "release",
+    command: "Run current source, sync-readiness, installed-overall and legacy-zero-hit verification after the single controlled runtime sync.",
+    requiresRealTraffic: false,
+    highImpact: false,
+  }),
+});
+const releaseGatesRequiringRealTraffic = new Set(["gate3", "gate4", "gate5", "gate8"]);
+
+function planReleaseGateActions(gates) {
+  return gates.flatMap((gate) => {
+    if (gate?.satisfied === true) return [];
+    if (gate?.id === "gate8") {
+      const action = gate8NextAction(gate?.missingEvidence);
+      return action ? [{ gateId: gate.id, ...action }] : [];
+    }
+    const action = releaseActionByGate[gate?.id];
+    return action ? [{ gateId: gate.id, ...action }] : [];
+  });
+}
+
+function requiredRealTrafficBlockedGates(missingGateIds) {
+  return missingGateIds.filter((gateId) => releaseGatesRequiringRealTraffic.has(gateId));
+}
+
+function releaseIsBlockedOnlyByRequiredRealTraffic(missingGateIds) {
+  return missingGateIds.length > 0
+    && requiredRealTrafficBlockedGates(missingGateIds).length === missingGateIds.length;
+}
+
 function selfTest() {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "anticodex-release-gates-"));
   let gate5Supervisor = null;
@@ -1220,6 +1295,40 @@ function selfTest() {
       || formalAction?.requiresRealTraffic !== false) {
       throw new Error("Gate 8 autonomous-video action is missing or can start model traffic");
     }
+    const plannedActions = planReleaseGateActions([
+      ...[1, 2, 3, 4, 5, 6].map((gate) => ({ id: `gate${gate}`, satisfied: false })),
+      { id: "gate7", satisfied: true },
+      { id: "gate8", satisfied: false, missingEvidence: ["formalLongTask"] },
+    ]);
+    const expectedActionIds = [
+      "refreshGate1", "refreshGate2", "refreshGate3", "refreshGate4",
+      "refreshGate5", "refreshGate6", "runGate8",
+    ];
+    if (!exactStringList(plannedActions.map((action) => action.id), expectedActionIds)) {
+      throw new Error(`release action inventory omitted missing gates: ${plannedActions.map((action) => action.id).join(",")}`);
+    }
+    const expectedRisk = {
+      refreshGate1: [false, true], refreshGate2: [false, true],
+      refreshGate3: [true, true], refreshGate4: [true, true],
+      refreshGate5: [true, true], refreshGate6: [false, false],
+      runGate8: [false, false],
+    };
+    for (const action of plannedActions) {
+      const expected = expectedRisk[action.id];
+      if (action.gateId !== action.id.replace(/^refresh/, "").replace(/^run/, "").toLowerCase()
+        || action.requiresRealTraffic !== expected?.[0]
+        || action.highImpact !== expected?.[1]) {
+        throw new Error(`release action risk metadata is invalid for ${action.id}`);
+      }
+    }
+    const realTrafficBlockedGates = requiredRealTrafficBlockedGates(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((gate) => `gate${gate}`),
+    );
+    if (!exactStringList(realTrafficBlockedGates, ["gate3", "gate4", "gate5", "gate8"])
+      || releaseIsBlockedOnlyByRequiredRealTraffic(["gate3", "gate4", "gate5", "gate8"]) !== true
+      || releaseIsBlockedOnlyByRequiredRealTraffic(["gate2", "gate3"]) !== false) {
+      throw new Error(`required real-traffic gate inventory is incomplete: ${realTrafficBlockedGates.join(",")}`);
+    }
     console.log(JSON.stringify({ ok: true, selfTest: true, checks: [
       "signed_evidence_acceptance",
       "stale_signed_evidence_rejection",
@@ -1233,6 +1342,8 @@ function selfTest() {
       "gate8_deleted_artifact_rejection",
       "gate8_current_component_binding",
       "gate8_autonomous_video_semantics",
+      "complete_missing_gate_action_inventory",
+      "complete_required_real_traffic_gate_inventory",
       "self_test_supervisor_pid_reuse_guard",
     ] }));
   } finally {
@@ -1257,27 +1368,8 @@ const currentGate = gates.find((gate) => !gate.satisfied)?.id || "complete";
 const gate5 = gates.find((gate) => gate.id === "gate5");
 const gate7 = gates.find((gate) => gate.id === "gate7");
 const gate8 = gates.find((gate) => gate.id === "gate8");
-const nextActions = [];
-if (!gate7.satisfied) {
-  nextActions.push({
-    id: "completeGate7",
-    phase: "release",
-    command: "Run current source, sync-readiness, installed-overall and legacy-zero-hit verification after the single controlled runtime sync.",
-    requiresRealTraffic: false,
-    highImpact: false,
-  });
-} else if (!gate5.satisfied) {
-  nextActions.push({
-    id: "refreshGate5",
-    phase: "integration",
-    command: "Generate one fresh signed Gate 5 aggregate bound to the current shell/component and include Manager actual-mouse, same-task model hot-switch, and single-window shortcut-restore evidence.",
-    requiresRealTraffic: true,
-    highImpact: true,
-  });
-} else if (!gate8.satisfied) {
-  const action = gate8NextAction(gate8.missingEvidence);
-  if (action) nextActions.push(action);
-}
+const nextActions = planReleaseGateActions(gates);
+const realTrafficBlockedGates = requiredRealTrafficBlockedGates(missingRequired);
 
 const releaseGateFailureReasons = gates.filter((gate) => !gate.satisfied).map((gate) => ({
   id: gate.id,
@@ -1297,7 +1389,7 @@ const releaseGateFailureReasons = gates.filter((gate) => !gate.satisfied).map((g
     : gate.id === "gate5"
       ? "Gate 5 requires a fresh current-release aggregate with real UI mouse, model hot-switch, and shortcut restore evidence."
       : "Refresh only the current three-layer evidence for this gate.",
-  orderedActions: nextActions.filter((action) => action.id === (gate.id === "gate8" ? "runGate8" : gate.id === "gate5" ? "refreshGate5" : "completeGate7")),
+  orderedActions: nextActions.filter((action) => action.gateId === gate.id),
 }));
 
 const groups = Object.fromEntries([...new Set(gates.map((gate) => gate.group))].map((group) => {
@@ -1330,8 +1422,8 @@ const payload = {
   releaseReady,
   releaseBinding: currentReleaseBinding(),
   shortReady,
-  releaseBlockedOnlyByRequiredRealTraffic: missingRequired.length === 1 && missingRequired[0] === "gate8",
-  requiredRealTrafficBlockedGates: missingRequired.filter((gate) => ["gate5", "gate8"].includes(gate)),
+  releaseBlockedOnlyByRequiredRealTraffic: releaseIsBlockedOnlyByRequiredRealTraffic(missingRequired),
+  requiredRealTrafficBlockedGates: realTrafficBlockedGates,
   strict,
   strictOptionalRealTraffic: false,
   optionalRealTrafficReady: true,
