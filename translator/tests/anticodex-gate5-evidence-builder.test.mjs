@@ -1195,8 +1195,13 @@ test("builder rejects ten files cloned from one shortcut restore event", () => {
     const state = buildRawEvidence(root);
     const template = JSON.parse(readFileSync(state.paths.shortcutRounds[0], "utf8"));
     state.paths.shortcutRounds.forEach((path, index) => {
+      const offsetMs = index + 1;
       const clone = structuredClone(template);
       clone.probeId = (index + 1).toString(16).padStart(32, "0");
+      clone.generatedAt = new Date(Date.parse(template.generatedAt) + offsetMs).toISOString();
+      clone.checkedAt = clone.generatedAt;
+      clone.topologyWatcherFirstSampleAtUtc = new Date(Date.parse(template.topologyWatcherFirstSampleAtUtc) + offsetMs).toISOString();
+      clone.appPageWatcherFirstSampleAtUtc = new Date(Date.parse(template.appPageWatcherFirstSampleAtUtc) + offsetMs).toISOString();
       clone.report = { history: path };
       writeJson(path, clone, { signed: true });
     });

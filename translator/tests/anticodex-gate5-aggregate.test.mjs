@@ -89,6 +89,7 @@ test("release validation deeply rechecks every current Gate 5 UI invariant", asy
     /rounds\.length < requiredShortcutRestoreRounds/,
     /shortcut_restore_ten_rounds/,
     /accepted duplicate shortcut restore event/,
+    /accepted duplicate shortcut restore physical trace/,
     /roundCount = ui\.shortcut_restore_single_window_no_blank_frames\.rounds\.length/,
     /round\?\.blankFrameCount/,
     /round\?\.maxVisibleWindowCount/,
@@ -533,14 +534,18 @@ test("Gate 5 rejects ten files cloned from one shortcut restore event", () => {
   try {
     const result = runFixture(root, ({ values }) => {
       const template = structuredClone(values.shortcutRestoreEvidence.rounds[0]);
-      const checkedAt = new Date().toISOString();
       values.shortcutRestoreEvidence.rounds = Array.from({ length: 10 }, (_, index) => {
-        const sourcePath = join(root, `shortcut-source-${index + 1}.json`);
+        const offsetMs = index + 1;
+        const roundCheckedAt = new Date(Date.parse(template.checkedAt) + offsetMs).toISOString();
+        const probeId = (index + 1).toString(16).padStart(32, "0");
+        const sourcePath = join(root, `20260810-00000${index}-shortcut-restore-${probeId}.json`);
         return {
           ...structuredClone(template),
-          generatedAt: checkedAt,
-          checkedAt,
-          probeId: (index + 1).toString(16).padStart(32, "0"),
+          generatedAt: roundCheckedAt,
+          checkedAt: roundCheckedAt,
+          topologyWatcherFirstSampleAtUtc: new Date(Date.parse(template.topologyWatcherFirstSampleAtUtc) + offsetMs).toISOString(),
+          appPageWatcherFirstSampleAtUtc: new Date(Date.parse(template.appPageWatcherFirstSampleAtUtc) + offsetMs).toISOString(),
+          probeId,
           sourcePath,
           sourceSha256: (index + 1).toString(16).padStart(64, "0"),
           report: { history: sourcePath },
