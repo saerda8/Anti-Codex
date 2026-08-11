@@ -43,7 +43,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function createSuccessFixture(t) {
+function createSuccessFixture(t, { annotatedTag = false } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), "anticodex-cpp-candidate-"));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
 
@@ -63,8 +63,13 @@ function createSuccessFixture(t) {
   git(repository, "config", "core.autocrlf", "false");
   git(repository, "add", ".");
   git(repository, "commit", "-m", "upstream");
-  git(repository, "tag", "v1.2.44");
   const upstreamCommit = git(repository, "rev-parse", "HEAD");
+  if (annotatedTag) {
+    git(repository, "tag", "-a", "v1.2.44", "-m", "release v1.2.44");
+  } else {
+    git(repository, "tag", "v1.2.44");
+  }
+  const upstreamTagObject = git(repository, "rev-parse", "v1.2.44");
   write(join(repository, "marker.txt"), "patched\n");
   git(repository, "add", "marker.txt");
   git(repository, "commit", "-m", "isolation patch");
@@ -136,7 +141,17 @@ Add-Content -LiteralPath $env:ANTICODEX_TEST_LOG -Value "hygiene runtime-clean"
 `,
   );
 
-  return { sandbox, project, stateRoot, logPath, activeSentinel, upstreamCommit, defaultHead };
+  return {
+    sandbox,
+    project,
+    repository,
+    stateRoot,
+    logPath,
+    activeSentinel,
+    upstreamCommit,
+    upstreamTagObject,
+    defaultHead,
+  };
 }
 
 function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot) {
@@ -229,8 +244,8 @@ test("Docker build hygiene can require zero labeled build containers", () => {
   assert.doesNotMatch(hygiene, /\bexit\s+1\b/);
 });
 
-test("CodexPlusPlus candidate preparation replays and verifies an exact local tag", (t) => {
-  const fixture = createSuccessFixture(t);
+test("CodexPlusPlus candidate preparation peels and verifies an exact annotated tag", (t) => {
+  const fixture = createSuccessFixture(t, { annotatedTag: true });
   const result = runCandidate(fixture);
 
   assert.equal(result.error, undefined, result.error?.message);
@@ -238,7 +253,10 @@ test("CodexPlusPlus candidate preparation replays and verifies an exact local ta
   const output = JSON.parse(result.stdout);
   assert.equal(output.ok, true);
   assert.equal(output.version, "1.2.44");
+  assert.notEqual(fixture.upstreamTagObject, fixture.upstreamCommit);
+  assert.equal(git(fixture.repository, "cat-file", "-t", fixture.upstreamTagObject), "tag");
   assert.equal(output.upstreamCommit, fixture.upstreamCommit);
+  assert.notEqual(output.upstreamCommit, fixture.upstreamTagObject);
   assert.match(output.patchCommit, /^[0-9a-f]{40}$/);
 
   const candidateRoot = join(
@@ -251,6 +269,7 @@ test("CodexPlusPlus candidate preparation replays and verifies an exact local ta
   const report = JSON.parse(readFileSync(join(candidateRoot, "candidate.json"), "utf8"));
   const proposed = JSON.parse(readFileSync(join(candidateRoot, "upstream.proposed.json"), "utf8"));
   const binary = readFileSync(join(candidateRoot, "codex-plus-plus.exe"));
+  assert.equal(report.upstreamCommit, fixture.upstreamCommit);
   assert.equal(report.binary.sha256, sha256(binary));
   assert.ok(report.checks.includes("clean_source"));
   assert.ok(report.checks.includes("build_hygiene_preflight"));
@@ -274,6 +293,7 @@ test("CodexPlusPlus candidate preparation replays and verifies an exact local ta
   ]);
   assert.equal(proposed.version, "1.2.44");
   assert.equal(proposed.tag, "v1.2.44");
+  assert.equal(proposed.upstreamCommit, fixture.upstreamCommit);
   assert.equal(proposed.verification.launcherReleaseBuild, `sha256:${sha256(binary)}`);
   assert.match(
     proposed.verification.patchReplay,
