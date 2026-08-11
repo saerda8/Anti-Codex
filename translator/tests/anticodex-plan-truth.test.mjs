@@ -17,6 +17,18 @@ const finalCandidateParent = "21c4efb6c85de59809366144b1f23b0fcb35dabd";
 const rev7ControlReport = "20260810-133920411-shortcut-restore-c2145848b6774098b2c18e60ae60208b.json";
 const rev9FailureReport = "20260810-135242746-shortcut-restore-aa223b2c43714a99b54d095ee664a132.json";
 const rev9FailureSha256 = "0530087aa23ad0aec45f5d206d3c44c44808db5c297e8fdb5b58a4084b258879";
+const currentSourceHead = "c1fbf1bb253c213919441ea4618834792732cd79";
+const currentSourcePreflightSha256 = "574160c6e9d71390f5cca0ece120d5d06e9dbdd37c8320ab4bea09c326b3e4f9";
+const codexPlusPlusTagObject = "ad2e18adf66662fe0caec6fe87f1d544e3160c18";
+const codexPlusPlusPeeledCommit = "a30b550135fb678bab600da59af153a403b285ee";
+const codexPlusPlusMainHead = "1df20b9fb605e3d59290296a0b164c3ce943d0e1";
+const officialRootCreatedAt = "2026-08-11T19:59:36.721724+08:00";
+const officialCoreCreatedAt = "2026-08-11T19:59:46.568971+08:00";
+const currentPreflightStartedAt = "2026-08-11T13:26:01.9940517Z";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function sectionAfterHeading(text, heading, nextHeadingPrefix) {
   const start = text.lastIndexOf(heading);
@@ -31,6 +43,66 @@ function appendToSection(text, heading, nextHeadingPrefix, line) {
   const next = text.indexOf(`\n${nextHeadingPrefix}`, start + heading.length);
   const end = next >= 0 ? next : text.length;
   return `${text.slice(0, end)}\n${line}${text.slice(end)}`;
+}
+
+function removeLineFromSection(text, heading, nextHeadingPrefix, pattern) {
+  const section = sectionAfterHeading(text, heading, nextHeadingPrefix);
+  const line = section.split(/\r?\n/).find((candidate) => pattern.test(candidate));
+  assert.ok(line, `missing mutation target: ${pattern}`);
+  return text.replace(line, "");
+}
+
+function assertNoUnqualifiedStaleOfficialTruth(planText, findingsText) {
+  const staleLines = `${planText}\n${findingsText}`.split(/\r?\n/).filter((line) => (
+    (/Microsoft Store currently offers no update beyond installed official Codex `26\.803\.5235\.0`/i.test(line)
+      || /Official Codex remains installed at `26\.803\.5235\.0`.*Microsoft Store reports no newer available package/i.test(line))
+    && !/(?:historical|superseded)/i.test(line)
+  ));
+  assert.deepEqual(staleLines, [], `unqualified stale official-version truth:\n${staleLines.join("\n")}`);
+
+  const historicalPlanLine = planText.split(/\r?\n/).find((line) => /Microsoft Store.*26\.803\.5235\.0/i.test(line) && /no update beyond/i.test(line));
+  const historicalFindingsLine = findingsText.split(/\r?\n/).find((line) => /Official Codex.*26\.803\.5235\.0/i.test(line) && /no newer available package/i.test(line));
+  assert.match(historicalPlanLine ?? "", /historical.*superseded/i);
+  assert.match(historicalFindingsLine ?? "", /historical.*superseded/i);
+}
+
+function assertCurrentUpdateTruth(planText, findingsText, acceptanceText) {
+  const planCurrent = sectionAfterHeading(planText, "### 2026-08-11 current upstream drift and checkpoint boundary", "### ");
+  const findingsCurrent = sectionAfterHeading(findingsText, "## 2026-08-11 current upstream drift findings", "## ");
+  const acceptanceCurrent = sectionAfterHeading(acceptanceText, "## 2026-08-11 current upstream drift boundary", "## ");
+  const current = `${planCurrent}\n${findingsCurrent}\n${acceptanceCurrent}`;
+
+  assertNoUnqualifiedStaleOfficialTruth(planText, findingsText);
+
+  for (const section of [planCurrent, findingsCurrent, acceptanceCurrent]) {
+    assert.match(section, /26\.803\.10989\.0.*root PID `8800`.*core PID `40560`/is);
+    assert.match(section, /revision 7.*26\.803\.5235\.0.*Anti-Codex process count is zero/is);
+    assert.match(section, /not synchronized.*not physically accepted/is);
+    assert.match(section, new RegExp(`${escapeRegExp(officialRootCreatedAt)}.*${escapeRegExp(officialCoreCreatedAt)}.*${escapeRegExp(currentPreflightStartedAt)}.*(?:precedes|before)`, "is"));
+    assert.match(section, new RegExp(`${currentSourceHead}.*13/13.*1013/1013.*${currentSourcePreflightSha256}`, "is"));
+    assert.match(section, /historical checkpoint.*before this documentation commit.*cannot authorize.*future activation/is);
+    assert.match(section, new RegExp(`v1\\.2\\.46.*${codexPlusPlusTagObject}.*${codexPlusPlusPeeledCommit}.*v1\\.2\\.45`, "is"));
+    assert.match(section, /v1\.2\.46.*(?:source replay|replay).*(?:not installable|ineligible for installation)/is);
+    assert.match(section, new RegExp(`${codexPlusPlusMainHead}.*25 commits ahead.*code`, "is"));
+    assert.match(section, /no observed helper-only path change.*does not accept.*future tag/is);
+    assert.match(section, /authorizes no future shutdown, synchronization, restart, physical UI, or provider traffic/is);
+  }
+  assert.match(planCurrent, /source_codex_changed.*16\/16.*full candidate.*CLI.*not run.*new explicit authorization.*new exact-HEAD preflight/is);
+  assert.match(findingsCurrent, /source_codex_changed.*temporary copy.*16\/16.*full candidate.*CLI.*not run/is);
+  assert.match(acceptanceCurrent, /source_codex_changed.*new explicit authorization.*new exact-HEAD preflight/is);
+
+  assert.match(current, /later upstream main commits only change website documentation.*(?:false|superseded|rejected)/is);
+
+  const conflictLines = current.split(/\r?\n/).filter((line) => (
+    (/Anti-Codex.*(?:is running|process count is [1-9]|synchronized|physically accepted)/i.test(line)
+      && !/not synchronized.*not physically accepted/i.test(line))
+    || /c1fbf1bb.*(?:current exact-HEAD|future activation checkpoint|authorizes future activation)/i.test(line)
+    || (/later upstream main commits only change website documentation/i.test(line) && !/(?:false|superseded|rejected)/i.test(line))
+    || /helper-only.*future tag.*(?:accepted|approved|installable)/i.test(line)
+    || (/(?:future\s+)?(?:shutdown|synchronization|sync|restart|physical UI|provider(?: traffic)?).*(?:authorized|approved|permitted|allowed)/i.test(line)
+      && !/(?:authorizes? no|no .*authorized|not .*authorized|requires? new explicit authorization)/i.test(line))
+  ));
+  assert.deepEqual(conflictLines, [], `current update truth conflicts:\n${conflictLines.join("\n")}`);
 }
 
 function assertCurrentInstalledTruth(planText, findingsText, acceptanceText = acceptance) {
@@ -134,4 +206,27 @@ test("current truth records the rejected Rev9 physical A/B and restored Rev7", (
   assert.match(current, new RegExp(`${rev7ControlReport}.*blank.*9 ms.*81 ms`, "i"));
   assert.match(current, new RegExp(`${rev9FailureReport}.*blank.*7 ms.*86 ms`, "i"));
   assert.match(current, /no model\/provider traffic/i);
+});
+
+test("current documents bind official Codex drift, historical preflight, and CodexPlusPlus upstream truth", () => {
+  assertCurrentUpdateTruth(plan, findings, acceptance);
+});
+
+test("current update truth fails closed on append-only synchronization, checkpoint, or upstream conflicts", () => {
+  const planHeading = "### 2026-08-11 current upstream drift and checkpoint boundary";
+  const findingsHeading = "## 2026-08-11 current upstream drift findings";
+  const acceptanceHeading = "## 2026-08-11 current upstream drift boundary";
+  assert.throws(() => assertCurrentUpdateTruth(appendToSection(plan, planHeading, "### ", "- [x] Anti-Codex is synchronized and physically accepted."), findings, acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, appendToSection(findings, findingsHeading, "## ", `- ${currentSourceHead} is the current exact-HEAD future activation checkpoint.`), acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings, appendToSection(acceptance, acceptanceHeading, "## ", "- Later upstream main commits only change website documentation.")));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings, appendToSection(acceptance, acceptanceHeading, "## ", "- The helper-only future tag is accepted and installable.")));
+  assert.throws(() => assertCurrentUpdateTruth(appendToSection(plan, planHeading, "### ", "- Future shutdown is authorized."), findings, acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, appendToSection(findings, findingsHeading, "## ", "- Future synchronization and restart are approved."), acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings, appendToSection(acceptance, acceptanceHeading, "## ", "- Future physical UI is allowed.")));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings, appendToSection(acceptance, acceptanceHeading, "## ", "- Future provider traffic is authorized.")));
+  assert.throws(() => assertCurrentUpdateTruth(plan + "\n- The Microsoft Store currently offers no update beyond installed official Codex `26.803.5235.0`.", findings, acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings + "\n- Official Codex remains installed at `26.803.5235.0`; the Microsoft Store reports no newer available package.", acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(removeLineFromSection(plan, planHeading, "### ", new RegExp(currentSourceHead)), findings, acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, removeLineFromSection(findings, findingsHeading, "## ", new RegExp(codexPlusPlusTagObject)), acceptance));
+  assert.throws(() => assertCurrentUpdateTruth(plan, findings, removeLineFromSection(acceptance, acceptanceHeading, "## ", new RegExp(codexPlusPlusMainHead))));
 });
