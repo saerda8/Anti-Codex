@@ -50,6 +50,14 @@
     "antiHelperOnlyEvidence": "Anti-Codex installs only codex-plus-plus.exe and starts --helper-only with enhancements disabled; the helper-only branch returns before update checks, Manager startup, DreamSkin API calls or dreamskin scheme registration.",
     "upstreamManagerFindings": [
       {
+        "severity": "P1",
+        "id": "provider-import-confirmation-race",
+        "scope": "upstream-manager-only",
+        "status": "open-upstream",
+        "presentInAcceptedBaseVersion": "1.2.45",
+        "summary": "A displayed provider import can be replaced by a later import in the single pending file, so confirming the displayed request can import and activate different settings. Anti-Codex helper-only mode does not enter this full-Manager path."
+      },
+      {
         "severity": "P2",
         "id": "dreamskin-confirmation-race",
         "scope": "upstream-manager-only",

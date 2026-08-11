@@ -93,9 +93,32 @@ test("v1.2.46 source replay remains separate from the accepted v1.2.45 component
   });
   assert.equal(proposal.securityReview.antiHelperOnlyBoundary, "passed");
   assert.deepEqual(
-    proposal.securityReview.upstreamManagerFindings.map(({ severity, id }) => [severity, id]),
-    [["P2", "dreamskin-confirmation-race"], ["P2", "dreamskin-publisher-replacement"]],
+    proposal.securityReview.upstreamManagerFindings.map(({ severity, id, scope, status }) => ({ severity, id, scope, status })),
+    [
+      {
+        severity: "P1",
+        id: "provider-import-confirmation-race",
+        scope: "upstream-manager-only",
+        status: "open-upstream",
+      },
+      {
+        severity: "P2",
+        id: "dreamskin-confirmation-race",
+        scope: "upstream-manager-only",
+        status: "open-upstream",
+      },
+      {
+        severity: "P2",
+        id: "dreamskin-publisher-replacement",
+        scope: "upstream-manager-only",
+        status: "open-upstream",
+      },
+    ],
   );
+  const providerImportFinding = proposal.securityReview.upstreamManagerFindings[0];
+  assert.equal(providerImportFinding.presentInAcceptedBaseVersion, "1.2.45");
+  assert.match(providerImportFinding.summary, /displayed provider import.*later import/i);
+  assert.match(providerImportFinding.summary, /helper-only mode does not enter/i);
   assert.equal("launcherReleaseBuild" in proposal.verification, false);
   assert.equal("binarySha256" in proposal, false);
   assert.equal("candidateRoot" in proposal, false);
