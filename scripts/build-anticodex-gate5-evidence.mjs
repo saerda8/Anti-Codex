@@ -303,7 +303,7 @@ function sameNativePath(left, right) {
     === resolve(String(right || "")).replace(/\\/g, "/").toLowerCase();
 }
 
-function shortcutRestorePhysicalTraceSha256(round) {
+function shortcutRestorePhysicalTraceSha256(round, { coreOnly = false } = {}) {
   const finite = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
   const bool = (value) => typeof value === "boolean" ? value : null;
   const activationSentAtMs = finite(round?.activationSentAtMs);
@@ -353,7 +353,9 @@ function shortcutRestorePhysicalTraceSha256(round) {
     || !Number.isInteger(watcherSampling[3]) || watcherSampling[3] < 2
     || watcherSampling[4] !== 1 || watcherSampling[5] !== 1
     || watcherSampling[6] < 0 || watcherSampling[7] < 0) return "";
-  return sha256(JSON.stringify({ earlyFrames, windowTransitions, watcherSampling }));
+  return sha256(JSON.stringify(coreOnly
+    ? { earlyFrames, windowTransitions }
+    : { earlyFrames, windowTransitions, watcherSampling }));
 }
 
 function independentShortcutRestoreRounds(rounds) {
@@ -367,6 +369,7 @@ function independentShortcutRestoreRounds(rounds) {
     const sourceSha256 = String(round?.sourceSha256 || "").toLowerCase();
     const historyPath = String(round?.report?.history || "");
     const physicalTraceSha256 = shortcutRestorePhysicalTraceSha256(round);
+    const frameWindowTraceSha256 = shortcutRestorePhysicalTraceSha256(round, { coreOnly: true });
     const checkedAtMs = Date.parse(checkedAt);
     const topologyStartedAtMs = Date.parse(topologyStartedAt);
     const appPageStartedAtMs = Date.parse(appPageStartedAt);
@@ -378,10 +381,11 @@ function independentShortcutRestoreRounds(rounds) {
       || basename(historyPath).toLowerCase().endsWith(`-shortcut-restore-${probeId}.json`) !== true
       || !/^[a-f0-9]{64}$/.test(sourceSha256)
       || !/^[a-f0-9]{64}$/.test(physicalTraceSha256)
+      || !/^[a-f0-9]{64}$/.test(frameWindowTraceSha256)
       || String(round?.physicalTraceSha256 || "").toLowerCase() !== physicalTraceSha256) return null;
-    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256, physicalTraceSha256 };
+    return { probeId, checkedAt, topologyStartedAt, appPageStartedAt, sourcePath: resolve(sourcePath).toLowerCase(), sourceSha256, physicalTraceSha256, frameWindowTraceSha256 };
   });
-  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256", "physicalTraceSha256"]
+  return identities.every(Boolean) && ["probeId", "checkedAt", "topologyStartedAt", "appPageStartedAt", "sourcePath", "sourceSha256", "physicalTraceSha256", "frameWindowTraceSha256"]
     .every((key) => new Set(identities.map((identity) => identity[key])).size === rounds.length);
 }
 
@@ -1257,7 +1261,7 @@ function normalizeShortcutRestores(sources, releaseBinding, runtimeIdentity) {
     && Number(round.expectedOriginalCodexPid) === Number(rounds[0].expectedOriginalCodexPid)),
   "shortcut-restore: process baseline changed between rounds");
   requireCondition(independentShortcutRestoreRounds(rounds),
-    "shortcut-restore: ten independent physical restore events with unique probe IDs, timestamps, histories, source hashes, and physical traces are required");
+    "shortcut-restore: ten independent physical restore events with unique probe IDs, timestamps, histories, source hashes, physical traces, and frame/window traces are required");
   return {
     schema: "anticodex-shortcut-restore-matrix-v1",
     ok: true,
