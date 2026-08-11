@@ -615,6 +615,27 @@ test("Gate 5 rejects ten files cloned from one shortcut restore event", () => {
   }
 });
 
+test("Gate 5 rejects cloned frame and window traces with unique watcher summaries", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-core-cloned-rounds-"));
+  try {
+    const result = runFixture(root, ({ values }) => {
+      const template = structuredClone(values.shortcutRestoreEvidence.rounds[0]);
+      for (const round of values.shortcutRestoreEvidence.rounds) {
+        for (const key of [
+          "activationSentAtMs", "windowHandleBefore", "expectedMainPid",
+          "earlyFrameCount", "earlyFrameTimeline", "windowStateTransitions",
+        ]) round[key] = structuredClone(template[key]);
+        round.physicalTraceSha256 = shortcutRestorePhysicalTraceSha256(round);
+      }
+    });
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.equal(result.payload.ok, false);
+    assert.match(result.payload.failures.join("\n"), /shortcut_restore_single_window_no_blank_frames/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Gate 5 accepts a signed exact-continuation ledger with consistent counts and turn chain", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-continuation-ledger-"));
   try {

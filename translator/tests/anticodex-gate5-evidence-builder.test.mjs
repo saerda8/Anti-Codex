@@ -1245,6 +1245,27 @@ test("builder rejects ten files cloned from one shortcut restore event", () => {
   }
 });
 
+test("builder rejects cloned frame and window traces even when watcher summaries differ", () => {
+  const root = mkdtempSync(join(tmpdir(), "anticodex-gate5-builder-shortcut-core-clone-"));
+  try {
+    const state = buildRawEvidence(root);
+    const template = JSON.parse(readFileSync(state.paths.shortcutRounds[0], "utf8"));
+    state.paths.shortcutRounds.forEach((path) => {
+      const round = JSON.parse(readFileSync(path, "utf8"));
+      for (const key of [
+        "activationSentAtMs", "windowHandleBefore", "expectedMainPid",
+        "earlyFrameCount", "earlyFrameTimeline", "windowStateTransitions",
+      ]) round[key] = structuredClone(template[key]);
+      writeJson(path, round, { signed: true });
+    });
+    const result = runBuilder(root, state);
+    assert.equal(result.child.status, 1, result.child.stderr || JSON.stringify(result.payload));
+    assert.match(result.payload.failures.join("\n"), /shortcut.*independent|physical.*trace/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("builder accepts only signed actual-mouse taskbar-button restore rounds", () => {
   const mutations = [
     ["desktop shortcut", (round) => { round.activationMode = "desktop-shortcut"; }],

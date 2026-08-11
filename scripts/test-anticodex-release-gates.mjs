@@ -1395,6 +1395,17 @@ function selfTest() {
         "appPageWatcherMaxIntervalMs", "appPageWatcherTailGapMs",
       ]) target[key] = structuredClone(source[key]);
     }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted duplicate shortcut restore physical trace");
+    expectUiFailure((ui) => {
+      const rounds = ui.shortcut_restore_single_window_no_blank_frames.rounds;
+      const source = structuredClone(rounds[0]);
+      for (const round of rounds) {
+        for (const key of [
+          "activationSentAtMs", "windowHandleBefore", "expectedMainPid",
+          "earlyFrameCount", "earlyFrameTimeline", "windowStateTransitions",
+        ]) round[key] = structuredClone(source[key]);
+        round.physicalTraceSha256 = shortcutRestorePhysicalTraceSha256(round);
+      }
+    }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted duplicate frame/window traces with unique watcher summaries");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].blankFrameCount = 1; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a blank restore frame");
     expectUiFailure((ui) => { ui.shortcut_restore_single_window_no_blank_frames.rounds[1].maxVisibleWindowCount = 2; }, "gate5_current_ui_shortcut_restore_single_window_no_blank_frames", "Gate 5 accepted a second visible window");
     const gate8ArtifactFailures = [];
