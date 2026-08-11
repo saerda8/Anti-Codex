@@ -3714,7 +3714,7 @@ The running installed client remains revision 5 until that final activation. Do 
 
 - [x] Raise the current taskbar-restore evidence threshold from three to ten rounds because the rejected Rev9 candidate remained clean for eight valid rounds and failed on the ninth. The builder now requires exactly ten signed raw rounds; aggregate and release validation require ten or more.
 - [x] Reject repeated files, repeated event envelopes and envelope-only clones. Each normalized round carries the existing recomputed fingerprint of early physical frames, window-state transitions and topology/page watcher sampling. Builder, aggregate and release also recompute a separate core fingerprint from only the frame timeline plus window transitions and require it to be unique, so changing watcher summary counters cannot make a cloned physical observation independent.
-- [x] Prove the change offline with TDD and independent review: builder `37/37`, aggregate `42/42`, release self-test, syntax and diff checks pass with no P0-P2. No client, runtime, mouse, official Codex or model/provider traffic was touched. The eight successful historical Rev9 rounds remain insufficient and Gate 5 stays red.
+- [x] Prove the change offline with TDD and independent review: builder `38/38`, aggregate `43/43`, release self-test, syntax and diff checks pass with no P0-P2. No client, runtime, mouse, official Codex or model/provider traffic was touched. The eight successful historical Rev9 rounds remain insufficient and Gate 5 stays red.
 
 ### 2026-08-11 Codex and CodexPlusPlus update watch
 
