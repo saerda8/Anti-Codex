@@ -8,7 +8,7 @@
   "installEligible": false,
   "baseAccepted": {
     "metadataPath": "../../../../third_party/codexplusplus/upstream.json",
-    "metadataSha256": "68c105bbf33ce07e16ad83649af9b19c3c2e2e35879ea300c23c67cf21617b2a",
+    "metadataNormalizedSha256": "82ffb795961003a1851a83d257c4cde6e886f5ae7ab742f6851406dc2f659bd2",
     "version": "1.2.45",
     "tag": "v1.2.45",
     "upstreamCommit": "055302664af09e6e3bb76a00b36d318132094ee3",
@@ -29,7 +29,7 @@
     "additionalPatches": [
       {
         "file": "patches/0013-fix-format-dreamskin-installer-test.patch",
-        "sha256": "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
+        "normalizedSha256": "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
         "scope": "normalize only the upstream v1.2.46 DreamSkin installer metadata assertion required by stable rustfmt; runtime behavior is unchanged"
       }
     ]

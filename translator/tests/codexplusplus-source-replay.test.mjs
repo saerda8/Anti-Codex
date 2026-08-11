@@ -11,8 +11,9 @@ const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
 
-function sha256(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+function normalizedTextSha256(path) {
+  const normalized = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+  return createHash("sha256").update(normalized, "utf8").digest("hex");
 }
 
 test("v1.2.46 source replay remains separate from the accepted v1.2.45 component", () => {
@@ -49,7 +50,7 @@ test("v1.2.46 source replay remains separate from the accepted v1.2.45 component
 
   assert.deepEqual(proposal.baseAccepted, {
     metadataPath: "../../../../third_party/codexplusplus/upstream.json",
-    metadataSha256: sha256(acceptedPath),
+    metadataNormalizedSha256: normalizedTextSha256(acceptedPath),
     version: accepted.version,
     tag: accepted.tag,
     upstreamCommit: accepted.upstreamCommit,
@@ -69,12 +70,15 @@ test("v1.2.46 source replay remains separate from the accepted v1.2.45 component
   assert.equal(proposal.replay.patchTree, "8037e005b80a2fb09c7784b02bbd8c0889156316");
   assert.deepEqual(proposal.replay.additionalPatches, [{
     file: "patches/0013-fix-format-dreamskin-installer-test.patch",
-    sha256: "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
+    normalizedSha256: "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
     scope: "normalize only the upstream v1.2.46 DreamSkin installer metadata assertion required by stable rustfmt; runtime behavior is unchanged",
   }]);
   const patchPath = join(proposalRoot, proposal.replay.additionalPatches[0].file);
   assert.equal(existsSync(patchPath), true);
-  assert.equal(sha256(patchPath), proposal.replay.additionalPatches[0].sha256);
+  assert.equal(
+    normalizedTextSha256(patchPath),
+    proposal.replay.additionalPatches[0].normalizedSha256,
+  );
 
   assert.deepEqual(proposal.verification, {
     patchReplay: "passed",
