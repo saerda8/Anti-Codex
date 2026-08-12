@@ -21,9 +21,9 @@
 
 ### 安装与共存
 
-- [ ] 1. 运行 `install-windows.bat` 完成安装;桌面与开始菜单出现 Anti-Codex 入口,
+- [x] 1. 运行 `install-windows.bat` 完成安装;桌面与开始菜单出现 Anti-Codex 入口,
       安装落点为 `%LOCALAPPDATA%\Anti-Codex`,状态目录为 `%APPDATA%\anticodex`。
-- [ ] 2. 双击启动后有且只有一个 Anti-Codex 窗口;原生 Codex 的安装、进程与数据不受影响,
+- [x] 2. 双击启动后有且只有一个 Anti-Codex 窗口;原生 Codex 的安装、进程与数据不受影响,
       两者可同时运行且任务栏/托盘图标各自独立。
 - [x] 3. 隔离检查:计划任务只有 Anti-Codex Launcher/Updater 两项且参数正确;
       无开发 worker、Docker 容器或 `R:` 盘残留串入产品。
@@ -62,6 +62,8 @@
 | 项 | 日期 | 证据 | 结果 |
 |---|---|---|---|
 | (示例) 4 | 2026-08-xx | 一次 Gemini 对话往返,无错误 | 通过 |
+| 1 | 2026-08-13 | 正式安装标记 `anticodex-host-manifest-v2`/patch revision 7 存在;安装根 `%LOCALAPPDATA%\Anti-Codex`、状态根 `%APPDATA%\anticodex` 均存在;桌面及开始菜单主入口经 `20260813-054310-shortcut-repair.json` 核对目标、参数、图标全部匹配 | 通过 |
+| 2 | 2026-08-13 | `20260813-043735-installed-overall-fast.json` 确认仅 1 个主 PID `30256`;Windows Shell 打开桌面入口后仍为同一 PID/HWND `1051282`,无第二根进程;官方 Codex PID `40560` 仍位于 WindowsApps 正式路径且响应正常;历史实鼠标任务栏恢复报告 `20260810-135235930-shortcut-restore-aa0d2997d97043e48e4f3596ef21ec8e.json` 全绿 | 通过 |
 | 3 | 2026-08-13 | `test-anticodex-independence.ps1` 通过;计划任务仅 Launcher/Updater 两项且参数指向安装运行时;无 Anti-Codex/CodexPlusPlus 容器,无 `R:` 盘;官方 Codex 前后 PID/路径一致 | 通过 |
 | 4 | 2026-08-13 | 真实桌面鼠标选择 `Claude Sonnet 4.6 (Thinking)` 后收到精确标记回复;报告 `20260812-210158-acceptance-item4-antigravity-model-claude-sonnet-4-6.json`;官方 Codex 进程保持存活 | 通过 |
 | 6 | 2026-08-13 | 原生任务完成 4 次 shell 工具调用并生成、校验 3 个文件;原生 `/compact` 产生 `compacted/context_compacted` 后在同一线程续接成功;报告 `20260812-210348-acceptance-item6-native-tool-flow-model-claude-sonnet-4-6.json`、`20260812-211046-compaction-resume.json` | 通过 |
