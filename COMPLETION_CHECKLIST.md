@@ -42,7 +42,7 @@
 - [x] 7. 原生 Settings:逐页打开当前版本全部设置页,不出现"糟糕,出错了";
       被隐藏的外部 ChatGPT Account / web Security 项不可见,其余本地项可正常交互。
 - [x] 8. 提示词管理:`管理 → 提示词` 完成一次 写入隔离 `AGENTS.md` → 重开读回 → 恢复默认 的闭环。
-- [ ] 9. Manager 按钮:管理页每个可见按钮点击后都有真实终态反馈(成功/失败/进度),
+- [x] 9. Manager 按钮:管理页每个可见按钮点击后都有真实终态反馈(成功/失败/进度),
       无"已开始"式假成功,无游离控制台窗口。
 
 ### 更新与回滚
@@ -67,4 +67,5 @@
 | 6 | 2026-08-13 | 原生任务完成 4 次 shell 工具调用并生成、校验 3 个文件;原生 `/compact` 产生 `compacted/context_compacted` 后在同一线程续接成功;报告 `20260812-210348-acceptance-item6-native-tool-flow-model-claude-sonnet-4-6.json`、`20260812-211046-compaction-resume.json` | 通过 |
 | 7 | 2026-08-13 | 真实鼠标逐页打开当前 16 个可见 Settings 页面,全部无崩溃;12 个隐藏入口均有运行时条件证据,无 ChatGPT/OpenAI 账号入口;个性化测试写入后原样恢复;验收器修正 `d1def33` | 通过 |
 | 8 | 2026-08-13 | `管理 → 提示词` 真实鼠标闭环:隔离 `AGENTS.md` 写入验收值,保存后重开精确读回,再恢复默认空值;其余三层提示词恢复为原状态,文件快照逐字节一致 | 通过 |
+| 9 | 2026-08-13 | 20 个可见按钮全部通过真实鼠标零副作用矩阵,7 个高影响按钮均需二次确认;真实安全按钮与功能刷新均有终态,插件 195/连接器 1494、MCP 1/Skill 98 且 `node_repl` 实调通过;报告 `20260813-054156-manager-ui-only-button-matrix.json`、`20260813-055936-manager-real-buttons-partial.json`;验收器时序修正 `91bf072` | 通过 |
 | 13 | 2026-08-13 | `ee468d5b75d46cb849106c38d6725b3df6f7ce97`; translator `1009/1009` 通过; `source-preflight` 报告 `C:\Users\XD\AppData\Roaming\anticodex\reports\20260813-041520-source-preflight.json`, `noTraffic=true` | 通过 |
