@@ -25,21 +25,21 @@
       安装落点为 `%LOCALAPPDATA%\Anti-Codex`,状态目录为 `%APPDATA%\anticodex`。
 - [ ] 2. 双击启动后有且只有一个 Anti-Codex 窗口;原生 Codex 的安装、进程与数据不受影响,
       两者可同时运行且任务栏/托盘图标各自独立。
-- [ ] 3. 隔离检查:计划任务只有 Anti-Codex Launcher/Updater 两项且参数正确;
+- [x] 3. 隔离检查:计划任务只有 Anti-Codex Launcher/Updater 两项且参数正确;
       无开发 worker、Docker 容器或 `R:` 盘残留串入产品。
 
 ### 模型路由(产品核心)
 
-- [ ] 4. Antigravity 路由:在管理页选择当前登录账号的一个 Antigravity 模型,
+- [x] 4. Antigravity 路由:在管理页选择当前登录账号的一个 Antigravity 模型,
       发出一次真实对话请求并收到正常回复。
 - [ ] 5. 第三方路由:在管理页测试、保存并应用一个第三方 API profile,
       发出一次真实请求并收到正常回复;人为填错密钥时请求失败关闭,不静默切换到其它模型。
-- [ ] 6. 原生 harness 完整性:跑一个包含工具调用(shell 或 MCP)的任务,
+- [x] 6. 原生 harness 完整性:跑一个包含工具调用(shell 或 MCP)的任务,
       确认规划、审批、工具执行、上下文压缩、完成判断均由原生 Codex 处理。
 
 ### 界面与设置
 
-- [ ] 7. 原生 Settings:逐页打开当前版本全部设置页,不出现"糟糕,出错了";
+- [x] 7. 原生 Settings:逐页打开当前版本全部设置页,不出现"糟糕,出错了";
       被隐藏的外部 ChatGPT Account / web Security 项不可见,其余本地项可正常交互。
 - [ ] 8. 提示词管理:`管理 → 提示词` 完成一次 写入隔离 `AGENTS.md` → 重开读回 → 恢复默认 的闭环。
 - [ ] 9. Manager 按钮:管理页每个可见按钮点击后都有真实终态反馈(成功/失败/进度),
@@ -55,10 +55,15 @@
 
 - [ ] 12. 窗口稳定:最小化/任务栏恢复、关闭/重开各若干次,无崩溃、无可稳定复现的空白窗口
       (偶发单帧白屏按 KNOWN_LIMITATIONS 处理,不阻塞)。
-- [ ] 13. 无流量源码门:在冻结基线提交上完整跑一次 translator 测试套件与源码预检,全绿。
+- [x] 13. 无流量源码门:在冻结基线提交上完整跑一次 translator 测试套件与源码预检,全绿。
 
 ## 验收记录
 
 | 项 | 日期 | 证据 | 结果 |
 |---|---|---|---|
 | (示例) 4 | 2026-08-xx | 一次 Gemini 对话往返,无错误 | 通过 |
+| 3 | 2026-08-13 | `test-anticodex-independence.ps1` 通过;计划任务仅 Launcher/Updater 两项且参数指向安装运行时;无 Anti-Codex/CodexPlusPlus 容器,无 `R:` 盘;官方 Codex 前后 PID/路径一致 | 通过 |
+| 4 | 2026-08-13 | 真实桌面鼠标选择 `Claude Sonnet 4.6 (Thinking)` 后收到精确标记回复;报告 `20260812-210158-acceptance-item4-antigravity-model-claude-sonnet-4-6.json`;官方 Codex 进程保持存活 | 通过 |
+| 6 | 2026-08-13 | 原生任务完成 4 次 shell 工具调用并生成、校验 3 个文件;原生 `/compact` 产生 `compacted/context_compacted` 后在同一线程续接成功;报告 `20260812-210348-acceptance-item6-native-tool-flow-model-claude-sonnet-4-6.json`、`20260812-211046-compaction-resume.json` | 通过 |
+| 7 | 2026-08-13 | 真实鼠标逐页打开当前 16 个可见 Settings 页面,全部无崩溃;12 个隐藏入口均有运行时条件证据,无 ChatGPT/OpenAI 账号入口;个性化测试写入后原样恢复;验收器修正 `d1def33` | 通过 |
+| 13 | 2026-08-13 | `ee468d5b75d46cb849106c38d6725b3df6f7ce97`; translator `1009/1009` 通过; `source-preflight` 报告 `C:\Users\XD\AppData\Roaming\anticodex\reports\20260813-041520-source-preflight.json`, `noTraffic=true` | 通过 |
