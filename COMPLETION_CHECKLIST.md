@@ -49,7 +49,7 @@
 
 - [x] 10. 更新闭环:`检查更新` 报告官方与 CodexPlusPlus 的源/活动版本;`同步更新`
       走完 候选构建 → 无流量验证 → 激活 → 安装后检查 的一次成功闭环,或在失败时自动回滚且保留原始失败原因。
-- [ ] 11. 回滚:从当前版本回滚到上一 revision,回滚后可正常启动且原生 Codex 不受影响。
+- [x] 11. 回滚:从当前版本回滚到上一 revision,回滚后可正常启动且原生 Codex 不受影响。
 
 ### 稳定性与源码门
 
@@ -71,5 +71,6 @@
 | 8 | 2026-08-13 | `管理 → 提示词` 真实鼠标闭环:隔离 `AGENTS.md` 写入验收值,保存后重开精确读回,再恢复默认空值;其余三层提示词恢复为原状态,文件快照逐字节一致 | 通过 |
 | 9 | 2026-08-13 | 20 个可见按钮全部通过真实鼠标零副作用矩阵,7 个高影响按钮均需二次确认;真实安全按钮与功能刷新均有终态,插件 195/连接器 1494、MCP 1/Skill 98 且 `node_repl` 实调通过;报告 `20260813-054156-manager-ui-only-button-matrix.json`、`20260813-055936-manager-real-buttons-partial.json`;验收器时序修正 `91bf072` | 通过 |
 | 10 | 2026-08-13 | 管理页真实鼠标确认“一键更新”,操作 `f6405d7cade24041b5df77a6f84b732f` 走完候选构建、无流量验证、激活与安装后检查;活动官方基线由 `26.803.5235.0` 更新为 `26.803.10989.0`,CodexPlusPlus 保持冻结 `v1.2.45`/SHA-256 `DA45C0CF...FA49922`;终态 `succeeded/complete`,保留可用回滚点,官方 Codex 10 个进程身份前后逐项一致;同组件受信路径修正 `c195d62` | 通过 |
+| 11 | 2026-08-13 | 安装版回滚点先通过完整清单校验,再执行真实回滚;操作 `96d228c569604e6c9e051b42f801f0b5` 从官方基线 `26.803.10989.0` revision 7 切回上一安全版 `26.803.5235.0` revision 7,终态 `rolled_back/complete`;回滚后无流量安装总检 `20260813-074428-installed-overall-fast.json` 全绿,单主进程、UI/Manager 就绪,CodexPlusPlus `v1.2.45` 哈希不变,官方 Codex 10 个进程身份前后逐项一致 | 通过 |
 | 12 | 2026-08-13 | 7 次真实任务栏恢复报告连续通过,同 PID/HWND/CDP 且单窗口;本轮 `20260812-224131329-shortcut-restore-d72b70c7249e421bb32e33a59696f27a.json` 的唯一首帧白屏在 81 ms 内恢复,按 `KNOWN_LIMITATIONS.md` 接受且不扩样;两次正式任务入口冷重启 `20260813-070145-cold-relaunch.json`、`20260813-070322-cold-relaunch.json` 全绿,当前 UI 非空,官方 Codex 身份不变;验收器修正 `84acda5` | 通过 |
 | 13 | 2026-08-13 | `ee468d5b75d46cb849106c38d6725b3df6f7ce97`; translator `1009/1009` 通过; `source-preflight` 报告 `C:\Users\XD\AppData\Roaming\anticodex\reports\20260813-041520-source-preflight.json`, `noTraffic=true` | 通过 |
