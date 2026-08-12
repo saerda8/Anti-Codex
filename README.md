@@ -3,9 +3,13 @@
 Anti-Codex 是一份与原版互不干扰的官方 Codex Desktop 隔离副本（isolated official Codex）。它保留
 Codex 原生界面和 harness，只替换模型提供方接入方式，不重写 Codex 的任务控制。
 
-项目基石是 [三层架构](docs/THREE_LAYER_ARCHITECTURE.md)，执行进度和剩余门禁见
-[最终迁移计划](docs/FINAL_MIGRATION_PLAN.md)。任何实现都不得在三层之外增加新的
-任务控制层。
+项目基石是 [三层架构](docs/THREE_LAYER_ARCHITECTURE.md)。任何实现都不得在三层之外
+增加新的任务控制层。
+
+完成判定只看 [完成清单](COMPLETION_CHECKLIST.md)；官方 Codex 与 CodexPlusPlus 的
+上游更新按 [日常维护](MAINTENANCE.md) 处理，不重开已通过的验收项；被接受的产品限制
+见 [已知限制](KNOWN_LIMITATIONS.md)。历史执行账本与旧验收体系已归档至
+[archive/](archive/README.md)，仅作历史证据，不可复用。
 
 ## 三层结构
 

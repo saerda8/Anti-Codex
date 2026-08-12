@@ -27,7 +27,6 @@ codex-home-deepseek-app/*
 !codex-home-deepseek-app/deepseek-model-catalog.json
 
 # Local working artifacts, backups, and drafts
-archive/
 research/
 steam-2026-ppt/
 videos/

@@ -1,6 +1,11 @@
 # Anti-Codex Final Migration Plan
 
-- Status: authoritative execution plan; release acceptance reopened after an installed-client fatal-page failure and P1 audit findings
+> **[SUPERSEDED - 2026-08-13]** 本文件已不再是权威执行计划,仅作历史证据保留。
+> 迁移(自研 translator → 三层架构)已完成;当前完成判定只看仓库根目录的
+> [`COMPLETION_CHECKLIST.md`](../COMPLETION_CHECKLIST.md),上游更新按
+> [`MAINTENANCE.md`](../MAINTENANCE.md) 处理。禁止向本文件追加新的 override 段落。
+
+- Status: superseded historical plan (formerly: authoritative execution plan; release acceptance reopened after an installed-client fatal-page failure and P1 audit findings)
 - Updated: 2026-07-28
 - Architecture: [`THREE_LAYER_ARCHITECTURE.md`](THREE_LAYER_ARCHITECTURE.md)
 - Removal ledger: [`LEGACY_REMOVAL_MANIFEST.md`](LEGACY_REMOVAL_MANIFEST.md)
