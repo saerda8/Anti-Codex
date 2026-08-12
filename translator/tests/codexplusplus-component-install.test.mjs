@@ -635,6 +635,21 @@ test("host sync stages, activates and recovers CodexPlusPlus with the copied Cod
   assert.match(sync, /\$installedPatches\.Count -ne \$acceptedPatches\.Count/);
 });
 
+test("host sync probes the trusted active path for a byte-identical component candidate", () => {
+  const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
+  const resolverStart = sync.indexOf("function Resolve-AntiCodexComponentLaunchProbeBinary");
+  const resolverEnd = sync.indexOf("function Test-AntiCodexComponentLaunchability", resolverStart);
+  const resolver = resolverStart >= 0 && resolverEnd > resolverStart
+    ? sync.slice(resolverStart, resolverEnd)
+    : "";
+
+  assert.ok(resolverStart >= 0, "sync must resolve a safe launch-probe binary");
+  assert.match(resolver, /Test-AntiCodexComponent -ComponentRoot \$activeComponent/);
+  assert.match(resolver, /\$candidateHash -eq \$activeHash/);
+  assert.match(resolver, /return \$activeBinary/);
+  assert.match(sync, /Resolve-AntiCodexComponentLaunchProbeBinary -ComponentRoot \$ComponentRoot/);
+});
+
 test("host sync rejects a missing CodexPlusPlus source before building or stopping the host", () => {
   const sync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
   const execution = sync.slice(sync.indexOf('$syncMutex = New-Object Threading.Mutex'));

@@ -613,10 +613,33 @@ function Test-AntiCodexComponent {
     return $manifest
 }
 
+function Resolve-AntiCodexComponentLaunchProbeBinary {
+    param([Parameter(Mandatory = $true)][string]$ComponentRoot)
+
+    $resolvedRoot = [IO.Path]::GetFullPath($ComponentRoot)
+    $candidateBinary = Join-Path $resolvedRoot "codex-plus-plus.exe"
+    if (-not $resolvedRoot.Equals([IO.Path]::GetFullPath($candidateComponent), [StringComparison]::OrdinalIgnoreCase)) {
+        return $candidateBinary
+    }
+
+    $activeBinary = Join-Path ([IO.Path]::GetFullPath($activeComponent)) "codex-plus-plus.exe"
+    if (-not (Test-Path -LiteralPath $activeBinary -PathType Leaf)) {
+        return $candidateBinary
+    }
+
+    Test-AntiCodexComponent -ComponentRoot $activeComponent | Out-Null
+    $candidateHash = Get-AntiCodexSha256 -Path $candidateBinary
+    $activeHash = Get-AntiCodexSha256 -Path $activeBinary
+    if ($candidateHash -eq $activeHash) {
+        return $activeBinary
+    }
+    return $candidateBinary
+}
+
 function Test-AntiCodexComponentLaunchability {
     param([Parameter(Mandatory = $true)][string]$ComponentRoot)
 
-    $binaryPath = Join-Path ([IO.Path]::GetFullPath($ComponentRoot)) "codex-plus-plus.exe"
+    $binaryPath = Resolve-AntiCodexComponentLaunchProbeBinary -ComponentRoot $ComponentRoot
     $resolvedCandidateRoot = [IO.Path]::GetFullPath($candidateRoot).TrimEnd(
         [IO.Path]::DirectorySeparatorChar,
         [IO.Path]::AltDirectorySeparatorChar
