@@ -1360,6 +1360,10 @@ test("Manager log counter excludes only the exact /health path", () => {
 });
 
 test("Manager native mouse verifier recomputes live hit coordinates and proves double confirmation", () => {
+  assert.match(managerButtonTest, /async function waitForManagerActionSurfaceStable\(actionName\)/);
+  assert.match(managerButtonTest, /const deadline = Date\.now\(\) \+ 35000;/);
+  assert.match(managerButtonTest, /grid\?\.childElementCount === 1/);
+  assert.doesNotMatch(managerButtonTest, /Boolean\(grid\?\.querySelector\("\.anticodex-loading"\)\)/);
   const start = managerButtonTest.indexOf("async function dispatchManagerActionActualMouse");
   const end = managerButtonTest.indexOf("async function verifyUpstreamConfigActualMouseClick", start);
   const block = managerButtonTest.slice(start, end);
@@ -1376,6 +1380,10 @@ test("Manager native mouse verifier recomputes live hit coordinates and proves d
   const batchStart = managerButtonTest.indexOf("async function runManagerActionBatch");
   const batchEnd = managerButtonTest.indexOf("if (uiOnlyMatrix)", batchStart);
   const batchBlock = managerButtonTest.slice(batchStart, batchEnd);
+  assert.ok(
+    batchBlock.indexOf("await waitForManagerActionSurfaceStable(actionName)")
+      < batchBlock.indexOf("await dispatchManagerActionActualMouse(actionName)"),
+  );
   assert.match(batchBlock, /let drainedPayloads = uiOnlyMode \? \{\} : await drainManagerActionQueue\(\)/);
   assert.match(batchBlock, /if \(!uiOnlyMode\) drainedPayloads =/);
   assert.equal((batchBlock.match(/verifyCloseButtonActualMouseClick\(\)/g) || []).length, 1);

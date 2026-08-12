@@ -1843,6 +1843,72 @@ async function readManagerActionLayout() {
   })()`, 3500);
 }
 
+async function waitForManagerActionSurfaceStable(actionName) {
+  const deadline = Date.now() + 35000;
+  let stableSince = 0;
+  let stableSignature = "";
+  let latest = null;
+  do {
+    latest = await evaluate(`(() => {
+      const actionName = ${JSON.stringify(actionName)};
+      const overlay = document.querySelector("#anticodex-manager-overlay");
+      const button = Array.from(overlay?.querySelectorAll("button[data-action]") || [])
+        .find((candidate) => candidate.dataset.action === actionName) || null;
+      const result = overlay?.querySelector('[data-anticodex-result="action"]') || null;
+      const grid = overlay?.querySelector(".anticodex-grid") || null;
+      const snapshotInFlight = window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ === true;
+      const actionInFlight = Boolean(window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__);
+      const busy = overlay?.getAttribute("data-anticodex-busy") === "true"
+        || overlay?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
+      const running = Boolean(result?.getAttribute("data-anticodex-running"));
+      const loading = grid?.childElementCount === 1
+        && grid.querySelector(".anticodex-loading") !== null;
+      const confirming = button?.getAttribute("data-confirming-high-impact") === "true";
+      const ready = Boolean(overlay && button && result && grid)
+        && !snapshotInFlight
+        && !actionInFlight
+        && !busy
+        && !running
+        && !loading
+        && !confirming
+        && button.disabled !== true;
+      return {
+        ready,
+        overlayPresent: Boolean(overlay),
+        buttonPresent: Boolean(button),
+        resultPresent: Boolean(result),
+        gridPresent: Boolean(grid),
+        snapshotInFlight,
+        actionInFlight,
+        busy,
+        running,
+        loading,
+        confirming,
+        disabled: button?.disabled === true,
+        signature: JSON.stringify([
+          overlay?.getAttribute("data-anticodex-operation-generation") || "",
+          overlay?.getAttribute("data-anticodex-open-refresh") || "",
+          grid?.childElementCount || 0,
+          String(result?.textContent || ""),
+        ]),
+      };
+    })()`, 3500);
+    if (latest.ready) {
+      if (latest.signature !== stableSignature) {
+        stableSignature = latest.signature;
+        stableSince = Date.now();
+      } else if (Date.now() - stableSince >= 300) {
+        return { ok: true, stableForMs: Date.now() - stableSince, ...latest };
+      }
+    } else {
+      stableSignature = "";
+      stableSince = 0;
+    }
+    await sleep(50);
+  } while (Date.now() < deadline);
+  return { ok: false, error: "Manager action surface did not become stable", ...latest };
+}
+
 async function dispatchManagerActionActualMouse(actionName) {
   const requiredConfirmation = MANAGER_HIGH_IMPACT_ACTION_SET.has(actionName);
   const expectedClickCount = requiredConfirmation ? 2 : 1;
@@ -2280,9 +2346,13 @@ async function runManagerActionBatch(actions) {
   };
 })()
 `, 12000);
-    const actualMouse = initial.ok
+    const actionSurface = initial.ok
+      ? await waitForManagerActionSurfaceStable(actionName)
+      : { ok: false, error: initial.error || "Manager action setup failed" };
+    initial.actionSurface = actionSurface;
+    const actualMouse = initial.ok && actionSurface.ok
       ? await dispatchManagerActionActualMouse(actionName)
-      : { ok: false, action: actionName, error: initial.error || "Manager action setup failed" };
+      : { ok: false, action: actionName, error: actionSurface.error || initial.error || "Manager action setup failed" };
     initial.actualMouse = actualMouse;
     if (!actualMouse.ok) initial.ok = false;
     initial.closeActualMouseOk = closeActualMouse.ok;
@@ -2785,9 +2855,13 @@ const initial = await evaluate(`
   };
 })()
 `, 12000);
-const actionActualMouse = initial.ok
+const actionSurface = initial.ok
+  ? await waitForManagerActionSurfaceStable(action)
+  : { ok: false, error: initial.error || "Manager action setup failed" };
+initial.actionSurface = actionSurface;
+const actionActualMouse = initial.ok && actionSurface.ok
   ? await dispatchManagerActionActualMouse(action)
-  : { ok: false, action, error: initial.error || "Manager action setup failed" };
+  : { ok: false, action, error: actionSurface.error || initial.error || "Manager action setup failed" };
 initial.actionActualMouse = actionActualMouse;
 if (!actionActualMouse.ok) initial.ok = false;
 const pageTargetsAfterManagerOpen = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
