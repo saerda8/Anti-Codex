@@ -138,7 +138,9 @@ function extractNativeSettingsVisibilityCandidates(source, registered) {
       if (switchMatches.length !== 1) continue;
       const switchBody = readBalancedBlock(filterBody, switchMatches[0].index + switchMatches[0][0].lastIndexOf("{"));
       const gated = new Set();
-      for (const returnMatch of switchBody.matchAll(/((?:case(?:`[^`]+`|"[^"]+"|'[^']+'|[A-Za-z_$][\w$-]*)\s*:\s*)+)return(?:!1|false)(?:;|(?=case|$))/g)) {
+      for (const returnMatch of switchBody.matchAll(/((?:case(?:`[^`]+`|"[^"]+"|'[^']+'|[A-Za-z_$][\w$-]*)\s*:\s*)+)return\s*([^;]*?)(?:;|(?=case|default|$))/g)) {
+        const returnExpression = returnMatch[2].replace(/\s+/g, "");
+        if (returnExpression === "!0" || returnExpression === "true") continue;
         for (const caseMatch of returnMatch[1].matchAll(/case(?:`([^`]+)`|"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$-]*))\s*:/g)) {
           const slug = String(caseMatch[1] || caseMatch[2] || caseMatch[3] || caseMatch[4] || "");
           if (registered.has(slug)) gated.add(slug);
@@ -209,20 +211,21 @@ function extractSlugArray(source, variableName) {
   return bodies.length === 1 ? bodies[0] : [];
 }
 
-function hasNavigationRegistryEvidence({ candidate, definitionSource, modulePath, sources, registered }) {
+function readNavigationRegistryEvidence({ candidate, definitionSource, modulePath, sources, registered }) {
   const sourceImports = parseNamedImports(definitionSource)
     .filter((entry) => entry.localName === candidate.filterSourceName);
-  if (sourceImports.length !== 1) return false;
+  if (sourceImports.length !== 1) return null;
   const navigationPath = resolveAsarModulePath(modulePath, sourceImports[0].specifier);
   const navigationSource = sources.get(navigationPath);
-  if (!navigationSource) return false;
+  if (!navigationSource) return null;
   const navigationExports = parseNamedExports(navigationSource)
     .filter((entry) => entry.exportedName === sourceImports[0].importedName);
-  if (navigationExports.length !== 1) return false;
+  if (navigationExports.length !== 1) return null;
   const navigationSlugs = extractSlugArray(navigationSource, navigationExports[0].localName);
-  if (!navigationSlugs.includes("agent") || !navigationSlugs.includes("personalization")) return false;
-  if (navigationSlugs.some((slug) => !registered.has(slug))) return false;
-  return candidate.gatedSlugs.every((slug) => navigationSlugs.includes(slug));
+  if (!navigationSlugs.includes("agent") || !navigationSlugs.includes("personalization")) return null;
+  if (navigationSlugs.some((slug) => !registered.has(slug))) return null;
+  if (candidate.gatedSlugs.some((slug) => !navigationSlugs.includes(slug))) return null;
+  return navigationSlugs;
 }
 
 function extractNamedFunctions(source) {
@@ -331,10 +334,17 @@ function countConsumerChains({ candidate, registrationVariableName, definitionSo
 function extractNativeSettingsVisibilityGateContract(source, registrationContract, evidence = {}) {
   const registered = new Set(registrationContract.slugs);
   const { modulePath, sources } = normalizeModuleSources(evidence, source);
-  if (!modulePath) return { matched: false, gatedSlugs: [] };
+  if (!modulePath) return { matched: false, navigationSlugs: [], gatedSlugs: [] };
   const fullChains = [];
   for (const candidate of extractNativeSettingsVisibilityCandidates(source, registered)) {
-    if (!hasNavigationRegistryEvidence({ candidate, definitionSource: source, modulePath, sources, registered })) continue;
+    const navigationSlugs = readNavigationRegistryEvidence({
+      candidate,
+      definitionSource: source,
+      modulePath,
+      sources,
+      registered,
+    });
+    if (!navigationSlugs) continue;
     const consumerCount = countConsumerChains({
       candidate,
       registrationVariableName: registrationContract.variableName,
@@ -343,11 +353,15 @@ function extractNativeSettingsVisibilityGateContract(source, registrationContrac
       sources,
     });
     if (consumerCount > 1) throw new Error("Ambiguous native Settings consumer contract.");
-    if (consumerCount === 1) fullChains.push(candidate);
+    if (consumerCount === 1) fullChains.push({ ...candidate, navigationSlugs });
   }
   if (fullChains.length > 1) throw new Error("Ambiguous native Settings visibility contract.");
-  if (fullChains.length === 0) return { matched: false, gatedSlugs: [] };
-  return { matched: true, gatedSlugs: fullChains[0].gatedSlugs };
+  if (fullChains.length === 0) return { matched: false, navigationSlugs: [], gatedSlugs: [] };
+  return {
+    matched: true,
+    navigationSlugs: fullChains[0].navigationSlugs,
+    gatedSlugs: fullChains[0].gatedSlugs,
+  };
 }
 
 function escapeRegExp(value) {
@@ -420,6 +434,13 @@ export function compareNativeSettingsSlugSets(expectedSlugs = [], visibleSlugs =
     duplicates,
     unexpected,
   };
+}
+
+export function compareNativeSettingsRuntimeContract(contract = {}, visibleSlugs = []) {
+  const navigationSlugs = Array.isArray(contract.navigationSlugs) && contract.navigationSlugs.length > 0
+    ? contract.navigationSlugs
+    : contract.registrationSlugs;
+  return compareNativeSettingsSlugSets(navigationSlugs || [], visibleSlugs, contract.gatedSlugs || []);
 }
 
 function alignedAsarDataOffset(headerSize) {
@@ -498,10 +519,12 @@ export function readNativeSettingsContract(asarPath) {
     if (matchingVisibilityContracts.length !== 1) {
       throw new Error(`Expected one native Settings visibility contract, found ${matchingVisibilityContracts.length}.`);
     }
-    const gatedSlugs = matchingVisibilityContracts[0].gatedSlugs
+    const visibilityContract = matchingVisibilityContracts[0];
+    const navigationSlugs = visibilityContract.navigationSlugs;
+    const gatedSlugs = visibilityContract.gatedSlugs
       .filter((slug) => registrationSet.has(slug))
       .sort();
-    return { registrationSlugs, gatedSlugs };
+    return { registrationSlugs, navigationSlugs, gatedSlugs };
   } finally {
     closeSync(fd);
   }

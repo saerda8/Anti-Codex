@@ -77,7 +77,7 @@ const moduleEvidence = (definitionSource = arbitraryContractSource, extraSources
 });
 assert.deepEqual(
   nativeSettingsContract.extractNativeSettingsGateSlugs(arbitraryContractSource, moduleEvidence()),
-  ["future-settings"],
+  ["conditional", "future-settings"],
 );
 
 const renamedVisibilityWithTailDecoy = [
@@ -177,12 +177,12 @@ const asarPath = process.argv[2] || "";
 if (asarPath) {
   const contract = nativeSettingsContract.readNativeSettingsContract(asarPath);
   assert.ok(contract.registrationSlugs.length > 0);
+  assert.ok(contract.navigationSlugs.length > 0);
   assert.ok(contract.gatedSlugs.length > 0);
   assert.ok(contract.gatedSlugs.every((slug) => contract.registrationSlugs.includes(slug)));
-  const comparison = compareNativeSettingsSlugSets(
-    contract.registrationSlugs,
-    contract.registrationSlugs.filter((slug) => !contract.gatedSlugs.includes(slug)),
-    contract.gatedSlugs,
+  const comparison = nativeSettingsContract.compareNativeSettingsRuntimeContract(
+    contract,
+    contract.navigationSlugs.filter((slug) => !contract.gatedSlugs.includes(slug)),
   );
   assert.equal(comparison.ok, true);
   assert.deepEqual(comparison.missingWithoutGateEvidence, []);

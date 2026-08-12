@@ -7,7 +7,7 @@ import {
   captureExactFileSnapshot,
   classifyNativeSettingsCrashSnapshot,
   classifyUnsupportedExternalSettingsTarget,
-  compareNativeSettingsSlugSets,
+  compareNativeSettingsRuntimeContract,
   exactFileSnapshotMatches,
   promptSettingsStatesEqual,
   promptSettingsStatesSemanticallyEqual,
@@ -660,7 +660,6 @@ async function auditNativePersonalization({ allowWrite }) {
 
 async function runNativeSettingsAcceptance() {
   const nativeSettingsContract = readNativeSettingsContract(nativeSettingsAsarPath);
-  const knownSlugs = nativeSettingsContract.registrationSlugs;
   const nav = await waitFor(`(() => {
     const node = ${nativeSettingsNavExpression};
     const rect = node?.getBoundingClientRect?.();
@@ -687,10 +686,9 @@ async function runNativeSettingsAcceptance() {
   if (nav.externalTargets.length > 0) {
     throw new Error(`External ChatGPT/OpenAI account settings are still visible in native Settings navigation: ${JSON.stringify(nav.externalTargets)}`);
   }
-  const slugComparison = compareNativeSettingsSlugSets(
-    knownSlugs,
+  const slugComparison = compareNativeSettingsRuntimeContract(
+    nativeSettingsContract,
     nav.entries.map((entry) => entry.slug),
-    nativeSettingsContract.gatedSlugs,
   );
   if (!slugComparison.ok) {
     throw new Error(`Native Settings registration mismatch: ${JSON.stringify({
