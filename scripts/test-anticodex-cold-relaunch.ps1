@@ -2,8 +2,8 @@
 param(
     [string]$BaseUrl = "",
     [string]$RuntimeRoot = $(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "Anti-Codex\runtime"),
-    [int]$TimeoutSec = 18,
-    [int]$StopTimeoutSec = 5,
+    [int]$TimeoutSec = 90,
+    [int]$StopTimeoutSec = 60,
     [int]$HealthPollTimeoutSec = 0,
     [int]$PollIntervalMs = 500,
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
@@ -110,18 +110,6 @@ function Save-Progress {
     } catch {}
 }
 
-function Read-TextFileTail {
-    param([string]$Path, [int]$MaxChars = 4000)
-    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
-    try {
-        $text = [System.IO.File]::ReadAllText($Path)
-        if ($text.Length -le $MaxChars) { return $text }
-        return $text.Substring($text.Length - $MaxChars)
-    } catch {
-        return ""
-    }
-}
-
 function New-ReportPaths {
     param([string]$Name)
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -135,8 +123,9 @@ $runtimeRootFull = Normalize-Path $RuntimeRoot
 $installRoot = Normalize-Path (Split-Path -Parent $runtimeRootFull)
 $activeHost = Normalize-Path (Join-Path $installRoot "codex-patched-app")
 $activeMainExe = Normalize-Path (Join-Path $activeHost "Anti-Codex.exe")
-$startAntiCodex = Join-Path $runtimeRootFull "scripts\start-anticodex.ps1"
+$taskLauncherScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex-task.mjs")
 $supervisorScript = Normalize-Path (Join-Path $runtimeRootFull "scripts\start-anticodex-fixed-route.mjs")
+$launchTaskName = "Anti-Codex Launcher"
 $lastSnapshot = [pscustomobject]@{
     main = @()
     supervisor = @()
@@ -145,10 +134,15 @@ $lastSnapshot = [pscustomobject]@{
 $originalCodexBefore = @()
 $originalCodexAfter = @()
 $originalCodexStopTargetIntersection = @()
-$launcherProc = $null
-$launcherOutPath = ""
-$launcherErrPath = ""
-$launcherMode = ""
+$launcherTaskStarted = $false
+$launcherTaskStateBefore = $null
+$launcherTaskStateAfter = $null
+$gracefulShutdownAccepted = $false
+$health = $null
+$managerHealth = $null
+$mainProcesses = @()
+$ready = $false
+$stopped = $false
 
 function Get-AntiCodexProcessSnapshot {
     $main = New-Object System.Collections.Generic.List[object]
@@ -164,7 +158,9 @@ function Get-AntiCodexProcessSnapshot {
         if ($commandLine -like "*$supervisorScript*") {
             $supervisor.Add($process) | Out-Null
         }
-        if ($process.ProcessId -ne $PID -and $commandLine -match $installRootEscaped -and $commandLine -match "start-anticodex\.ps1") {
+        if ($process.ProcessId -ne $PID -and
+            $commandLine -match $installRootEscaped -and
+            $commandLine.IndexOf($taskLauncherScript, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $launcher.Add($process) | Out-Null
         }
     }
@@ -204,7 +200,7 @@ function Get-AntiCodexLauncherProcesses {
     return @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         $_.ProcessId -ne $PID -and
         ([string]$_.CommandLine) -match $installRootEscaped -and
-        ([string]$_.CommandLine) -match "start-anticodex\.ps1"
+        ([string]$_.CommandLine).IndexOf($taskLauncherScript, [StringComparison]::OrdinalIgnoreCase) -ge 0
     })
 }
 
@@ -219,18 +215,56 @@ function Get-OriginalCodexMainProcesses {
     })
 }
 
-function Stop-ProcessList {
-    param($Processes)
-    foreach ($process in @($Processes)) {
-        try { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue } catch {}
+function Get-AntiCodexLaunchTask {
+    $task = Get-ScheduledTask -TaskName $launchTaskName -ErrorAction Stop
+    $actions = @($task.Actions)
+    if (-not $task.Settings.Enabled -or $actions.Count -ne 1) {
+        throw "The isolated Anti-Codex Launcher task is missing or stale."
+    }
+    $action = $actions[0]
+    if ([string]$action.Arguments -notmatch "--headless" -or
+        ([string]$action.Arguments).IndexOf($taskLauncherScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "The isolated Anti-Codex Launcher task does not target the installed task launcher."
+    }
+    return $task
+}
+
+function Test-AntiCodexLaunchTaskReady {
+    try {
+        return [int](Get-AntiCodexLaunchTask).State -eq 3
+    } catch {
+        return $false
     }
 }
 
-function Stop-ProcessTreeList {
-    param($Processes)
-    foreach ($process in @($Processes)) {
-        if ([int]$process.ProcessId -le 0) { continue }
-        try { & taskkill.exe /PID $process.ProcessId /T /F 2>$null | Out-Null } catch {}
+function Invoke-AntiCodexFixedRouteShutdown {
+    try {
+        $health = Invoke-FixedRouteHealth
+        if (-not $health -or
+            $health.ok -ne $true -or
+            [string]$health.state -ne "ready" -or
+            (Normalize-Path ([string]$health.appExecutable)) -ine $activeMainExe) {
+            return $false
+        }
+        $supervisor = @(Get-AntiCodexSupervisorProcesses | Where-Object { [int]$_.ProcessId -eq [int]$health.pid })
+        if ($supervisor.Count -ne 1) { return $false }
+
+        $authPath = Join-Path $env:APPDATA "anticodex\codex-home-deepseek-app\auth.json"
+        if (-not (Test-Path -LiteralPath $authPath -PathType Leaf)) { return $false }
+        $controlToken = [string](Get-Content -LiteralPath $authPath -Raw -Encoding UTF8 | ConvertFrom-Json).OPENAI_API_KEY
+        if ([string]::IsNullOrWhiteSpace($controlToken)) { return $false }
+
+        $request = [Net.HttpWebRequest]::Create("http://127.0.0.1:18487/anticodex/fixed-route/shutdown")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = 3000
+        $request.ReadWriteTimeout = 3000
+        $request.ContentLength = 0
+        $request.Headers[[Net.HttpRequestHeader]::Authorization] = "Bearer $controlToken"
+        $response = $request.GetResponse()
+        try { return [int]$response.StatusCode -eq 202 } finally { $response.Dispose() }
+    } catch {
+        return $false
     }
 }
 
@@ -244,85 +278,86 @@ function Wait-Until {
     return $false
 }
 
-if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
-    Add-Failure "Anti-Codex launcher missing: $startAntiCodex"
+if (-not (Test-Path -LiteralPath $taskLauncherScript -PathType Leaf)) {
+    Add-Failure "Anti-Codex task launcher missing: $taskLauncherScript"
 } else {
     Save-Progress "snapshot-original-codex"
-    $originalCodexBefore = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
+    $originalCodexBefore = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId } | Sort-Object -Unique)
+
+    $launchTask = $null
+    try {
+        $launchTask = Get-AntiCodexLaunchTask
+        $launcherTaskStateBefore = [int]$launchTask.State
+    } catch {
+        Add-Failure $_.Exception.Message
+    }
 
     $stageStarted = [DateTime]::UtcNow
-    Save-Progress "stop-existing-processes"
-    $launcherStopTargets = @(Get-AntiCodexLauncherProcesses)
-    $hostStopTargets = @(Get-AntiCodexHostProcesses)
-    $supervisorStopTargets = @(Get-AntiCodexSupervisorProcesses)
-    $stopTargetPids = @($launcherStopTargets + $hostStopTargets + $supervisorStopTargets | ForEach-Object { [int]$_.ProcessId })
+    Save-Progress "request-graceful-shutdown"
+    $stopTargetPids = @(
+        @(Get-AntiCodexLauncherProcesses) +
+        @(Get-AntiCodexHostProcesses) +
+        @(Get-AntiCodexSupervisorProcesses) |
+            ForEach-Object { [int]$_.ProcessId } |
+            Sort-Object -Unique
+    )
     $originalCodexStopTargetIntersection = @($originalCodexBefore | Where-Object { $stopTargetPids -contains $_ })
     if ($originalCodexStopTargetIntersection.Count -gt 0) {
         Add-Failure "original Codex process was selected as an Anti-Codex stop target"
     }
-    Stop-ProcessList $launcherStopTargets
-    Stop-ProcessTreeList $supervisorStopTargets
-    Stop-ProcessList $hostStopTargets
 
-    $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
-        @(Get-AntiCodexLauncherProcesses).Count -eq 0 -and
-        @(Get-AntiCodexHostProcesses).Count -eq 0 -and
-        @(Get-AntiCodexSupervisorProcesses).Count -eq 0
+    if ($launchTask -and $originalCodexStopTargetIntersection.Count -eq 0) {
+        $gracefulShutdownAccepted = Invoke-AntiCodexFixedRouteShutdown
     }
-    $stages.Add((New-Stage "stop-existing-processes" $stageStarted $stopped "launcher, copied client, and fixed-route supervisor stopped")) | Out-Null
-    Save-Progress "stopped-existing-processes"
-    if (-not $stopped) {
-        Add-Failure "Anti-Codex old processes did not stop within $StopTimeoutSec seconds"
-    }
-
-    $stageStarted = [DateTime]::UtcNow
-    $launched = $true
-    Save-Progress "launch-anticodex"
-    $launcherOutPath = [IO.Path]::GetTempFileName()
-    $launcherErrPath = [IO.Path]::GetTempFileName()
-    try {
-        $powerShellBin = (Get-Command "powershell.exe" -ErrorAction Stop).Source
-        $launcherProc = Start-Process -FilePath $powerShellBin `
-            -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$startAntiCodex`"") `
-            -RedirectStandardOutput $launcherOutPath `
-            -RedirectStandardError $launcherErrPath `
-            -WindowStyle Hidden -PassThru
-        $launcherMode = "powershell-start-process"
-    } catch {
-        $powerShellLaunchError = $_.Exception.Message
-        try {
-            $cmdArgs = @(
-                "/d", "/c", "start", '""', "/min",
-                "powershell.exe",
-                "-NoProfile", "-ExecutionPolicy", "Bypass",
-                "-File", "`"$startAntiCodex`""
-            )
-            $launcherProc = Start-Process -FilePath cmd.exe -ArgumentList $cmdArgs -WindowStyle Hidden -PassThru
-            $launcherMode = "cmd-start-fallback"
-        } catch {
-            $launched = $false
-            Add-Failure "failed to launch Anti-Codex: $powerShellLaunchError; cmd fallback failed: $($_.Exception.Message)"
+    $stages.Add((New-Stage "request-graceful-shutdown" $stageStarted $gracefulShutdownAccepted "authenticated fixed-route shutdown requested")) | Out-Null
+    if (-not $gracefulShutdownAccepted) {
+        Add-Failure "Anti-Codex did not accept the authenticated graceful shutdown request"
+    } else {
+        $stopped = Wait-Until -TimeoutSeconds $StopTimeoutSec -Predicate {
+            @(Get-AntiCodexLauncherProcesses).Count -eq 0 -and
+            @(Get-AntiCodexHostProcesses).Count -eq 0 -and
+            @(Get-AntiCodexSupervisorProcesses).Count -eq 0 -and
+            (Test-AntiCodexLaunchTaskReady)
+        }
+        if (-not $stopped) {
+            Add-Failure "Anti-Codex did not stop cleanly within $StopTimeoutSec seconds"
         }
     }
-    $stages.Add((New-Stage "launch-anticodex" $stageStarted $launched "start-anticodex.ps1 dispatched")) | Out-Null
+    $stages.Add((New-Stage "wait-clean-stop" $stageStarted $stopped "task launcher, copied client, and fixed-route supervisor stopped")) | Out-Null
+    Save-Progress "stopped-existing-processes"
+
+    $stageStarted = [DateTime]::UtcNow
+    Save-Progress "launch-anticodex"
+    if ($stopped) {
+        try {
+            $launchTask = Get-AntiCodexLaunchTask
+            if ([int]$launchTask.State -ne 3) {
+                throw "The isolated Anti-Codex Launcher task was not Ready before relaunch."
+            }
+            Start-ScheduledTask -TaskName $launchTaskName
+            $launcherTaskStarted = $true
+        } catch {
+            Add-Failure "failed to launch Anti-Codex through its isolated task: $($_.Exception.Message)"
+        }
+    }
+    $stages.Add((New-Stage "launch-anticodex" $stageStarted $launcherTaskStarted "isolated Anti-Codex Launcher task dispatched")) | Out-Null
     Save-Progress "launched-anticodex"
 
-    $health = $null
-    $managerHealth = $null
-    $mainProcesses = @()
     $stageStarted = [DateTime]::UtcNow
     Save-Progress "wait-health-ready"
-    $ready = Wait-Until -TimeoutSeconds $HealthPollTimeoutSec -Predicate {
-        $script:lastSnapshot = Get-AntiCodexProcessSnapshot
-        $script:mainProcesses = @($script:lastSnapshot.main)
-        try {
-            $script:managerHealth = Invoke-LocalJson "/health"
-            $script:health = Invoke-FixedRouteHealth
-            $healthReady = Test-AntiCodexRelaunchHealthReady $script:health
-            $managerReady = $script:managerHealth.ok -eq $true -and [string]$script:managerHealth.schema -eq "anticodex-manager-service-v1"
-            return $healthReady -and $managerReady -and $script:mainProcesses.Count -ge 1
-        } catch {
-            return $false
+    if ($launcherTaskStarted) {
+        $ready = Wait-Until -TimeoutSeconds $HealthPollTimeoutSec -Predicate {
+            $script:lastSnapshot = Get-AntiCodexProcessSnapshot
+            $script:mainProcesses = @($script:lastSnapshot.main)
+            try {
+                $script:managerHealth = Invoke-LocalJson "/health"
+                $script:health = Invoke-FixedRouteHealth
+                $healthReady = Test-AntiCodexRelaunchHealthReady $script:health
+                $managerReady = $script:managerHealth.ok -eq $true -and [string]$script:managerHealth.schema -eq "anticodex-manager-service-v1"
+                return $healthReady -and $managerReady -and $script:mainProcesses.Count -eq 1
+            } catch {
+                return $false
+            }
         }
     }
     $stages.Add((New-Stage "wait-health-ready" $stageStarted $ready "main process and local health ready")) | Out-Null
@@ -355,7 +390,11 @@ if (-not (Test-Path -LiteralPath $startAntiCodex -PathType Leaf)) {
         Add-Failure "expected exactly one Anti-Codex main process, found $($mainProcesses.Count)"
     }
 
-    $originalCodexAfter = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId })
+    try { $launcherTaskStateAfter = [int](Get-AntiCodexLaunchTask).State } catch {}
+    $originalCodexAfter = @(Get-OriginalCodexMainProcesses | ForEach-Object { [int]$_.ProcessId } | Sort-Object -Unique)
+    if (($originalCodexBefore -join ",") -ne ($originalCodexAfter -join ",")) {
+        Add-Failure "original Codex main process identity changed during Anti-Codex cold relaunch"
+    }
 }
 Save-Progress "final-snapshot"
 
@@ -370,17 +409,7 @@ $finalSnapshot = Get-AntiCodexProcessSnapshot
 $mainSnapshot = @($finalSnapshot.main)
 $supervisorSnapshot = @($finalSnapshot.supervisor)
 $reportPaths = New-ReportPaths "cold-relaunch"
-$launcherExitCode = $null
-$launcherHasExited = $null
-if ($launcherProc) {
-    try {
-        $launcherProc.Refresh()
-        $launcherHasExited = [bool]$launcherProc.HasExited
-        if ($launcherProc.HasExited) { $launcherExitCode = $launcherProc.ExitCode }
-    } catch {}
-}
-$launcherStdoutTail = Read-TextFileTail $launcherOutPath
-$launcherStderrTail = Read-TextFileTail $launcherErrPath
+$originalCodexPidSetUnchanged = (($originalCodexBefore -join ",") -eq ($originalCodexAfter -join ","))
 
 $result = [pscustomobject]@{
     reportName = "cold-relaunch"
@@ -408,20 +437,20 @@ $result = [pscustomobject]@{
         launcherCount = @($finalSnapshot.launcher).Count
     }
     launcher = [pscustomobject]@{
-        started = [bool]$launcherProc
-        mode = $launcherMode
-        pid = if ($launcherProc) { [int]$launcherProc.Id } else { $null }
-        hasExited = $launcherHasExited
-        exitCode = $launcherExitCode
-        stdoutTail = $launcherStdoutTail
-        stderrTail = $launcherStderrTail
+        started = $launcherTaskStarted
+        mode = "scheduled-task"
+        taskName = $launchTaskName
+        taskScript = $taskLauncherScript
+        taskStateBefore = $launcherTaskStateBefore
+        taskStateAfter = $launcherTaskStateAfter
+        gracefulShutdownAccepted = $gracefulShutdownAccepted
     }
     originalCodex = [pscustomobject]@{
-        unchanged = ($originalCodexStopTargetIntersection.Count -eq 0)
+        unchanged = ($originalCodexStopTargetIntersection.Count -eq 0 -and $originalCodexPidSetUnchanged)
         beforePids = @($originalCodexBefore)
         afterPids = @($originalCodexAfter)
         stopTargetIntersectionPids = @($originalCodexStopTargetIntersection)
-        pidSetUnchanged = (($originalCodexBefore -join ",") -eq ($originalCodexAfter -join ","))
+        pidSetUnchanged = $originalCodexPidSetUnchanged
     }
     stopTimeoutSec = $StopTimeoutSec
     healthPollTimeoutSec = $HealthPollTimeoutSec
@@ -434,7 +463,6 @@ $result = [pscustomobject]@{
 
 $json = $result | ConvertTo-Json -Depth 8 -Compress
 Write-AntiCodexJsonReport -LatestPath $reportPaths.latest -HistoryPath $reportPaths.history -Json $json -Encoding ([System.Text.UTF8Encoding]::new($false))
-Remove-Item -LiteralPath $launcherOutPath, $launcherErrPath -Force -ErrorAction SilentlyContinue
 $json
 if ($failures.Count -gt 0) { exit 1 }
 

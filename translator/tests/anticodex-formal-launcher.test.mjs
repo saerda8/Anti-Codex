@@ -26,6 +26,7 @@ const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-s
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
 const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
+const coldRelaunch = readFileSync(resolve(root, "scripts", "test-anticodex-cold-relaunch.ps1"), "utf8");
 
 test("controlled route restarts do not accumulate signal listeners", () => {
   assert.equal(typeof taskLauncher.attachForwardedSignalHandlers, "function");
@@ -689,6 +690,17 @@ test("runtime sync accepts verified health through Launcher state transitions", 
 
   assert.doesNotMatch(polling, /if \(\[int\]\$task\.State -notin @\(2, 4\)\) \{ break \}/);
   assert.match(polling, /\$ready = \(\$null -ne \$health -and \$null -ne \$fixedRoute\)/);
+});
+
+test("cold relaunch uses graceful shutdown and the durable isolated Launcher task", () => {
+  assert.match(coldRelaunch, /\[int\]\$TimeoutSec\s*=\s*90/);
+  assert.match(coldRelaunch, /\[int\]\$StopTimeoutSec\s*=\s*60/);
+  assert.match(coldRelaunch, /anticodex\/fixed-route\/shutdown/);
+  assert.match(coldRelaunch, /Get-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.match(coldRelaunch, /Start-ScheduledTask\s+-TaskName\s+\$launchTaskName/);
+  assert.match(coldRelaunch, /start-anticodex-task\.mjs/);
+  assert.doesNotMatch(coldRelaunch, /\bStop-Process\b|\btaskkill(?:\.exe)?\b/);
+  assert.doesNotMatch(coldRelaunch, /Start-Process[\s\S]*?start-anticodex\.ps1/);
 });
 
 test("runtime sync gives both cold launcher attempts enough time before rollback", () => {
