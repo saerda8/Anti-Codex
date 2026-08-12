@@ -41,7 +41,7 @@
 
 - [x] 7. 原生 Settings:逐页打开当前版本全部设置页,不出现"糟糕,出错了";
       被隐藏的外部 ChatGPT Account / web Security 项不可见,其余本地项可正常交互。
-- [ ] 8. 提示词管理:`管理 → 提示词` 完成一次 写入隔离 `AGENTS.md` → 重开读回 → 恢复默认 的闭环。
+- [x] 8. 提示词管理:`管理 → 提示词` 完成一次 写入隔离 `AGENTS.md` → 重开读回 → 恢复默认 的闭环。
 - [ ] 9. Manager 按钮:管理页每个可见按钮点击后都有真实终态反馈(成功/失败/进度),
       无"已开始"式假成功,无游离控制台窗口。
 
@@ -66,4 +66,5 @@
 | 4 | 2026-08-13 | 真实桌面鼠标选择 `Claude Sonnet 4.6 (Thinking)` 后收到精确标记回复;报告 `20260812-210158-acceptance-item4-antigravity-model-claude-sonnet-4-6.json`;官方 Codex 进程保持存活 | 通过 |
 | 6 | 2026-08-13 | 原生任务完成 4 次 shell 工具调用并生成、校验 3 个文件;原生 `/compact` 产生 `compacted/context_compacted` 后在同一线程续接成功;报告 `20260812-210348-acceptance-item6-native-tool-flow-model-claude-sonnet-4-6.json`、`20260812-211046-compaction-resume.json` | 通过 |
 | 7 | 2026-08-13 | 真实鼠标逐页打开当前 16 个可见 Settings 页面,全部无崩溃;12 个隐藏入口均有运行时条件证据,无 ChatGPT/OpenAI 账号入口;个性化测试写入后原样恢复;验收器修正 `d1def33` | 通过 |
+| 8 | 2026-08-13 | `管理 → 提示词` 真实鼠标闭环:隔离 `AGENTS.md` 写入验收值,保存后重开精确读回,再恢复默认空值;其余三层提示词恢复为原状态,文件快照逐字节一致 | 通过 |
 | 13 | 2026-08-13 | `ee468d5b75d46cb849106c38d6725b3df6f7ce97`; translator `1009/1009` 通过; `source-preflight` 报告 `C:\Users\XD\AppData\Roaming\anticodex\reports\20260813-041520-source-preflight.json`, `noTraffic=true` | 通过 |
