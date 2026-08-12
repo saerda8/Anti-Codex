@@ -19,8 +19,8 @@ test("Manager update runner uses only real CDP mouse clicks and requires explici
   assert.match(source, /\u6253\u5f00\u4e2a\u4eba\u8d44\u6599\u83dc\u5355/);
   assert.match(source, /\u7ba1\u7406/);
   assert.match(source, /syncHost/);
-  assert.match(source, /\u540c\u6b65 Codex \u66f4\u65b0/);
-  assert.doesNotMatch(source, /\u4e00\u952e\u66f4\u65b0/);
+  assert.match(source, /\u4e00\u952e\u66f4\u65b0/);
+  assert.doesNotMatch(source, /value\.text === "\u540c\u6b65 Codex \u66f4\u65b0"/);
   assert.match(source, /data-confirming-high-impact/);
   assert.match(source, /function pickPrimaryAppTarget\(targets\)/);
   assert.match(source, /avatar-overlay/);

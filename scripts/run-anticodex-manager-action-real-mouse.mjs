@@ -1060,7 +1060,7 @@ try {
 
   const firstActionPoint = await waitFor(
     visiblePoint(`document.querySelector('#anticodex-manager-overlay button[data-action="syncHost"]')`),
-    (value) => value?.ok === true && value.text === "同步 Codex 更新",
+    (value) => value?.ok === true && value.text === "一键更新",
   );
   await realMouseClick(firstActionPoint);
 
