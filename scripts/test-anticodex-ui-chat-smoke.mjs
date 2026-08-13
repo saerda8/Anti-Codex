@@ -3509,7 +3509,7 @@ function currentModelProbeExpression(requiredValues = [], { clickSelected = fals
         rect: { x: Math.round(rect.left), y: Math.round(rect.top), w: Math.round(rect.width), h: Math.round(rect.height) },
       };
     };
-    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|model|模型|自定义/i.test(label);
+    const modelish = (label) => /gemini|claude|opus|sonnet|flash|gpt|oss|mimo|third[- ]?party|第三方|model|模型|自定义/i.test(label);
     const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
     const composerRect = composer?.getBoundingClientRect();
     const inspectedCandidates = Array.from(document.querySelectorAll('button,[role="button"],[role="menu"],[aria-haspopup]'))

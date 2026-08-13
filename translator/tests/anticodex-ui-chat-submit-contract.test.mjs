@@ -200,6 +200,17 @@ test("model picker prefers a menu trigger beside the composer over modelish hist
   assert.match(uiSmoke, /\.filter\(\(item\) => item\.outsideHistorySidebar/);
 });
 
+test("model picker recognizes the active third-party selector before switching to Antigravity", () => {
+  const probeStart = uiSmoke.indexOf("function currentModelProbeExpression(");
+  const probeEnd = uiSmoke.indexOf("\nfunction modelOptionProbeExpression(", probeStart);
+  const probe = uiSmoke.slice(probeStart, probeEnd);
+  const patternSource = probe.match(/const modelish = \(label\) => (\/.*?\/i)\.test\(label\)/)?.[1];
+  assert.ok(patternSource, "model selector label pattern is missing");
+  const modelish = vm.runInNewContext(patternSource);
+
+  assert.equal(modelish.test("第三方 · mimo-v2.5-pro极高"), true);
+});
+
 test("frontend-only model switching waits for the lazily rendered native selector", () => {
   assert.match(
     uiSmoke,
