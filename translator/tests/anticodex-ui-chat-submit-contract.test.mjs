@@ -415,6 +415,7 @@ test("UI state validates the current isolated fixed-route catalog before legacy 
 
 test("UI state recognizes third-party model controls and no-task screens", () => {
   assert.match(uiState, /const modelControlPatternSource = String\.raw`[^`]*gpt-\\d[^`]*third-party[^`]*第三方/);
+  assert.ok(uiState.includes("第三方\\s*(?:API|·)"));
   assert.match(uiState, /composerPresent: Boolean\(document\.querySelector/);
   assert.match(uiState, /selectedContextProbe\?\.composerPresent === false/);
   assert.match(uiState, /else if \(!matchedModelText\)/);

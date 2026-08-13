@@ -99,7 +99,7 @@ function discoverAntiCodexCdpPorts() {
   }
 }
 const mojibakePattern = /(?:缁狅紕鎮妡娣囶喖|濡偓|闁板秶鐤唡閸掗攱|韫囶偊|閺佺繝|娴狅絿鎮妡閼卞﹤|娑撳秳|锟)/;
-const modelControlPatternSource = String.raw`Gemini\s+\d|Claude\s+\w+\s+\d|GPT-OSS\s+\d|gemini-|claude-|gpt-oss-|(?:第三方\s*·\s*)?gpt-\d|third-party|第三方\s*API`;
+const modelControlPatternSource = String.raw`Gemini\s+\d|Claude\s+\w+\s+\d|GPT-OSS\s+\d|gemini-|claude-|gpt-oss-|(?:第三方\s*·\s*)?gpt-\d|third-party|第三方\s*(?:API|·)`;
 const pageStateProbeExpression = `(() => {
   const shortUiText = () => {
     const chunks = [];
