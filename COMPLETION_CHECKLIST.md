@@ -32,7 +32,7 @@
 
 - [x] 4. Antigravity 路由:在管理页选择当前登录账号的一个 Antigravity 模型,
       发出一次真实对话请求并收到正常回复。
-- [ ] 5. 第三方路由:在管理页测试、保存并应用一个第三方 API profile,
+- [x] 5. 第三方路由:在管理页测试、保存并应用一个第三方 API profile,
       发出一次真实请求并收到正常回复;人为填错密钥时请求失败关闭,不静默切换到其它模型。
 - [x] 6. 原生 harness 完整性:跑一个包含工具调用(shell 或 MCP)的任务,
       确认规划、审批、工具执行、上下文压缩、完成判断均由原生 Codex 处理。
@@ -66,6 +66,7 @@
 | 2 | 2026-08-13 | `20260813-043735-installed-overall-fast.json` 确认仅 1 个主 PID `30256`;Windows Shell 打开桌面入口后仍为同一 PID/HWND `1051282`,无第二根进程;官方 Codex PID `40560` 仍位于 WindowsApps 正式路径且响应正常;历史实鼠标任务栏恢复报告 `20260810-135235930-shortcut-restore-aa0d2997d97043e48e4f3596ef21ec8e.json` 全绿 | 通过 |
 | 3 | 2026-08-13 | `test-anticodex-independence.ps1` 通过;计划任务仅 Launcher/Updater 两项且参数指向安装运行时;无 Anti-Codex/CodexPlusPlus 容器,无 `R:` 盘;官方 Codex 前后 PID/路径一致 | 通过 |
 | 4 | 2026-08-13 | 真实桌面鼠标选择 `Claude Sonnet 4.6 (Thinking)` 后收到精确标记回复;报告 `20260812-210158-acceptance-item4-antigravity-model-claude-sonnet-4-6.json`;官方 Codex 进程保持存活 | 通过 |
+| 5 | 2026-08-13 | 管理页对小米 `https://api.xiaomimimo.com/v1` / `mimo-v2.5-pro` 完成真实“测试连通”及保存,正式入口重开后用真实鼠标选择该第三方模型并收到 `MIMO_ITEM5_OK`;报告 `20260813-070255-acceptance-item5-xiaomi-model-anticodex-third-party-mimo-v2-5-pro.json` 为 `desktop-ui-real-traffic`,固定路由明确解析到小米接口;故意错误密钥返回 HTTP 401,五份配置哈希及 `third-party/mimo-v2.5-pro` 路由均不变;重开前后官方 Codex 10 个进程身份一致 | 通过 |
 | 6 | 2026-08-13 | 原生任务完成 4 次 shell 工具调用并生成、校验 3 个文件;原生 `/compact` 产生 `compacted/context_compacted` 后在同一线程续接成功;报告 `20260812-210348-acceptance-item6-native-tool-flow-model-claude-sonnet-4-6.json`、`20260812-211046-compaction-resume.json` | 通过 |
 | 7 | 2026-08-13 | 真实鼠标逐页打开当前 16 个可见 Settings 页面,全部无崩溃;12 个隐藏入口均有运行时条件证据,无 ChatGPT/OpenAI 账号入口;个性化测试写入后原样恢复;验收器修正 `d1def33` | 通过 |
 | 8 | 2026-08-13 | `管理 → 提示词` 真实鼠标闭环:隔离 `AGENTS.md` 写入验收值,保存后重开精确读回,再恢复默认空值;其余三层提示词恢复为原状态,文件快照逐字节一致 | 通过 |
