@@ -1421,6 +1421,14 @@ async function beginNativeSingleTaskWindow() {
   return preflight;
 }
 
+function collectNativeSingleTaskExpectedThreadIds({ markerThreadIds, sameChatTaskId }) {
+  const sameChat = String(sameChatTaskId || "").trim();
+  const markerIds = Array.isArray(markerThreadIds)
+    ? markerThreadIds.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  return [...new Set([...(sameChat ? [sameChat] : []), ...markerIds])].sort();
+}
+
 async function inspectNativeSingleTaskWindow(preflight, markerText) {
   if (!requireNativeSingleTask || preflight?.skipped === true) {
     return { ok: true, skipped: true, reason: "not_required" };
@@ -1429,9 +1437,12 @@ async function inspectNativeSingleTaskWindow(preflight, markerText) {
     codexHome: anticodexCodexHome,
     afterId: Number(preflight?.baselineId || 0),
   });
-  const expectedThreadIds = codexRolloutMarkerBundles(markerText)
-    .map((bundle) => String(bundle?.sessionId || "").trim())
-    .filter(Boolean);
+  const expectedThreadIds = collectNativeSingleTaskExpectedThreadIds({
+    markerThreadIds: codexRolloutMarkerBundles(markerText)
+      .map((bundle) => String(bundle?.sessionId || "").trim())
+      .filter(Boolean),
+    sameChatTaskId: sameChatTitleContains ? expectedTaskId : "",
+  });
   const activity = analyzeNativeCodexActivityRows(rows, { marker: markerText, expectedThreadIds });
   const ok = activity.unexpectedExecutionThreadIds.length === 0
     && activity.titleThreadsUsedTools !== true
@@ -7638,8 +7649,8 @@ async function main() {
   }
   const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence, submitTurns);
   const observedRequestPayload = modelRequestPayloadObserved(diagnostics, submitTurns);
-  const observedRealTraffic = observedModelRoute || observedRequestPayload;
-  if (!observedRequestPayload && !observedModelRoute) failures.push("desktop submit did not produce model request evidence");
+  const observedRealTraffic = observedModelRoute || observedRequestPayload || nativeModelRequestObserved;
+  if (!observedRealTraffic) failures.push("desktop submit did not produce model request evidence");
   const requiredFileAfter = requiredFile && existsSync(requiredFile)
     ? { exists: true, size: statSync(requiredFile).size, mtimeMs: statSync(requiredFile).mtimeMs }
     : { exists: false, size: 0, mtimeMs: 0 };

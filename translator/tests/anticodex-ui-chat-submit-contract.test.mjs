@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
+import { analyzeNativeCodexActivityRows } from "../../scripts/lib/anticodex-native-request-activity.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const uiSmoke = readFileSync(resolve(root, "scripts", "test-anticodex-ui-chat-smoke.mjs"), "utf8");
@@ -500,6 +501,61 @@ test("same-chat activation rejects a merely selected row while another task is a
   assert.equal(state.taskId, "target-task");
   assert.equal(state.selected, true);
   assert.equal(state.activeTaskId, "client-new-thread:pending");
+});
+
+function loadCollectNativeSingleTaskExpectedThreadIds() {
+  const functionName = "collectNativeSingleTaskExpectedThreadIds";
+  const start = uiSmoke.indexOf(`function ${functionName}(`);
+  const end = uiSmoke.indexOf("\nasync function inspectNativeSingleTaskWindow(", start);
+  assert.ok(start >= 0 && end > start, `${functionName} is missing`);
+  return vm.runInNewContext(`(${uiSmoke.slice(start, end)})`);
+}
+
+test("native single-task acceptance allows the expected same-chat task id for request and tool execution after submit", () => {
+  const collect = loadCollectNativeSingleTaskExpectedThreadIds();
+  const expectedTaskId = "019ffc57-6a72-7f81-8ce8-8796485ca06d";
+
+  const expectedThreadIds = collect({
+    markerThreadIds: [],
+    sameChatTaskId: expectedTaskId,
+  });
+  assert.equal(expectedThreadIds.length, 1);
+  assert.equal(expectedThreadIds[0], expectedTaskId);
+
+  const activity = analyzeNativeCodexActivityRows([
+    { id: 1, ts: 1, target: "codex_http_client::custom_ca", threadId: expectedTaskId, body: "request" },
+    { id: 2, ts: 2, target: "codex_core::tools", threadId: expectedTaskId, body: "tool call completed" },
+    { id: 3, ts: 3, target: "codex_http_client::custom_ca", threadId: "other-task", body: "request" },
+    { id: 4, ts: 4, target: "codex_core::tools", threadId: "other-task", body: "tool call completed" },
+  ], { expectedThreadIds });
+
+  assert.equal(activity.unexpectedRequestThreadIds.includes(expectedTaskId), false);
+  assert.equal(activity.unexpectedExecutionThreadIds.includes(expectedTaskId), false);
+  assert.deepEqual(activity.unexpectedRequestThreadIds, ["other-task"]);
+  assert.deepEqual(activity.unexpectedExecutionThreadIds, ["other-task"]);
+});
+
+test("same-chat native request evidence counts as desktop real traffic", () => {
+  const start = uiSmoke.indexOf("const observedModelRoute = desktopRealTrafficObserved(modelRouteEvidence, submitTurns);");
+  const end = uiSmoke.indexOf("const requiredFileAfter =", start);
+  assert.ok(start >= 0 && end > start, "desktop real-traffic aggregation is missing");
+  const block = uiSmoke.slice(start, end);
+
+  assert.match(
+    block,
+    /const observedRealTraffic = observedModelRoute \|\| observedRequestPayload \|\| nativeModelRequestObserved;/,
+  );
+  assert.match(block, /if \(!observedRealTraffic\) failures\.push\("desktop submit did not produce model request evidence"\);/);
+});
+
+test("expected task id widens native acceptance only for a same-chat navigation", () => {
+  const start = uiSmoke.indexOf("async function inspectNativeSingleTaskWindow(");
+  const end = uiSmoke.indexOf("\nfunction compactCodexRolloutEvidence(", start);
+  assert.ok(start >= 0 && end > start, "native single-task inspection is missing");
+  assert.match(
+    uiSmoke.slice(start, end),
+    /sameChatTaskId: sameChatTitleContains \? expectedTaskId : ""/,
+  );
 });
 
 test("same-chat opening proves task activation before accepting an idle composer", () => {
