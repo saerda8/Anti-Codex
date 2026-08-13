@@ -24,7 +24,8 @@ export const ROUTE_RESTART_REQUEST_SCHEMA = "anticodex-route-restart-request-v1"
 const ROUTE_RESTART_REQUEST_MAX_AGE_MS = 120_000;
 const DEFAULT_ANTIGRAVITY_MODEL = "gemini-3-flash-agent";
 const FIXED_ROUTE_HEALTH_URL = "http://127.0.0.1:18487/anticodex/fixed-route/health";
-export const FIXED_ROUTE_PORTS = Object.freeze([8484, 18318, 18484, 18485, 18486, 18487, 18488, 18489]);
+export const CDP_PORT_CANDIDATES = Object.freeze([18318, 18319, 18320]);
+export const FIXED_ROUTE_PORTS = Object.freeze([8484, ...CDP_PORT_CANDIDATES, 18484, 18485, 18486, 18487, 18488, 18489]);
 export const ANTIGRAVITY_START_TIMEOUT_MS = 90_000;
 const scriptRoot = dirname(fileURLToPath(import.meta.url));
 const HOST_SYNC_MUTEX_NAMES = Object.freeze([
@@ -304,6 +305,31 @@ function tcpPortIsOpen(port) {
   });
 }
 
+function tcpPortCanBind(port) {
+  return new Promise((resolveAvailable) => {
+    const server = net.createServer();
+    let settled = false;
+    const finish = (available) => {
+      if (settled) return;
+      settled = true;
+      resolveAvailable(available);
+    };
+    server.once("error", () => finish(false));
+    server.listen({ host: "127.0.0.1", port, exclusive: true }, () => {
+      server.close(() => finish(true));
+    });
+  });
+}
+
+export async function selectAvailableCdpPort(options = {}) {
+  const candidates = options.candidates ?? CDP_PORT_CANDIDATES;
+  const canBind = options.canBind ?? tcpPortCanBind;
+  for (const candidate of candidates) {
+    if (await canBind(candidate)) return candidate;
+  }
+  throw new Error(`No Anti-Codex CDP port is available: ${candidates.join(", ")}`);
+}
+
 export async function waitForFixedRoutePortsReleased(options = {}) {
   const ports = options.ports ?? FIXED_ROUTE_PORTS;
   const timeoutMs = Number(options.timeoutMs ?? 30_000);
@@ -337,6 +363,10 @@ export function buildTaskLaunchPlan(options = {}) {
   const codexHome = join(stateRoot, "codex-home-deepseek-app");
   const { provider, model } = resolveLaunchSelection(profile, readNativeSelection(codexHome));
   const disableGpu = truthy(env.ANTICODEX_DISABLE_GPU ?? env.DEEPCODEX_DISABLE_GPU);
+  const cdpPort = Number(options.cdpPort ?? CDP_PORT_CANDIDATES[0]);
+  if (!Number.isInteger(cdpPort) || cdpPort < 1 || cdpPort > 65535 || !CDP_PORT_CANDIDATES.includes(cdpPort)) {
+    throw new Error("cdpPort must be an approved Anti-Codex CDP port");
+  }
   const supervisorArgs = [
     supervisorScript,
     "--install-root", installRoot,
@@ -349,6 +379,7 @@ export function buildTaskLaunchPlan(options = {}) {
   if (provider === "third-party") {
     supervisorArgs.push("--context-window", String(profile.contextWindow));
   }
+  supervisorArgs.push("--cdp-port", String(cdpPort));
 
   return {
     schema: TASK_LAUNCHER_SCHEMA,
@@ -358,6 +389,7 @@ export function buildTaskLaunchPlan(options = {}) {
     codexHome,
     provider,
     model,
+    cdpPort,
     disableGpu,
     profile,
     supervisorScript,
@@ -402,7 +434,7 @@ export function buildTaskLauncherEnvironment(plan, baseEnv = process.env, runtim
     CODEX_HOME: plan.codexHome,
     GLOBAL_CODEX_HOME: join(plan.userProfile, ".codex"),
     DEEPCODEX_SHARED_CODEX_HOME: join(plan.userProfile, ".codex"),
-    DEEPCODEX_CDP_PORT: "18318",
+    DEEPCODEX_CDP_PORT: String(plan.cdpPort),
     DEEPCODEX_DISPLAY_NAME: "Anti-Codex",
     DEEPCODEX_SKIP_PLUGIN_SYNC: "1",
     ANTICODEX_MANAGER_API: "http://127.0.0.1:8484",
@@ -592,7 +624,7 @@ export function attachForwardedSignalHandlers(child, signalTarget = process) {
 
 export async function runTaskLauncher(options = {}) {
   const env = options.env ?? process.env;
-  const plan = buildTaskLaunchPlan({ env, profile: options.profile });
+  let plan = buildTaskLaunchPlan({ env, profile: options.profile });
   if (options.planOnly) return plan;
 
   const releaseHostSyncBarrier = await acquireHostSyncBarrier({
@@ -606,6 +638,11 @@ export async function runTaskLauncher(options = {}) {
     if (await fixedRouteReady()) {
       writeLauncherState(plan, startedAt, "ready", "ready", "existing fixed route");
       return { ok: true, reused: true };
+    }
+
+    const cdpPort = await selectAvailableCdpPort({ canBind: options.canBindCdpPort });
+    if (cdpPort !== plan.cdpPort) {
+      plan = buildTaskLaunchPlan({ env, profile: options.profile, cdpPort });
     }
 
     const runtimeProfile = readThirdPartyRuntimeProfile(plan, env);

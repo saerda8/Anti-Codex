@@ -6,11 +6,13 @@ import { join } from "node:path";
 
 import {
   ANTIGRAVITY_START_TIMEOUT_MS,
+  CDP_PORT_CANDIDATES,
   FIXED_ROUTE_PORTS,
   ROUTE_RESTART_REQUEST_SCHEMA,
   buildTaskLaunchPlan,
   buildTaskLauncherEnvironment,
   consumeRouteRestartRequest,
+  selectAvailableCdpPort,
   waitForFixedRoutePortsReleased,
 } from "../../scripts/start-anticodex-task.mjs";
 
@@ -74,6 +76,33 @@ test("task launcher keeps Antigravity on the existing thin fixed route", () => {
   assert.equal(childEnv.UPSTREAM_API_KEY, undefined);
   assert.equal(childEnv.ANTICODEX_DISABLE_GPU, undefined);
   assert.equal(childEnv.DEEPCODEX_DISABLE_GPU, undefined);
+});
+
+test("task launcher falls back when the default CDP port cannot be rebound", async () => {
+  const selected = await selectAvailableCdpPort({
+    candidates: [18318, 18319, 18320],
+    canBind: async (port) => port === 18319,
+  });
+
+  assert.deepEqual(CDP_PORT_CANDIDATES, [18318, 18319, 18320]);
+  assert.ok(CDP_PORT_CANDIDATES.every((port) => port < 49152));
+  assert.equal(selected, 18319);
+});
+
+test("task launcher propagates the selected CDP port to the supervisor and children", () => {
+  const plan = buildTaskLaunchPlan({
+    env: baseEnv,
+    cdpPort: 18319,
+    profile: {
+      mode: "antigravity",
+      antigravityModel: "gemini-3-flash-agent",
+    },
+  });
+  const childEnv = buildTaskLauncherEnvironment(plan, baseEnv);
+
+  assert.equal(plan.cdpPort, 18319);
+  assert.deepEqual(plan.supervisorArgs.slice(-2), ["--cdp-port", "18319"]);
+  assert.equal(childEnv.DEEPCODEX_CDP_PORT, "18319");
 });
 
 test("task launcher keeps software rendering as an explicit recovery fallback", () => {
