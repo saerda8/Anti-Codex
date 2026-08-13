@@ -88,6 +88,45 @@ function singleSubmitRolloutRecords({ sessionId, cwd, prompt }) {
   ];
 }
 
+function loadRecordContainsExactPrompt() {
+  const functionName = "recordContainsExactPrompt";
+  const start = uiSmoke.indexOf(`function ${functionName}(`);
+  const end = uiSmoke.indexOf("\nfunction readSingleSubmitRolloutEvidence(", start);
+  assert.ok(start >= 0 && end > start, `${functionName} could not be extracted`);
+  return vm.runInNewContext(`(${uiSmoke.slice(start, end)})`);
+}
+
+function loadSingleSubmitUpstreamReader(records) {
+  const functionName = "readSingleSubmitUpstreamEvidence";
+  const start = uiSmoke.indexOf(`function ${functionName}(`);
+  const end = uiSmoke.indexOf("\nasync function readSingleSubmitNativeEvidence(", start);
+  assert.ok(start >= 0 && end > start, `${functionName} could not be extracted`);
+  const body = Buffer.from(`${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+  return new Function(
+    "existsSync",
+    "statSync",
+    "openSync",
+    "readSync",
+    "closeSync",
+    "codexPlusPlusLogPath",
+    "Buffer",
+    `${uiSmoke.slice(start, end)}; return ${functionName};`,
+  )(
+    () => true,
+    () => ({ size: body.length }),
+    () => 1,
+    (_descriptor, target, targetOffset, length, sourceOffset) => body.copy(
+      target,
+      targetOffset,
+      sourceOffset,
+      sourceOffset + length,
+    ),
+    () => {},
+    "codex-plus.log",
+    Buffer,
+  );
+}
+
 test("autonomous completion contract requires model-owned planning and forbids milestone finalization", () => {
   assert.match(autonomousCompletionPrompt, /update_plan/);
   assert.match(autonomousCompletionPrompt, /顶层计划/);
@@ -353,6 +392,59 @@ test("single-submit rollout evidence accepts a valid rollout absent from the bas
   assert.equal(evidence.newTask, true);
   assert.equal(evidence.taskId, "fresh-task");
   assert.equal(evidence.file, freshPath);
+});
+
+test("single-submit prompt matching ignores only UI-added trailing whitespace", () => {
+  const recordContainsExactPrompt = loadRecordContainsExactPrompt();
+  const prompt = "Build the warranty app.\n";
+
+  assert.equal(recordContainsExactPrompt({
+    type: "event_msg",
+    payload: { type: "user_message", message: `${prompt}\n` },
+  }, prompt), true);
+  assert.equal(recordContainsExactPrompt({
+    type: "event_msg",
+    payload: { type: "user_message", message: "Build a different app.\n\n" },
+  }, prompt), false);
+});
+
+test("single-submit upstream receipt accepts a later successful tool-bearing retry", () => {
+  const request = (timestamp) => ({
+    timestamp_ms: timestamp,
+    event: "protocol_proxy.upstream_request",
+    detail: {
+      relayId: "anticodex-antigravity",
+      relayName: "Anti-Codex Antigravity",
+      endpoint: "http://127.0.0.1:18488/v1/chat/completions",
+      wireApi: "ChatCompletions",
+      attempt: 1,
+      candidateCount: 1,
+      requestTools: { count: 14 },
+      upstreamTools: { count: 20 },
+    },
+  });
+  const response = (timestamp, statusCode) => ({
+    timestamp_ms: timestamp,
+    event: "protocol_proxy.upstream_response",
+    detail: {
+      relayId: "anticodex-antigravity",
+      endpoint: "http://127.0.0.1:18488/v1/chat/completions",
+      attempt: 1,
+      candidateCount: 1,
+      statusCode,
+    },
+  });
+  const readSingleSubmitUpstreamEvidence = loadSingleSubmitUpstreamReader([
+    request(100),
+    response(110, 502),
+    request(200),
+    response(210, 200),
+  ]);
+
+  const evidence = readSingleSubmitUpstreamEvidence(0);
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.request.timestampMs, 200);
+  assert.equal(evidence.response.statusCode, 200);
 });
 
 test("history-only UI probe never submits model traffic", () => {

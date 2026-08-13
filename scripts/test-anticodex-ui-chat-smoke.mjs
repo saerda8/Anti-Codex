@@ -1148,7 +1148,7 @@ function sameNativePath(left, right) {
 }
 
 function recordContainsExactPrompt(record, expectedPrompt) {
-  const normalize = (value) => String(value || "").replace(/\r\n?/g, "\n");
+  const normalize = (value) => String(value || "").replace(/\r\n?/g, "\n").trimEnd();
   const prompt = normalize(expectedPrompt);
   if (!prompt) return false;
   if (record?.type === "event_msg"
@@ -1255,23 +1255,40 @@ function readSingleSubmitUpstreamEvidence(offset) {
     .flatMap((line) => {
       try { return [JSON.parse(line)]; } catch { return []; }
     });
-  const requestIndex = records.findIndex((record) => (
+  const isCandidateRequest = (record) => (
     record?.event === "protocol_proxy.upstream_request"
     && record?.detail?.relayId === "anticodex-antigravity"
     && Number(record?.detail?.candidateCount || 0) === 1
     && Number(record?.detail?.requestTools?.count || 0) > 0
     && Number(record?.detail?.upstreamTools?.count || 0) > 0
+  );
+  const responseMatchesRequest = (record, requestRecord) => (
+    record?.event === "protocol_proxy.upstream_response"
+    && record?.detail?.relayId === requestRecord.detail.relayId
+    && record?.detail?.endpoint === requestRecord.detail.endpoint
+    && Number(record?.detail?.attempt || 0) === Number(requestRecord.detail.attempt || 0)
+    && Number(record?.detail?.candidateCount || 0) === Number(requestRecord.detail.candidateCount || 0)
+  );
+  const requestIndexes = records.flatMap((record, index) => (isCandidateRequest(record) ? [index] : []));
+  const successfulResponseIndex = records.findIndex((record, responseIndex) => (
+    Number(record?.detail?.statusCode || 0) >= 200
+    && Number(record?.detail?.statusCode || 0) < 300
+    && requestIndexes.some((requestIndex) => (
+      requestIndex < responseIndex && responseMatchesRequest(record, records[requestIndex])
+    ))
   ));
+  const requestIndex = successfulResponseIndex >= 0
+    ? requestIndexes.findLast((candidateIndex) => (
+      candidateIndex < successfulResponseIndex
+      && responseMatchesRequest(records[successfulResponseIndex], records[candidateIndex])
+    )) ?? -1
+    : (requestIndexes[0] ?? -1);
   const requestRecord = requestIndex >= 0 ? records[requestIndex] : null;
-  const responseRecord = requestRecord
-    ? records.slice(requestIndex + 1).find((record) => (
-      record?.event === "protocol_proxy.upstream_response"
-      && record?.detail?.relayId === requestRecord.detail.relayId
-      && record?.detail?.endpoint === requestRecord.detail.endpoint
-      && Number(record?.detail?.attempt || 0) === Number(requestRecord.detail.attempt || 0)
-      && Number(record?.detail?.candidateCount || 0) === Number(requestRecord.detail.candidateCount || 0)
-    )) || null
-    : null;
+  const responseRecord = successfulResponseIndex >= 0
+    ? records[successfulResponseIndex]
+    : (requestRecord
+      ? records.slice(requestIndex + 1).find((record) => responseMatchesRequest(record, requestRecord)) || null
+      : null);
   const statusCode = Number(responseRecord?.detail?.statusCode || 0);
   const request = requestRecord ? {
     timestampMs: Number(requestRecord.timestamp_ms || 0),
