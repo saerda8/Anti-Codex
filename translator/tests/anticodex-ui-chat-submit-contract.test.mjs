@@ -466,6 +466,56 @@ test("same-chat title matching is confined to the history sidebar", () => {
   );
 });
 
+function loadSameChatActiveExpression() {
+  const functionName = "sameChatActiveExpression";
+  const start = uiSmoke.indexOf(`function ${functionName}(`);
+  const end = uiSmoke.indexOf("\nasync function readSameChatTaskActive(", start);
+  assert.ok(start >= 0 && end > start, `${functionName} could not be extracted`);
+  return vm.runInNewContext(`(${uiSmoke.slice(start, end)})`);
+}
+
+test("same-chat activation rejects a merely selected row while another task is active", () => {
+  const sameChatActiveExpression = loadSameChatActiveExpression();
+  const row = ({ id, active, selected }) => ({
+    getAttribute(name) {
+      return {
+        "data-app-action-sidebar-thread-id": `local:${id}`,
+        "data-app-action-sidebar-thread-active": String(active),
+        "data-app-action-sidebar-thread-selected": String(selected),
+      }[name] || null;
+    },
+  });
+  const document = {
+    querySelectorAll() {
+      return [
+        row({ id: "target-task", active: false, selected: true }),
+        row({ id: "client-new-thread:pending", active: true, selected: false }),
+      ];
+    },
+  };
+
+  const state = vm.runInNewContext(sameChatActiveExpression("target-task"), { document });
+
+  assert.equal(state.ok, false);
+  assert.equal(state.taskId, "target-task");
+  assert.equal(state.selected, true);
+  assert.equal(state.activeTaskId, "client-new-thread:pending");
+});
+
+test("same-chat opening proves task activation before accepting an idle composer", () => {
+  const start = uiSmoke.indexOf("async function openSameChatByTitle(");
+  const end = uiSmoke.indexOf("\nconst visibleMainPaneTextExpression", start);
+  assert.ok(start >= 0 && end > start, "same-chat open helper is missing");
+  const openSameChat = uiSmoke.slice(start, end);
+  const mouseRelease = openSameChat.indexOf('type: "mouseReleased"');
+  const activationWait = openSameChat.indexOf("waitForSameChatTaskActive(ws, evidence.taskId");
+  const composerWait = openSameChat.indexOf("waitForVisibleComposerIdle(ws");
+
+  assert.ok(mouseRelease >= 0 && activationWait > mouseRelease && composerWait > activationWait);
+  assert.match(uiSmoke, /sameChatEvidence\.activeBeforeSubmit = await readSameChatTaskActive\(ws, sameChatEvidence\.taskId\)/);
+  assert.match(uiSmoke, /same-chat task changed before submit/);
+});
+
 test("forced same-chat recovery opens the target before stopping its active turn", () => {
   assert.match(
     uiSmoke,

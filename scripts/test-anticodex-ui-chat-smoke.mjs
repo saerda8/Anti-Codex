@@ -80,7 +80,7 @@ Options:
   --require-native-single-task    Require native Codex request quiet before submit and reject hidden tool execution.
   --same-chat              Reuse the current chat instead of opening an isolated chat.
   --same-chat-title-contains <text>  Reopen an existing task whose visible title contains this text.
-  --expected-task-id <id>    Bind a no-traffic same-task model probe to the exact native task id.
+  --expected-task-id <id>    Bind same-chat navigation and submit to the exact native task id.
   --expected-original-codex-pid <pid>  Require the original Codex process to remain alive.
   --expected-anticodex-main-pid <pid>  Bind evidence to the current Anti-Codex main process.
   --expected-supervisor-pid <pid>      Bind evidence to the current fixed-route supervisor.
@@ -4637,10 +4637,13 @@ async function sendSingleSubmitPromptWithPhysicalMouse(ws) {
   };
 }
 
-function sameChatClickExpression(titleNeedle) {
+function sameChatClickExpression(titleNeedle, expectedTaskId = "") {
   const needle = JSON.stringify(String(titleNeedle || ""));
+  const expected = JSON.stringify(String(expectedTaskId || "").trim());
   return `(() => {
     const wanted = ${needle}.replace(/\\s+/g, " ").trim();
+    const expectedTaskId = ${expected};
+    const normalizeTaskId = (raw) => String(raw || '').trim().replace(/^[^:]+:/, '');
     const visible = (el) => {
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
@@ -4655,11 +4658,12 @@ function sameChatClickExpression(titleNeedle) {
       .filter(visible)
       .map((el) => ({
         el,
+        taskId: normalizeTaskId(el.getAttribute('data-app-action-sidebar-thread-id')),
         text: String(el.getAttribute('data-app-action-sidebar-thread-title') || el.innerText || el.textContent || "")
           .replace(/\\s+/g, " ")
           .trim(),
       }))
-      .filter((item) => wanted && item.text.includes(wanted))
+      .filter((item) => wanted && item.text.includes(wanted) && (!expectedTaskId || item.taskId === expectedTaskId))
       .sort((a, b) => {
         const ar = a.el.getBoundingClientRect();
         const br = b.el.getBoundingClientRect();
@@ -4667,10 +4671,11 @@ function sameChatClickExpression(titleNeedle) {
       });
     const selected = candidates[0];
     if (!selected) return { clicked: false, wanted, candidates: [] };
-    const rect = selected.el.getBoundingClientRect();
+    const clickTarget = selected.el.querySelector('[data-thread-title-trigger="true"]') || selected.el;
+    const rect = clickTarget.getBoundingClientRect();
     const identityElement = selected.el;
     const rawTaskId = String(identityElement?.getAttribute('data-app-action-sidebar-thread-id') || '').trim();
-    const taskId = rawTaskId.includes(':') ? rawTaskId.slice(rawTaskId.lastIndexOf(':') + 1) : rawTaskId;
+    const taskId = normalizeTaskId(rawTaskId);
     return {
       clicked: true,
       wanted,
@@ -4679,10 +4684,54 @@ function sameChatClickExpression(titleNeedle) {
       text: selected.text.slice(0, 240),
       tag: selected.el.tagName,
       role: selected.el.getAttribute("role") || "",
+      activeBeforeClick: selected.el.getAttribute('data-app-action-sidebar-thread-active') === 'true',
       rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
       candidateCount: candidates.length,
     };
   })()`;
+}
+
+function sameChatActiveExpression(taskId) {
+  const expected = JSON.stringify(String(taskId || "").trim());
+  return `(() => {
+    const expectedTaskId = ${expected};
+    const normalizeTaskId = (raw) => String(raw || '').trim().replace(/^[^:]+:/, '');
+    const rows = Array.from(document.querySelectorAll('[data-app-action-sidebar-thread-id]'));
+    const target = rows.find((row) => normalizeTaskId(row.getAttribute('data-app-action-sidebar-thread-id')) === expectedTaskId) || null;
+    const active = rows.find((row) => row.getAttribute('data-app-action-sidebar-thread-active') === 'true'
+      || row.getAttribute('aria-current') === 'page') || null;
+    const activeTaskId = normalizeTaskId(active?.getAttribute('data-app-action-sidebar-thread-id')) || null;
+    const targetActive = target?.getAttribute('data-app-action-sidebar-thread-active') === 'true'
+      || target?.getAttribute('aria-current') === 'page';
+    return {
+      ok: Boolean(target && targetActive && activeTaskId === expectedTaskId),
+      taskId: expectedTaskId || null,
+      found: Boolean(target),
+      active: Boolean(targetActive),
+      selected: target?.getAttribute('data-app-action-sidebar-thread-selected') === 'true',
+      activeTaskId,
+    };
+  })()`;
+}
+
+async function readSameChatTaskActive(ws, taskId) {
+  const result = await ws.send("Runtime.evaluate", {
+    expression: sameChatActiveExpression(taskId),
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  return result.result?.result?.value || null;
+}
+
+async function waitForSameChatTaskActive(ws, taskId, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = null;
+  while (Date.now() < deadline) {
+    latest = await readSameChatTaskActive(ws, taskId);
+    if (latest?.ok === true) return latest;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  return latest;
 }
 
 function historyShowMoreExpression() {
@@ -4785,11 +4834,15 @@ function historySidebarScrollExpression({ reset = false, restoreOriginal = false
   })()`;
 }
 
-async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTimeoutMs = 20_000 } = {}) {
+async function openSameChatByTitle(ws, titleNeedle, {
+  waitForIdle = true,
+  idleTimeoutMs = 20_000,
+  expectedTaskId = "",
+} = {}) {
   const openedAt = Date.now();
   const findVisibleTask = async () => {
     const result = await ws.send("Runtime.evaluate", {
-      expression: sameChatClickExpression(titleNeedle),
+      expression: sameChatClickExpression(titleNeedle, expectedTaskId),
       returnByValue: true,
       awaitPromise: true,
     });
@@ -4857,10 +4910,14 @@ async function openSameChatByTitle(ws, titleNeedle, { waitForIdle = true, idleTi
   if (!Number.isFinite(sameChatX) || !Number.isFinite(sameChatY)) {
     throw new Error(`same-chat task did not expose a clickable rectangle: ${titleNeedle}`);
   }
-  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: sameChatX, y: sameChatY, button: "none" });
-  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x: sameChatX, y: sameChatY, button: "left", clickCount: 1 });
-  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: sameChatX, y: sameChatY, button: "left", clickCount: 1 });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: sameChatX, y: sameChatY, button: "none", buttons: 0, pointerType: "mouse" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mousePressed", x: sameChatX, y: sameChatY, button: "left", buttons: 1, clickCount: 1, pointerType: "mouse" });
+  await ws.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: sameChatX, y: sameChatY, button: "left", buttons: 0, clickCount: 1, pointerType: "mouse" });
   evidence.actualMouseClick = true;
+  evidence.activation = await waitForSameChatTaskActive(ws, evidence.taskId, 5_000);
+  if (evidence.activation?.ok !== true) {
+    throw new Error(`same-chat task did not become active after click: ${evidence.taskId || titleNeedle}`);
+  }
   if (waitForIdle) {
     evidence.visibleIdleAfterClick = await waitForVisibleComposerIdle(ws, idleTimeoutMs);
     if (evidence.visibleIdleAfterClick?.ok !== true) {
@@ -5464,6 +5521,7 @@ async function runHistoryProbeOnly() {
     const sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
       waitForIdle: true,
       idleTimeoutMs: Math.max(5_000, historyOpenBudgetMs + 2_000),
+      expectedTaskId,
     });
     if (historyReopenNavigation) {
       sameChatEvidence.historyReopenNavigation = historyReopenNavigation;
@@ -5864,6 +5922,7 @@ async function runFrontendModelProbeOnly() {
     const sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
       waitForIdle: true,
       idleTimeoutMs: 12_000,
+      expectedTaskId,
     });
     const windowActivation = activateAntiCodexWindow(expectedAntiCodexMainPid || healthBefore?.processes?.copiedClient?.[0]);
     const visibleWindow = await waitForVisibleDocument(ws, 3_000);
@@ -6232,6 +6291,7 @@ async function main() {
       sameChatEvidence = await openSameChatByTitle(ws, sameChatTitleContains, {
         waitForIdle: requireHistoryResponsive,
         idleTimeoutMs: Math.max(5_000, historyOpenBudgetMs + 2_000),
+        expectedTaskId,
       });
       if (historyReopenNavigation) {
         sameChatEvidence.historyReopenNavigation = historyReopenNavigation;
@@ -6364,6 +6424,7 @@ async function main() {
     } else if (sameChatTitleContains) {
       sameChatEvidence = sameChatEvidence || await openSameChatByTitle(ws, sameChatTitleContains, {
         waitForIdle: preserveSameChatActiveTask,
+        expectedTaskId,
       });
       if (!preserveSameChatActiveTask && sameChatEvidence?.visibleIdleAfterClick?.ok !== true) {
         const reopenedRecovery = await ws.send("Runtime.evaluate", {
@@ -6424,6 +6485,13 @@ async function main() {
         process.exit(1);
       }
       preSubmitModelSelectionEvidence = modelSelectionEvidence;
+    }
+
+    if (sameChatEvidence?.taskId) {
+      sameChatEvidence.activeBeforeSubmit = await readSameChatTaskActive(ws, sameChatEvidence.taskId);
+      if (sameChatEvidence.activeBeforeSubmit?.ok !== true) {
+        throw new Error(`same-chat task changed before submit: expected ${sameChatEvidence.taskId}, active ${sameChatEvidence.activeBeforeSubmit?.activeTaskId || "<missing>"}`);
+      }
     }
 
     if (taskMode === "multi-turn-project") {

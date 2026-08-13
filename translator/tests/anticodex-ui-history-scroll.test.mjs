@@ -14,7 +14,7 @@ test("history reopen scans a virtualized sidebar before declaring an older task 
   assert.match(uiSmoke, /function historySidebarScrollExpression\(/);
   assert.match(uiSmoke, /scrollHeight\s*>\s*[^\n]+clientHeight/);
   assert.match(uiSmoke, /historyScrollAttempt\s*<\s*40/);
-  assert.match(uiSmoke, /sameChatClickExpression\(titleNeedle\)/);
+  assert.match(uiSmoke, /sameChatClickExpression\(titleNeedle, expectedTaskId\)/);
   assert.match(uiSmoke, /historyScrollEvidence/);
 });
 
