@@ -176,6 +176,22 @@ test("all required local prompt layers stay visible without a second policy inje
   }
 });
 
+test("required command guidance blocks cross-shell destructive retries and global toolchain changes", () => {
+  const patchSource = readFileSync(
+    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+    "utf8",
+  );
+  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+
+  assert.match(guidance, /blocked recursive delete or move/i);
+  assert.match(guidance, /one shell end-to-end/i);
+  assert.match(guidance, /resolved absolute target/i);
+  assert.match(guidance, /Remove-Item[^.]+-LiteralPath/i);
+  assert.match(guidance, /cmd\.exe[^.]+(?:rmdir|rd)/i);
+  assert.match(guidance, /global toolchain defaults/i);
+  assert.match(guidance, /never enumerate all environment variables/i);
+});
+
 test("prompt policy rejects non-text and oversized edits", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-invalid-"));
   try {

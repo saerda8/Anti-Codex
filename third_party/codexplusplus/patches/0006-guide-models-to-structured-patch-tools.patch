@@ -118,7 +118,7 @@ index 3bf1c49..d299237 100644
 +    }
 +}
 +
-+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits.";
++const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits. Windows destructive filesystem safety: never translate or retry a blocked recursive delete or move through another shell. Keep the operation in one shell end-to-end and first verify that every resolved absolute target remains inside the intended workspace or an explicitly named target directory. In PowerShell, use Remove-Item with -LiteralPath; never fall back to cmd.exe /c, rmdir, or rd after a policy rejection. Do not change global toolchain defaults, user environment, PATH, registry state, or installed software unless the user explicitly requested that exact change. Query only specifically named non-secret environment variables; never enumerate all environment variables.";
 +
 +fn request_has_apply_patch_tool(tools: Option<&Value>) -> bool {
 +    tools.and_then(Value::as_array).is_some_and(|tools| {
@@ -138,7 +138,7 @@ index 3bf1c49..d299237 100644
 +}
 +
 +fn guide_command_tools_away_from_file_edits(tools: &mut [Value]) {
-+    const GUIDANCE: &str = "Do not use this command tool for file edits when apply_patch tools are available; call the apply_patch structured tools directly. Use this command tool only for commands, builds, tests, and inspection.";
++    const GUIDANCE: &str = "Do not use this command tool for file edits when apply_patch tools are available; call the apply_patch structured tools directly. Use this command tool only for commands, builds, tests, and inspection. Never translate or retry a blocked recursive delete or move through another shell. On Windows, keep destructive filesystem work in one shell end-to-end, verify every resolved absolute target first, use PowerShell Remove-Item with -LiteralPath, and never fall back to cmd.exe /c, rmdir, or rd after a policy rejection. Never change global toolchain defaults or enumerate all environment variables without an explicit user request.";
 +
 +    for tool in tools {
 +        let Some(function) = tool.get_mut("function").and_then(Value::as_object_mut) else {

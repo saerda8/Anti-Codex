@@ -22,7 +22,7 @@ const REQUIRED_LOCAL_PROMPT_LAYERS = Object.freeze([Object.freeze({
   required: true,
   routes: Object.freeze(["antigravity", "third-party"]),
   activeWhen: "Chat Completions conversion includes an apply_patch tool",
-  content: "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits.",
+  content: "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits. Windows destructive filesystem safety: never translate or retry a blocked recursive delete or move through another shell. Keep the operation in one shell end-to-end and first verify that every resolved absolute target remains inside the intended workspace or an explicitly named target directory. In PowerShell, use Remove-Item with -LiteralPath; never fall back to cmd.exe /c, rmdir, or rd after a policy rejection. Do not change global toolchain defaults, user environment, PATH, registry state, or installed software unless the user explicitly requested that exact change. Query only specifically named non-secret environment variables; never enumerate all environment variables.",
 })]);
 const AUDITABLE_SNAPSHOT_LAYERS = new Set([
   ...Object.keys(EDITABLE_LAYERS),

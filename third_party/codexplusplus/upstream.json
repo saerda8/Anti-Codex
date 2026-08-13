@@ -6,7 +6,7 @@
     "tag":  "v1.2.47",
     "upstreamCommit":  "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
     "isolationPatchCommit":  "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-    "patchCommit":  "f1a5cbcdc846bf0139324ebd888b31a26ba0557c",
+    "patchCommit":  "56cf2cf54e90761622f511269f25cf672a1b0e77",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -35,8 +35,8 @@
                     },
                     {
                         "file":  "patches/0006-guide-models-to-structured-patch-tools.patch",
-                        "sha256":  "a9e61ff8776e9e4edd4812bb948aef2d4420ee41bc0797d0fe9e9341f00c9fdb",
-                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, and reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged; command execution, routing, history, retries and task control remain unchanged"
+                        "sha256":  "7d9515ca97101bb12656ce341aa918adf7e4de32ecfc0b03a65548b931b5bb7f",
+                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes and broad environment enumeration; command execution, routing, history, retries and task control remain unchanged"
                     },
                     {
                         "file":  "patches/0007-ignore-late-reasoning-after-visible-text.patch",
@@ -75,13 +75,13 @@
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head f1a5cbcdc846bf0139324ebd888b31a26ba0557c; tree 28cd13c30dd5d6d12b5cf5534a99ebae786e57c9",
+                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head 56cf2cf54e90761622f511269f25cf672a1b0e77; tree 2be3a5d5509a77e50ba8d37b5f55e669dd8f25f3",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:02d0eaf056445d70f08757af355a9becc78e4a7068892723245bbf537036276b",
+                         "launcherReleaseBuild":  "sha256:033e376a3227fc0e9e37c121f102014a488ba03567bc0f8d3f5a1ebcfa53ee9a",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }
