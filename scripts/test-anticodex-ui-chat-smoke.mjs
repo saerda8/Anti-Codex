@@ -1433,6 +1433,16 @@ async function inspectNativeSingleTaskWindow(preflight, markerText) {
   if (!requireNativeSingleTask || preflight?.skipped === true) {
     return { ok: true, skipped: true, reason: "not_required" };
   }
+  if (preflight?.ok !== true) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "native_preflight_missing",
+      preflight: preflight || null,
+      activity: null,
+      failureReasons: [],
+    };
+  }
   const rows = await readNativeCodexActivityRows({
     codexHome: anticodexCodexHome,
     afterId: Number(preflight?.baselineId || 0),
@@ -3184,7 +3194,11 @@ async function waitForVisibleComposerIdle(ws, timeoutMs = 20_000) {
           if (!(element instanceof HTMLElement)) return false;
           const rect = element.getBoundingClientRect();
           const style = getComputedStyle(element);
-          return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+          return rect.width > 0
+            && rect.height > 0
+            && style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && style.pointerEvents !== 'none';
         };
         const composer = document.querySelector('[data-codex-composer].ProseMirror') || document.querySelector('.ProseMirror');
         const buttons = Array.from(document.querySelectorAll('button')).filter(visible);
@@ -3289,6 +3303,41 @@ function recoverIdleBackendStaleComposerExpression() {
     }
     controls.sort((left, right) => right.priority - left.priority);
     return { controls };
+  })()`;
+}
+
+function recoverSameChatBackgroundTerminalsExpression(taskId) {
+  const expected = JSON.stringify(String(taskId || "").trim());
+  return `(() => {
+    const expectedTaskId = ${expected};
+    const normalizeTaskId = (raw) => String(raw || '').trim().replace(/^[^:]+:/, '');
+    const active = Array.from(document.querySelectorAll('[data-app-action-sidebar-thread-id]'))
+      .find((row) => row.getAttribute('data-app-action-sidebar-thread-active') === 'true'
+        || row.getAttribute('aria-current') === 'page') || null;
+    const activeTaskId = normalizeTaskId(active?.getAttribute('data-app-action-sidebar-thread-id'));
+    const controls = [];
+    if (!expectedTaskId || activeTaskId !== expectedTaskId) {
+      return { controls, skipped: true, reason: 'expected_same_chat_not_active', expectedTaskId, activeTaskId };
+    }
+    for (const button of [...document.querySelectorAll('button')]) {
+      const rect = button.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      const label = (button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent || '').trim();
+      const backgroundTerminalControl = /^(?:Stop all background terminals|\u505c\u6b62\u6240\u6709\u540e\u53f0\u7ec8\u7aef)$/i.test(label);
+      if (button.disabled
+        || rect.width <= 0
+        || rect.height <= 0
+        || style.display === 'none'
+        || style.visibility === 'hidden'
+        || style.pointerEvents === 'none'
+        || !backgroundTerminalControl) continue;
+      controls.push({
+        label,
+        priority: 100,
+        rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+      });
+    }
+    return { controls, expectedTaskId, activeTaskId };
   })()`;
 }
 
@@ -6396,7 +6445,7 @@ async function main() {
     const visibleIdleForSubmit = preserveSameChatActiveTask
       ? preservedActiveTask?.visibleIdleAfterWait
       : initialIdle.visibleIdle;
-    if (initialIdle.source === "fixed-route-ready" && visibleIdleForSubmit?.ok !== true) {
+    if (initialIdle.source === "fixed-route-ready" && visibleIdleForSubmit?.ok !== true && !sameChatTitleContains) {
       throw new Error("fixed-route backend was ready but the visible composer still showed an active task");
     }
     if (preserveSameChatActiveTask && visibleIdleForSubmit?.ok !== true) {
@@ -6439,7 +6488,7 @@ async function main() {
       });
       if (!preserveSameChatActiveTask && sameChatEvidence?.visibleIdleAfterClick?.ok !== true) {
         const reopenedRecovery = await ws.send("Runtime.evaluate", {
-          expression: recoverStaleComposerExpression(),
+          expression: recoverSameChatBackgroundTerminalsExpression(expectedTaskId),
           returnByValue: true,
           awaitPromise: true,
         });
@@ -7612,6 +7661,7 @@ async function main() {
   if (nativeSingleTaskEvidence.ok !== true) failures.push(...nativeSingleTaskEvidence.failureReasons);
   const fixedRouteHealthEvidence = await readFixedRouteHealth();
   const nativeModelRequestObserved = nativeSingleTaskEvidence.ok === true
+    && nativeSingleTaskEvidence.skipped !== true
     && nativeExpectedRequestObserved(nativeSingleTaskEvidence.activity);
   const nativeObservedModels = [...new Set([
     fixedRouteHealthEvidence?.model,

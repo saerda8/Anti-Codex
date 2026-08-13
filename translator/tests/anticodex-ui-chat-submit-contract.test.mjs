@@ -558,6 +558,27 @@ test("expected task id widens native acceptance only for a same-chat navigation"
   );
 });
 
+test("native single-task inspection skips history when this run never opened a preflight window", () => {
+  const start = uiSmoke.indexOf("async function inspectNativeSingleTaskWindow(");
+  const end = uiSmoke.indexOf("\nfunction compactCodexRolloutEvidence(", start);
+  assert.ok(start >= 0 && end > start, "native single-task inspection is missing");
+  const inspection = uiSmoke.slice(start, end);
+  const missingPreflightGuard = inspection.indexOf("preflight?.ok !== true");
+  const nativeRead = inspection.indexOf("readNativeCodexActivityRows");
+
+  assert.ok(missingPreflightGuard >= 0 && nativeRead > missingPreflightGuard);
+  assert.match(inspection, /reason: "native_preflight_missing"/);
+  assert.match(inspection, /ok: true,[\s\S]*?skipped: true/);
+
+  const aggregationStart = uiSmoke.indexOf("const nativeModelRequestObserved = nativeSingleTaskEvidence.ok === true");
+  const aggregationEnd = uiSmoke.indexOf("const nativeObservedModels =", aggregationStart);
+  assert.ok(aggregationStart >= 0 && aggregationEnd > aggregationStart, "native evidence aggregation is missing");
+  assert.match(
+    uiSmoke.slice(aggregationStart, aggregationEnd),
+    /nativeSingleTaskEvidence\.skipped !== true[\s\S]*?nativeExpectedRequestObserved\(nativeSingleTaskEvidence\.activity\)/,
+  );
+});
+
 test("same-chat opening proves task activation before accepting an idle composer", () => {
   const start = uiSmoke.indexOf("async function openSameChatByTitle(");
   const end = uiSmoke.indexOf("\nconst visibleMainPaneTextExpression", start);
@@ -579,8 +600,30 @@ test("forced same-chat recovery opens the target before stopping its active turn
   );
   assert.match(
     uiSmoke,
-    /if \(!preserveSameChatActiveTask && sameChatEvidence\?\.visibleIdleAfterClick\?\.ok !== true\) \{[\s\S]*?recoverStaleComposerExpression\(\)[\s\S]*?clickRecoveryControlsWithMouse\(ws, sameChatEvidence\.staleRecovery\)[\s\S]*?waitForVisibleComposerIdle\(ws, 20_000\)/,
+    /if \(!preserveSameChatActiveTask && sameChatEvidence\?\.visibleIdleAfterClick\?\.ok !== true\) \{[\s\S]*?recoverSameChatBackgroundTerminalsExpression\(expectedTaskId\)[\s\S]*?clickRecoveryControlsWithMouse\(ws, sameChatEvidence\.staleRecovery\)[\s\S]*?waitForVisibleComposerIdle\(ws, 20_000\)/,
   );
+  assert.match(
+    uiSmoke,
+    /initialIdle\.source === "fixed-route-ready" && visibleIdleForSubmit\?\.ok !== true && !sameChatTitleContains/,
+  );
+});
+
+test("same-chat background-terminal recovery is bound to the active expected task", () => {
+  const start = uiSmoke.indexOf("function recoverSameChatBackgroundTerminalsExpression(");
+  const end = uiSmoke.indexOf("\nasync function clickRecoveryControlsWithMouse(", start);
+  assert.ok(start >= 0 && end > start, "same-chat background-terminal recovery is missing");
+  const recovery = uiSmoke.slice(start, end);
+
+  assert.match(recovery, /data-app-action-sidebar-thread-active/);
+  assert.match(recovery, /activeTaskId !== expectedTaskId/);
+  assert.match(recovery, /Stop all background terminals/);
+  assert.match(recovery, /\\u505c\\u6b62\\u6240\\u6709\\u540e\\u53f0\\u7ec8\\u7aef/);
+  assert.match(recovery, /style\.pointerEvents === 'none'/);
+
+  const idleStart = uiSmoke.indexOf("async function waitForVisibleComposerIdle(");
+  const idleEnd = uiSmoke.indexOf("\nfunction recoverStaleComposerExpression(", idleStart);
+  assert.ok(idleStart >= 0 && idleEnd > idleStart, "visible composer idle probe is missing");
+  assert.match(uiSmoke.slice(idleStart, idleEnd), /style\.pointerEvents !== 'none'/);
 });
 
 test("local-project follow-up can bind its marker to an explicit required file", () => {
