@@ -1,14 +1,14 @@
-From ab515ecc9d14f79519a9cdcff87ab2c7b98c27f0 Mon Sep 17 00:00:00 2001
+From 0cdbce3f6e536af87a0d126ec43469eeaab16f66 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
-Subject: [PATCH 04/10] fix: route Anti-Codex model slots
+Subject: [PATCH 04/13] fix: route Anti-Codex model slots
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs | 357 ++++++++++++++++++-
- 1 file changed, 346 insertions(+), 11 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs | 386 ++++++++++++++++++-
+ 1 file changed, 376 insertions(+), 10 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index dc70635..606bdea 100644
+index 560c26d..a4ab0f3 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
@@ -34,7 +34,7 @@ index dc70635..606bdea 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -616,13 +623,326 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+@@ -624,6 +631,316 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
          .await
  }
  
@@ -351,47 +351,56 @@ index dc70635..606bdea 100644
  async fn open_responses_proxy_request_with_settings_and_user_agent(
      body: &str,
      settings: crate::settings::BackendSettings,
-     original_user_agent: Option<&str>,
+@@ -631,6 +948,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      request_path: &str,
  ) -> anyhow::Result<UpstreamProxyResponse> {
--    let request_json: Value = serde_json::from_str(body)?;
-+    let mut request_json: Value = serde_json::from_str(body)?;
+     let mut request_json: Value = serde_json::from_str(body)?;
 +    let compaction_model_aligned =
 +        align_codex_compaction_model_with_live_selection(&settings, &mut request_json);
 +    let directed_relay = select_anticodex_relay_for_model(&settings, &mut request_json)?;
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -630,11 +950,16 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -641,7 +961,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+         .map(str::trim)
+         .unwrap_or("")
+         .to_string();
+-    let model_route = select_model_route(&settings, &source_model)?;
++    let model_route = if directed_relay.is_none() {
++        select_model_route(&settings, &source_model)?
++    } else {
++        None
++    };
+     if let Some(route) = &model_route
+         && route.upstream_model != source_model
+     {
+@@ -650,7 +974,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
--    let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
-+    let relay = match directed_relay.as_ref() {
-+        Some(relay) => relay.clone(),
-+        None => crate::relay_rotation::select_relay_for_request(&settings, context)?,
-+    };
-     let mut relays = vec![relay.clone()];
--    relays.extend(crate::relay_rotation::fallback_relays_after(
--        &settings, &relay.id,
--    )?);
-+    if directed_relay.is_none() {
-+        relays.extend(crate::relay_rotation::fallback_relays_after(
-+            &settings, &relay.id,
-+        )?);
-+    }
-     let relay_count = relays.len();
-     for (attempt, relay) in relays.into_iter().enumerate() {
-         validate_upstream(&relay)?;
-@@ -652,6 +977,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+-    let (relay, relays) = if let Some(route) = &model_route {
++    let (relay, relays) = if let Some(relay) = directed_relay.as_ref() {
++        (relay.clone(), vec![relay.clone()])
++    } else if let Some(route) = &model_route {
+         (route.relay.clone(), vec![route.relay.clone()])
+     } else {
+         let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
+@@ -681,6 +1007,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
 +                "compactionModelAligned": compaction_model_aligned,
-                 "headerTimeoutSeconds": header_timeout.as_secs()
-             }),
-         );
-@@ -761,7 +1087,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+                 "headerTimeoutSeconds": header_timeout.as_secs(),
+                 "modelRoute": model_route.as_ref().map(|route| json!({
+                     "sourceRelayId": route.source_relay_id,
+@@ -835,12 +1162,14 @@ fn select_model_route(
+         source_model: model.to_string(),
+         upstream_model,
+     }))
++}
++
+ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+     body: &str,
      original_user_agent: Option<&str>,
      request_path: &str,
  ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
@@ -400,38 +409,69 @@ index dc70635..606bdea 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -771,14 +1097,22 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -850,14 +1179,44 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
 +    let compaction_model_aligned =
 +        align_codex_compaction_model_with_live_selection(&settings, &mut request_json);
 +    let directed_relay = select_anticodex_relay_for_model(&settings, &mut request_json)?;
++    let source_model = request_json
++        .get("model")
++        .and_then(Value::as_str)
++        .map(str::trim)
++        .unwrap_or("")
++        .to_string();
++    let model_route = if directed_relay.is_none() {
++        select_model_route(&settings, &source_model)?
++    } else {
++        None
++    };
++    if let Some(route) = &model_route
++        && route.upstream_model != source_model
++    {
++        request_json["model"] = Value::String(route.upstream_model.clone());
++    }
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
 -    let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
-+    let relay = match directed_relay.as_ref() {
-+        Some(relay) => relay.clone(),
-+        None => crate::relay_rotation::select_relay_for_request(&settings, context)?,
-+    };
-     let mut relays = vec![relay.clone()];
+-    let mut relays = vec![relay.clone()];
 -    relays.extend(crate::relay_rotation::fallback_relays_after(
 -        &settings, &relay.id,
 -    )?);
-+    if directed_relay.is_none() {
++    let (relay, relays) = if let Some(relay) = directed_relay.as_ref() {
++        (relay.clone(), vec![relay.clone()])
++    } else if let Some(route) = &model_route {
++        (route.relay.clone(), vec![route.relay.clone()])
++    } else {
++        let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
++        let mut relays = vec![relay.clone()];
 +        relays.extend(crate::relay_rotation::fallback_relays_after(
 +            &settings, &relay.id,
 +        )?);
-+    }
++        (relay, relays)
++    };
++    debug_assert_eq!(
++        relays.first().map(|item| item.id.as_str()),
++        Some(relay.id.as_str())
++    );
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -800,6 +1134,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -879,7 +1238,14 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,
+-                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
 +                "compactionModelAligned": compaction_model_aligned,
-                 "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs()
++                "headerTimeoutSeconds": UPSTREAM_STREAM_HEADER_TIMEOUT.as_secs(),
++                "modelRoute": model_route.as_ref().map(|route| json!({
++                    "sourceRelayId": route.source_relay_id,
++                    "sourceModel": route.source_model,
++                    "targetRelayId": route.relay.id,
++                    "upstreamModel": route.upstream_model
++                }))
              }),
          );
+         let upstream = match crate::loopback_http::post_json(

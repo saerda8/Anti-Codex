@@ -1,12 +1,12 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly thirteen narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, conservative missing-usage estimation for native compaction, common-entry editable prompt policy for the two reserved Anti-Codex relays, the retained v1.2.45 relay-auth rustfmt normalization, and one v1.2.46 DreamSkin-test rustfmt normalization. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries exactly thirteen narrow Anti-Codex compatibility patches: eleven functional compatibility patches covering product isolation, transport, routing, conversion, diagnostics, bounded requests, usage estimation and prompt policy; the retained v1.2.46 DreamSkin-installer rustfmt normalization; and one v1.2.47 DreamSkin-runtime rustfmt normalization. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.2.46`
-- Accepted commit: `a30b550135fb678bab600da59af153a403b285ee`
+- Accepted version: `v1.2.47`
+- Accepted commit: `900d12756297f169f8c3ec45ca5a53dadb80ea2b`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -27,7 +27,7 @@ The second patch changes only plain-HTTP loopback model transport. It uses a one
 
 The third patch removes tools only from exact official Codex title and task-suggestion helper requests. Ordinary user turns and all upstream conversion behavior remain unchanged.
 
-The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, an explicit routable request model remains authoritative; isolated config is only a fallback for a missing or unknown request model. Directed Anti-Codex requests fail closed instead of rotating to the other provider; ordinary requests and unmarked user turns retain upstream CodexPlusPlus selection.
+The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, an explicit routable request model remains authoritative; isolated config is only a fallback for a missing or unknown request model. Directed Anti-Codex requests take precedence and fail closed instead of rotating to another provider; ordinary v1.2.47 provider-scoped per-model routes remain available on both direct and cancel-aware transports.
 
 The fifth patch changes only image-bearing tool output conversion. It keeps ordinary tool output unchanged, replaces textual JSON/Base64 image payloads with standard Chat `image_url` content parts, and preserves the original tool call association. This prevents valid local image results from being counted as hundreds of thousands of text tokens by Chat-only providers.
 
@@ -43,11 +43,11 @@ The tenth patch estimates nonzero Responses usage only when a completed Chat SSE
 
 The eleventh patch reads only the explicitly configured absolute `prompt-policy.json` path for the exact `anticodex-antigravity` and `anticodex-third-party` relays. Default mode preserves request JSON unchanged; disabled and custom modes operate on the merged system/developer carriers before the Responses/Chat branch while preserving every user message, including the native AGENTS wrapper. It adds the optional user instruction once, keeps existing tool compatibility guidance intact, and atomically records only the original/effective merged instruction text, hashes and local route metadata in `native-prompt-snapshot.json`; an unchanged snapshot is not rewritten. Missing, malformed or out-of-scope policy input passes the original request through unchanged.
 
-The twelfth patch changes only three indentation levels in the upstream v1.2.45 `requires_openai_auth` fallback chain so stable rustfmt accepts the exact tagged source. The before and after lines are identical after leading whitespace is removed; no expression, value, branch, dependency, route or runtime behavior changes.
+The twelfth patch wraps one upstream v1.2.46 DreamSkin installer metadata assertion in the stable rustfmt form. Removing whitespace leaves the expression unchanged; it changes no installer, Manager, helper, provider or runtime behavior.
 
-The thirteenth patch wraps one upstream v1.2.46 DreamSkin installer metadata assertion in the stable rustfmt form. Removing whitespace leaves the expression unchanged; it changes no installer, Manager, helper, provider or runtime behavior.
+The thirteenth patch normalizes one upstream v1.2.47 DreamSkin runtime layout assertion into the stable rustfmt form. Removing whitespace leaves the expression unchanged; it changes no Manager, helper, provider or runtime behavior.
 
-None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. The eleventh patch may change only the two reserved Anti-Codex relays at the common request entry, read only the explicit absolute policy path, preserve user messages, and record only local merged prompt text, hashes and routing metadata. The twelfth patch may change only the three leading-whitespace levels required by rustfmt in the v1.2.45 relay authentication fallback chain. The thirteenth patch may change only the whitespace layout of the v1.2.46 DreamSkin installer metadata assertion. None may add retries or task-control behavior.
+None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. It must preserve ordinary upstream provider-scoped routes on both transports. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. The eleventh patch may change only the two reserved Anti-Codex relays at the common request entry, read only the explicit absolute policy path, preserve user messages, and record only local merged prompt text, hashes and routing metadata. The twelfth and thirteenth patches may change only the whitespace layout of their respective upstream DreamSkin test assertions. None may add retries or task-control behavior.
 
 ## Replay
 
@@ -55,7 +55,7 @@ Apply the patch to the pinned upstream commit:
 
 ```powershell
 git clone https://github.com/BigPizzaV3/CodexPlusPlus.git
-git -C CodexPlusPlus checkout a30b550135fb678bab600da59af153a403b285ee
+git -C CodexPlusPlus checkout 900d12756297f169f8c3ec45ca5a53dadb80ea2b
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch
@@ -67,8 +67,8 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch
-git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0012-fix-format-relay-auth-fallback-chain.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch
+git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0014-fix-format-dreamskin-runtime-test.patch
 ```
 
 `upstream.json` records the patch hash and verification state.
@@ -83,11 +83,11 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- All thirteen patches replay without conflict on pinned upstream `v1.2.46` to head `d84bd4274ec72ce1f5347731cdfe5a11c8761469` and tree `8037e005b80a2fb09c7784b02bbd8c0889156316`.
-- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,838,080-byte launcher has SHA-256 `75081ade5fb0af8cb03436574cf7cafe4d587c448bb96078240f5fca1c67152e`.
+- All thirteen patches replay without conflict on pinned upstream `v1.2.47` to head `f1a5cbcdc846bf0139324ebd888b31a26ba0557c` and tree `28cd13c30dd5d6d12b5cf5534a99ebae786e57c9`.
+- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,288,704-byte launcher has SHA-256 `02d0eaf056445d70f08757af355a9becc78e4a7068892723245bbf537036276b`.
 - Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
-- The accepted project metadata is `v1.2.46` with thirteen patches and the managed launcher hash above; installed activation is a separate guarded step.
+- The accepted project metadata is `v1.2.47` with thirteen patches and the managed launcher hash above; installed activation is a separate guarded step.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

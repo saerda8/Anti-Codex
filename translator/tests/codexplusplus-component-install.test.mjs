@@ -709,8 +709,8 @@ test("runtime sync carries the pinned CodexPlusPlus metadata and all accepted pa
   assert.match(runtimeSync, /0009-fix-allow-long-multimodal-helper-requests\.patch/);
   assert.match(runtimeSync, /0010-fix-estimate-missing-chat-usage-for-native-compaction\.patch/);
   assert.match(runtimeSync, /0011-apply-anticodex-prompt-policy-at-common-request-entry\.patch/);
-  assert.match(runtimeSync, /0012-fix-format-relay-auth-fallback-chain\.patch/);
   assert.match(runtimeSync, /0013-fix-format-dreamskin-installer-test\.patch/);
+  assert.match(runtimeSync, /0014-fix-format-dreamskin-runtime-test\.patch/);
   assert.match(runtimeSync, /foreach \(\$dir in @\([^\r\n]*"third_party"\)\)/);
 });
 

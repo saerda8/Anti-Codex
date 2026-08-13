@@ -1,7 +1,7 @@
-From d84bd4274ec72ce1f5347731cdfe5a11c8761469 Mon Sep 17 00:00:00 2001
+From aa9a23e263453daafa91283797c6d0c56edbd4b2 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Project <anticodex-project@example.invalid>
 Date: Tue, 11 Aug 2026 00:26:23 +0800
-Subject: [PATCH 13/13] fix: format DreamSkin installer metadata test
+Subject: [PATCH 12/13] fix: format DreamSkin installer metadata test
 
 ---
  crates/codex-plus-core/tests/installers.rs | 6 +++++-

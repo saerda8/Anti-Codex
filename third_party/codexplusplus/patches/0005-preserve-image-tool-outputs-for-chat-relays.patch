@@ -1,7 +1,7 @@
-From 6ff1485f4a2fb138f7a7c220deecba8c9ffd40dd Mon Sep 17 00:00:00 2001
+From b2fa0c376f876084b640828e7b981cdf6860ada1 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 05/10] fix: preserve image tool outputs for chat relays
+Subject: [PATCH 05/13] fix: preserve image tool outputs for chat relays
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 152 +++++++++++++++++-
@@ -9,10 +9,10 @@ Subject: [PATCH 05/10] fix: preserve image tool outputs for chat relays
  2 files changed, 215 insertions(+), 4 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 606bdea..be58747 100644
+index a4ab0f3..3bf1c49 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -2657,7 +2657,7 @@ fn append_responses_item(
+@@ -2767,7 +2767,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -21,7 +21,7 @@ index 606bdea..be58747 100644
              }));
          }
          Some("custom_tool_call") => {
-@@ -2703,7 +2703,7 @@ fn append_responses_item(
+@@ -2813,7 +2813,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -30,7 +30,7 @@ index 606bdea..be58747 100644
              }));
          }
          Some("tool_call") => {
-@@ -2749,7 +2749,7 @@ fn append_responses_item(
+@@ -2859,7 +2859,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -39,7 +39,7 @@ index 606bdea..be58747 100644
              }));
          }
          Some("reasoning") => {
-@@ -2786,11 +2786,26 @@ fn append_responses_item(
+@@ -2896,11 +2896,26 @@ fn append_responses_item(
  }
  
  fn orphan_tool_output_message(call_id: &str, output: &Value) -> Value {
@@ -67,7 +67,7 @@ index 606bdea..be58747 100644
          )
      })
  }
-@@ -4175,6 +4190,135 @@ fn response_output_text(value: &Value) -> String {
+@@ -4285,6 +4300,135 @@ fn response_output_text(value: &Value) -> String {
      }
  }
  
@@ -204,10 +204,10 @@ index 606bdea..be58747 100644
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 866f064..afec691 100644
+index c2f9260..557698b 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -905,6 +905,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+@@ -943,6 +943,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
      );
  }
  

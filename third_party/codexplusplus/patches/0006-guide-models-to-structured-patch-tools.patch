@@ -1,7 +1,7 @@
-From b26c92600783923192a874d724f90407a7b4eae1 Mon Sep 17 00:00:00 2001
+From 281b14335a52bcf5cdfc040df7bc3e20504ee7a6 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
-Subject: [PATCH 06/10] guide models to structured patch tools
+Subject: [PATCH 06/13] guide models to structured patch tools
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--
@@ -9,7 +9,7 @@ Subject: [PATCH 06/10] guide models to structured patch tools
  2 files changed, 353 insertions(+), 27 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index be58747..6b6cc0c 100644
+index 3bf1c49..d299237 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -209,6 +209,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
@@ -39,7 +39,7 @@ index be58747..6b6cc0c 100644
      if !suppress_tools {
          let tool_context = build_codex_tool_context(body.get("tools"));
          let mut has_chat_tools = false;
-@@ -2115,19 +2120,23 @@ impl ChatSseState {
+@@ -2225,19 +2230,23 @@ impl ChatSseState {
  
          {
              let state = self.tools.entry(chat_index).or_default();
@@ -70,7 +70,7 @@ index be58747..6b6cc0c 100644
                  should_add = true;
                  pending_arguments = state.arguments.clone();
              } else if state.added {
-@@ -2396,6 +2405,16 @@ impl ChatSseState {
+@@ -2506,6 +2515,16 @@ impl ChatSseState {
      }
  }
  
@@ -87,7 +87,7 @@ index be58747..6b6cc0c 100644
  fn take_sse_block(buffer: &mut String) -> Option<String> {
      let lf = buffer.find("\n\n").map(|index| (index, 2));
      let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
-@@ -3187,6 +3206,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
+@@ -3297,6 +3316,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
  
  fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) -> Vec<Value> {
      let mut converted = Vec::new();
@@ -95,7 +95,7 @@ index be58747..6b6cc0c 100644
      for tool in tools {
          if let Some(name) = tool.as_str().filter(|name| !name.is_empty()) {
              converted.push(generic_custom_proxy_tool(name, ""));
-@@ -3210,7 +3230,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3320,7 +3340,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
                      .and_then(Value::as_str)
                      .unwrap_or("");
                  if detect_codex_custom_tool_kind(tool, name) == CodexCustomToolKind::ApplyPatch {
@@ -104,7 +104,7 @@ index be58747..6b6cc0c 100644
                  } else {
                      converted.push(generic_custom_proxy_tool(name, description));
                  }
-@@ -3219,7 +3239,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3329,7 +3349,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
              _ => {}
          }
      }
@@ -163,7 +163,7 @@ index be58747..6b6cc0c 100644
  }
  
  fn detect_codex_custom_tool_kind(tool: &Value, name: &str) -> CodexCustomToolKind {
-@@ -3383,6 +3453,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
+@@ -3493,6 +3563,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
  
  fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      vec![
@@ -179,7 +179,7 @@ index be58747..6b6cc0c 100644
          function_tool(
              &format!("{name}_add_file"),
              &patch_proxy_description(
-@@ -3431,6 +3510,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
+@@ -3541,6 +3620,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      ]
  }
  
@@ -200,7 +200,7 @@ index be58747..6b6cc0c 100644
  fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
      json!({
          "type": "function",
-@@ -3443,11 +3536,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
+@@ -3553,11 +3646,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
  }
  
  fn patch_proxy_description(description: &str, action: &str, default_description: &str) -> String {
@@ -216,7 +216,7 @@ index be58747..6b6cc0c 100644
  }
  
  fn apply_patch_add_file_schema() -> Value {
-@@ -3552,15 +3647,16 @@ fn apply_patch_hunks_schema() -> Value {
+@@ -3662,15 +3757,16 @@ fn apply_patch_hunks_schema() -> Value {
  }
  
  fn proxy_action_from_upstream_name(name: &str) -> Option<CodexPatchProxyAction> {
@@ -238,7 +238,7 @@ index be58747..6b6cc0c 100644
          Some(CodexPatchProxyAction::Batch)
      } else {
          None
-@@ -3629,7 +3725,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
+@@ -3739,7 +3835,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
              let name = object.get("name").and_then(Value::as_str)?;
              let spec = context.custom_tools.get(name)?;
              let upstream_name = if spec.kind == CodexCustomToolKind::ApplyPatch {
@@ -250,10 +250,10 @@ index be58747..6b6cc0c 100644
                  spec.openai_name.clone()
              };
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index afec691..264279d 100644
+index 557698b..9f050bc 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -676,9 +676,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
+@@ -714,9 +714,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
  fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      let converted = responses_to_chat_completions(json!({
          "model": "gpt-5-mini",
@@ -274,7 +274,7 @@ index afec691..264279d 100644
              {
                  "type": "custom",
                  "name": "apply_patch",
-@@ -690,6 +701,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -728,6 +739,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      .unwrap();
  
      assert_eq!(converted["stream_options"]["include_usage"], true);
@@ -288,7 +288,7 @@ index afec691..264279d 100644
      let names: Vec<_> = converted["tools"]
          .as_array()
          .unwrap()
-@@ -699,21 +717,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -737,21 +755,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      assert_eq!(
          names,
          vec![
@@ -349,7 +349,7 @@ index afec691..264279d 100644
      );
  }
  
-@@ -988,12 +1041,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+@@ -1026,12 +1079,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
      }))
      .unwrap();
  
@@ -370,7 +370,7 @@ index afec691..264279d 100644
          "{\"content\":\"# Test\",\"path\":\"docs/test.md\"}"
      );
  }
-@@ -1256,6 +1315,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
+@@ -1294,6 +1353,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
      );
  }
  
@@ -412,7 +412,7 @@ index afec691..264279d 100644
  #[test]
  fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      let converted = chat_completion_to_response_with_request(
-@@ -1293,6 +1387,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
+@@ -1331,6 +1425,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      );
  }
  
@@ -466,7 +466,7 @@ index afec691..264279d 100644
  #[test]
  fn chat_completion_response_maps_gemini_and_claude_cache_usage_like_ccx() {
      let gemini = chat_completion_to_response(json!({
-@@ -1472,6 +1613,93 @@ data: [DONE]
+@@ -1510,6 +1651,93 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  

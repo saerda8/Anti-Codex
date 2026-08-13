@@ -1,14 +1,15 @@
-From 8cdab128ffc6096384e0c0e4eb493a79cf919c9d Mon Sep 17 00:00:00 2001
+From 4df9e4b84df908b0897521bb127ece9ad0ab6b9c Mon Sep 17 00:00:00 2001
 From: Anti-Codex <anticodex@local.invalid>
 Date: Sat, 1 Aug 2026 12:05:44 +0800
-Subject: [PATCH] feat: apply Anti-Codex prompt policy at common request entry
+Subject: [PATCH 11/13] feat: apply Anti-Codex prompt policy at common request
+ entry
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 658 +++++++++++++++++++
  1 file changed, 658 insertions(+)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 5a65f4a..36d9069 100644
+index 3fc0956..6fbd519 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,10 +4,14 @@
@@ -686,7 +687,7 @@ index 5a65f4a..36d9069 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -1520,6 +2177,7 @@ async fn upstream_request_parts(
+@@ -1630,6 +2287,7 @@ async fn upstream_request_parts(
      if compact && relay.protocol == RelayProtocol::ChatCompletions {
          anyhow::bail!("Chat Completions 协议暂不支持 Responses compact 请求");
      }

@@ -11,21 +11,28 @@ const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
 
+test("v1.2.47 promotion targets the reviewed upstream tag", () => {
+  const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
+
+  assert.equal(accepted.version, "1.2.47");
+  assert.equal(accepted.tag, "v1.2.47");
+  assert.equal(accepted.upstreamCommit, "900d12756297f169f8c3ec45ca5a53dadb80ea2b");
+  assert.equal(accepted.patches.length, 13);
+  assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
+  assert.equal(accepted.patches.at(-1).file, "patches/0014-fix-format-dreamskin-runtime-test.patch");
+  assert.equal(
+    accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
+    false,
+  );
+});
+
 function normalizedTextSha256(path) {
   const normalized = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
   return createHash("sha256").update(normalized, "utf8").digest("hex");
 }
 
-test("accepted v1.2.46 component is derived from the reviewed source replay", () => {
-  const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
+test("historical v1.2.46 source replay remains internally consistent", () => {
   const proposal = JSON.parse(readFileSync(proposalPath, "utf8"));
-
-  assert.equal(accepted.version, "1.2.46");
-  assert.equal(accepted.tag, "v1.2.46");
-  assert.equal(accepted.upstreamCommit, "a30b550135fb678bab600da59af153a403b285ee");
-  assert.equal(accepted.patches.length, 13);
-  assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0013-fix-format-dreamskin-installer-test.patch");
 
   assert.deepEqual(Object.keys(proposal).sort(), [
     "accepted",
@@ -43,7 +50,7 @@ test("accepted v1.2.46 component is derived from the reviewed source replay", ()
   ]);
   assert.equal(proposal.schema, "codexplusplus-source-replay-v1");
   assert.equal(proposal.component, "CodexPlusPlus");
-  assert.equal(proposal.repository, accepted.repository);
+  assert.equal(proposal.repository, "https://github.com/BigPizzaV3/CodexPlusPlus.git");
   assert.equal(proposal.license, "AGPL-3.0-only");
   assert.equal(proposal.accepted, false);
   assert.equal(proposal.candidatePublished, false);
@@ -69,9 +76,6 @@ test("accepted v1.2.46 component is derived from the reviewed source replay", ()
   assert.equal(proposal.replay.isolationPatchCommit, "d8082c26f116761de89a2ef3342057d54a9e1eb6");
   assert.equal(proposal.replay.patchCommit, "d84bd4274ec72ce1f5347731cdfe5a11c8761469");
   assert.equal(proposal.replay.patchTree, "8037e005b80a2fb09c7784b02bbd8c0889156316");
-  assert.equal(accepted.isolationPatchCommit, proposal.replay.isolationPatchCommit);
-  assert.equal(accepted.patchCommit, proposal.replay.patchCommit);
-  assert.match(accepted.verification.patchReplay, new RegExp(proposal.replay.patchTree));
   assert.deepEqual(proposal.replay.additionalPatches, [{
     file: "patches/0013-fix-format-dreamskin-installer-test.patch",
     normalizedSha256: "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
@@ -163,12 +167,12 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation records the accepted v1.2.46 promotion", () => {
+test("component documentation records the accepted v1.2.47 promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.2\.46`/);
-  assert.match(readme, /checkout a30b550135fb678bab600da59af153a403b285ee/);
-  assert.match(readme, /thirteen patches replay without conflict on pinned upstream `v1\.2\.46`/);
+  assert.match(readme, /Accepted version: `v1\.2\.47`/);
+  assert.match(readme, /checkout 900d12756297f169f8c3ec45ca5a53dadb80ea2b/);
+  assert.match(readme, /thirteen patches replay without conflict on pinned upstream `v1\.2\.47`/);
   assert.match(readme, /historical source-replay record/);
   assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);
