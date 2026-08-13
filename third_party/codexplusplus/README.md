@@ -1,12 +1,12 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly twelve narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, conservative missing-usage estimation for native compaction, common-entry editable prompt policy for the two reserved Anti-Codex relays, and one upstream v1.2.45 rustfmt-only relay authentication indentation normalization. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries exactly thirteen narrow Anti-Codex compatibility patches: product isolation, cancel-aware loopback transport, exact native-helper tool suppression, frontend-model-directed dual-relay and compaction routing, multimodal preservation for image-bearing tool outputs, structured patch-tool priority and guidance, non-interleaved streamed output ordering, metadata-only tool conversion audit, a bounded long-multimodal helper body limit, conservative missing-usage estimation for native compaction, common-entry editable prompt policy for the two reserved Anti-Codex relays, the retained v1.2.45 relay-auth rustfmt normalization, and one v1.2.46 DreamSkin-test rustfmt normalization. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.2.45`
-- Accepted commit: `055302664af09e6e3bb76a00b36d318132094ee3`
+- Accepted version: `v1.2.46`
+- Accepted commit: `a30b550135fb678bab600da59af153a403b285ee`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -45,7 +45,9 @@ The eleventh patch reads only the explicitly configured absolute `prompt-policy.
 
 The twelfth patch changes only three indentation levels in the upstream v1.2.45 `requires_openai_auth` fallback chain so stable rustfmt accepts the exact tagged source. The before and after lines are identical after leading whitespace is removed; no expression, value, branch, dependency, route or runtime behavior changes.
 
-None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. The eleventh patch may change only the two reserved Anti-Codex relays at the common request entry, read only the explicit absolute policy path, preserve user messages, and record only local merged prompt text, hashes and routing metadata. The twelfth patch may change only the three leading-whitespace levels required by rustfmt in the v1.2.45 relay authentication fallback chain. None may add retries or task-control behavior.
+The thirteenth patch wraps one upstream v1.2.46 DreamSkin installer metadata assertion in the stable rustfmt form. Removing whitespace leaves the expression unchanged; it changes no installer, Manager, helper, provider or runtime behavior.
+
+None of the first four patches may change request input other than the fourth patch's model-only rewrite, tools, Responses/Chat conversion, streaming, retries, history or task control. The fourth patch may route only the documented Anti-Codex model namespace between the two named resident relays, rewrite a generic or namespaced slot to its actual upstream model, preserve an explicit routable model on canonically marked native compaction, and use isolated config only when that model is missing or unknown. The fifth patch may change only image-bearing tool output representation. The sixth patch may add the exact-name structured `apply_patch` schema, place it before compatibility proxies and command tools, reuse the existing native custom-tool reconstruction, and append file-edit guidance to command tools only while `apply_patch` is available. The seventh patch may suppress only late reasoning that would otherwise interleave a second active item after visible text. The eighth patch may emit only no-secret diagnostic metadata. The ninth patch may change only bounded local request-size constants and their boundary tests. The tenth patch may add only the missing-usage fallback and its tests. The eleventh patch may change only the two reserved Anti-Codex relays at the common request entry, read only the explicit absolute policy path, preserve user messages, and record only local merged prompt text, hashes and routing metadata. The twelfth patch may change only the three leading-whitespace levels required by rustfmt in the v1.2.45 relay authentication fallback chain. The thirteenth patch may change only the whitespace layout of the v1.2.46 DreamSkin installer metadata assertion. None may add retries or task-control behavior.
 
 ## Replay
 
@@ -53,7 +55,7 @@ Apply the patch to the pinned upstream commit:
 
 ```powershell
 git clone https://github.com/BigPizzaV3/CodexPlusPlus.git
-git -C CodexPlusPlus checkout 055302664af09e6e3bb76a00b36d318132094ee3
+git -C CodexPlusPlus checkout a30b550135fb678bab600da59af153a403b285ee
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch
@@ -66,6 +68,7 @@ git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\00
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0012-fix-format-relay-auth-fallback-chain.patch
+git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch
 ```
 
 `upstream.json` records the patch hash and verification state.
@@ -76,16 +79,15 @@ Run `scripts\prepare-codexplusplus-candidate.ps1 -Tag vX.Y.Z` from the Anti-Code
 
 The candidate contains clean patched source, the release launcher, `candidate.json` and `upstream.proposed.json`. It never changes the project patches or `upstream.json`, never installs or activates a component, and never stops or restarts Anti-Codex. A patch conflict therefore requires an explicit patch review and project commit. After that commit, the component installer accepts only the candidate whose version, upstream commit, patch commit and binary hash exactly match the committed metadata; the existing guarded sync remains the sole activation and rollback path.
 
-`docs/audits/codexplusplus/v1.2.46-source-replay/source-replay.json` is deliberately weaker evidence. It binds the accepted metadata and proposal-only text patch with line-ending-normalized SHA-256 values and records a clean 13-patch source replay, locked Cargo metadata, stable rustfmt and the isolation audit without claiming a managed Windows build, a launchable binary, candidate publication, installation eligibility or activation. It cannot replace `upstream.json` or enter runtime synchronization.
+`docs/audits/codexplusplus/v1.2.46-source-replay/source-replay.json` is the historical source-replay record that preceded the managed build. It remains immutable and truthfully says that its own run did not build, publish, install or activate anything. Runtime synchronization trusts only the promoted `upstream.json` identity and its content-addressed managed candidate.
 
 ## Current Verification Boundary
 
-- All twelve patches replay without conflict on pinned upstream `v1.2.45` to head `65cbc08be3dc7390bdd61f9236d6c266b61d3f40` and tree `359271c6a0c807a8914be9d1a0bdc25e1430212c`.
-- The managed candidate runner passes format, protocol-proxy, watcher, Windows x64 Manager check, release build, Windows process creation, source cleanliness and Docker pre/postflight checks. The resulting 17,789,440-byte launcher has SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922`.
-- The focused component-install and security-boundary contracts pass 42/42. Complete project regression and promotion preflight remain required before activation.
+- All thirteen patches replay without conflict on pinned upstream `v1.2.46` to head `d84bd4274ec72ce1f5347731cdfe5a11c8761469` and tree `8037e005b80a2fb09c7784b02bbd8c0889156316`.
+- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,838,080-byte launcher has SHA-256 `75081ade5fb0af8cb03436574cf7cafe4d587c448bb96078240f5fca1c67152e`.
+- Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
-- The prior 10-patch release launcher SHA-256 `f508f3bf6b6a9e28ea5f632839ec83678b99e9937d7bd62606feafb09dcab2be` is historical evidence only and is not accepted for the current `v1.2.45` twelve-patch source.
-- The accepted project metadata remains `v1.2.45` with twelve patches and the managed launcher hash above.
-- The newer `v1.2.46` source-only replay reaches head `d84bd4274ec72ce1f5347731cdfe5a11c8761469` and tree `8037e005b80a2fb09c7784b02bbd8c0889156316` after a proposal-only rustfmt patch. Its managed build, Windows launchability, publication, installation and activation remain intentionally unverified.
+- The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
+- The accepted project metadata is `v1.2.46` with thirteen patches and the managed launcher hash above; installed activation is a separate guarded step.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

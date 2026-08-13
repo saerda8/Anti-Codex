@@ -12,6 +12,8 @@ const patch11Path = join(root, "third_party", "codexplusplus", "patches", "0011-
 const patch11 = existsSync(patch11Path) ? readFileSync(patch11Path, "utf8") : "";
 const patch12Path = join(root, "third_party", "codexplusplus", "patches", "0012-fix-format-relay-auth-fallback-chain.patch");
 const patch12 = existsSync(patch12Path) ? readFileSync(patch12Path, "utf8") : "";
+const patch13Path = join(root, "third_party", "codexplusplus", "patches", "0013-fix-format-dreamskin-installer-test.patch");
+const patch13 = existsSync(patch13Path) ? readFileSync(patch13Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -25,10 +27,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 12);
+  assert.equal(metadata.patches.length, 13);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0012-fix-format-relay-auth-fallback-chain.patch",
+    "patches/0013-fix-format-dreamskin-installer-test.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -64,6 +66,31 @@ test("v1.2.45 rustfmt compatibility patch changes indentation only", () => {
   assert.deepEqual(added.map((line) => line.trimStart()), removed.map((line) => line.trimStart()));
   assert.ok(added.every((line) => line.startsWith("            .")));
   assert.ok(removed.every((line) => line.startsWith("        .")));
+});
+
+test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
+  assert.match(patch13, /^From [0-9a-f]{40} /m);
+  assert.match(patch13, /^Subject: \[PATCH 13\/13\] fix: format DreamSkin installer metadata test$/m);
+  assert.deepEqual(
+    [...patch13.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
+    [[
+      "crates/codex-plus-core/tests/installers.rs",
+      "crates/codex-plus-core/tests/installers.rs",
+    ]],
+  );
+  const added = patch13
+    .split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+    .map((line) => line.slice(1))
+    .join("")
+    .replaceAll(/\s/g, "");
+  const removed = patch13
+    .split("\n")
+    .filter((line) => line.startsWith("-") && !line.startsWith("---") && line !== "-- ")
+    .map((line) => line.slice(1))
+    .join("")
+    .replaceAll(/\s/g, "");
+  assert.equal(added, removed);
 });
 
 test("Anti-Codex prompt policy is confined to both reserved relays at the common request entry", () => {

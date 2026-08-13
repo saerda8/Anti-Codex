@@ -2,11 +2,11 @@
     "component":  "CodexPlusPlus",
     "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
     "license":  "AGPL-3.0-only",
-    "version":  "1.2.45",
-    "tag":  "v1.2.45",
-    "upstreamCommit":  "055302664af09e6e3bb76a00b36d318132094ee3",
-    "isolationPatchCommit":  "f842229bfe3b16753e0775e9f5e968cbb967eda5",
-    "patchCommit":  "65cbc08be3dc7390bdd61f9236d6c266b61d3f40",
+    "version":  "1.2.46",
+    "tag":  "v1.2.46",
+    "upstreamCommit":  "a30b550135fb678bab600da59af153a403b285ee",
+    "isolationPatchCommit":  "d8082c26f116761de89a2ef3342057d54a9e1eb6",
+    "patchCommit":  "d84bd4274ec72ce1f5347731cdfe5a11c8761469",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -67,16 +67,21 @@
                         "file":  "patches/0012-fix-format-relay-auth-fallback-chain.patch",
                         "sha256":  "33f59c274019d4ec9a84c06e4770ce63e8b6ed87ea050c35ffdb5ff24f202f9e",
                         "scope":  "normalize only the upstream v1.2.45 relay authentication fallback method-chain indentation required by stable rustfmt; runtime behavior is unchanged"
+                    },
+                    {
+                        "file":  "patches/0013-fix-format-dreamskin-installer-test.patch",
+                        "sha256":  "3c21dc6dde0b90be4b1df2c506fda4502d2ee514f2b9e53a3783237dad79991a",
+                        "scope":  "normalize only the upstream v1.2.46 DreamSkin installer metadata assertion required by stable rustfmt; runtime behavior is unchanged"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "12 project patches replayed without automatic conflict resolution; head 65cbc08be3dc7390bdd61f9236d6c266b61d3f40; tree 359271c6a0c807a8914be9d1a0bdc25e1430212c",
+                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head d84bd4274ec72ce1f5347731cdfe5a11c8761469; tree 8037e005b80a2fb09c7784b02bbd8c0889156316",
                          "sourceIsolationAudit":  "passed",
-                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before activation.",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922",
+                         "launcherReleaseBuild":  "sha256:75081ade5fb0af8cb03436574cf7cafe4d587c448bb96078240f5fca1c67152e",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }

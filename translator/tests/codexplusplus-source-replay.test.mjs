@@ -16,15 +16,16 @@ function normalizedTextSha256(path) {
   return createHash("sha256").update(normalized, "utf8").digest("hex");
 }
 
-test("v1.2.46 source replay remains separate from the accepted v1.2.45 component", () => {
+test("accepted v1.2.46 component is derived from the reviewed source replay", () => {
   const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
   const proposal = JSON.parse(readFileSync(proposalPath, "utf8"));
 
-  assert.equal(accepted.version, "1.2.45");
-  assert.equal(accepted.tag, "v1.2.45");
-  assert.equal(accepted.upstreamCommit, "055302664af09e6e3bb76a00b36d318132094ee3");
-  assert.equal(accepted.patches.length, 12);
+  assert.equal(accepted.version, "1.2.46");
+  assert.equal(accepted.tag, "v1.2.46");
+  assert.equal(accepted.upstreamCommit, "a30b550135fb678bab600da59af153a403b285ee");
+  assert.equal(accepted.patches.length, 13);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
+  assert.equal(accepted.patches.at(-1).file, "patches/0013-fix-format-dreamskin-installer-test.patch");
 
   assert.deepEqual(Object.keys(proposal).sort(), [
     "accepted",
@@ -50,12 +51,12 @@ test("v1.2.46 source replay remains separate from the accepted v1.2.45 component
 
   assert.deepEqual(proposal.baseAccepted, {
     metadataPath: "../../../../third_party/codexplusplus/upstream.json",
-    metadataNormalizedSha256: normalizedTextSha256(acceptedPath),
-    version: accepted.version,
-    tag: accepted.tag,
-    upstreamCommit: accepted.upstreamCommit,
-    patchCommit: accepted.patchCommit,
-    patchCount: accepted.patches.length,
+    metadataNormalizedSha256: "82ffb795961003a1851a83d257c4cde6e886f5ae7ab742f6851406dc2f659bd2",
+    version: "1.2.45",
+    tag: "v1.2.45",
+    upstreamCommit: "055302664af09e6e3bb76a00b36d318132094ee3",
+    patchCommit: "65cbc08be3dc7390bdd61f9236d6c266b61d3f40",
+    patchCount: 12,
   });
   assert.deepEqual(proposal.target, {
     version: "1.2.46",
@@ -68,6 +69,9 @@ test("v1.2.46 source replay remains separate from the accepted v1.2.45 component
   assert.equal(proposal.replay.isolationPatchCommit, "d8082c26f116761de89a2ef3342057d54a9e1eb6");
   assert.equal(proposal.replay.patchCommit, "d84bd4274ec72ce1f5347731cdfe5a11c8761469");
   assert.equal(proposal.replay.patchTree, "8037e005b80a2fb09c7784b02bbd8c0889156316");
+  assert.equal(accepted.isolationPatchCommit, proposal.replay.isolationPatchCommit);
+  assert.equal(accepted.patchCommit, proposal.replay.patchCommit);
+  assert.match(accepted.verification.patchReplay, new RegExp(proposal.replay.patchTree));
   assert.deepEqual(proposal.replay.additionalPatches, [{
     file: "patches/0013-fix-format-dreamskin-installer-test.patch",
     normalizedSha256: "2b8303ac87d9d3c4f6b2abb218c836050002f452401093e633d3b6686fbb7811",
@@ -159,14 +163,14 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation separates accepted and source-only versions", () => {
+test("component documentation records the accepted v1.2.46 promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.2\.45`/);
-  assert.match(readme, /checkout 055302664af09e6e3bb76a00b36d318132094ee3/);
-  assert.match(readme, /`v1\.2\.46` source-only replay/);
-  assert.match(readme, /current `v1\.2\.45` twelve-patch source/);
-  assert.match(readme, /managed build, Windows launchability, publication, installation and activation remain intentionally unverified/);
+  assert.match(readme, /Accepted version: `v1\.2\.46`/);
+  assert.match(readme, /checkout a30b550135fb678bab600da59af153a403b285ee/);
+  assert.match(readme, /thirteen patches replay without conflict on pinned upstream `v1\.2\.46`/);
+  assert.match(readme, /historical source-replay record/);
+  assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);
   assert.doesNotMatch(readme, /checkout 77091ccaee4423f35a1b2c51c4ecd703e6201092/);
 });

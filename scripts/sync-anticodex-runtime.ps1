@@ -295,6 +295,7 @@ $requiredSourceFiles = @(
     "third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
     "third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
     "third_party\codexplusplus\patches\0012-fix-format-relay-auth-fallback-chain.patch",
+    "third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",
