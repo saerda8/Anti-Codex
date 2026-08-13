@@ -2068,6 +2068,11 @@ async function verifyUpstreamConfigActualMouseClick() {
   do {
     form = await evaluate(`(() => {
       const result = document.querySelector('#anticodex-manager-overlay [data-anticodex-result="action"]');
+      const resultCard = result?.closest('.anticodex-result-card') || null;
+      const resultCardRect = resultCard?.getBoundingClientRect?.() || null;
+      const panel = document.querySelector('#anticodex-manager-overlay .anticodex-panel');
+      const panelRect = panel?.getBoundingClientRect?.() || null;
+      const stickyHeadRect = document.querySelector('#anticodex-manager-overlay .anticodex-head')?.getBoundingClientRect?.() || null;
       const labels = Array.from(result?.querySelectorAll('label > span') || []).map((node) => String(node.textContent || '').trim());
       const protocolLabel = Array.from(result?.querySelectorAll('label') || []).find((label) =>
         String(label.querySelector(':scope > span')?.textContent || '').trim() === '\u534f\u8bae'
@@ -2080,7 +2085,21 @@ async function verifyUpstreamConfigActualMouseClick() {
         buttons: Array.from(result?.querySelectorAll('button') || []).map((button) => ({
           label: String(button.textContent || '').trim(),
           disabled: button.disabled,
+          height: button.getBoundingClientRect?.().height || 0,
         })),
+        resultCardTitle: String(resultCard?.querySelector('h2')?.textContent || '').trim(),
+        resultCardInView: Boolean(resultCardRect && stickyHeadRect
+          && resultCardRect.top >= stickyHeadRect.bottom - 1
+          && resultCardRect.top < innerHeight
+          && resultCardRect.bottom > 0),
+        stickyHeaderCoversPanelTop: Boolean(panel && panelRect && stickyHeadRect
+          && panel.scrollTop > 0
+          && stickyHeadRect.top <= panelRect.top + (Number.parseFloat(getComputedStyle(panel).borderTopWidth) || 0) + 1),
+        saveGuidanceVisible: Array.from(result?.querySelectorAll('.anticodex-form-hint') || []).some((node) => {
+          const rect = node.getBoundingClientRect?.();
+          return /\u5148\u6d4b\u8bd5\u8fde\u901a/.test(String(node.textContent || ''))
+            && rect && rect.width > 0 && rect.height > 0 && rect.top < innerHeight && rect.bottom > 0;
+        }),
         hasImpactWarning: !!result?.querySelector('.anticodex-warn'),
         embedded: !!result?.closest('#anticodex-manager-overlay'),
         actionLabel: String(document.querySelector('#anticodex-manager-overlay button[data-action="upstreamConfig"]')?.textContent || '').trim(),
@@ -2174,6 +2193,7 @@ async function verifyUpstreamConfigActualMouseClick() {
   const profileUnchanged = beforeSignature === publicProfileSignature(afterProfile);
   const pageTargetsAfter = await getJson(`http://127.0.0.1:${port}/json`).catch(() => []);
   const buttonState = Object.fromEntries((form.buttons || []).map((button) => [button.label, button.disabled]));
+  const buttonHeight = Object.fromEntries((form.buttons || []).map((button) => [button.label, button.height]));
   const actualMouse = {
     ok: form.ok === true && form.confirming === "",
     action: "upstreamConfig",
@@ -2194,6 +2214,12 @@ async function verifyUpstreamConfigActualMouseClick() {
     && ["\u534f\u8bae", "\u63a5\u53e3\u5730\u5740\uff08\u53ef\u586b base URL \u6216\u5b8c\u6574\u63a5\u53e3\uff09", "\u6a21\u578b\u540d", "API key"].every((label) => form.labels?.includes(label))
     && buttonState["\u6d4b\u8bd5\u8fde\u901a"] === false
     && buttonState["\u4fdd\u5b58\u914d\u7f6e"] === true
+    && buttonHeight["\u6d4b\u8bd5\u8fde\u901a"] >= 40
+    && buttonHeight["\u4fdd\u5b58\u914d\u7f6e"] >= 40
+    && form.resultCardTitle === "\u7b2c\u4e09\u65b9 API \u914d\u7f6e"
+    && form.resultCardInView === true
+    && form.stickyHeaderCoversPanelTop === true
+    && form.saveGuidanceVisible === true
     && !("\u4fdd\u5b58\u5e76\u5207\u6362" in buttonState)
     && !("\u6062\u590d Antigravity" in buttonState)
     && !form.labels?.includes("Antigravity \u6a21\u578b")

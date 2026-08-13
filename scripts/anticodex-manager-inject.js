@@ -1790,10 +1790,10 @@
       #${MANAGER_ID}[data-anticodex-theme="light"]{color-scheme:light;--ac-bg:#f7f7f7;--ac-surface:#fff;--ac-raised:#f1f1f1;--ac-hover:#e7e7e7;--ac-input-bg:#fff;--ac-line:rgba(0,0,0,.08);--ac-line-strong:rgba(0,0,0,.14);--ac-text:#1f1f1f;--ac-muted:#666;--ac-value:#292929;--ac-result:#333;--ac-error:#a52a3a;--ac-warn:#805d14;--ac-focus:#555;--ac-backdrop:rgba(20,20,20,.24);--ac-shadow:rgba(0,0,0,.22);--ac-close-active:#ddd;--ac-button-hover-line:rgba(0,0,0,.2);--ac-danger:#6e2832;--ac-danger-hover:#7a303b;--ac-danger-active:#842f3c;--ac-danger-line:#8e3d49;--ac-danger-hover-line:#9d4a56;--ac-danger-text:#fff4f5;--ac-danger-section:#fbf1f2;--ac-danger-section-line:rgba(122,48,59,.25)}
       #${MANAGER_ID}[data-anticodex-theme="dark"]{color-scheme:dark}
       #${MANAGER_ID} *{box-sizing:border-box}
-      .anticodex-panel{width:min(1080px,96vw);height:min(840px,92vh);overflow:auto;border-radius:14px;background:var(--ac-bg);border:1px solid var(--ac-line-strong);box-shadow:0 28px 90px var(--ac-shadow);padding:20px}
-      .anticodex-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:2px 2px 0;position:sticky;top:0;z-index:3;background:var(--ac-bg)}
+      .anticodex-panel{width:min(1080px,96vw);height:min(840px,92vh);overflow:auto;border-radius:14px;background:var(--ac-bg);border:1px solid var(--ac-line-strong);box-shadow:0 28px 90px var(--ac-shadow);padding:0 20px 20px}
+      .anticodex-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;padding:22px 2px 0;position:sticky;top:0;z-index:3;background:var(--ac-bg)}
       .anticodex-head h1{font-size:20px;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;font-weight:650}.anticodex-head p{margin:0;color:var(--ac-muted);font-size:12px}.anticodex-head-tools{display:flex;gap:8px;align-items:center}
-      .anticodex-prompt-settings{border:1px solid var(--ac-line);border-radius:9px;min-height:44px;padding:0 14px;background:var(--ac-raised);color:var(--ac-text);cursor:pointer;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif}.anticodex-prompt-settings:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}
+      .anticodex-prompt-settings{border:1px solid var(--ac-line);border-radius:9px;min-height:44px;padding:0 14px;background:var(--ac-raised);color:var(--ac-text);cursor:pointer;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;white-space:nowrap}.anticodex-prompt-settings:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}
       .anticodex-close{appearance:none;border:1px solid var(--ac-line);border-radius:9px;min-width:88px;width:88px;min-height:44px;height:48px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center;line-height:1;background:var(--ac-raised);color:transparent;cursor:pointer;touch-action:manipulation;position:relative;z-index:2;pointer-events:auto;font:600 13px "Segoe UI",Microsoft YaHei,sans-serif;user-select:none;flex:0 0 auto;overflow:hidden;-webkit-app-region:no-drag}
       .anticodex-close::after{content:attr(aria-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ac-text);pointer-events:none}
       .anticodex-close:hover{background:var(--ac-hover);border-color:var(--ac-line-strong)}.anticodex-close:active{background:var(--ac-close-active)}.anticodex-close:focus-visible{outline:2px solid var(--ac-focus);outline-offset:2px}
@@ -1809,10 +1809,15 @@
       .anticodex-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.anticodex-card{border:1px solid var(--ac-line);background:var(--ac-surface);border-radius:12px;padding:14px;min-height:112px}
       .anticodex-card h2{font-size:13px;font-weight:650;margin:0 0 10px;color:var(--ac-text)}.anticodex-kv{display:grid;grid-template-columns:130px 1fr;gap:7px 10px;font-size:12px}.anticodex-k{color:var(--ac-muted)}.anticodex-v{color:var(--ac-value);word-break:break-word}
       .anticodex-result{white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--ac-result)}.anticodex-wide{grid-column:1/-1}.anticodex-error{color:var(--ac-error)}.anticodex-loading{color:var(--ac-muted)}.anticodex-warn{color:var(--ac-warn)}
+      .anticodex-result-card{scroll-margin-top:78px}
+      .anticodex-form-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .anticodex-form-actions button{border:1px solid var(--ac-line-strong);border-radius:8px;min-height:40px;padding:0 14px;background:var(--ac-raised);color:var(--ac-text);font:600 12px "Segoe UI",Microsoft YaHei,sans-serif;cursor:pointer}
+      .anticodex-form-actions button:hover:not(:disabled){background:var(--ac-hover);border-color:var(--ac-button-hover-line)}.anticodex-form-actions button:disabled{opacity:.55;cursor:not-allowed}
+      .anticodex-form-hint{font-size:12px;line-height:1.5;color:var(--ac-muted)}
       .anticodex-result-tools{display:flex;justify-content:flex-end;margin-top:10px}.anticodex-copy-result{border:1px solid var(--ac-line-strong);border-radius:8px;min-height:34px;padding:0 12px;background:var(--ac-raised);color:var(--ac-text);font:600 12px "Segoe UI",Microsoft YaHei,sans-serif;cursor:pointer}.anticodex-copy-result:hover{background:var(--ac-hover);border-color:var(--ac-button-hover-line)}
       .anticodex-connector-allowlist-input{width:100%;min-height:86px;resize:vertical;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-input-bg);color:var(--ac-text);padding:10px 11px;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
       .anticodex-connector-allowlist-input:focus{outline:2px solid var(--ac-focus);outline-offset:2px}
-      @media(max-width:820px){#${MANAGER_ID}{padding:12px}.anticodex-grid{grid-template-columns:1fr}.anticodex-panel{padding:15px}.anticodex-kv{grid-template-columns:1fr}.anticodex-action-section-head{display:block}.anticodex-action-section p{text-align:left;margin-top:3px}}
+      @media(max-width:820px){#${MANAGER_ID}{padding:12px}.anticodex-grid{grid-template-columns:1fr}.anticodex-panel{padding:0 15px 15px}.anticodex-head{padding-top:17px;gap:10px}.anticodex-prompt-settings{padding:0 10px}.anticodex-close{min-width:72px;width:72px}.anticodex-kv{grid-template-columns:1fr}.anticodex-action-section-head{display:block}.anticodex-action-section p{text-align:left;margin-top:3px}}
     ` });
     const root = el("div", { id: MANAGER_ID, role: "dialog", "aria-label": MANAGER_LABEL, "data-anticodex-manager-version": VERSION, "data-anticodex-manager-view": "status", "data-anticodex-busy": "false" });
     const panel = el("div", { className: "anticodex-panel" });
@@ -1892,7 +1897,14 @@
       }
     }
 
-    panel.append(style, head, actions, grid, card("\u68c0\u67e5\u7ed3\u679c", resultBody));
+    const resultCard = card("\u68c0\u67e5\u7ed3\u679c", resultBody);
+    resultCard.classList.add("anticodex-result-card");
+    const resultCardTitle = resultCard.querySelector("h2");
+    function setResultCardMode(mode) {
+      resultCard.setAttribute("data-anticodex-result-mode", mode);
+      if (resultCardTitle) resultCardTitle.textContent = mode === "upstream-config" ? "\u7b2c\u4e09\u65b9 API \u914d\u7f6e" : "\u68c0\u67e5\u7ed3\u679c";
+    }
+    panel.append(style, head, actions, grid, resultCard);
     root.append(panel);
     const closeFromRootHit = (event) => {
       if (closestEventElementOrPoint(event, "[data-anticodex-close]", root)) {
@@ -1919,6 +1931,7 @@
 
     async function load(options = {}) {
       if (managerView !== "status") return;
+      setResultCardMode("status");
       const updateResult = options.updateResult !== false;
       const loadGeneration = actionGeneration;
       try {
@@ -2086,6 +2099,7 @@
     window.__ANTICODEX_REFRESH_MANAGER_PANEL__ = () => load({ updateResult: false });
 
     async function showPromptSettings() {
+      setResultCardMode("status");
       const promptGeneration = Number(root.getAttribute("data-anticodex-prompt-generation") || 0) + 1;
       root.setAttribute("data-anticodex-prompt-generation", String(promptGeneration));
       managerView = "prompts";
@@ -2215,6 +2229,7 @@
     promptSettingsButton.onclick = () => { void runManagerExclusive(showPromptSettings); };
 
     async function showUpstreamConfig() {
+      setResultCardMode("upstream-config");
       await ensureSnapshotForLoad();
       let profileResult = await safeJson("/anticodex/upstream-profile", { preferSnapshot: true });
       if (!profileResult.ok) {
@@ -2231,6 +2246,7 @@
           el("pre", { className: "anticodex-result anticodex-error", text: String(profileResult.error?.message || "本地模型通道不可用") }),
           el("div", { style: "display:flex;gap:8px" }, [retryButton]),
         ]));
+        resultCard.scrollIntoView({ block: "start", inline: "nearest" });
         return;
       }
       const profilePayload = profileResult.value || {};
@@ -2266,7 +2282,8 @@
       updateProviderModelList(saved.capabilities?.providerModels || []);
       const contextWindow = el("input", { style: fieldStyle, type: "number", min: "16000", max: "4000000", step: "1000", value: String(saved.contextWindow || 272000), placeholder: "272000" });
       const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
-      const stageBox = el("pre", { className: "anticodex-result", text: "“测试连通”会发送一次最小真实请求；测试成功后，“保存配置”复用这次结果，不会再次请求，也不会切换当前会话。" });
+      const stageBox = el("pre", { className: "anticodex-result", "aria-live": "polite", text: "“测试连通”会发送一次最小真实请求；测试成功后，“保存配置”复用这次结果，不会再次请求，也不会切换当前会话。" });
+      const saveHint = el("div", { className: "anticodex-form-hint", text: "先测试连通；成功后可保存。" });
       const testButton = el("button", { type: "button", text: "测试连通" });
       const saveButton = el("button", { type: "button", text: "保存配置" });
       saveButton.disabled = true;
@@ -2283,9 +2300,12 @@
       const refreshUpstreamConfigControls = () => {
         for (const field of upstreamConfigFields) field.disabled = upstreamConfigOperationInFlight;
         testButton.disabled = upstreamConfigOperationInFlight;
-        saveButton.disabled = upstreamConfigOperationInFlight
-          || !testedFingerprint
-          || testedFingerprint !== upstreamConfigFingerprint();
+        const fingerprintMatches = Boolean(testedFingerprint) && testedFingerprint === upstreamConfigFingerprint();
+        saveButton.disabled = upstreamConfigOperationInFlight || !fingerprintMatches;
+        saveHint.textContent = upstreamConfigOperationInFlight
+          ? "正在处理，请稍候…"
+          : (fingerprintMatches ? "连接已通过，现在可保存。" : "先测试连通；成功后可保存。");
+        saveButton.title = fingerprintMatches ? "保存当前配置" : "请先点击“测试连通”";
       };
       const setUpstreamConfigBusy = (busy) => {
         upstreamConfigOperationInFlight = Boolean(busy);
@@ -2387,9 +2407,11 @@
         providerModelList,
         row("上下文窗口（token）", contextWindow),
         row("API key", apiKey),
-        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap" }, [testButton, saveButton]),
+        el("div", { className: "anticodex-form-actions" }, [testButton, saveButton]),
+        saveHint,
         stageBox,
       ]));
+      resultCard.scrollIntoView({ block: "start", inline: "nearest" });
     }
 
     function installActions() {
@@ -2464,6 +2486,7 @@
             await showUpstreamConfig();
             return;
           }
+          setResultCardMode("status");
           actionGeneration += 1;
           const currentActionGeneration = actionGeneration;
           const actionToken = `${currentActionGeneration}:${Date.now()}:${Math.random().toString(36).slice(2)}`;

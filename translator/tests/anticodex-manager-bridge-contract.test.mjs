@@ -280,6 +280,37 @@ test("Manager third-party form saves configuration without switching the active 
   }
 });
 
+test("Manager third-party setup is brought into view with a clear save workflow", () => {
+  const start = managerInject.indexOf("async function showUpstreamConfig()");
+  const end = managerInject.indexOf("function installActions()", start);
+  const block = managerInject.slice(start, end);
+
+  assert.match(block, /setResultCardMode\("upstream-config"\)/);
+  assert.match(block, /resultCard\.scrollIntoView\(\{ block: "start", inline: "nearest" \}\)/);
+  assert.match(block, /className: "anticodex-form-actions"/);
+  assert.match(block, /className: "anticodex-form-hint"/);
+  assert.match(block, /\u5148\u6d4b\u8bd5\u8fde\u901a/);
+  assert.match(managerInject, /\.anticodex-form-actions button\{[^}]*min-height:40px/);
+  assert.match(managerInject, /\.anticodex-result-card\{[^}]*scroll-margin-top:78px/);
+});
+
+test("Manager sticky header masks content while the panel is scrolled", () => {
+  assert.match(managerInject, /\.anticodex-panel\{[^}]*padding:0 20px 20px/);
+  assert.match(managerInject, /\.anticodex-head\{[^}]*padding:22px 2px 0;[^}]*position:sticky;top:0;[^}]*background:var\(--ac-bg\)/);
+  assert.doesNotMatch(managerInject, /\.anticodex-head::before/);
+});
+
+test("Manager mobile header keeps command labels horizontal", () => {
+  const mobileStart = managerInject.indexOf("@media(max-width:820px)");
+  const mobileEnd = managerInject.indexOf("\n    ` });", mobileStart);
+  const mobileCss = managerInject.slice(mobileStart, mobileEnd);
+
+  assert.match(managerInject, /\.anticodex-prompt-settings\{[^}]*white-space:nowrap/);
+  assert.match(mobileCss, /\.anticodex-head\{[^}]*gap:10px/);
+  assert.match(mobileCss, /\.anticodex-prompt-settings\{[^}]*padding:0 10px/);
+  assert.match(mobileCss, /\.anticodex-close\{[^}]*min-width:72px;width:72px/);
+});
+
 test("Manager reuses one successful upstream test for save and invalidates it after edits", () => {
   const start = managerInject.indexOf("async function showUpstreamConfig()");
   const end = managerInject.indexOf("function installActions()", start);
@@ -299,7 +330,8 @@ test("Manager reuses one successful upstream test for save and invalidates it af
   const controlsStart = block.indexOf("const refreshUpstreamConfigControls");
   const controlsEnd = block.indexOf("const setUpstreamConfigBusy", controlsStart);
   const controlsBlock = block.slice(controlsStart, controlsEnd);
-  assert.match(controlsBlock, /saveButton\.disabled = upstreamConfigOperationInFlight[\s\S]*?\|\| !testedFingerprint[\s\S]*?\|\| testedFingerprint !== upstreamConfigFingerprint\(\)/);
+  assert.match(controlsBlock, /const fingerprintMatches = Boolean\(testedFingerprint\) && testedFingerprint === upstreamConfigFingerprint\(\)/);
+  assert.match(controlsBlock, /saveButton\.disabled = upstreamConfigOperationInFlight \|\| !fingerprintMatches/);
 
   const invalidateStart = block.indexOf("const invalidateConnectionTest");
   const invalidateEnd = block.indexOf("const upstreamConnectionSummaryText", invalidateStart);
