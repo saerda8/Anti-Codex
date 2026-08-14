@@ -7,6 +7,7 @@ import {
   codexLikeAgentProcessProven,
   classifyReconnectOutcome,
   collectCodexRolloutMarkerEvidence,
+  collectCodexRolloutSubmittedTurnEvidence,
   composerHasUnsubmittedMarker,
   countMarkerOccurrences,
   countNewAssistantMarkers,
@@ -201,6 +202,81 @@ test("native Codex rollout evidence exposes a failed marker turn instead of comp
     marker,
     routeReady: true,
   }), false);
+});
+
+test("submitted-turn evidence ignores an identical failed prompt before this run's baseline", () => {
+  const records = [
+    { type: "event_msg", payload: { type: "task_started", turn_id: "old-turn" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "继续\n" }] } },
+    {
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        turn_id: "old-turn",
+        error: { message: "FAILED_PRECONDITION (code 400): User location is not supported for the API use." },
+      },
+    },
+  ];
+  const baselineRecordCount = records.length;
+  records.push(
+    { type: "event_msg", payload: { type: "task_started", turn_id: "current-turn" } },
+    { type: "turn_context", payload: { turn_id: "current-turn", model: "claude-sonnet-4-6" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "继续\n" }] } },
+    {
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        turn_id: "current-turn",
+        error: { message: "exceeded retry limit, last status: 429 Too Many Requests" },
+      },
+    },
+  );
+
+  const evidence = collectCodexRolloutSubmittedTurnEvidence(records, "继续", { baselineRecordCount });
+
+  assert.equal(evidence.latestSubmittedTurnId, "current-turn");
+  assert.equal(evidence.latestSubmittedTurnComplete, false);
+  assert.match(evidence.latestSubmittedTurnError, /429 Too Many Requests/i);
+  assert.doesNotMatch(evidence.latestSubmittedTurnError, /location is not supported/i);
+  assert.deepEqual(evidence.models, ["claude-sonnet-4-6"]);
+});
+
+test("submitted-turn evidence stays pending until this run records the exact prompt", () => {
+  const records = [
+    { type: "event_msg", payload: { type: "task_started", turn_id: "old-turn" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "继续" }] } },
+    {
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        turn_id: "old-turn",
+        error: { message: "FAILED_PRECONDITION: old failure" },
+      },
+    },
+  ];
+  const evidence = collectCodexRolloutSubmittedTurnEvidence(records, "继续", {
+    baselineRecordCount: records.length,
+  });
+
+  assert.equal(evidence.promptSeen, false);
+  assert.equal(evidence.latestSubmittedTurnId, null);
+  assert.equal(evidence.latestSubmittedTurnComplete, false);
+  assert.equal(evidence.latestSubmittedTurnError, null);
+});
+
+test("submitted-turn evidence recognizes a successful current continuation", () => {
+  const evidence = collectCodexRolloutSubmittedTurnEvidence([
+    { type: "event_msg", payload: { type: "task_started", turn_id: "current-turn" } },
+    { type: "turn_context", payload: { turn_id: "current-turn", model: "gemini-3.1-pro-low" } },
+    { type: "event_msg", payload: { type: "user_message", message: "继续\n" } },
+    { type: "event_msg", payload: { type: "task_complete", turn_id: "current-turn" } },
+  ], "继续");
+
+  assert.equal(evidence.promptSeen, true);
+  assert.equal(evidence.latestSubmittedTurnId, "current-turn");
+  assert.equal(evidence.latestSubmittedTurnComplete, true);
+  assert.equal(evidence.latestSubmittedTurnError, null);
+  assert.deepEqual(evidence.models, ["gemini-3.1-pro-low"]);
 });
 
 test("latest marker turn completion ignores an older completed rollout", () => {

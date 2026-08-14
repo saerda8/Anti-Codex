@@ -289,6 +289,112 @@ function responseItemText(content) {
   return String(content.text ?? content.output_text ?? content.input_text ?? "");
 }
 
+function normalizedSubmittedPrompt(value) {
+  return String(value || "").replace(/\r\n?/g, "\n").trimEnd();
+}
+
+function rolloutTerminalError(payload) {
+  const rawError = payload?.error;
+  return String(
+    typeof rawError === "string"
+      ? rawError
+      : rawError?.message ?? rawError?.code ?? "",
+  ).trim().slice(0, 1200);
+}
+
+export function collectCodexRolloutSubmittedTurnEvidence(
+  records = [],
+  expectedPrompt = "",
+  { baselineRecordCount = 0 } = {},
+) {
+  const prompt = normalizedSubmittedPrompt(expectedPrompt);
+  const input = Array.isArray(records) ? records : [];
+  const start = Math.max(0, Math.min(input.length, Number(baselineRecordCount) || 0));
+  const turns = new Map();
+  const promptTurns = [];
+  let currentTurnId = "";
+
+  const ensureTurn = (turnId) => {
+    const id = String(turnId || "").trim();
+    if (!id) return null;
+    if (!turns.has(id)) {
+      turns.set(id, {
+        id,
+        promptIndex: -1,
+        models: new Set(),
+        terminalType: "",
+        error: "",
+      });
+    }
+    return turns.get(id);
+  };
+
+  for (let index = start; index < input.length; index += 1) {
+    const record = input[index];
+    if (!record || typeof record !== "object") continue;
+    const payload = record.payload && typeof record.payload === "object" ? record.payload : {};
+
+    if (record.type === "turn_context") {
+      currentTurnId = String(payload.turn_id || payload.id || currentTurnId || "").trim();
+      const turn = ensureTurn(currentTurnId);
+      const model = String(payload.model || payload.collaboration_mode?.settings?.model || "").trim();
+      if (turn && model) turn.models.add(model);
+      continue;
+    }
+
+    if (record.type === "event_msg" && payload.type === "task_started") {
+      currentTurnId = String(payload.turn_id || payload.id || currentTurnId || "").trim();
+      ensureTurn(currentTurnId);
+      continue;
+    }
+
+    const responsePrompt = record.type === "response_item"
+      && payload.type === "message"
+      && payload.role === "user"
+      ? responseItemText(payload.content)
+      : null;
+    const eventPrompt = record.type === "event_msg" && payload.type === "user_message"
+      ? payload.message
+      : null;
+    const submittedText = responsePrompt ?? eventPrompt;
+    if (submittedText !== null && prompt && normalizedSubmittedPrompt(submittedText) === prompt) {
+      const metadataTurnId = String(
+        payload.internal_chat_message_metadata_passthrough?.turn_id || "",
+      ).trim();
+      const turnId = metadataTurnId
+        || currentTurnId
+        || String(payload.id || record.timestamp || `submitted-turn-${index}`);
+      currentTurnId = turnId;
+      const turn = ensureTurn(turnId);
+      if (turn && turn.promptIndex < 0) {
+        turn.promptIndex = index;
+        promptTurns.push(turn);
+      }
+      continue;
+    }
+
+    if (record.type !== "event_msg"
+      || (payload.type !== "task_complete" && payload.type !== "turn_aborted")) continue;
+    const turnId = String(payload.turn_id || currentTurnId || promptTurns.at(-1)?.id || "").trim();
+    const turn = ensureTurn(turnId);
+    if (!turn) continue;
+    turn.terminalType = payload.type;
+    turn.error = payload.type === "turn_aborted"
+      ? `turn aborted: ${String(payload.reason || "unknown reason").trim()}`
+      : rolloutTerminalError(payload);
+  }
+
+  const latest = promptTurns.at(-1) || null;
+  return {
+    promptSeen: latest !== null,
+    submittedTurnIds: promptTurns.map((turn) => turn.id),
+    latestSubmittedTurnId: latest?.id || null,
+    latestSubmittedTurnComplete: latest?.terminalType === "task_complete" && !latest.error,
+    latestSubmittedTurnError: latest?.error || null,
+    models: latest ? [...latest.models] : [],
+  };
+}
+
 export function collectCodexRolloutMarkerEvidence(records = [], marker = "") {
   const needle = String(marker || "");
   const models = new Set();

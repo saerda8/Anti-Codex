@@ -649,9 +649,12 @@ test("local-project follow-up can bind its marker to an explicit required file",
   assert.match(uiSmoke, /if \(!requiredFileAuthoritative && !artifactEvidence\?\.files\?\.doneTxt\)/);
 });
 
-test("result-driven verification fails fast on a rollout task error", () => {
-  assert.match(uiSmoke, /const latestTurnError = String\(rolloutBundles\[0\]\?\.latestMarkerTurnError \|\| ""\)\.trim\(\)/);
+test("result-driven verification is bound to the newly submitted rollout turn", () => {
+  assert.match(uiSmoke, /resultDrivenRolloutBaseline = snapshotResultDrivenRolloutWindow\(\)/);
+  assert.match(uiSmoke, /readResultDrivenSubmittedTurn\([\s\S]*?resultDrivenRolloutBaseline,[\s\S]*?promptText,[\s\S]*?expectedTaskId/);
+  assert.match(uiSmoke, /const latestTurnError = String\(submittedTurnEvidence\?\.latestSubmittedTurnError \|\| ""\)\.trim\(\)/);
   assert.match(uiSmoke, /if \(latestTurnError\) \{[\s\S]*?resultDrivenCompletionError = latestTurnError;[\s\S]*?break;/);
+  assert.doesNotMatch(uiSmoke, /rolloutBundles\[0\]\?\.latestMarkerTurnError/);
   assert.match(uiSmoke, /provider turn failed: \$\{resultDrivenCompletionError\}/);
 });
 

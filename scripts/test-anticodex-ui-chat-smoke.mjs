@@ -14,6 +14,7 @@ import {
   classifyReconnectOutcome,
   codexLikeAgentProcessProven,
   collectCodexRolloutMarkerEvidence,
+  collectCodexRolloutSubmittedTurnEvidence,
   composerHasUnsubmittedMarker,
   countMarkerOccurrences,
   countNewAssistantMarkers,
@@ -1128,6 +1129,10 @@ function snapshotSingleSubmitRollouts() {
   }]));
 }
 
+function snapshotResultDrivenRolloutWindow() {
+  return snapshotSingleSubmitRollouts();
+}
+
 function readJsonLines(path) {
   try {
     return readFileSync(path, "utf8")
@@ -1140,6 +1145,67 @@ function readJsonLines(path) {
   } catch {
     return [];
   }
+}
+
+function readJsonLinesAfterOffset(path, requestedOffset = 0) {
+  try {
+    const content = readFileSync(path);
+    let offset = Math.max(0, Math.min(content.length, Number(requestedOffset) || 0));
+    if (offset > 0 && offset < content.length && content[offset - 1] !== 0x0a) {
+      const nextLine = content.indexOf(0x0a, offset);
+      if (nextLine < 0) return [];
+      offset = nextLine + 1;
+    }
+    return content.subarray(offset)
+      .toString("utf8")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .flatMap((line) => {
+        try { return [JSON.parse(line.replace(/^\uFEFF/, ""))]; } catch { return []; }
+      });
+  } catch {
+    return [];
+  }
+}
+
+function readResultDrivenSubmittedTurn(
+  rolloutBaseline,
+  submittedPrompt,
+  expectedSessionId = "",
+) {
+  const expected = String(expectedSessionId || "").trim();
+  const candidates = [];
+  for (const file of recentCodexRolloutFiles(500)) {
+    const baseline = rolloutBaseline instanceof Map ? rolloutBaseline.get(file.path) : null;
+    if (baseline && file.size <= Number(baseline.size || 0)) continue;
+    const records = readJsonLines(file.path);
+    const sessionMeta = records.find((record) => record?.type === "session_meta") || null;
+    const sessionId = String(sessionMeta?.payload?.id || sessionMeta?.payload?.session_id || "").trim();
+    if (expected && sessionId !== expected) continue;
+    const appendedRecords = readJsonLinesAfterOffset(file.path, Number(baseline?.size || 0));
+    const evidence = collectCodexRolloutSubmittedTurnEvidence(appendedRecords, submittedPrompt);
+    if (evidence.promptSeen !== true) continue;
+    candidates.push({
+      ...evidence,
+      sessionId: sessionId || null,
+      taskId: sessionId || null,
+      file: file.path,
+      mtimeMs: file.mtimeMs,
+    });
+  }
+  return candidates[0] || {
+    promptSeen: false,
+    submittedTurnIds: [],
+    latestSubmittedTurnId: null,
+    latestSubmittedTurnComplete: false,
+    latestSubmittedTurnError: null,
+    models: [],
+    sessionId: expected || null,
+    taskId: expected || null,
+    file: null,
+    mtimeMs: null,
+  };
 }
 
 function sameNativePath(left, right) {
@@ -6298,6 +6364,8 @@ async function main() {
   let autonomousIdleIncompleteObserved = false;
   let resultDrivenCompletionObserved = false;
   let resultDrivenCompletionError = "";
+  let resultDrivenRolloutBaseline = new Map();
+  let resultDrivenSubmittedTurnEvidence = null;
   const complexProjectRequiresModelLed = taskMode === "complex-project" || taskMode === "autonomous-reasoning";
 
   try {
@@ -6900,6 +6968,9 @@ async function main() {
     }
 
     nativeActivityPreflight = await beginNativeSingleTaskWindow();
+    if (resultDrivenCompletionEnabled) {
+      resultDrivenRolloutBaseline = snapshotResultDrivenRolloutWindow();
+    }
     await closeManagerOverlayIfOpen(ws);
     markerBaselineCount = countMarkerOccurrences(await readVisibleMainPaneText(ws), marker);
     assistantMarkerHistoryBaselineCount = responseHistoryAssistantMarkerCount(marker);
@@ -7106,8 +7177,13 @@ async function main() {
       });
       if (answerMarkerCount >= 1 && !firstReplySeenAt) firstReplySeenAt = Date.now();
       if (resultDrivenCompletionEnabled) {
-        const rolloutBundles = codexRolloutMarkerBundles(marker);
-        const latestTurnError = String(rolloutBundles[0]?.latestMarkerTurnError || "").trim();
+        const submittedTurnEvidence = readResultDrivenSubmittedTurn(
+          resultDrivenRolloutBaseline,
+          promptText,
+          expectedTaskId,
+        );
+        resultDrivenSubmittedTurnEvidence = submittedTurnEvidence;
+        const latestTurnError = String(submittedTurnEvidence?.latestSubmittedTurnError || "").trim();
         if (latestTurnError) {
           resultDrivenCompletionError = latestTurnError;
           firstReplySeenAt ||= Date.now();
@@ -7115,9 +7191,14 @@ async function main() {
           break;
         }
         const fixedRouteHealth = await readFixedRouteHealth();
+        const submittedTurnBundles = submittedTurnEvidence?.latestSubmittedTurnId ? [{
+          markerTurnIds: submittedTurnEvidence.submittedTurnIds,
+          latestMarkerTurnId: submittedTurnEvidence.latestSubmittedTurnId,
+          latestMarkerTurnComplete: submittedTurnEvidence.latestSubmittedTurnComplete === true,
+        }] : [];
         if (resultDrivenTurnCompletionReady({
           enabled: true,
-          rolloutBundles,
+          rolloutBundles: submittedTurnBundles,
           composerText: composer,
           marker,
           routeReady: fixedRouteHealthIsReady(fixedRouteHealth),
@@ -7826,6 +7907,7 @@ async function main() {
     resultDrivenCompletionEnabled,
     resultDrivenCompletionObserved,
     resultDrivenCompletionError: resultDrivenCompletionError || null,
+    resultDrivenSubmittedTurnEvidence,
     responseHistoryPath,
     activeReconnectSeen,
     activeReconnectEvidence,
