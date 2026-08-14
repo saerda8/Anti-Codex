@@ -17,12 +17,18 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
   assert.equal(accepted.version, "1.2.47");
   assert.equal(accepted.tag, "v1.2.47");
   assert.equal(accepted.upstreamCommit, "900d12756297f169f8c3ec45ca5a53dadb80ea2b");
+  assert.equal(accepted.patchCommit, "b9a27983a5d131cbab00280adb9d35cf3d224614");
   assert.equal(accepted.patches.length, 14);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
   assert.equal(accepted.patches.at(-1).file, "patches/0015-enforce-Anti-Codex-command-tool-safety.patch");
   assert.equal(
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
+  );
+  assert.match(accepted.verification.patchReplay, /tree 1695c9a45382ab45b7c674d7b7ba6e8f4ac0c7f8$/);
+  assert.equal(
+    accepted.verification.launcherReleaseBuild,
+    "sha256:16554c7f0d9ee4f459a26b6c672f1822ba8437a43f93d304a673cdeb22e90dae",
   );
 });
 
@@ -173,6 +179,7 @@ test("component documentation records the accepted v1.2.47 promotion", () => {
   assert.match(readme, /Accepted version: `v1\.2\.47`/);
   assert.match(readme, /checkout 900d12756297f169f8c3ec45ca5a53dadb80ea2b/);
   assert.match(readme, /carries exactly fourteen narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All fourteen patches replay without conflict on pinned upstream `v1\.2\.47`/);
   assert.match(readme, /historical source-replay record/);
   assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);

@@ -86,11 +86,11 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- Thirteen patches previously replayed without conflict on pinned upstream `v1.2.47` to head `a3046ab308939af971412b6b036d969e7d098405` and tree `b29d2f8b026bbd0b1970ba1b5102a3924b40a922`; the fourteenth command-enforcement patch has passed its 71-test protocol suite and awaits managed candidate replay.
-- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,292,800-byte launcher has SHA-256 `2e23b108532abed28fc71917c91a8954d1db93cb58f617a24481cecd5fd5dbfa`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership.
+- All fourteen patches replay without conflict on pinned upstream `v1.2.47` to head `b9a27983a5d131cbab00280adb9d35cf3d224614` and tree `1695c9a45382ab45b7c674d7b7ba6e8f4ac0c7f8`.
+- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,009,664-byte launcher has SHA-256 `16554c7f0d9ee4f459a26b6c672f1822ba8437a43f93d304a673cdeb22e90dae`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership. The response conversion boundary now enforces those Docker rules and structured source editing before an unsafe command can reach the command tool.
 - Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
-- The project metadata is `v1.2.47` with fourteen patches; the managed launcher hash above remains the installed thirteen-patch baseline until the new candidate is promoted and activated through the guarded path.
+- The accepted project metadata is `v1.2.47` with fourteen patches and the managed launcher hash above; installed activation is a separate guarded step.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.
