@@ -195,6 +195,7 @@ test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex"
   assert.match(script, /test-codexplusplus-isolation-compatibility\.mjs/);
   assert.match(script, /invoke-anticodex-cargo-xwin\.ps1/);
   assert.match(script, /-CargoArguments\s+\$command/);
+  assert.match(script, /foreach \(\$command in \$commands\)[\s\S]{0,120}\n\s*& \$managedCargoRunner/);
   assert.match(script, /test-anticodex-docker-build-hygiene\.ps1/);
   assert.match(script, /-RequireRuntimeClean/);
   assert.match(script, /upstream\.proposed\.json/);

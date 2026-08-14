@@ -589,7 +589,7 @@ try {
     try {
         foreach ($command in $commands) {
             try {
-                [void](& $managedCargoRunner -Worktree $worktree -CargoArguments $command)
+                & $managedCargoRunner -Worktree $worktree -CargoArguments $command
             } catch {
                 if ($_.Exception.Message -notmatch 'cargo-xwin container exited with code -1$') {
                     throw
