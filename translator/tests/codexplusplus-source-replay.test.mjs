@@ -17,7 +17,7 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
   assert.equal(accepted.version, "1.2.47");
   assert.equal(accepted.tag, "v1.2.47");
   assert.equal(accepted.upstreamCommit, "900d12756297f169f8c3ec45ca5a53dadb80ea2b");
-  assert.equal(accepted.patchCommit, "b9a27983a5d131cbab00280adb9d35cf3d224614");
+  assert.equal(accepted.patchCommit, "28951d55b9755a18b3e5d64d664b1b3ac1347731");
   assert.equal(accepted.patches.length, 15);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
   assert.equal(accepted.patches.at(-1).file, "patches/0016-block-forced-Docker-interruption.patch");
@@ -25,10 +25,10 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree 1695c9a45382ab45b7c674d7b7ba6e8f4ac0c7f8$/);
+  assert.match(accepted.verification.patchReplay, /tree 858410d03f532c9992a953f55c8f0ce5eba5fea8$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:16554c7f0d9ee4f459a26b6c672f1822ba8437a43f93d304a673cdeb22e90dae",
+    "sha256:e17a9376c3aa6d85de87da52e7b74e5957d2a64cf030d16b6f5c8d3f219b6b49",
   );
 });
 
@@ -179,6 +179,7 @@ test("component documentation records the accepted v1.2.47 promotion", () => {
   assert.match(readme, /Accepted version: `v1\.2\.47`/);
   assert.match(readme, /checkout 900d12756297f169f8c3ec45ca5a53dadb80ea2b/);
   assert.match(readme, /carries exactly fifteen narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All fifteen patches replayed without conflict/);
   assert.match(readme, /historical source-replay record/);
   assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);
