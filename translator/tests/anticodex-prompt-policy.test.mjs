@@ -220,6 +220,18 @@ test("required command guidance forbids global Docker cleanup and requires task 
   assert.match(guidance, /ownership cannot be proven[^.]+do not change any container/i);
 });
 
+test("required command guidance labels every Docker container at creation", () => {
+  const patchSource = readFileSync(
+    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+    "utf8",
+  );
+  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+
+  assert.match(guidance, /every docker run or docker create[^.]+--name[^.]+--label com\.anticodex\.task-id=<current task id>/i);
+  assert.match(guidance, /never use a Docker-generated container name/i);
+  assert.match(guidance, /current task ID is unavailable[^.]+do not create a container/i);
+});
+
 test("prompt policy rejects non-text and oversized edits", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-invalid-"));
   try {
