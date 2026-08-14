@@ -268,6 +268,11 @@ test("Manager third-party form saves configuration without switching the active 
 
   assert.ok(/text:\s*"保存配置"/.test(block), "third-party form is missing 保存配置");
   assert.ok(block.includes("配置已保存，可在聊天输入框的模型菜单选择第三方模型。"), "third-party form is missing saved guidance");
+  assert.match(
+    block,
+    /placeholder:\s*saved\.keyConfigured\s*\?\s*`已保存 · \$\{saved\.keyHint\}，留空沿用旧 key`\s*:\s*"请输入 API key"/,
+    "configured third-party key does not show its masked suffix"
+  );
   for (const [label, forbidden] of [
     ["保存并切换", /保存并切换/],
     ["恢复 Antigravity", /恢复 Antigravity/],

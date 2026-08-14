@@ -124,7 +124,10 @@ try {
     Assert-Equal $saved.antigravityModel "" "third-party save preserves default Antigravity model"
     Assert-Equal $saved.lastTestStatus "success" "saved lastTestStatus"
     Assert-Equal $saved.keyConfigured $true "saved keyConfigured"
-    Assert-Equal $saved.keyHint "sk-...1234" "saved keyHint"
+    Assert-Equal $saved.keyHint "****1234" "saved keyHint"
+    if (($saved | ConvertTo-Json -Depth 20 -Compress) -match "sk-proj-mysecretkey1234|sk-") {
+        Fail-Test "public profile key hint must expose only a masked suffix"
+    }
     Assert-OnlyProperties $saved $publicFields "SaveThirdParty output"
 
     $keyPath = Join-Path $StateRoot "upstream-profile.key"

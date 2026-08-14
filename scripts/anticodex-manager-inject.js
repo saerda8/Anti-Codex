@@ -2281,7 +2281,7 @@
       };
       updateProviderModelList(saved.capabilities?.providerModels || []);
       const contextWindow = el("input", { style: fieldStyle, type: "number", min: "16000", max: "4000000", step: "1000", value: String(saved.contextWindow || 272000), placeholder: "272000" });
-      const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? "已保存，可留空沿用旧 key" : "请输入 API key" });
+      const apiKey = el("input", { style: fieldStyle, type: "password", placeholder: saved.keyConfigured ? `已保存 · ${saved.keyHint}，留空沿用旧 key` : "请输入 API key" });
       const stageBox = el("pre", { className: "anticodex-result", "aria-live": "polite", text: "“测试连通”会发送一次最小真实请求；测试成功后，“保存配置”复用这次结果，不会再次请求，也不会切换当前会话。" });
       const saveHint = el("div", { className: "anticodex-form-hint", text: "先测试连通；成功后可保存。" });
       const testButton = el("button", { type: "button", text: "测试连通" });

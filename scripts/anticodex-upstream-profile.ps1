@@ -127,8 +127,8 @@ function Unprotect-ApiKey {
 function Get-KeyHint {
     param([string]$Value)
     if ([string]::IsNullOrEmpty($Value)) { return "" }
-    if ($Value.Length -le 7) { return "***" }
-    return ($Value.Substring(0, 3) + "..." + $Value.Substring($Value.Length - 4))
+    if ($Value.Length -le 7) { return "****" }
+    return ("****" + $Value.Substring($Value.Length - 4))
 }
 
 function Test-AllowedBaseUrl {
