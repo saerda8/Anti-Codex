@@ -192,6 +192,18 @@ test("required command guidance blocks cross-shell destructive retries and globa
   assert.match(guidance, /never enumerate all environment variables/i);
 });
 
+test("required command guidance treats timeout as unknown before retrying a process", () => {
+  const patchSource = readFileSync(
+    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+    "utf8",
+  );
+  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+
+  assert.match(guidance, /timeout[^.]+does not mean[^.]+exited/i);
+  assert.match(guidance, /verify[^.]+process or container[^.]+exited/i);
+  assert.match(guidance, /do not retry[^.]+duplicate/i);
+});
+
 test("prompt policy rejects non-text and oversized edits", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-invalid-"));
   try {
