@@ -14,6 +14,8 @@ const patch13Path = join(root, "third_party", "codexplusplus", "patches", "0013-
 const patch13 = existsSync(patch13Path) ? readFileSync(patch13Path, "utf8") : "";
 const patch14Path = join(root, "third_party", "codexplusplus", "patches", "0014-fix-format-dreamskin-runtime-test.patch");
 const patch14 = existsSync(patch14Path) ? readFileSync(patch14Path, "utf8") : "";
+const patch15Path = join(root, "third_party", "codexplusplus", "patches", "0015-enforce-Anti-Codex-command-tool-safety.patch");
+const patch15 = existsSync(patch15Path) ? readFileSync(patch15Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -27,10 +29,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 13);
+  assert.equal(metadata.patches.length, 14);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0014-fix-format-dreamskin-runtime-test.patch",
+    "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -41,6 +43,17 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("Anti-Codex command safety is enforced at both nonstream and streaming tool-call exits", () => {
+  assert.match(patch15, /command_policy_checked_arguments/);
+  assert.match(patch15, /enforces_command_policy_for/);
+  assert.match(patch15, /docker --context desktop-linux run/);
+  assert.match(patch15, /com\.anticodex\.task-id=not-a-task/);
+  assert.match(patch15, /chat_sse_command_policy_never_streams_an_unsafe_command/);
+  assert.match(patch15, /chat_completion_response_does_not_enforce_command_policy_without_apply_patch/);
+  assert.match(patch15, /direct source or evidence edits must use apply_patch/);
+  assert.match(patch15, /global Docker cleanup is forbidden/);
 });
 
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {

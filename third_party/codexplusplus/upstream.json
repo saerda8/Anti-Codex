@@ -72,10 +72,15 @@
                         "file":  "patches/0014-fix-format-dreamskin-runtime-test.patch",
                         "sha256":  "4211f425655e971c55b8e77901a4205fa34d41580cc5ee2594b4cc1a6b781080",
                         "scope":  "normalize only the upstream v1.2.47 DreamSkin runtime layout assertion required by stable rustfmt; runtime behavior is unchanged"
+                    },
+                    {
+                        "file":  "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
+                        "sha256":  "5a439b61b04dad70d6df3f6e973f8cdd14022f699f278d8bcdf90a6686b75bf9",
+                        "scope":  "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, wrapped apply_patch calls, unlabeled Docker creation and global Docker cleanup with a deterministic local policy rejection; ordinary build and test commands plus requests without apply_patch remain compatible"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head a3046ab308939af971412b6b036d969e7d098405; tree b29d2f8b026bbd0b1970ba1b5102a3924b40a922",
+                         "patchReplay":  "13 previously accepted project patches replayed without automatic conflict resolution; the fourteenth patch requires managed candidate replay; head a3046ab308939af971412b6b036d969e7d098405; tree b29d2f8b026bbd0b1970ba1b5102a3924b40a922",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",

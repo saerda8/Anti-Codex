@@ -296,6 +296,7 @@ $requiredSourceFiles = @(
     "third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
     "third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch",
     "third_party\codexplusplus\patches\0014-fix-format-dreamskin-runtime-test.patch",
+    "third_party\codexplusplus\patches\0015-enforce-Anti-Codex-command-tool-safety.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",
