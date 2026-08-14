@@ -6,7 +6,7 @@
     "tag":  "v1.2.47",
     "upstreamCommit":  "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
     "isolationPatchCommit":  "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-    "patchCommit":  "28951d55b9755a18b3e5d64d664b1b3ac1347731",
+    "patchCommit":  "e1cc5c4ae8b51be9d847318ede613595e7d54eef",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -82,16 +82,21 @@
                         "file":  "patches/0016-block-forced-Docker-interruption.patch",
                         "sha256":  "c2a4cc8d9bed6f931add677ea068d700ff3860b6cb87208bd3216cbc8bdd8326",
                         "scope":  "while structured apply_patch is available, reject Docker stop, kill, restart and force-remove command calls so a timed-out container must be waited on instead of interrupted or replaced; docker wait and non-forced removal of an already exited container remain available"
+                    },
+                    {
+                        "file":  "patches/0017-route-native-compaction-header.patch",
+                        "sha256":  "bbcb1fd0474fbca5e29371791c8082b27207146cdd7ec7aa53c5069564fce448",
+                        "scope":  "consume only the canonical Codex HTTP x-codex-turn-metadata compaction marker at the helper boundary, preserve the body metadata fallback, and route marked compaction through the current isolated model selection on direct and cancel-aware transports; ordinary turns remain unchanged and the header value is neither logged nor forwarded"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "15 project patches replayed without automatic conflict resolution; head 28951d55b9755a18b3e5d64d664b1b3ac1347731; tree 858410d03f532c9992a953f55c8f0ce5eba5fea8",
+                         "patchReplay":  "16 project patches replayed without automatic conflict resolution; head e1cc5c4ae8b51be9d847318ede613595e7d54eef; tree 3b9a20238f38a7ea75661fee629cd20213773ebd",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:e17a9376c3aa6d85de87da52e7b74e5957d2a64cf030d16b6f5c8d3f219b6b49",
+                         "launcherReleaseBuild":  "sha256:652cd17a11ef1feb0656519eac5cd2dde85d1465c2e04caae8ec62712ee76e79",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }

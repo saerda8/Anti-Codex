@@ -713,6 +713,7 @@ test("runtime sync carries the pinned CodexPlusPlus metadata and all accepted pa
   assert.match(runtimeSync, /0014-fix-format-dreamskin-runtime-test\.patch/);
   assert.match(runtimeSync, /0015-enforce-Anti-Codex-command-tool-safety\.patch/);
   assert.match(runtimeSync, /0016-block-forced-Docker-interruption\.patch/);
+  assert.match(runtimeSync, /0017-route-native-compaction-header\.patch/);
   assert.match(runtimeSync, /foreach \(\$dir in @\([^\r\n]*"third_party"\)\)/);
 });
 
@@ -727,6 +728,26 @@ test("Anti-Codex routing patch follows native model slots without overriding ord
   assert.match(patch, /directed_relay\.is_none\(\)/);
   assert.doesNotMatch(patch, /CODEX_PLUS_FIXED_MODEL|apply_fixed_model_override/);
   assert.doesNotMatch(patch, /tool_choice|previous_response_id|retry/i);
+});
+
+test("native compaction routing consumes the current Codex HTTP metadata header", () => {
+  const patch = readFileSync(
+    resolve(root, "third_party", "codexplusplus", "patches", "0017-route-native-compaction-header.patch"),
+    "utf8",
+  );
+  assert.match(patch, /x-codex-turn-metadata/);
+  assert.match(patch, /request_turn_metadata/);
+  assert.match(patch, /header_value_from_headers\(\s*&request_headers,[\s\S]*CODEX_TURN_METADATA_KEY/);
+  assert.match(patch, /header_marked_compaction_uses_current_third_party_selection/);
+  assert.match(patch, /ordinary_turn_header_does_not_follow_a_different_live_selection/);
+  assert.match(
+    patch,
+    /try_handle_cancel_aware_protocol_proxy_stream\([\s\S]*request_turn_metadata: Option<&str>[\s\S]*\+\s+request_turn_metadata,/,
+  );
+  assert.match(
+    patch,
+    /open_cancel_aware_loopback_responses_proxy_request\([\s\S]*turn_metadata: Option<&str>/,
+  );
 });
 
 test("image tool output patch preserves images as multimodal Chat content", () => {

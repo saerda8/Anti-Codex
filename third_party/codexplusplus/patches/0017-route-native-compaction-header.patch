@@ -1,0 +1,336 @@
+From 3bb3dd9ee05d223c90808657ef2dc7bed59b5986 Mon Sep 17 00:00:00 2001
+From: Anti-Codex Diagnostic <anticodex@example.invalid>
+Date: Fri, 14 Aug 2026 14:30:00 +0800
+Subject: [PATCH] route native compaction metadata header
+
+---
+ crates/codex-plus-core/src/launcher.rs       |  24 +++--
+ crates/codex-plus-core/src/protocol_proxy.rs | 116 +++++++++++++++----
+ 2 files changed, 116 insertions(+), 24 deletions(-)
+
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index 8eeeb1ff..32f349e2 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -1109,6 +1109,10 @@ async fn handle_helper_connection_with_proxy_token(
+         }
+     };
+     let request_content_encoding = header_value_from_headers(&request_headers, "content-encoding");
++    let request_turn_metadata = header_value_from_headers(
++        &request_headers,
++        crate::protocol_proxy::CODEX_TURN_METADATA_KEY,
++    );
+ 
+     let _ = crate::diagnostic_log::append_diagnostic_log(
+         "helper.request",
+@@ -1188,6 +1192,7 @@ async fn handle_helper_connection_with_proxy_token(
+             &mut stream,
+             &request_body,
+             request_user_agent.as_deref(),
++            request_turn_metadata.as_deref(),
+             method,
+             path,
+             remote_addr_text,
+@@ -1569,6 +1574,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+     request_user_agent: Option<&str>,
++    request_turn_metadata: Option<&str>,
+     request_json: Option<&serde_json::Value>,
+     method: &str,
+     path: &str,
+@@ -1578,6 +1584,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+         request_body,
+         request_user_agent,
+         path,
++        request_turn_metadata,
+     );
+     let open_result = tokio::select! {
+         result = open_upstream => result,
+@@ -1799,6 +1806,7 @@ async fn handle_protocol_proxy_connection(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+     request_user_agent: Option<&str>,
++    request_turn_metadata: Option<&str>,
+     method: &str,
+     path: &str,
+     remote_addr_text: Option<String>,
+@@ -1809,6 +1817,7 @@ async fn handle_protocol_proxy_connection(
+             stream,
+             request_body,
+             request_user_agent,
++            request_turn_metadata,
+             request_json.as_ref(),
+             method,
+             path,
+@@ -1818,13 +1827,14 @@ async fn handle_protocol_proxy_connection(
+     {
+         return Ok(());
+     }
+-    let upstream = match crate::protocol_proxy::open_responses_proxy_request_for_path(
+-        request_body,
+-        request_user_agent,
+-        path,
+-    )
+-    .await
+-    {
++    let open_upstream =
++        crate::protocol_proxy::open_responses_proxy_request_for_path_with_turn_metadata(
++            request_body,
++            request_user_agent,
++            path,
++            request_turn_metadata,
++        );
++    let upstream = match open_upstream.await {
+         Ok(upstream) => upstream,
+         Err(error) => {
+             let body = serde_json::to_vec(
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 5773710e..31741244 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -69,7 +69,7 @@ const ANTICODEX_THIRD_PARTY_RELAY_ID: &str = "anticodex-third-party";
+ const ANTICODEX_ANTIGRAVITY_MODEL_SLOT: &str = "anticodex/antigravity";
+ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
+ const ANTICODEX_THIRD_PARTY_MODEL_PREFIX: &str = "anticodex/third-party/";
+-const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata";
++pub const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata";
+ const CODEX_COMPACTION_REQUEST_KIND: &str = "compaction";
+ const ANTICODEX_PROMPT_POLICY_PATH_ENV: &str = "ANTICODEX_PROMPT_POLICY_PATH";
+ const ANTICODEX_PROMPT_POLICY_SCHEMA: &str = "anticodex-prompt-policy-v1";
+@@ -1373,6 +1373,21 @@ pub async fn open_responses_proxy_request_for_path(
+     body: &str,
+     original_user_agent: Option<&str>,
+     request_path: &str,
++) -> anyhow::Result<UpstreamProxyResponse> {
++    open_responses_proxy_request_for_path_with_turn_metadata(
++        body,
++        original_user_agent,
++        request_path,
++        None,
++    )
++    .await
++}
++
++pub async fn open_responses_proxy_request_for_path_with_turn_metadata(
++    body: &str,
++    original_user_agent: Option<&str>,
++    request_path: &str,
++    turn_metadata: Option<&str>,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+     let settings = SettingsStore::default().load().unwrap_or_default();
+     open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1380,6 +1395,7 @@ pub async fn open_responses_proxy_request_for_path(
+         settings,
+         original_user_agent,
+         request_path,
++        turn_metadata,
+     )
+     .await
+ }
+@@ -1388,8 +1404,14 @@ pub async fn open_responses_proxy_request_with_settings(
+     body: &str,
+     settings: crate::settings::BackendSettings,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+-    open_responses_proxy_request_with_settings_and_user_agent(body, settings, None, "/responses")
+-        .await
++    open_responses_proxy_request_with_settings_and_user_agent(
++        body,
++        settings,
++        None,
++        "/responses",
++        None,
++    )
++    .await
+ }
+ 
+ pub async fn open_responses_proxy_request_with_settings_for_path(
+@@ -1397,8 +1419,14 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+     settings: crate::settings::BackendSettings,
+     request_path: &str,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+-    open_responses_proxy_request_with_settings_and_user_agent(body, settings, None, request_path)
+-        .await
++    open_responses_proxy_request_with_settings_and_user_agent(
++        body,
++        settings,
++        None,
++        request_path,
++        None,
++    )
++    .await
+ }
+ 
+ fn relay_profile_by_id(settings: &BackendSettings, id: &str) -> Option<RelayProfile> {
+@@ -1424,7 +1452,17 @@ fn metadata_marks_codex_compaction(metadata: &Value) -> bool {
+         .is_some_and(|kind| kind == CODEX_COMPACTION_REQUEST_KIND)
+ }
+ 
+-fn request_is_codex_compaction(request_json: &Value) -> bool {
++fn serialized_metadata_marks_codex_compaction(serialized: &str) -> bool {
++    serde_json::from_str::<Value>(serialized)
++        .ok()
++        .as_ref()
++        .is_some_and(metadata_marks_codex_compaction)
++}
++
++fn request_is_codex_compaction(request_json: &Value, turn_metadata: Option<&str>) -> bool {
++    if turn_metadata.is_some_and(serialized_metadata_marks_codex_compaction) {
++        return true;
++    }
+     let Some(metadata) = request_json
+         .get("client_metadata")
+         .and_then(Value::as_object)
+@@ -1434,10 +1472,7 @@ fn request_is_codex_compaction(request_json: &Value) -> bool {
+     };
+ 
+     match metadata {
+-        Value::String(serialized) => serde_json::from_str::<Value>(serialized)
+-            .ok()
+-            .as_ref()
+-            .is_some_and(metadata_marks_codex_compaction),
++        Value::String(serialized) => serialized_metadata_marks_codex_compaction(serialized),
+         Value::Object(_) => metadata_marks_codex_compaction(metadata),
+         _ => false,
+     }
+@@ -1459,9 +1494,10 @@ fn anticodex_model_is_routable(settings: &BackendSettings, model: &str) -> bool
+ fn align_codex_compaction_model_with_selected(
+     settings: &BackendSettings,
+     request_json: &mut Value,
++    turn_metadata: Option<&str>,
+     selected_model: Option<&str>,
+ ) -> bool {
+-    if !request_is_codex_compaction(request_json) {
++    if !request_is_codex_compaction(request_json, turn_metadata) {
+         return false;
+     }
+     if request_json
+@@ -1488,15 +1524,21 @@ fn align_codex_compaction_model_with_selected(
+ fn align_codex_compaction_model_with_live_selection(
+     settings: &BackendSettings,
+     request_json: &mut Value,
++    turn_metadata: Option<&str>,
+ ) -> bool {
+-    if !request_is_codex_compaction(request_json) {
++    if !request_is_codex_compaction(request_json, turn_metadata) {
+         return false;
+     }
+     let config_path = crate::codex_home::default_codex_home_dir().join("config.toml");
+     let selected_model = std::fs::read_to_string(config_path)
+         .ok()
+         .and_then(|contents| crate::relay_config::root_key_string(&contents, "model"));
+-    align_codex_compaction_model_with_selected(settings, request_json, selected_model.as_deref())
++    align_codex_compaction_model_with_selected(
++        settings,
++        request_json,
++        turn_metadata,
++        selected_model.as_deref(),
++    )
+ }
+ 
+ fn select_anticodex_relay_for_model(
+@@ -1645,6 +1687,7 @@ mod anticodex_model_routing_tests {
+         assert!(align_codex_compaction_model_with_selected(
+             &settings(),
+             &mut request,
++            None,
+             Some("anticodex/third-party/gpt-5.6-sol"),
+         ));
+         let relay = select_anticodex_relay_for_model(&settings(), &mut request)
+@@ -1665,6 +1708,7 @@ mod anticodex_model_routing_tests {
+         assert!(!align_codex_compaction_model_with_selected(
+             &settings(),
+             &mut request,
++            None,
+             Some("anticodex/third-party/gpt-5.6-sol"),
+         ));
+         let relay = select_anticodex_relay_for_model(&settings(), &mut request)
+@@ -1685,6 +1729,7 @@ mod anticodex_model_routing_tests {
+         assert!(!align_codex_compaction_model_with_selected(
+             &settings(),
+             &mut request,
++            None,
+             Some("anticodex/third-party/gpt-5.6-sol"),
+         ));
+         let relay = select_anticodex_relay_for_model(&settings(), &mut request)
+@@ -1705,10 +1750,39 @@ mod anticodex_model_routing_tests {
+         assert!(!align_codex_compaction_model_with_selected(
+             &settings(),
+             &mut request,
++            None,
+             Some("unrelated-provider-model"),
+         ));
+         assert_eq!(request["model"], "claude-sonnet-4-6");
+     }
++
++    #[test]
++    fn header_marked_compaction_uses_current_third_party_selection() {
++        let mut request = json!({"model": "stale-native-model"});
++        assert!(align_codex_compaction_model_with_selected(
++            &settings(),
++            &mut request,
++            Some(r#"{"request_kind":"compaction"}"#),
++            Some("anticodex/third-party/gpt-5.6-sol"),
++        ));
++        let relay = select_anticodex_relay_for_model(&settings(), &mut request)
++            .unwrap()
++            .unwrap();
++        assert_eq!(relay.id, ANTICODEX_THIRD_PARTY_RELAY_ID);
++        assert_eq!(request["model"], "gpt-5.6-sol");
++    }
++
++    #[test]
++    fn ordinary_turn_header_does_not_follow_a_different_live_selection() {
++        let mut request = json!({"model": "claude-sonnet-4-6"});
++        assert!(!align_codex_compaction_model_with_selected(
++            &settings(),
++            &mut request,
++            Some(r#"{"request_kind":"turn"}"#),
++            Some("anticodex/third-party/gpt-5.6-sol"),
++        ));
++        assert_eq!(request["model"], "claude-sonnet-4-6");
++    }
+ }
+ 
+ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1716,10 +1790,14 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+     settings: crate::settings::BackendSettings,
+     original_user_agent: Option<&str>,
+     request_path: &str,
++    turn_metadata: Option<&str>,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+     let mut request_json: Value = serde_json::from_str(body)?;
+-    let compaction_model_aligned =
+-        align_codex_compaction_model_with_live_selection(&settings, &mut request_json);
++    let compaction_model_aligned = align_codex_compaction_model_with_live_selection(
++        &settings,
++        &mut request_json,
++        turn_metadata,
++    );
+     let directed_relay = select_anticodex_relay_for_model(&settings, &mut request_json)?;
+     let is_stream = request_json
+         .get("stream")
+@@ -1940,6 +2018,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+     body: &str,
+     original_user_agent: Option<&str>,
+     request_path: &str,
++    turn_metadata: Option<&str>,
+ ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
+     let mut request_json: Value = serde_json::from_str(body)?;
+     let is_stream = request_json
+@@ -1951,8 +2030,11 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+     }
+ 
+     let settings = SettingsStore::default().load().unwrap_or_default();
+-    let compaction_model_aligned =
+-        align_codex_compaction_model_with_live_selection(&settings, &mut request_json);
++    let compaction_model_aligned = align_codex_compaction_model_with_live_selection(
++        &settings,
++        &mut request_json,
++        turn_metadata,
++    );
+     let directed_relay = select_anticodex_relay_for_model(&settings, &mut request_json)?;
+     let source_model = request_json
+         .get("model")
+-- 
+2.51.0.windows.2

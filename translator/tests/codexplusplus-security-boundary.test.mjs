@@ -31,10 +31,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 15);
+  assert.equal(metadata.patches.length, 16);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0016-block-forced-Docker-interruption.patch",
+    "patches/0017-route-native-compaction-header.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
