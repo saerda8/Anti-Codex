@@ -6,7 +6,7 @@
   "tag": "v1.2.47",
   "upstreamCommit": "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
   "isolationPatchCommit": "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-  "patchCommit": "dcbe8430db614e8fee2147759a48337e69c799c7",
+  "patchCommit": "3714b9e36d29862185833a04e1995a54a9d03f4b",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -92,16 +92,21 @@
       "file": "patches/0018-route-compaction-by-current-thread-model.patch",
       "sha256": "247e2bff290e933c784fc590838d9a05822d1141dc471a3a80727b31a8734d92",
       "scope": "for canonically marked compaction only, resolve a validated thread or session id to the latest matching isolated rollout thread_settings_applied model within a bounded tail and let that current task selection replace a stale routable model across third-party, Claude and Gemini switches; missing or invalid thread state retains the existing fallback, ordinary turns remain unchanged, and rollout contents are neither logged nor forwarded"
+    },
+    {
+      "file": "patches/0019-bound-upstream-stream-inactivity.patch",
+      "sha256": "eab4d67dcc18ab68a3dec83202e578b279ab6424d83e40408f32423f10c45b56",
+      "scope": "bound every successful Responses and Chat streaming helper read to 120 seconds of upstream inactivity, emit a Responses failure for converted Chat streams, close direct streams deterministically, and record timeout rather than success; routing, retries, history, tools and task control remain unchanged"
     }
   ],
   "verification": {
-    "patchReplay": "17 project patches replayed without automatic conflict resolution; head dcbe8430db614e8fee2147759a48337e69c799c7; tree c0b12f8326f4c796acf5dfc2dae56b4e2d4d712c",
+    "patchReplay": "18 project patches replayed without automatic conflict resolution; head 3714b9e36d29862185833a04e1995a54a9d03f4b; tree d1f506d8fa34670058236d41d429be4cca7428e8",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:7a04d770cdb998d1af32806bd901c85f3324b8b711b4683956414d61e3b89fb4",
+    "launcherReleaseBuild": "sha256:36457e386e8aca1c2ac37b5207dac64c5c5d345103f38b9b239bdad8d343bfa9",
     "runtimeIsolation": "candidate only; not activated"
   }
 }

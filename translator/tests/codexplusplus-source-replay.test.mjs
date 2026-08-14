@@ -17,18 +17,18 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
   assert.equal(accepted.version, "1.2.47");
   assert.equal(accepted.tag, "v1.2.47");
   assert.equal(accepted.upstreamCommit, "900d12756297f169f8c3ec45ca5a53dadb80ea2b");
-  assert.equal(accepted.patchCommit, "dcbe8430db614e8fee2147759a48337e69c799c7");
-  assert.equal(accepted.patches.length, 17);
+  assert.equal(accepted.patchCommit, "3714b9e36d29862185833a04e1995a54a9d03f4b");
+  assert.equal(accepted.patches.length, 18);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0018-route-compaction-by-current-thread-model.patch");
+  assert.equal(accepted.patches.at(-1).file, "patches/0019-bound-upstream-stream-inactivity.patch");
   assert.equal(
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree c0b12f8326f4c796acf5dfc2dae56b4e2d4d712c$/);
+  assert.match(accepted.verification.patchReplay, /tree d1f506d8fa34670058236d41d429be4cca7428e8$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:7a04d770cdb998d1af32806bd901c85f3324b8b711b4683956414d61e3b89fb4",
+    "sha256:36457e386e8aca1c2ac37b5207dac64c5c5d345103f38b9b239bdad8d343bfa9",
   );
 });
 
@@ -178,8 +178,9 @@ test("component documentation records the accepted v1.2.47 promotion", () => {
 
   assert.match(readme, /Accepted version: `v1\.2\.47`/);
   assert.match(readme, /checkout 900d12756297f169f8c3ec45ca5a53dadb80ea2b/);
-  assert.match(readme, /carries exactly seventeen narrow Anti-Codex compatibility patches/);
-  assert.match(readme, /All seventeen patches replayed without conflict/);
+  assert.match(readme, /carries exactly eighteen narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All eighteen patches replayed without conflict/);
+  assert.match(readme, /120 seconds without upstream data/);
   assert.match(readme, /historical source-replay record/);
   assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);

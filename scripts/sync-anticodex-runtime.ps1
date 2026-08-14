@@ -300,6 +300,7 @@ $requiredSourceFiles = @(
     "third_party\codexplusplus\patches\0016-block-forced-Docker-interruption.patch",
     "third_party\codexplusplus\patches\0017-route-native-compaction-header.patch",
     "third_party\codexplusplus\patches\0018-route-compaction-by-current-thread-model.patch",
+    "third_party\codexplusplus\patches\0019-bound-upstream-stream-inactivity.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",

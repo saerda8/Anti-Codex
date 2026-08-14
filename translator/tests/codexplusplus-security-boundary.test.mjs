@@ -20,6 +20,8 @@ const patch16Path = join(root, "third_party", "codexplusplus", "patches", "0016-
 const patch16 = existsSync(patch16Path) ? readFileSync(patch16Path, "utf8") : "";
 const patch18Path = join(root, "third_party", "codexplusplus", "patches", "0018-route-compaction-by-current-thread-model.patch");
 const patch18 = existsSync(patch18Path) ? readFileSync(patch18Path, "utf8") : "";
+const patch19Path = join(root, "third_party", "codexplusplus", "patches", "0019-bound-upstream-stream-inactivity.patch");
+const patch19 = existsSync(patch19Path) ? readFileSync(patch19Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -37,10 +39,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 17);
+  assert.equal(metadata.patches.length, 18);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0018-route-compaction-by-current-thread-model.patch",
+    "patches/0019-bound-upstream-stream-inactivity.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -51,6 +53,25 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("upstream stream inactivity terminates every helper streaming path without a false success", () => {
+  assert.match(patch19, /UPSTREAM_STREAM_IDLE_TIMEOUT/);
+  assert.match(patch19, /Duration::from_secs\(120\)/);
+  assert.match(patch19, /with_upstream_stream_idle_timeout/);
+  assert.match(patch19, /upstream_stream_idle_timeout_rejects_a_pending_item/);
+  assert.match(patch19, /upstream_stream_idle_timeout_accepts_a_ready_item/);
+  assert.match(patch19, /stream_timeout/);
+  assert.match(patch19, /helper\.protocol_proxy_stream_timeout/);
+  assert.match(patch19, /helper\.chat_completions_proxy_stream_timeout/);
+  assert.ok(
+    (patch19.match(/with_upstream_stream_idle_timeout\(/g) ?? []).length >= 8,
+    "all cancel-aware and fallback streaming reads must be bounded",
+  );
+  assert.doesNotMatch(
+    patch19,
+    /stream_timeout[\s\S]{0,600}protocol_proxy_stream_ok|stream_timeout[\s\S]{0,600}chat_completions_proxy_stream_ok/,
+  );
 });
 
 test("current task model selection is bounded, thread-scoped, and compaction-only", () => {
