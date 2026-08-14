@@ -204,6 +204,22 @@ test("required command guidance treats timeout as unknown before retrying a proc
   assert.match(guidance, /do not retry[^.]+duplicate/i);
 });
 
+test("required command guidance forbids global Docker cleanup and requires task ownership", () => {
+  const patchSource = readFileSync(
+    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+    "utf8",
+  );
+  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+
+  assert.match(guidance, /never stop, kill, remove, or prune all Docker containers/i);
+  assert.match(guidance, /unfiltered docker ps -q/i);
+  assert.match(guidance, /docker container prune/i);
+  assert.match(guidance, /exact container[^.]+current task/i);
+  assert.match(guidance, /container ID[^.]+ownership label/i);
+  assert.match(guidance, /other projects[^.]+remain untouched/i);
+  assert.match(guidance, /ownership cannot be proven[^.]+do not change any container/i);
+});
+
 test("prompt policy rejects non-text and oversized edits", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-prompt-policy-invalid-"));
   try {
