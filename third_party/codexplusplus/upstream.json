@@ -6,7 +6,7 @@
     "tag":  "v1.2.47",
     "upstreamCommit":  "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
     "isolationPatchCommit":  "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-    "patchCommit":  "d31c2911b23d817062abe61f477d16867c34bd4f",
+    "patchCommit":  "a3046ab308939af971412b6b036d969e7d098405",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -75,13 +75,13 @@
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head d31c2911b23d817062abe61f477d16867c34bd4f; tree 73a902f955123dac724be0b92168b2ee33b14ae8",
+                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head a3046ab308939af971412b6b036d969e7d098405; tree b29d2f8b026bbd0b1970ba1b5102a3924b40a922",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:5ebb92f15bccb8e283e523df065c8348022454796cc1301ac6179f95ccd4d1eb",
+                         "launcherReleaseBuild":  "sha256:2e23b108532abed28fc71917c91a8954d1db93cb58f617a24481cecd5fd5dbfa",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }
