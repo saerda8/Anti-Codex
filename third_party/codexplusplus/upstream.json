@@ -35,8 +35,8 @@
                     },
                     {
                         "file":  "patches/0006-guide-models-to-structured-patch-tools.patch",
-                        "sha256":  "f79ecb6ef5d9f52c425858bc3913388fc212b2ac563c0ac5bc6612dca4ba0ae8",
-                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes, broad environment enumeration, retrying timed-out processes or containers before verified exit, and global Docker stop, kill, remove, or prune operations without exact current-task container ownership; command execution, routing, history, retries and task control remain unchanged"
+                        "sha256":  "d9dde79f846f4e4e93fa21ab95f521973aa4aa4d64c4ddfdc77a6563b30ffd6b",
+                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes, broad environment enumeration, retrying timed-out processes or containers before verified exit, replacing still-running timed-out instances, and global Docker stop, kill, remove, or prune operations without exact current-task container ownership; command execution, routing, history, retries and task control remain unchanged"
                     },
                     {
                         "file":  "patches/0007-ignore-late-reasoning-after-visible-text.patch",

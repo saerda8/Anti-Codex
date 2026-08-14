@@ -204,6 +204,19 @@ test("required command guidance treats timeout as unknown before retrying a proc
   assert.match(guidance, /do not retry[^.]+duplicate/i);
 });
 
+test("required command guidance preserves a still-running timed-out instance", () => {
+  const patchSource = readFileSync(
+    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
+    "utf8",
+  );
+  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+
+  assert.match(guidance, /still running[^.]+wait for the same instance[^.]+collect its result/i);
+  assert.match(guidance, /never stop, kill, or remove[^.]+merely to retry/i);
+  assert.match(guidance, /do not change[^.]+container name[^.]+bypass[^.]+conflict/i);
+  assert.match(guidance, /do not create a replacement/i);
+});
+
 test("required command guidance forbids global Docker cleanup and requires task ownership", () => {
   const patchSource = readFileSync(
     new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
