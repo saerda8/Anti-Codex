@@ -18,6 +18,8 @@ const patch15Path = join(root, "third_party", "codexplusplus", "patches", "0015-
 const patch15 = existsSync(patch15Path) ? readFileSync(patch15Path, "utf8") : "";
 const patch16Path = join(root, "third_party", "codexplusplus", "patches", "0016-block-forced-Docker-interruption.patch");
 const patch16 = existsSync(patch16Path) ? readFileSync(patch16Path, "utf8") : "";
+const patch18Path = join(root, "third_party", "codexplusplus", "patches", "0018-route-compaction-by-current-thread-model.patch");
+const patch18 = existsSync(patch18Path) ? readFileSync(patch18Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -26,15 +28,19 @@ const patch2AddedLines = patch2
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
   .join("\n");
+const patch18AddedLines = patch18
+  .split("\n")
+  .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+  .join("\n");
 
 test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 16);
+  assert.equal(metadata.patches.length, 17);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0017-route-native-compaction-header.patch",
+    "patches/0018-route-compaction-by-current-thread-model.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -45,6 +51,19 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("current task model selection is bounded, thread-scoped, and compaction-only", () => {
+  assert.match(patch18, /latest_thread_model_from_rollout/);
+  assert.match(patch18, /ANTICODEX_THREAD_SELECTION_TAIL_BYTES/);
+  assert.match(patch18, /Uuid::parse_str/);
+  assert.match(patch18, /latest_thread_selection_beats_previous_routable_model_for_compaction/);
+  assert.match(patch18, /latest_thread_antigravity_selection_beats_previous_third_party_compaction_model/);
+  assert.match(patch18, /latest_thread_selection_does_not_rewrite_an_ordinary_turn/);
+  assert.doesNotMatch(
+    patch18AddedLines,
+    /tracing::|println!|eprintln!|log::|request_headers\.insert|tool_choice|previous_response_id|retry|task control/i,
+  );
 });
 
 test("timed-out Docker work cannot be stopped or force-removed for a retry", () => {
