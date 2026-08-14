@@ -6,7 +6,7 @@
     "tag":  "v1.2.47",
     "upstreamCommit":  "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
     "isolationPatchCommit":  "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-    "patchCommit":  "56cf2cf54e90761622f511269f25cf672a1b0e77",
+    "patchCommit":  "0c89ea497338f7fc543e7a8e854081b07b157089",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -35,8 +35,8 @@
                     },
                     {
                         "file":  "patches/0006-guide-models-to-structured-patch-tools.patch",
-                        "sha256":  "7d9515ca97101bb12656ce341aa918adf7e4de32ecfc0b03a65548b931b5bb7f",
-                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes and broad environment enumeration; command execution, routing, history, retries and task control remain unchanged"
+                        "sha256":  "419a15c77d54f93b530ac7dce7ed024632f8a49c7a84963ab6c936c42e4d9696",
+                        "scope":  "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes, broad environment enumeration, and retrying timed-out processes or containers before verified exit; command execution, routing, history, retries and task control remain unchanged"
                     },
                     {
                         "file":  "patches/0007-ignore-late-reasoning-after-visible-text.patch",
@@ -75,13 +75,13 @@
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head 56cf2cf54e90761622f511269f25cf672a1b0e77; tree 2be3a5d5509a77e50ba8d37b5f55e669dd8f25f3",
+                         "patchReplay":  "13 project patches replayed without automatic conflict resolution; head 0c89ea497338f7fc543e7a8e854081b07b157089; tree 277d7c5050795c721576b302858971d854d23474",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:033e376a3227fc0e9e37c121f102014a488ba03567bc0f8d3f5a1ebcfa53ee9a",
+                         "launcherReleaseBuild":  "sha256:9a037dd8125962172aa7cc5035eba624174f202983b5f1a85609182f4693d941",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }
