@@ -16,6 +16,8 @@ const patch14Path = join(root, "third_party", "codexplusplus", "patches", "0014-
 const patch14 = existsSync(patch14Path) ? readFileSync(patch14Path, "utf8") : "";
 const patch15Path = join(root, "third_party", "codexplusplus", "patches", "0015-enforce-Anti-Codex-command-tool-safety.patch");
 const patch15 = existsSync(patch15Path) ? readFileSync(patch15Path, "utf8") : "";
+const patch16Path = join(root, "third_party", "codexplusplus", "patches", "0016-block-forced-Docker-interruption.patch");
+const patch16 = existsSync(patch16Path) ? readFileSync(patch16Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -29,10 +31,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 14);
+  assert.equal(metadata.patches.length, 15);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
+    "patches/0016-block-forced-Docker-interruption.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -43,6 +45,15 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("timed-out Docker work cannot be stopped or force-removed for a retry", () => {
+  assert.match(patch16, /docker rm -f cv_check cv_test_final/);
+  assert.match(patch16, /docker container rm --force cv_check/);
+  assert.match(patch16, /docker stop cv_check/);
+  assert.match(patch16, /stopping or force-removing a Docker container is forbidden; wait for it to exit/);
+  assert.match(patch16, /docker wait cv_check/);
+  assert.match(patch16, /docker rm cv_check/);
 });
 
 test("Anti-Codex command safety is enforced at both nonstream and streaming tool-call exits", () => {

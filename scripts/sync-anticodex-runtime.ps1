@@ -297,6 +297,7 @@ $requiredSourceFiles = @(
     "third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch",
     "third_party\codexplusplus\patches\0014-fix-format-dreamskin-runtime-test.patch",
     "third_party\codexplusplus\patches\0015-enforce-Anti-Codex-command-tool-safety.patch",
+    "third_party\codexplusplus\patches\0016-block-forced-Docker-interruption.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",

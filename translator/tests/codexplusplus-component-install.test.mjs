@@ -712,6 +712,7 @@ test("runtime sync carries the pinned CodexPlusPlus metadata and all accepted pa
   assert.match(runtimeSync, /0013-fix-format-dreamskin-installer-test\.patch/);
   assert.match(runtimeSync, /0014-fix-format-dreamskin-runtime-test\.patch/);
   assert.match(runtimeSync, /0015-enforce-Anti-Codex-command-tool-safety\.patch/);
+  assert.match(runtimeSync, /0016-block-forced-Docker-interruption\.patch/);
   assert.match(runtimeSync, /foreach \(\$dir in @\([^\r\n]*"third_party"\)\)/);
 });
 
