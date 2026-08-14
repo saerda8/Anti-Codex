@@ -175,6 +175,7 @@ function startSuspendedSupervisor(scriptPath) {
 function stopTestSupervisor(supervisor, {
   queryProcess = queryExactWindowsProcessIdentity,
   killProcessTree = (processId) => spawnSync("taskkill.exe", ["/PID", String(processId), "/T", "/F"], { windowsHide: true, stdio: "ignore" }),
+  killExactProcess = () => supervisor?.child?.kill?.() === true,
 } = {}) {
   const processId = Number(supervisor?.child?.pid || 0);
   const expectedCreationDateUtc = String(supervisor?.creationDateUtc || "");
@@ -182,7 +183,13 @@ function stopTestSupervisor(supervisor, {
   const liveProcess = queryProcess(processId);
   if (Number(liveProcess?.processId || 0) !== processId
     || String(liveProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
-  return killProcessTree(processId)?.status === 0;
+  if (killProcessTree(processId)?.status === 0) return true;
+  const revalidatedProcess = queryProcess(processId);
+  if (Number(revalidatedProcess?.processId || 0) !== processId
+    || String(revalidatedProcess?.creationDateUtc || "") !== expectedCreationDateUtc) return false;
+  const killed = killExactProcess(processId) === true;
+  if (killed) supervisor.child.unref?.();
+  return killed;
 }
 
 test("paused aggregate supervisor cleanup rejects a reused PID identity", () => {
@@ -205,6 +212,28 @@ test("paused aggregate supervisor cleanup rejects a reused PID identity", () => 
     killProcessTree,
   }), true);
   assert.equal(killCalls, 1);
+});
+
+test("paused aggregate supervisor cleanup falls back to the exact child after tree cleanup fails", () => {
+  const supervisor = {
+    child: { pid: 424242 },
+    creationDateUtc: "2026-08-09T00:00:00.0000000Z",
+  };
+  let queryCalls = 0;
+  let exactKillCalls = 0;
+  assert.equal(stopTestSupervisor(supervisor, {
+    queryProcess: () => {
+      queryCalls += 1;
+      return { processId: supervisor.child.pid, creationDateUtc: supervisor.creationDateUtc };
+    },
+    killProcessTree: () => ({ status: 1 }),
+    killExactProcess: () => {
+      exactKillCalls += 1;
+      return true;
+    },
+  }), true);
+  assert.equal(queryCalls, 2);
+  assert.equal(exactKillCalls, 1);
 });
 
 function fixture(root, fixtureSourceRoot = sourceRoot) {
