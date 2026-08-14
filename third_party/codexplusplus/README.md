@@ -83,8 +83,8 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- All thirteen patches replay without conflict on pinned upstream `v1.2.47` to head `0c89ea497338f7fc543e7a8e854081b07b157089` and tree `277d7c5050795c721576b302858971d854d23474`.
-- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,292,800-byte launcher has SHA-256 `9a037dd8125962172aa7cc5035eba624174f202983b5f1a85609182f4693d941`; its immutable guidance also treats a command timeout as an unknown process/container lifetime and requires verified exit before retry.
+- All thirteen patches replay without conflict on pinned upstream `v1.2.47` to head `7f4aa9ca20a01d3a4935839b71abce0754e4fe76` and tree `55b00f8fd7fca243b47248994a23a28394f369b5`.
+- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,292,800-byte launcher has SHA-256 `da6f321feef5fcd06049c822d450c4bb075aa58402a16f0d042a8838db763ee1`; its immutable guidance treats a command timeout as an unknown process/container lifetime, requires verified exit before retry, and forbids global Docker cleanup without exact current-task ownership.
 - Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
