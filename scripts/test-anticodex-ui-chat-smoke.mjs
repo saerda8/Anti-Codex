@@ -7744,7 +7744,11 @@ async function main() {
   const nativeModelRequestObserved = nativeSingleTaskEvidence.ok === true
     && nativeSingleTaskEvidence.skipped !== true
     && nativeExpectedRequestObserved(nativeSingleTaskEvidence.activity);
+  const resultDrivenObservedModels = Array.isArray(resultDrivenSubmittedTurnEvidence?.models)
+    ? resultDrivenSubmittedTurnEvidence.models
+    : [];
   const nativeObservedModels = [...new Set([
+    ...resultDrivenObservedModels,
     fixedRouteHealthEvidence?.model,
     fixedRouteHealthEvidence?.route?.model,
   ].map((value) => String(value || "").trim()).filter(Boolean))];

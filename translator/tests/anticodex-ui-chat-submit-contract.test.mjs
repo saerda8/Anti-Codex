@@ -548,6 +548,16 @@ test("same-chat native request evidence counts as desktop real traffic", () => {
   assert.match(block, /if \(!observedRealTraffic\) failures\.push\("desktop submit did not produce model request evidence"\);/);
 });
 
+test("result-driven same-chat model evidence validates a per-task model switch", () => {
+  const start = uiSmoke.indexOf("const resultDrivenObservedModels =");
+  const end = uiSmoke.indexOf("const nativeSubmit =", start);
+  assert.ok(start >= 0 && end > start, "native model evidence aggregation is missing");
+  const block = uiSmoke.slice(start, end);
+
+  assert.match(block, /resultDrivenSubmittedTurnEvidence\?\.models/);
+  assert.match(block, /\.\.\.resultDrivenObservedModels[\s\S]*?fixedRouteHealthEvidence\?\.model/);
+});
+
 test("expected task id widens native acceptance only for a same-chat navigation", () => {
   const start = uiSmoke.indexOf("async function inspectNativeSingleTaskWindow(");
   const end = uiSmoke.indexOf("\nfunction compactCodexRolloutEvidence(", start);
