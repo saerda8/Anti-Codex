@@ -451,6 +451,23 @@ test("patches the extracted 26.727 local-model availability helper without chang
   assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(), model: visible, useHiddenModels: true }), true);
 });
 
+test("patches the extracted 26.810 local-model availability helper without changing its new guards", () => {
+  const source = "function vti({additionalAvailableModels:e,authMethod:t,availableModels:n,isCustomModelProvider:r,model:i,useHiddenModels:a}){return e?.has(i.model)===!0||i.model!==`codex-auto-review`&&(a&&!r&&t!==`amazonBedrock`?n.has(i.model):!i.hidden)}";
+  const patched = brandPatchCompat.patchLocalModelAvailability(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(patched), true);
+  assert.equal(brandPatchCompat.patchLocalModelAvailability(patched), patched);
+  const filter = new Function(`${patched};return vti;`)();
+  const hidden = { model: "hidden", hidden: true };
+  const visible = { model: "visible", hidden: false };
+  const review = { model: "codex-auto-review", hidden: false };
+  assert.equal(filter({ additionalAvailableModels: new Set(["hidden"]), authMethod: "chatgpt", availableModels: new Set(), isCustomModelProvider: false, model: hidden, useHiddenModels: true }), true);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["hidden"]), isCustomModelProvider: false, model: hidden, useHiddenModels: true }), false);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["visible"]), isCustomModelProvider: false, model: visible, useHiddenModels: true }), true);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["codex-auto-review"]), isCustomModelProvider: false, model: review, useHiddenModels: true }), false);
+});
+
 test("patches Codex 26.609 system window titles without changing bundle size", () => {
   const source = [
     "let M=new r.BrowserWindow({width:b,height:x,",

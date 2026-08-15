@@ -607,7 +607,8 @@ export function hasPatchedAuthRequirement(text) {
 export function hasPatchedLocalModelAvailability(text) {
   const source = String(text ?? "");
   return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(source) ||
-    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source);
+    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
+    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),isCustomModelProvider:[\w$]+,model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source);
 }
 
 export function patchLocalModelAvailability(text) {
@@ -622,6 +623,13 @@ export function patchLocalModelAvailability(text) {
   if (extracted?.groups) {
     const gate = `${extracted.groups.hidden}&&${extracted.groups.auth}!==\`amazonBedrock\``;
     const gateIndex = extracted.index + extracted[0].indexOf(gate);
+    return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
+  }
+
+  const extractedWithCustomProvider = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<hidden>&&!\k<custom>&&\k<auth>!==`amazonBedrock`\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.exec(source);
+  if (extractedWithCustomProvider?.groups) {
+    const gate = `${extractedWithCustomProvider.groups.hidden}&&!${extractedWithCustomProvider.groups.custom}&&${extractedWithCustomProvider.groups.auth}!==\`amazonBedrock\``;
+    const gateIndex = extractedWithCustomProvider.index + extractedWithCustomProvider[0].indexOf(gate);
     return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
   }
   if (hasPatchedLocalModelAvailability(source)) return source;
