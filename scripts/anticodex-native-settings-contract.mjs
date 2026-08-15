@@ -118,6 +118,32 @@ export function extractNativeSettingsGateSlugs(source = "", evidence = {}) {
   return extractNativeSettingsVisibilityGateContract(text, registrationContract, evidence).gatedSlugs;
 }
 
+function extractGatedSettingsSlugs(filterBody, entryName, registered) {
+  const escapedEntryName = escapeRegExp(entryName);
+  const switchMatches = [...filterBody.matchAll(new RegExp(`switch\\(\\s*${escapedEntryName}\\.slug\\s*\\)\\s*\\{`, "g"))];
+  if (switchMatches.length !== 1) return null;
+  const switchBody = readBalancedBlock(filterBody, switchMatches[0].index + switchMatches[0][0].lastIndexOf("{"));
+  const gated = new Set();
+  for (const returnMatch of switchBody.matchAll(/((?:case(?:`[^`]+`|"[^"]+"|'[^']+'|[A-Za-z_$][\w$-]*)\s*:\s*)+)return\s*([^;]*?)(?:;|(?=case|default|$))/g)) {
+    const returnExpression = returnMatch[2].replace(/\s+/g, "");
+    if (returnExpression === "!0" || returnExpression === "true") continue;
+    for (const caseMatch of returnMatch[1].matchAll(/case(?:`([^`]+)`|"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$-]*))\s*:/g)) {
+      const slug = String(caseMatch[1] || caseMatch[2] || caseMatch[3] || caseMatch[4] || "");
+      if (registered.has(slug)) gated.add(slug);
+    }
+  }
+  return [...gated].sort();
+}
+
+function hasSettingsNavigationProjection(functionBody, visibleName) {
+  const escapedVisibleName = escapeRegExp(visibleName);
+  if (new RegExp(`\\bsettingsNavigationSections\\s*:\\s*${escapedVisibleName}\\.filter\\(`).test(functionBody)) return true;
+  for (const match of functionBody.matchAll(new RegExp(`(?:^|[,{;])\\s*(?:(?:var|let|const)\\s+)?([A-Za-z_$][\\w$]*)\\s*=\\s*${escapedVisibleName}\\.filter\\(`, "g"))) {
+    if (new RegExp(`\\bsettingsNavigationSections\\s*:\\s*${escapeRegExp(match[1])}\\b`).test(functionBody)) return true;
+  }
+  return false;
+}
+
 function extractNativeSettingsVisibilityCandidates(source, registered) {
   const candidates = [];
   for (const functionMatch of source.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\([^)]{0,1200}\)\s*\{/g)) {
@@ -130,26 +156,36 @@ function extractNativeSettingsVisibilityCandidates(source, registered) {
       const filterSourceName = filterMatch[2];
       const entryName = filterMatch[3];
       const escapedVisibleName = escapeRegExp(visibleName);
-      if (!new RegExp(`\\bsettingsNavigationSections\\s*:\\s*${escapedVisibleName}\\.filter\\(`).test(functionBody)
+      if (!hasSettingsNavigationProjection(functionBody, visibleName)
         || !new RegExp(`\\bvisibleSettingsSections\\s*:\\s*${escapedVisibleName}\\b`).test(functionBody)) continue;
       const filterBody = readBalancedBlock(functionBody, filterMatch.index + filterMatch[0].lastIndexOf("{"));
-      const escapedEntryName = escapeRegExp(entryName);
-      const switchMatches = [...filterBody.matchAll(new RegExp(`switch\\(\\s*${escapedEntryName}\\.slug\\s*\\)\\s*\\{`, "g"))];
-      if (switchMatches.length !== 1) continue;
-      const switchBody = readBalancedBlock(filterBody, switchMatches[0].index + switchMatches[0][0].lastIndexOf("{"));
-      const gated = new Set();
-      for (const returnMatch of switchBody.matchAll(/((?:case(?:`[^`]+`|"[^"]+"|'[^']+'|[A-Za-z_$][\w$-]*)\s*:\s*)+)return\s*([^;]*?)(?:;|(?=case|default|$))/g)) {
-        const returnExpression = returnMatch[2].replace(/\s+/g, "");
-        if (returnExpression === "!0" || returnExpression === "true") continue;
-        for (const caseMatch of returnMatch[1].matchAll(/case(?:`([^`]+)`|"([^"]+)"|'([^']+)'|([A-Za-z_$][\w$-]*))\s*:/g)) {
-          const slug = String(caseMatch[1] || caseMatch[2] || caseMatch[3] || caseMatch[4] || "");
-          if (registered.has(slug)) gated.add(slug);
-        }
-      }
+      const gatedSlugs = extractGatedSettingsSlugs(filterBody, entryName, registered);
+      if (!gatedSlugs) continue;
       candidates.push({
         functionName: functionMatch[1],
         filterSourceName,
-        gatedSlugs: [...gated].sort(),
+        gatedSlugs,
+      });
+    }
+    for (const filterMatch of functionBody.matchAll(/(?:^|[,{;])\s*(?:(?:var|let|const)\s+)?([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\.filter\(\s*([A-Za-z_$][\w$]*)\s*\)/g)) {
+      const visibleName = filterMatch[1];
+      const filterSourceName = filterMatch[2];
+      const predicateName = filterMatch[3];
+      const escapedVisibleName = escapeRegExp(visibleName);
+      if (!hasSettingsNavigationProjection(functionBody, visibleName)
+        || !new RegExp(`\\bvisibleSettingsSections\\s*:\\s*${escapedVisibleName}\\b`).test(functionBody)) continue;
+      const predicateAssignments = [...functionBody.matchAll(new RegExp(`(?<![A-Za-z0-9_$])${escapeRegExp(predicateName)}\\s*=\\s*(?:\\(\\s*)?([A-Za-z_$][\\w$]*)(?:\\s*\\))?\\s*=>\\s*\\{`, "g"))];
+      if (predicateAssignments.length !== 1) continue;
+      const predicateBody = readBalancedBlock(
+        functionBody,
+        predicateAssignments[0].index + predicateAssignments[0][0].lastIndexOf("{"),
+      );
+      const gatedSlugs = extractGatedSettingsSlugs(predicateBody, predicateAssignments[0][1], registered);
+      if (!gatedSlugs) continue;
+      candidates.push({
+        functionName: functionMatch[1],
+        filterSourceName,
+        gatedSlugs,
       });
     }
   }

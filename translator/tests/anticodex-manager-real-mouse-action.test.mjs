@@ -278,6 +278,31 @@ test("native Settings completeness requires explicit gate evidence for missing r
     ["cloud-settings", "debug", "usage"],
   );
 
+  const compiledVisibilitySource = [
+    'import{fT as sections}from"./app-initial.js";',
+    'const pages={agent:A,personalization:B,usage:C,"cloud-settings":D,debug:E};',
+    'function useVisible(){let visible,navigation,predicate;',
+    'predicate=entry=>{switch(entry.slug){case`usage`:return usageEnabled;',
+    'case`cloud-settings`:return!1;case`debug`:return isDebugEnabled({buildFlavor:`prod`,flag});',
+    'case`agent`:case`personalization`:return!0;}};',
+    'visible=sections.filter(predicate);const excludeAgent=entry=>entry.slug!==`agent`;',
+    'navigation=visible.filter(excludeAgent);',
+    'return{activeSettingsSection:null,settingsNavigationSections:navigation,',
+    'shouldRedirectToVisibleSettingsSection:!1,shouldRenderRouteContent:!0,visibleSettingsSections:visible}}',
+    'export{useVisible as n,pages as r};',
+  ].join("");
+  assert.deepEqual(
+    nativeSettingsContract.extractNativeSettingsGateSlugs(compiledVisibilitySource, {
+      modulePath: "webview/assets/use-visible-settings.js",
+      moduleSources: {
+        "webview/assets/app-initial.js": dynamicNavigationSource,
+        "webview/assets/use-visible-settings.js": compiledVisibilitySource,
+        "webview/assets/settings-page.js": dynamicConsumerSource,
+      },
+    }),
+    ["cloud-settings", "debug", "usage"],
+  );
+
   const runner = readFileSync(scriptUrl, "utf8");
   assert.match(runner, /readNativeSettingsContract/);
   assert.match(runner, /compareNativeSettingsRuntimeContract/);
