@@ -558,13 +558,13 @@ test("result-driven same-chat model evidence validates a per-task model switch",
   assert.match(block, /\.\.\.resultDrivenObservedModels[\s\S]*?fixedRouteHealthEvidence\?\.model/);
 });
 
-test("expected task id widens native acceptance only for a same-chat navigation", () => {
+test("expected task id widens native acceptance for title navigation or an exact reused chat", () => {
   const start = uiSmoke.indexOf("async function inspectNativeSingleTaskWindow(");
   const end = uiSmoke.indexOf("\nfunction compactCodexRolloutEvidence(", start);
   assert.ok(start >= 0 && end > start, "native single-task inspection is missing");
   assert.match(
     uiSmoke.slice(start, end),
-    /sameChatTaskId: sameChatTitleContains \? expectedTaskId : ""/,
+    /sameChatTaskId: \(sameChatTitleContains \|\| preserveSameChatActiveTask\) \? expectedTaskId : ""/,
   );
 });
 
@@ -599,8 +599,29 @@ test("same-chat opening proves task activation before accepting an idle composer
   const composerWait = openSameChat.indexOf("waitForVisibleComposerIdle(ws");
 
   assert.ok(mouseRelease >= 0 && activationWait > mouseRelease && composerWait > activationWait);
-  assert.match(uiSmoke, /sameChatEvidence\.activeBeforeSubmit = await readSameChatTaskActive\(ws, sameChatEvidence\.taskId\)/);
-  assert.match(uiSmoke, /same-chat task changed before submit/);
+  assert.match(uiSmoke, /activeBeforeSubmitPreparation = await readSameChatTaskActive\(ws, boundSameChatTaskId\)/);
+  assert.match(uiSmoke, /same-chat task changed before submit preparation/);
+});
+
+test("an exact same-chat task id is revalidated before preparation and the physical send click", () => {
+  assert.match(
+    uiSmoke,
+    /const boundSameChatTaskId = preserveSameChatActiveTask[\s\S]*?expectedTaskId \|\| sameChatEvidence\?\.taskId/,
+  );
+
+  const binding = uiSmoke.indexOf("const boundSameChatTaskId = preserveSameChatActiveTask");
+  const preparationGuard = uiSmoke.indexOf("activeBeforeSubmitPreparation", binding);
+  const insertText = uiSmoke.indexOf('Input.insertText", { text: promptText }', binding);
+  const clickGuard = uiSmoke.indexOf("activeBeforePhysicalSend", insertText);
+  const mouseClick = uiSmoke.indexOf('type: "mousePressed", x, y', clickGuard);
+
+  assert.ok(binding >= 0, "exact same-chat task binding is missing");
+  assert.ok(preparationGuard > binding && preparationGuard < insertText);
+  assert.ok(clickGuard > insertText && clickGuard < mouseClick);
+  assert.match(
+    uiSmoke.slice(clickGuard, mouseClick),
+    /same-chat task changed before physical send/,
+  );
 });
 
 test("forced same-chat recovery opens the target before stopping its active turn", () => {

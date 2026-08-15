@@ -1517,7 +1517,7 @@ async function inspectNativeSingleTaskWindow(preflight, markerText) {
     markerThreadIds: codexRolloutMarkerBundles(markerText)
       .map((bundle) => String(bundle?.sessionId || "").trim())
       .filter(Boolean),
-    sameChatTaskId: sameChatTitleContains ? expectedTaskId : "",
+    sameChatTaskId: (sameChatTitleContains || preserveSameChatActiveTask) ? expectedTaskId : "",
   });
   const activity = analyzeNativeCodexActivityRows(rows, { marker: markerText, expectedThreadIds });
   const ok = activity.unexpectedExecutionThreadIds.length === 0
@@ -6568,6 +6568,24 @@ async function main() {
         }
       }
     }
+    const boundSameChatTaskId = preserveSameChatActiveTask
+      ? String(expectedTaskId || sameChatEvidence?.taskId || "").trim()
+      : "";
+    if (boundSameChatTaskId) {
+      const activeBeforeSubmitPreparation = await readSameChatTaskActive(ws, boundSameChatTaskId);
+      if (sameChatEvidence) {
+        sameChatEvidence.activeBeforeSubmitPreparation = activeBeforeSubmitPreparation;
+      } else {
+        preservedActiveTask = {
+          ...(preservedActiveTask || {}),
+          expectedTaskId: boundSameChatTaskId,
+          activeBeforeSubmitPreparation,
+        };
+      }
+      if (activeBeforeSubmitPreparation?.ok !== true) {
+        throw new Error(`same-chat task changed before submit preparation: expected ${boundSameChatTaskId}, active ${activeBeforeSubmitPreparation?.activeTaskId || "<missing>"}`);
+      }
+    }
     if (requiredModelNeedles().length > 0) {
       modelSelectionEvidence = await selectRequiredModel(ws, 20_000);
       if (modelSelectionEvidence?.matched !== true) {
@@ -6613,13 +6631,6 @@ async function main() {
         process.exit(1);
       }
       preSubmitModelSelectionEvidence = modelSelectionEvidence;
-    }
-
-    if (sameChatEvidence?.taskId) {
-      sameChatEvidence.activeBeforeSubmit = await readSameChatTaskActive(ws, sameChatEvidence.taskId);
-      if (sameChatEvidence.activeBeforeSubmit?.ok !== true) {
-        throw new Error(`same-chat task changed before submit: expected ${sameChatEvidence.taskId}, active ${sameChatEvidence.activeBeforeSubmit?.activeTaskId || "<missing>"}`);
-      }
     }
 
     if (taskMode === "multi-turn-project") {
@@ -7037,6 +7048,20 @@ async function main() {
       }
       if (prep?.hasSendButton !== true) {
         failures.push("send button remained blocked after closing model menus and overlays");
+      }
+      if (boundSameChatTaskId) {
+        const activeBeforePhysicalSend = await readSameChatTaskActive(ws, boundSameChatTaskId);
+        if (sameChatEvidence) {
+          sameChatEvidence.activeBeforePhysicalSend = activeBeforePhysicalSend;
+        } else {
+          preservedActiveTask = {
+            ...(preservedActiveTask || {}),
+            activeBeforePhysicalSend,
+          };
+        }
+        if (activeBeforePhysicalSend?.ok !== true) {
+          throw new Error(`same-chat task changed before physical send: expected ${boundSameChatTaskId}, active ${activeBeforePhysicalSend?.activeTaskId || "<missing>"}`);
+        }
       }
       const rect = prep?.hasSendButton === true ? prep?.selected?.rect || null : null;
       if (prep?.hasSendButton === true && (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y) || !Number.isFinite(rect.w) || !Number.isFinite(rect.h))) {
