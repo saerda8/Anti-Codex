@@ -122,6 +122,13 @@ test("Anti-Codex command safety blocks Git worktree rewrites without blocking re
   assert.match(patch15, /git worktree edits must not bypass apply_patch/);
 });
 
+test("Anti-Codex command safety rejects test pipelines that mask the producer exit status", () => {
+  assert.match(patch15, /masked_test_pipeline_status/);
+  assert.match(patch15, /masked_test_pipeline_is_blocked/);
+  assert.match(patch15, /pipefail_test_pipeline_is_allowed/);
+  assert.match(patch15, /test pipelines must preserve the producer exit status/);
+});
+
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch13, /^From [0-9a-f]{40} /m);
   assert.match(patch13, /^Subject: \[PATCH 12\/13\] fix: format DreamSkin installer metadata test$/m);
