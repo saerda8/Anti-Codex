@@ -75,8 +75,8 @@
     },
     {
       "file": "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
-      "sha256": "5a439b61b04dad70d6df3f6e973f8cdd14022f699f278d8bcdf90a6686b75bf9",
-      "scope": "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, wrapped apply_patch calls, unlabeled Docker creation and global Docker cleanup with a deterministic local policy rejection; ordinary build and test commands plus requests without apply_patch remain compatible"
+      "sha256": "ffc52e96bb2565bf4cff9668140546ad14be384db27c9924defa4b9f339f6392",
+      "scope": "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, stdin-fed Python source writers, Git worktree rewrites, wrapped apply_patch calls, non-cleaning or unlabeled Docker creation and global Docker cleanup with a deterministic local policy rejection; read-only Python and Git checks, ordinary build and test commands, plus requests without apply_patch remain compatible"
     },
     {
       "file": "patches/0016-block-forced-Docker-interruption.patch",

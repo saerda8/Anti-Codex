@@ -47,7 +47,7 @@ The twelfth patch wraps one upstream v1.2.46 DreamSkin installer metadata assert
 
 The thirteenth patch normalizes one upstream v1.2.47 DreamSkin runtime layout assertion into the stable rustfmt form. Removing whitespace leaves the expression unchanged; it changes no Manager, helper, provider or runtime behavior.
 
-The fourteenth patch enforces the sixth patch's command guidance only when an exact structured `apply_patch` tool is available. At both nonstream and streaming tool-call exits, it replaces wrapped patch calls, direct source or evidence writes, Docker creation without an explicit name and valid current-task label, and global Docker cleanup with a deterministic local rejection. It preserves ordinary inspection, build and test commands and leaves requests without `apply_patch` unchanged.
+The fourteenth patch enforces the sixth patch's command guidance only when an exact structured `apply_patch` tool is available. At both nonstream and streaming tool-call exits, it replaces wrapped patch calls, direct source or evidence writes, stdin-fed Python source writers, Git worktree rewrites, Docker creation without automatic cleanup, an explicit name and valid current-task label, and global Docker cleanup with a deterministic local rejection. It preserves read-only Python and Git checks, ordinary inspection, build and test commands and leaves requests without `apply_patch` unchanged.
 
 The fifteenth patch closes the timeout-retry gap by rejecting Docker stop, kill, restart and force-remove calls while structured patching is available. A timed-out container must be observed with `docker wait`; non-forced removal remains available only after Docker itself confirms that the container has exited.
 

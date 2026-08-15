@@ -105,6 +105,21 @@ test("Anti-Codex command safety is enforced at both nonstream and streaming tool
   assert.match(patch15, /chat_completion_response_does_not_enforce_command_policy_without_apply_patch/);
   assert.match(patch15, /direct source or evidence edits must use apply_patch/);
   assert.match(patch15, /global Docker cleanup is forbidden/);
+  assert.match(patch15, /docker run\/create requires automatic cleanup/);
+});
+
+test("Anti-Codex command safety blocks stdin-fed Python source writers without blocking reads", () => {
+  assert.match(patch15, /interpreter_stdin_source_write/);
+  assert.match(patch15, /python_stdin_source_writer_is_blocked/);
+  assert.match(patch15, /python_stdin_source_reader_is_allowed/);
+  assert.match(patch15, /interpreter stdin source edits must use apply_patch/);
+});
+
+test("Anti-Codex command safety blocks Git worktree rewrites without blocking read-only patch checks", () => {
+  assert.match(patch15, /git_worktree_mutation/);
+  assert.match(patch15, /git_checkout_source_writer_is_blocked/);
+  assert.match(patch15, /git_apply_check_is_allowed/);
+  assert.match(patch15, /git worktree edits must not bypass apply_patch/);
 });
 
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {

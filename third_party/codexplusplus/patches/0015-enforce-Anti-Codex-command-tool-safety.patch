@@ -4,9 +4,9 @@ Date: Fri, 14 Aug 2026 12:25:25 +0800
 Subject: [PATCH] enforce Anti-Codex command tool safety
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 287 +++++++++++++++++-
- .../codex-plus-core/tests/protocol_proxy.rs   | 195 ++++++++++++
- 2 files changed, 480 insertions(+), 2 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs  | 403 +++++++++++++++++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   | 291 +++++++++++++++
+ 2 files changed, 692 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
 index 7fd8220..7dcad32 100644
@@ -61,7 +61,7 @@ index 7fd8220..7dcad32 100644
  }
  
  pub fn local_responses_proxy_base_url(port: u16) -> String {
-@@ -4125,6 +4167,243 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -4125,6 +4167,359 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
  
  const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits. Windows destructive filesystem safety: never translate or retry a blocked recursive delete or move through another shell. Keep the operation in one shell end-to-end and first verify that every resolved absolute target remains inside the intended workspace or an explicitly named target directory. In PowerShell, use Remove-Item with -LiteralPath; never fall back to cmd.exe /c, rmdir, or rd after a policy rejection. Do not change global toolchain defaults, user environment, PATH, registry state, or installed software unless the user explicitly requested that exact change. Query only specifically named non-secret environment variables; never enumerate all environment variables. Command timeout safety: a timeout only means the caller stopped waiting; it does not mean the process or container exited. Before any retry, verify that the prior process or container has exited. Do not retry while it is still running or create duplicate work. If it is still running after a timeout, wait for the same instance to finish and collect its result. Never stop, kill, or remove a still-running process or container merely to retry. Do not change a container name to bypass a name conflict, and do not create a replacement. Container ownership safety: every docker run or docker create command must include an explicit --name and --label com.anticodex.task-id=<current task id>; never use a Docker-generated container name. If the current task ID is unavailable, do not create a container. Never stop, kill, remove, or prune all Docker containers, and never use unfiltered docker ps -q, docker kill or docker stop over every listed ID, docker container prune, or docker system prune. Inspect first and operate only on the exact container created for the current task, proven by its recorded container ID and task-specific ownership label. Containers from other projects are user-owned and must remain untouched. If ownership cannot be proven, report the blocker and do not change any container.";
  
@@ -89,6 +89,9 @@ index 7fd8220..7dcad32 100644
 +
 +            match subcommand {
 +                "run" | "create" => {
++                    if !arguments.iter().any(|argument| argument == "--rm") {
++                        return Some("docker run/create requires automatic cleanup");
++                    }
 +                    if !has_nonempty_option(arguments, "--name")
 +                        || !has_task_ownership_label(arguments)
 +                    {
@@ -104,6 +107,11 @@ index 7fd8220..7dcad32 100644
 +                    let nested_arguments = &arguments[nested_index + 1..];
 +                    if nested == "prune" {
 +                        return Some("global Docker cleanup is forbidden");
++                    }
++                    if nested == "create"
++                        && !nested_arguments.iter().any(|argument| argument == "--rm")
++                    {
++                        return Some("docker run/create requires automatic cleanup");
 +                    }
 +                    if nested == "create"
 +                        && (!has_nonempty_option(nested_arguments, "--name")
@@ -134,6 +142,9 @@ index 7fd8220..7dcad32 100644
 +    if normalized.contains("apply_patch") {
 +        return Some("apply_patch must be called as a structured tool");
 +    }
++    if git_worktree_mutation(&lower) {
++        return Some("git worktree edits must not bypass apply_patch");
++    }
 +    let direct_write = [
 +        "set-content",
 +        "add-content",
@@ -152,8 +163,113 @@ index 7fd8220..7dcad32 100644
 +    ]
 +    .iter()
 +    .any(|extension| normalized.contains(extension));
++    if source_path && interpreter_stdin_source_write(&normalized) {
++        return Some("interpreter stdin source edits must use apply_patch");
++    }
 +    if direct_write && source_path {
 +        return Some("direct source or evidence edits must use apply_patch");
++    }
++    None
++}
++
++fn interpreter_stdin_source_write(command: &str) -> bool {
++    let python_stdin = ["| python -", "| python.exe -", "| py -", "| py.exe -"]
++        .iter()
++        .any(|pipe| command.contains(pipe));
++    if !python_stdin {
++        return false;
++    }
++
++    let writes_through_handle = [".write_text(", ".write_bytes(", ".truncate("]
++        .iter()
++        .any(|primitive| command.contains(primitive));
++    if writes_through_handle {
++        return true;
++    }
++
++    command.match_indices("open(").any(|(index, _)| {
++        let arguments = &command[index + "open(".len()..];
++        let arguments = arguments.split(')').next().unwrap_or(arguments);
++        [
++            "\"w\"", "'w'", "\"w+\"", "'w+'", "\"a\"", "'a'", "\"a+\"", "'a+'", "\"x\"", "'x'",
++            "\"x+\"", "'x+'", "\"r+\"", "'r+'",
++        ]
++        .iter()
++        .any(|mode| arguments.contains(mode))
++    })
++}
++
++fn git_worktree_mutation(command: &str) -> bool {
++    command_segments(command).iter().any(|segment| {
++        segment
++            .iter()
++            .enumerate()
++            .filter_map(|(index, token)| is_git_token(token).then_some(index))
++            .any(|git_index| {
++                let Some((subcommand_index, subcommand)) = git_subcommand(segment, git_index)
++                else {
++                    return false;
++                };
++                if subcommand == "apply" {
++                    let arguments = &segment[subcommand_index + 1..];
++                    let explicitly_applies = arguments.iter().any(|argument| argument == "--apply");
++                    let read_only = arguments.iter().any(|argument| {
++                        matches!(
++                            argument.as_str(),
++                            "--check" | "--stat" | "--numstat" | "--summary"
++                        )
++                    });
++                    return explicitly_applies || !read_only;
++                }
++                matches!(
++                    subcommand,
++                    "am" | "checkout"
++                        | "checkout-index"
++                        | "cherry-pick"
++                        | "clean"
++                        | "merge"
++                        | "mv"
++                        | "rebase"
++                        | "reset"
++                        | "restore"
++                        | "revert"
++                        | "rm"
++                        | "stash"
++                        | "switch"
++                )
++            })
++    })
++}
++
++fn is_git_token(token: &str) -> bool {
++    let name = token
++        .rsplit(|character| character == '/' || character == '\\')
++        .next()
++        .unwrap_or(token);
++    matches!(name, "git" | "git.exe")
++}
++
++fn git_subcommand(tokens: &[String], git_index: usize) -> Option<(usize, &str)> {
++    let mut index = git_index + 1;
++    while index < tokens.len() {
++        let token = tokens[index].as_str();
++        if matches!(
++            token,
++            "-c" | "--git-dir" | "--work-tree" | "--namespace" | "--super-prefix"
++        ) {
++            index += 2;
++            continue;
++        }
++        if token.starts_with("--git-dir=")
++            || token.starts_with("--work-tree=")
++            || token.starts_with("--namespace=")
++            || token.starts_with("--super-prefix=")
++            || token.starts_with('-')
++        {
++            index += 1;
++            continue;
++        }
++        return Some((index, token));
 +    }
 +    None
 +}
@@ -305,7 +421,7 @@ index 7fd8220..7dcad32 100644
  fn request_has_apply_patch_tool(tools: Option<&Value>) -> bool {
      tools.and_then(Value::as_array).is_some_and(|tools| {
          tools.iter().any(|tool| {
-@@ -4797,7 +5076,9 @@ fn push_tool_call_delta_sse(
+@@ -4797,7 +5192,9 @@ fn push_tool_call_delta_sse(
      delta: &str,
      tool_context: &CodexToolContext,
  ) {
@@ -316,7 +432,7 @@ index 7fd8220..7dcad32 100644
          let _ = delta;
      } else {
          push_sse(
-@@ -4837,6 +5118,7 @@ fn push_tool_call_done_sse(
+@@ -4837,6 +5234,7 @@ fn push_tool_call_done_sse(
          );
          return;
      }
@@ -324,7 +440,7 @@ index 7fd8220..7dcad32 100644
      push_sse(
          output,
          "response.function_call_arguments.done",
-@@ -4844,7 +5126,7 @@ fn push_tool_call_done_sse(
+@@ -4844,7 +5242,7 @@ fn push_tool_call_done_sse(
              "type": "response.function_call_arguments.done",
              "item_id": state.item_id,
              "output_index": output_index,
@@ -333,7 +449,7 @@ index 7fd8220..7dcad32 100644
          }),
      );
  }
-@@ -4870,6 +5152,7 @@ fn response_tool_call_item(
+@@ -4870,6 +5268,7 @@ fn response_tool_call_item(
          });
      }
      let (display_name, namespace) = tool_context.openai_name_for_function_tool(name);
@@ -345,10 +461,45 @@ diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-
 index f8ffff8..658e8aa 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1472,6 +1472,201 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
+@@ -1472,6 +1472,297 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
      assert_eq!(converted["output"][1]["input"], "rows 1-5");
  }
  
++fn command_policy_shell_command(command: &str) -> String {
++    let converted = chat_completion_to_response_with_request(
++        json!({
++            "id": "chatcmpl_command_policy_helper",
++            "created": 123,
++            "model": "gpt-5-mini",
++            "choices": [{
++                "finish_reason": "tool_calls",
++                "message": {
++                    "role": "assistant",
++                    "tool_calls": [{
++                        "id": "call_command_policy_helper",
++                        "type": "function",
++                        "function": {
++                            "name": "shell_command",
++                            "arguments": json!({ "command": command }).to_string()
++                        }
++                    }]
++                }
++            }]
++        }),
++        &json!({
++            "model": "gpt-5-mini",
++            "tools": [
++                { "type": "custom", "name": "apply_patch" },
++                { "type": "function", "name": "shell_command", "parameters": {} }
++            ]
++        }),
++    )
++    .unwrap();
++    let arguments: Value =
++        serde_json::from_str(converted["output"][0]["arguments"].as_str().unwrap()).unwrap();
++    arguments["command"].as_str().unwrap().to_string()
++}
++
 +#[test]
 +fn chat_completion_response_command_policy_enforces_safety_when_apply_patch_is_available() {
 +    let request = json!({
@@ -397,6 +548,7 @@ index f8ffff8..658e8aa 100644
 +    for blocked in [
 +        "docker run --rm alpine echo unsafe",
 +        "docker --context desktop-linux run --rm alpine echo unsafe",
++        "docker run --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine",
 +        "docker container prune -f",
 +        "docker ps --quiet | ForEach-Object { docker stop $_ }",
 +        "docker run --name cv_test --label com.anticodex.task-id=not-a-task alpine",
@@ -411,6 +563,66 @@ index f8ffff8..658e8aa 100644
 +    let allowed = "docker run --rm --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
 +    assert_eq!(convert_arguments(allowed)["command"], allowed);
 +    assert_eq!(convert_arguments("cargo test")["command"], "cargo test");
++}
++
++#[test]
++fn python_stdin_source_writer_is_blocked() {
++    let open_writer = r#"$script = @'
++with open("tests/integration_test.rs", "w", encoding="utf-8") as file:
++    file.write("changed")
++'@
++$script | python -"#;
++    let path_writer = r#"$script = @'
++from pathlib import Path
++Path("src/lib.rs").write_text("changed", encoding="utf-8")
++'@
++$script | python.exe -"#;
++
++    for blocked in [open_writer, path_writer] {
++        let converted = command_policy_shell_command(blocked);
++        assert!(converted.contains("Anti-Codex command policy blocked"));
++        assert!(!converted.contains(blocked));
++    }
++}
++
++#[test]
++fn python_stdin_source_reader_is_allowed() {
++    let reader = r#"$script = @'
++import sys
++from pathlib import Path
++with open("tests/integration_test.rs", "r", encoding="utf-8") as file:
++    print(file.read())
++sys.stdout.write(Path("src/lib.rs").read_text(encoding="utf-8"))
++'@
++$script | python -"#;
++
++    assert_eq!(command_policy_shell_command(reader), reader);
++}
++
++#[test]
++fn git_checkout_source_writer_is_blocked() {
++    for blocked in [
++        "git checkout -- tests/integration_test.rs",
++        "git restore tests/integration_test.rs",
++        "git reset --hard HEAD",
++        "git clean -fd",
++        "git apply fix.patch",
++    ] {
++        let converted = command_policy_shell_command(blocked);
++        assert!(converted.contains("Anti-Codex command policy blocked"));
++        assert!(!converted.contains(blocked));
++    }
++}
++
++#[test]
++fn git_apply_check_is_allowed() {
++    for allowed in [
++        "git apply --check fix.patch",
++        "git apply --numstat fix.patch",
++        "git diff -- tests/integration_test.rs",
++    ] {
++        assert_eq!(command_policy_shell_command(allowed), allowed);
++    }
 +}
 +
 +#[test]
@@ -549,4 +761,3 @@ index f8ffff8..658e8aa 100644
      let gemini = chat_completion_to_response(json!({
 -- 
 2.55.0.windows.4
-
