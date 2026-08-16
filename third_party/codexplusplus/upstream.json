@@ -75,12 +75,12 @@
     },
     {
       "file": "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
-      "sha256": "f677453fb8d8a951ff40bfd0c52058708c456a413357b1292ba1baa240990143",
-      "scope": "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, stdin-fed Python source writers, Git worktree rewrites, wrapped apply_patch calls, test pipelines that mask the producer exit status, non-cleaning or unlabeled Docker creation and global Docker cleanup with a deterministic local policy rejection; read-only Python and Git checks, test pipelines that preserve producer status, ordinary build commands, plus requests without apply_patch remain compatible"
+      "sha256": "9c144978e1b376c34ff965db8235fb43a7134afef48289863e9e4d6cafd6f195",
+      "scope": "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, stdin-fed Python source writers, Git worktree rewrites, wrapped apply_patch calls, test pipelines that mask the producer exit status, Docker creation without automatic cleanup or the deterministic anticodex-<task-id> name and matching ownership label, and global Docker cleanup with a deterministic local policy rejection; read-only Python and Git checks, test pipelines that preserve producer status, ordinary build commands, plus requests without apply_patch remain compatible"
     },
     {
       "file": "patches/0016-block-forced-Docker-interruption.patch",
-      "sha256": "c2a4cc8d9bed6f931add677ea068d700ff3860b6cb87208bd3216cbc8bdd8326",
+      "sha256": "8ba0bec4921f54eb97c7f74cabee047e61a555058cf95e31eeac555c97addf10",
       "scope": "while structured apply_patch is available, reject Docker stop, kill, restart and force-remove command calls so a timed-out container must be waited on instead of interrupted or replaced; docker wait and non-forced removal of an already exited container remain available"
     },
     {
@@ -100,7 +100,7 @@
     }
   ],
   "verification": {
-    "patchReplay": "18 project patches replayed without automatic conflict resolution; accepted head 3714b9e36d29862185833a04e1995a54a9d03f4b; current source tree c6e5bfb2aae0a75d9421cc1c296f3da2e388a423",
+    "patchReplay": "18 project patches replayed without automatic conflict resolution; accepted head 3714b9e36d29862185833a04e1995a54a9d03f4b; current source tree c4d09bc03419a2d6703ff8070776faa35e6d8fa4",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",

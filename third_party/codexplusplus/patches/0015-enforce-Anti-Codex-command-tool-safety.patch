@@ -4,9 +4,9 @@ Date: Fri, 14 Aug 2026 12:25:25 +0800
 Subject: [PATCH] enforce Anti-Codex command tool safety
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 425 +++++++++++++++++++-
- .../codex-plus-core/tests/protocol_proxy.rs   | 305 +++++++++++++++
- 2 files changed, 728 insertions(+), 2 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs  | 423 +++++++++++++++++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   | 314 +++++++++++++++
+ 2 files changed, 735 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
 index 7fd8220..7dcad32 100644
@@ -61,7 +61,7 @@ index 7fd8220..7dcad32 100644
  }
  
  pub fn local_responses_proxy_base_url(port: u16) -> String {
-@@ -4125,6 +4167,381 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -4125,6 +4167,379 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
  
  const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "When editing files, call the provided apply_patch structured function tool directly. Do not invoke apply_patch through exec_command, shell_command, PowerShell, cmd.exe, Bash, or another command wrapper. Use command tools only for inspection, builds, tests, and commands that are not file edits. Windows destructive filesystem safety: never translate or retry a blocked recursive delete or move through another shell. Keep the operation in one shell end-to-end and first verify that every resolved absolute target remains inside the intended workspace or an explicitly named target directory. In PowerShell, use Remove-Item with -LiteralPath; never fall back to cmd.exe /c, rmdir, or rd after a policy rejection. Do not change global toolchain defaults, user environment, PATH, registry state, or installed software unless the user explicitly requested that exact change. Query only specifically named non-secret environment variables; never enumerate all environment variables. Command timeout safety: a timeout only means the caller stopped waiting; it does not mean the process or container exited. Before any retry, verify that the prior process or container has exited. Do not retry while it is still running or create duplicate work. If it is still running after a timeout, wait for the same instance to finish and collect its result. Never stop, kill, or remove a still-running process or container merely to retry. Do not change a container name to bypass a name conflict, and do not create a replacement. Container ownership safety: every docker run or docker create command must include an explicit --name and --label com.anticodex.task-id=<current task id>; never use a Docker-generated container name. If the current task ID is unavailable, do not create a container. Never stop, kill, remove, or prune all Docker containers, and never use unfiltered docker ps -q, docker kill or docker stop over every listed ID, docker container prune, or docker system prune. Inspect first and operate only on the exact container created for the current task, proven by its recorded container ID and task-specific ownership label. Containers from other projects are user-owned and must remain untouched. If ownership cannot be proven, report the blocker and do not change any container.";
  
@@ -92,11 +92,9 @@ index 7fd8220..7dcad32 100644
 +                    if !arguments.iter().any(|argument| argument == "--rm") {
 +                        return Some("docker run/create requires automatic cleanup");
 +                    }
-+                    if !has_nonempty_option(arguments, "--name")
-+                        || !has_task_ownership_label(arguments)
-+                    {
++                    if !task_container_name_matches_label(arguments) {
 +                        return Some(
-+                            "docker run/create requires an explicit name and current-task ownership label",
++                            "docker run/create container name and ownership label must identify the same current task; use --name anticodex-<current task id>",
 +                        );
 +                    }
 +                }
@@ -113,12 +111,9 @@ index 7fd8220..7dcad32 100644
 +                    {
 +                        return Some("docker run/create requires automatic cleanup");
 +                    }
-+                    if nested == "create"
-+                        && (!has_nonempty_option(nested_arguments, "--name")
-+                            || !has_task_ownership_label(nested_arguments))
-+                    {
++                    if nested == "create" && !task_container_name_matches_label(nested_arguments) {
 +                        return Some(
-+                            "docker run/create requires an explicit name and current-task ownership label",
++                            "docker run/create container name and ownership label must identify the same current task; use --name anticodex-<current task id>",
 +                        );
 +                    }
 +                    if nested == "ls" && has_quiet_option(nested_arguments) {
@@ -389,33 +384,36 @@ index 7fd8220..7dcad32 100644
 +        .map(|(index, token)| (index, token.as_str()))
 +}
 +
-+fn has_nonempty_option(tokens: &[String], option: &str) -> bool {
-+    tokens.iter().enumerate().any(|(index, token)| {
++fn option_value<'a>(tokens: &'a [String], option: &str) -> Option<&'a str> {
++    let prefix = format!("{option}=");
++    tokens.iter().enumerate().find_map(|(index, token)| {
 +        let token = token.trim_matches(['\'', '"']);
-+        token
-+            .strip_prefix(&format!("{option}="))
-+            .is_some_and(|value| !value.trim_matches(['\'', '"']).is_empty())
-+            || (token == option
-+                && tokens.get(index + 1).is_some_and(|value| {
-+                    let value = value.trim_matches(['\'', '"']);
-+                    !value.is_empty() && !value.starts_with('-')
-+                }))
++        let value = token.strip_prefix(&prefix).or_else(|| {
++            (token == option).then(|| tokens.get(index + 1).map_or("", String::as_str))
++        })?;
++        let value = value.trim_matches(['\'', '"']);
++        (!value.is_empty() && !value.starts_with('-')).then_some(value)
 +    })
 +}
 +
-+fn has_task_ownership_label(tokens: &[String]) -> bool {
-+    tokens.iter().enumerate().any(|(index, token)| {
++fn task_ownership_id(tokens: &[String]) -> Option<&str> {
++    tokens.iter().enumerate().find_map(|(index, token)| {
 +        let token = token.trim_matches(['\'', '"']);
 +        let value = token.strip_prefix("--label=").or_else(|| {
 +            (token == "--label").then(|| tokens.get(index + 1).map_or("", String::as_str))
-+        });
-+        value.is_some_and(|value| {
-+            value
-+                .trim_matches(['\'', '"'])
-+                .strip_prefix("com.anticodex.task-id=")
-+                .is_some_and(is_task_id)
-+        })
++        })?;
++        let task_id = value
++            .trim_matches(['\'', '"'])
++            .strip_prefix("com.anticodex.task-id=")?;
++        is_task_id(task_id).then_some(task_id)
 +    })
++}
++
++fn task_container_name_matches_label(tokens: &[String]) -> bool {
++    let Some(name) = option_value(tokens, "--name") else {
++        return false;
++    };
++    task_ownership_id(tokens).is_some_and(|task_id| name == format!("anticodex-{task_id}"))
 +}
 +
 +fn is_task_id(task_id: &str) -> bool {
@@ -443,7 +441,7 @@ index 7fd8220..7dcad32 100644
  fn request_has_apply_patch_tool(tools: Option<&Value>) -> bool {
      tools.and_then(Value::as_array).is_some_and(|tools| {
          tools.iter().any(|tool| {
-@@ -4797,7 +5214,9 @@ fn push_tool_call_delta_sse(
+@@ -4797,7 +5212,9 @@ fn push_tool_call_delta_sse(
      delta: &str,
      tool_context: &CodexToolContext,
  ) {
@@ -454,7 +452,7 @@ index 7fd8220..7dcad32 100644
          let _ = delta;
      } else {
          push_sse(
-@@ -4837,6 +5256,7 @@ fn push_tool_call_done_sse(
+@@ -4837,6 +5254,7 @@ fn push_tool_call_done_sse(
          );
          return;
      }
@@ -462,7 +460,7 @@ index 7fd8220..7dcad32 100644
      push_sse(
          output,
          "response.function_call_arguments.done",
-@@ -4844,7 +5264,7 @@ fn push_tool_call_done_sse(
+@@ -4844,7 +5262,7 @@ fn push_tool_call_done_sse(
              "type": "response.function_call_arguments.done",
              "item_id": state.item_id,
              "output_index": output_index,
@@ -471,7 +469,7 @@ index 7fd8220..7dcad32 100644
          }),
      );
  }
-@@ -4870,6 +5290,7 @@ fn response_tool_call_item(
+@@ -4870,6 +5288,7 @@ fn response_tool_call_item(
          });
      }
      let (display_name, namespace) = tool_context.openai_name_for_function_tool(name);
@@ -483,7 +481,7 @@ diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-
 index f8ffff8..658e8aa 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1472,6 +1472,311 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
+@@ -1472,6 +1472,320 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
      assert_eq!(converted["output"][1]["input"], "rows 1-5");
  }
  
@@ -571,6 +569,7 @@ index f8ffff8..658e8aa 100644
 +        "docker run --rm alpine echo unsafe",
 +        "docker --context desktop-linux run --rm alpine echo unsafe",
 +        "docker run --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine",
++        "docker run --rm --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine",
 +        "docker container prune -f",
 +        "docker ps --quiet | ForEach-Object { docker stop $_ }",
 +        "docker run --name cv_test --label com.anticodex.task-id=not-a-task alpine",
@@ -582,9 +581,17 @@ index f8ffff8..658e8aa 100644
 +        assert!(!command.contains(blocked));
 +    }
 +
-+    let allowed = "docker run --rm --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
++    let allowed = "docker run --rm --name anticodex-019ffc57-6a72-7f81-8ce8-8796485ca06d --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
 +    assert_eq!(convert_arguments(allowed)["command"], allowed);
 +    assert_eq!(convert_arguments("cargo test")["command"], "cargo test");
++}
++
++#[test]
++fn randomized_task_container_name_is_blocked() {
++    let blocked = "docker run --rm --name cv_retry_2 --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo unsafe";
++    let converted = command_policy_shell_command(blocked);
++    assert!(converted.contains("Anti-Codex command policy blocked"));
++    assert!(!converted.contains(blocked));
 +}
 +
 +#[test]
@@ -759,7 +766,7 @@ index f8ffff8..658e8aa 100644
 +    assert!(converted.contains("Anti-Codex command policy blocked"));
 +    assert!(!converted.contains("docker run --rm alpine echo unsafe"));
 +
-+    let allowed = "docker run --rm --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
++    let allowed = "docker run --rm --name anticodex-019ffc57-6a72-7f81-8ce8-8796485ca06d --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
 +    let allowed_arguments = json!({ "command": allowed }).to_string();
 +    let allowed_sse = format!(
 +        "data: {}\n\ndata: [DONE]\n\n",

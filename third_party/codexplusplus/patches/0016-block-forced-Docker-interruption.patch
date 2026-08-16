@@ -12,8 +12,8 @@ diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-co
 index 7dcad32..5773710 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -4215,6 +4215,16 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
-                             "docker run/create requires an explicit name and current-task ownership label",
+@@ -4218,6 +4218,16 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
+                             "docker run/create container name and ownership label must identify the same current task; use --name anticodex-<current task id>",
                          );
                      }
 +                    if matches!(nested, "kill" | "stop" | "restart")
@@ -29,7 +29,7 @@ index 7dcad32..5773710 100644
                      if nested == "ls" && has_quiet_option(nested_arguments) {
                          has_quiet_container_list = true;
                      }
-@@ -4225,7 +4235,17 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
+@@ -4228,7 +4238,17 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
                      return Some("global Docker cleanup is forbidden");
                  }
                  "ps" if has_quiet_option(arguments) => has_quiet_container_list = true,
@@ -48,7 +48,7 @@ index 7dcad32..5773710 100644
                  _ => {}
              }
          }
-@@ -4404,6 +4424,16 @@ fn has_quiet_option(tokens: &[String]) -> bool {
+@@ -4537,6 +4557,16 @@ fn has_quiet_option(tokens: &[String]) -> bool {
      })
  }
  
@@ -69,7 +69,7 @@ diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-
 index 658e8aa..5d5b00a 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1523,6 +1523,9 @@ fn chat_completion_response_command_policy_enforces_safety_when_apply_patch_is_a
+@@ -1560,6 +1560,9 @@ fn chat_completion_response_command_policy_enforces_safety_when_apply_patch_is_a
          "docker container prune -f",
          "docker ps --quiet | ForEach-Object { docker stop $_ }",
          "docker run --name cv_test --label com.anticodex.task-id=not-a-task alpine",
@@ -79,8 +79,8 @@ index 658e8aa..5d5b00a 100644
          r#"[System.IO.File]::WriteAllText(\"src/main.rs\", \"unsafe\")"#,
      ] {
          let arguments = convert_arguments(blocked);
-@@ -1534,6 +1537,14 @@ fn chat_completion_response_command_policy_enforces_safety_when_apply_patch_is_a
-     let allowed = "docker run --rm --name cv_test --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
+@@ -1571,6 +1574,14 @@ fn chat_completion_response_command_policy_enforces_safety_when_apply_patch_is_a
+     let allowed = "docker run --rm --name anticodex-019ffc57-6a72-7f81-8ce8-8796485ca06d --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
      assert_eq!(convert_arguments(allowed)["command"], allowed);
      assert_eq!(convert_arguments("cargo test")["command"], "cargo test");
 +    assert_eq!(
@@ -96,4 +96,3 @@ index 658e8aa..5d5b00a 100644
  #[test]
 -- 
 2.55.0.windows.4
-

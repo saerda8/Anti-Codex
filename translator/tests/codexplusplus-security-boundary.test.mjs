@@ -129,6 +129,13 @@ test("Anti-Codex command safety rejects test pipelines that mask the producer ex
   assert.match(patch15, /test pipelines must preserve the producer exit status/);
 });
 
+test("Anti-Codex command safety binds one deterministic container name to the current task", () => {
+  assert.match(patch15, /task_container_name_matches_label/);
+  assert.match(patch15, /randomized_task_container_name_is_blocked/);
+  assert.match(patch15, /anticodex-<current task id>/);
+  assert.match(patch15, /container name and ownership label must identify the same current task/);
+});
+
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch13, /^From [0-9a-f]{40} /m);
   assert.match(patch13, /^Subject: \[PATCH 12\/13\] fix: format DreamSkin installer metadata test$/m);
