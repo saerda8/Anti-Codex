@@ -51,6 +51,7 @@ $dockerArgs = @(
     "--rm",
     "--name", $ContainerName,
     "--label", "com.anticodex.ephemeral-build=true",
+    "--env", "CARGO_BUILD_JOBS=2",
     "--mount", "type=bind,source=$resolvedWorktree,destination=/work",
     "--volume", "anticodex-cargo-xwin-cache:/root/.cache/cargo-xwin",
     "--volume", "anticodex-cargo-git:/usr/local/cargo/git",

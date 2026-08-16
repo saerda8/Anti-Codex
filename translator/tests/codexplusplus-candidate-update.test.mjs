@@ -245,6 +245,11 @@ test("Docker build hygiene can require zero labeled build containers", () => {
   assert.doesNotMatch(hygiene, /\bexit\s+1\b/);
 });
 
+test("managed Cargo builds cap worker concurrency at two", () => {
+  const runner = readFileSync(cargoRunnerPath, "utf8");
+  assert.match(runner, /"--env",\s*"CARGO_BUILD_JOBS=2"/);
+});
+
 test("CodexPlusPlus candidate preparation peels and verifies an exact annotated tag", (t) => {
   const fixture = createSuccessFixture(t, { annotatedTag: true });
   const result = runCandidate(fixture);
