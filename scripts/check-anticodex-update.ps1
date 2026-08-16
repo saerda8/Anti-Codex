@@ -125,6 +125,37 @@ function Get-ObjectPropertyValue {
     return $property.Value
 }
 
+function Test-CodexPlusPlusPatchSet {
+    param(
+        [object]$ExpectedPatches,
+        [object]$ActualPatches
+    )
+
+    $expected = @($ExpectedPatches)
+    $actual = @($ActualPatches)
+    if ($expected.Count -eq 0 -or $expected.Count -ne $actual.Count) {
+        return $false
+    }
+    for ($index = 0; $index -lt $expected.Count; $index += 1) {
+        $expectedPatch = $expected[$index]
+        $actualPatch = $actual[$index]
+        $expectedFile = Get-ObjectPropertyValue -InputObject $expectedPatch -Name "file"
+        $actualFile = Get-ObjectPropertyValue -InputObject $actualPatch -Name "file"
+        $expectedHash = Get-ObjectPropertyValue -InputObject $expectedPatch -Name "sha256"
+        $actualHash = Get-ObjectPropertyValue -InputObject $actualPatch -Name "sha256"
+        if ($expectedFile -isnot [string] -or $actualFile -isnot [string] -or
+            $expectedHash -isnot [string] -or $actualHash -isnot [string] -or
+            [string]::IsNullOrWhiteSpace($expectedFile) -or
+            $expectedFile -cne $actualFile -or
+            $expectedHash -notmatch '^[0-9a-fA-F]{64}$' -or
+            $actualHash -notmatch '^[0-9a-fA-F]{64}$' -or
+            $expectedHash.ToLowerInvariant() -cne $actualHash.ToLowerInvariant()) {
+            return $false
+        }
+    }
+    return $true
+}
+
 function Get-CodexPlusPlusRemoteRelease {
     param([object]$Metadata)
 
@@ -510,13 +541,14 @@ $activeComponentExpectedHash = ([string](Get-ObjectPropertyValue -InputObject (G
 $activeComponentPatches = Get-ObjectPropertyValue -InputObject $activeComponentManifest -Name "patches"
 $activeComponentActualHash = (Get-OptionalHash $activeComponentBinaryPath)
 if ($activeComponentActualHash) { $activeComponentActualHash = $activeComponentActualHash.ToLowerInvariant() }
+$componentPatchSetMatches = Test-CodexPlusPlusPatchSet -ExpectedPatches $sourceComponentPatches -ActualPatches $activeComponentPatches
 $componentComparable = [bool]($sourceComponentVersion -and ($sourceComponentHash -match '^[0-9a-f]{64}$') -and @($sourceComponentPatches).Count -gt 0 -and $activeComponentVersion -and $activeComponentActualHash)
 $componentDrift = [bool]($sourceComponentMetadata -and (
     -not $componentComparable -or
     [string]$sourceComponentVersion -ne [string]$activeComponentVersion -or
     $sourceComponentHash -ne $activeComponentActualHash -or
     $activeComponentExpectedHash -ne $activeComponentActualHash -or
-    @($activeComponentPatches).Count -ne @($sourceComponentPatches).Count
+    -not $componentPatchSetMatches
 ))
 $updateNeeded = [bool]($comparable -and ($hostChanged -or $cliChanged -or $packageVersionChanged -or $guardrailDrift -or $componentDrift))
 $driftState = if (-not $source -or -not $comparable) {

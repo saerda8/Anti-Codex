@@ -831,7 +831,11 @@ test("update check reports CodexPlusPlus drift as part of the same release", () 
   assert.match(checker, /components = \[pscustomobject\]@\{/);
   assert.match(checker, /\$guardrailDrift -or \$componentDrift/);
   assert.match(checker, /\$sourceComponentPatches\s*=\s*Get-ObjectPropertyValue/);
-  assert.match(checker, /@\(\$activeComponentPatches\)\.Count\s+-ne\s+@\(\$sourceComponentPatches\)\.Count/);
+  assert.match(checker, /function Test-CodexPlusPlusPatchSet/);
+  assert.match(checker, /\$componentPatchSetMatches\s*=\s*Test-CodexPlusPlusPatchSet/);
+  assert.match(checker, /-not\s+\$componentPatchSetMatches/);
+  assert.match(checker, /Get-ObjectPropertyValue\s+-InputObject\s+\$expectedPatch\s+-Name\s+"file"/);
+  assert.match(checker, /Get-ObjectPropertyValue\s+-InputObject\s+\$expectedPatch\s+-Name\s+"sha256"/);
   assert.doesNotMatch(checker, /@\(\$activeComponentPatches\)\.Count\s+-ne\s+\d+/);
 });
 
