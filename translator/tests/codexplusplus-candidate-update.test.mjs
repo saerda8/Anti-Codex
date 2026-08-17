@@ -292,8 +292,8 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
   assert.equal(report.build.runnerImage, "test/cargo-xwin:fixed");
   assert.deepEqual(report.build.commands, [
     "fmt --all -- --check",
-    "test --locked -p codex-plus-core --test protocol_proxy",
-    "test --locked -p codex-plus-core --test watcher",
+    "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+    "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
   ]);
@@ -325,8 +325,8 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
   assert.deepEqual(calls, [
     "hygiene runtime-clean",
     "cargo fmt --all -- --check",
-    "cargo test --locked -p codex-plus-core --test protocol_proxy",
-    "cargo test --locked -p codex-plus-core --test watcher",
+    "cargo test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+    "cargo test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "cargo xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "cargo xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
     "hygiene runtime-clean",
