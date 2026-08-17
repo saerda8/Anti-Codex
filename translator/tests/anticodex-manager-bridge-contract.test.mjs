@@ -1117,15 +1117,32 @@ test("Manager abandons an unleased stale bridge request before the long action t
 test("Manager preserves a new action while the bridge drains an already leased backlog", async () => {
   const staleErrorSource = extractNamedFunction(managerInject, "managerBridgeStaleError");
   const invokeSource = extractNamedFunction(managerInject, "invokeManagerBridgeWithPickup");
-  const context = {
-    Date,
+  let now = 0;
+  let waitCount = 0;
+  let queuedRequest = null;
+  let resolvePayload = null;
+  let context = null;
+  context = {
+    Date: { now: () => now },
     Error,
     Promise,
     Set,
     MANAGER_BRIDGE_PICKUP_TIMEOUT_MS: 30,
     MANAGER_BRIDGE_BACKLOG_GRACE_MS: 100,
     MANAGER_BRIDGE_PICKUP_POLL_MS: 2,
-    wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+    wait: async () => {
+      waitCount += 1;
+      if (waitCount === 1) {
+        now = 35;
+        context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [queuedRequest];
+        return;
+      }
+      now += 5;
+      queuedRequest.leaseCount = 1;
+      context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
+      delete context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[queuedRequest.id];
+      resolvePayload({ ok: true, action: "syncHost", transport: "bridge" });
+    },
     window: {
       __ANTICODEX_MANAGER_ACTION_QUEUE__: [],
       __ANTICODEX_MANAGER_ACTION_PROMISES__: {},
@@ -1140,21 +1157,14 @@ test("Manager preserves a new action while the bridge drains an already leased b
     { id: "existing-read", kind: "manager-request", path: "/health", leaseCount: 1 },
   );
   const payload = await context.invokeManagerBridgeWithPickup(() => new Promise((resolvePromise) => {
-    const request = { id: "new-action", action: "syncHost", leaseCount: 0 };
-    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[request.id] = { resolve: resolvePromise };
-    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push(request);
-    setTimeout(() => {
-      context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [request];
-      setTimeout(() => {
-        request.leaseCount = 1;
-        context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__ = [];
-        delete context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[request.id];
-        resolvePromise({ ok: true, action: "syncHost", transport: "bridge" });
-      }, 5);
-    }, 35);
+    queuedRequest = { id: "new-action", action: "syncHost", leaseCount: 0 };
+    resolvePayload = resolvePromise;
+    context.window.__ANTICODEX_MANAGER_ACTION_PROMISES__[queuedRequest.id] = { resolve: resolvePromise };
+    context.window.__ANTICODEX_MANAGER_ACTION_QUEUE__.push(queuedRequest);
   }));
 
   assert.equal(payload.transport, "bridge");
+  assert.equal(waitCount, 2);
 });
 
 test("Manager uses the bridge only after pickup and safely falls back when app bridge is stale", () => {

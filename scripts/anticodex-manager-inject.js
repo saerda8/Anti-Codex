@@ -433,12 +433,20 @@
       const startedAt = Date.now();
       const backlogDeadline = startedAt + MANAGER_BRIDGE_BACKLOG_GRACE_MS;
       let pickupDeadline = startedAt + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS;
+      let leasedBacklogActive = false;
       while (Date.now() < backlogDeadline) {
         const queue = window.__ANTICODEX_MANAGER_ACTION_QUEUE__ || [];
         const current = queue
           .find((request) => String(request?.id || "") === requestId);
         if (!current || Number(current.leaseCount || 0) > 0) return payloadPromise;
-        if (queue.some((request) => String(request?.id || "") !== requestId && Number(request?.leaseCount || 0) > 0)) {
+        const hasLeasedBacklog = queue.some(
+          (request) => String(request?.id || "") !== requestId && Number(request?.leaseCount || 0) > 0,
+        );
+        if (hasLeasedBacklog) {
+          leasedBacklogActive = true;
+          pickupDeadline = backlogDeadline;
+        } else if (leasedBacklogActive) {
+          leasedBacklogActive = false;
           pickupDeadline = Math.min(backlogDeadline, Date.now() + MANAGER_BRIDGE_PICKUP_TIMEOUT_MS);
         }
         if (Date.now() >= pickupDeadline) break;
