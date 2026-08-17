@@ -25,7 +25,7 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree d1f506d8fa34670058236d41d429be4cca7428e8$/);
+  assert.match(accepted.verification.patchReplay, /tree c4d09bc03419a2d6703ff8070776faa35e6d8fa4$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
     "sha256:36457e386e8aca1c2ac37b5207dac64c5c5d345103f38b9b239bdad8d343bfa9",
