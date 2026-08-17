@@ -1,7 +1,7 @@
-From 4df9e4b84df908b0897521bb127ece9ad0ab6b9c Mon Sep 17 00:00:00 2001
+From 62f8f5556808e207a54ceb34da7e31a94caa32dc Mon Sep 17 00:00:00 2001
 From: Anti-Codex <anticodex@local.invalid>
 Date: Sat, 1 Aug 2026 12:05:44 +0800
-Subject: [PATCH 11/13] feat: apply Anti-Codex prompt policy at common request
+Subject: [PATCH 11/18] feat: apply Anti-Codex prompt policy at common request
  entry
 
 ---
@@ -9,7 +9,7 @@ Subject: [PATCH 11/13] feat: apply Anti-Codex prompt policy at common request
  1 file changed, 658 insertions(+)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 3fc0956..6fbd519 100644
+index 0bd53ea..7fd8220 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,10 +4,14 @@

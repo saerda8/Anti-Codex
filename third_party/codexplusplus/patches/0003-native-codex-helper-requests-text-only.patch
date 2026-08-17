@@ -1,7 +1,7 @@
-From 19e028678d5b3c9dc324d22f73f573efb126d7aa Mon Sep 17 00:00:00 2001
+From ee7875c626a058c0a13b40ffde3f4640a2b498f1 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:35:15 +0800
-Subject: [PATCH 03/13] fix: keep native helper requests text-only
+Subject: [PATCH 03/18] fix: keep native helper requests text-only
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 105 ++++++++++++++---
@@ -134,10 +134,10 @@ index 9363c89..560c26d 100644
      match value {
          Value::String(text) => normalize_chat_tool_arguments_string(text),
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 796270f..c2f9260 100644
+index 358b32c..2f8fb5c 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -517,6 +517,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
+@@ -518,6 +518,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
      assert!(converted.get("parallel_tool_calls").is_none());
  }
  

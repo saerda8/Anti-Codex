@@ -1,14 +1,14 @@
-From 8efc81c87405b7e39a0c6341cfb74849083dc31e Mon Sep 17 00:00:00 2001
+From 65c6d0fdca2f1baed46dd4aa79ddf282815d1a99 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 07:13:50 +0800
-Subject: [PATCH 08/13] chore: audit Codex tool conversion
+Subject: [PATCH 08/18] chore: audit Codex tool conversion
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 70 +++++++++++++++++++-
  1 file changed, 67 insertions(+), 3 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 9208a5f..a009843 100644
+index acdab44..1318dfb 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -7,7 +7,7 @@ use std::collections::BTreeSet;

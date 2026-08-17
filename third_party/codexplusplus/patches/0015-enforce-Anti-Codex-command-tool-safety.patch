@@ -1,15 +1,15 @@
-From c8f5c5959a063f966c7e81aee806bfffa79fd7d3 Mon Sep 17 00:00:00 2001
+From de1c87762e408f48874c163bfea910a6bcb9738b Mon Sep 17 00:00:00 2001
 From: Anti-Codex Diagnostic <anticodex@example.invalid>
 Date: Fri, 14 Aug 2026 12:25:25 +0800
-Subject: [PATCH] enforce Anti-Codex command tool safety
+Subject: [PATCH 14/18] enforce Anti-Codex command tool safety
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 423 +++++++++++++++++++-
- .../codex-plus-core/tests/protocol_proxy.rs   | 314 +++++++++++++++
+ crates/codex-plus-core/src/protocol_proxy.rs  | 423 +++++++++++++++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   | 314 +++++++++++++
  2 files changed, 735 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 7fd8220..7dcad32 100644
+index 7fd8220..880d056 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -876,6 +876,48 @@ impl CodexToolContext {
@@ -478,10 +478,10 @@ index 7fd8220..7dcad32 100644
          "id": format!("fc_{call_id}"),
          "type": "function_call",
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index f8ffff8..658e8aa 100644
+index a07473e..aba2770 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1472,6 +1472,320 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
+@@ -1473,6 +1473,320 @@ fn chat_completion_response_keeps_ordinary_suffix_named_custom_tools() {
      assert_eq!(converted["output"][1]["input"], "rows 1-5");
  }
  
@@ -802,5 +802,3 @@ index f8ffff8..658e8aa 100644
  #[test]
  fn chat_completion_response_maps_gemini_and_claude_cache_usage_like_ccx() {
      let gemini = chat_completion_to_response(json!({
--- 
-2.55.0.windows.4

@@ -1,14 +1,14 @@
-From dcbe8430db614e8fee2147759a48337e69c799c7 Mon Sep 17 00:00:00 2001
+From df6f84bc0fef6c4f037cf6c883def1b9582f58f6 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 16:13:39 +0800
-Subject: [PATCH] route compaction by current thread model
+Subject: [PATCH 17/18] route compaction by current thread model
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 256 ++++++++++++++++++-
  1 file changed, 255 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 3174124..82603a6 100644
+index c66f73c..c3fdb06 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,6 +4,7 @@
@@ -316,6 +316,3 @@ index 3174124..82603a6 100644
  }
  
  async fn open_responses_proxy_request_with_settings_and_user_agent(
--- 
-2.55.0.windows.4
-

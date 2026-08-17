@@ -1,7 +1,7 @@
-From ec119e6782efa533e99cd1eedc3822ab52014d5e Mon Sep 17 00:00:00 2001
+From bcb8d3765885e405d355490794bec8bbb74c2fa0 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 08:09:32 +0800
-Subject: [PATCH 07/13] handle third-party thinking tags without interleaving
+Subject: [PATCH 07/18] handle third-party thinking tags without interleaving
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 47 +++++++++----
@@ -9,7 +9,7 @@ Subject: [PATCH 07/13] handle third-party thinking tags without interleaving
  2 files changed, 101 insertions(+), 14 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index d299237..9208a5f 100644
+index 90ce583..acdab44 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -7,7 +7,7 @@ use std::collections::BTreeSet;
@@ -121,10 +121,10 @@ index d299237..9208a5f 100644
  
  fn strip_think_answer_separator(text: &str) -> &str {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 9f050bc..0f27f5e 100644
+index b8e714f..086ec3c 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1537,6 +1537,33 @@ fn chat_completion_response_splits_inline_think_block() {
+@@ -1538,6 +1538,33 @@ fn chat_completion_response_splits_inline_think_block() {
      );
      assert_eq!(converted["output"][1]["type"], "message");
      assert_eq!(converted["output"][1]["content"][0]["text"], "pong");
@@ -158,7 +158,7 @@ index 9f050bc..0f27f5e 100644
  }
  
  #[test]
-@@ -1560,6 +1587,33 @@ data: [DONE]
+@@ -1561,6 +1588,33 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  
@@ -192,7 +192,7 @@ index 9f050bc..0f27f5e 100644
  #[test]
  fn chat_sse_converts_reasoning_inline_think_tools_and_errors_like_ccs() {
      let reasoning = chat_sse_to_responses_sse(
-@@ -1592,6 +1646,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
+@@ -1593,6 +1647,20 @@ data: {"id":"chatcmpl_minimax","created":123,"model":"MiniMax-M2.7","choices":[{
      assert!(!inline_think.contains("<think>"));
      assert!(!inline_think.contains("</think>"));
  

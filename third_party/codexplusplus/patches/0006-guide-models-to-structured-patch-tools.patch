@@ -1,7 +1,7 @@
-From 281b14335a52bcf5cdfc040df7bc3e20504ee7a6 Mon Sep 17 00:00:00 2001
+From c97fd034a4a915852b18585e77b7d6230dd22d53 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
-Subject: [PATCH 06/13] guide models to structured patch tools
+Subject: [PATCH 06/18] guide models to structured patch tools
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--
@@ -9,7 +9,7 @@ Subject: [PATCH 06/13] guide models to structured patch tools
  2 files changed, 353 insertions(+), 27 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 3bf1c49..d299237 100644
+index 3bf1c49..90ce583 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -209,6 +209,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
@@ -250,10 +250,10 @@ index 3bf1c49..d299237 100644
                  spec.openai_name.clone()
              };
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 557698b..9f050bc 100644
+index b735c34..b8e714f 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -714,9 +714,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
+@@ -715,9 +715,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
  fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      let converted = responses_to_chat_completions(json!({
          "model": "gpt-5-mini",
@@ -274,7 +274,7 @@ index 557698b..9f050bc 100644
              {
                  "type": "custom",
                  "name": "apply_patch",
-@@ -728,6 +739,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -729,6 +740,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      .unwrap();
  
      assert_eq!(converted["stream_options"]["include_usage"], true);
@@ -288,7 +288,7 @@ index 557698b..9f050bc 100644
      let names: Vec<_> = converted["tools"]
          .as_array()
          .unwrap()
-@@ -737,21 +755,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -738,21 +756,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      assert_eq!(
          names,
          vec![
@@ -349,7 +349,7 @@ index 557698b..9f050bc 100644
      );
  }
  
-@@ -1026,12 +1079,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+@@ -1027,12 +1080,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
      }))
      .unwrap();
  
@@ -370,7 +370,7 @@ index 557698b..9f050bc 100644
          "{\"content\":\"# Test\",\"path\":\"docs/test.md\"}"
      );
  }
-@@ -1294,6 +1353,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
+@@ -1295,6 +1354,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
      );
  }
  
@@ -412,7 +412,7 @@ index 557698b..9f050bc 100644
  #[test]
  fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      let converted = chat_completion_to_response_with_request(
-@@ -1331,6 +1425,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
+@@ -1332,6 +1426,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      );
  }
  
@@ -466,7 +466,7 @@ index 557698b..9f050bc 100644
  #[test]
  fn chat_completion_response_maps_gemini_and_claude_cache_usage_like_ccx() {
      let gemini = chat_completion_to_response(json!({
-@@ -1510,6 +1651,93 @@ data: [DONE]
+@@ -1511,6 +1652,93 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  

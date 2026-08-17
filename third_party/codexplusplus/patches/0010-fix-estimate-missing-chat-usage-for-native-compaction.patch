@@ -1,7 +1,7 @@
-From 46d850c2245f9e9c691cd53e195c7d77f6ad42a8 Mon Sep 17 00:00:00 2001
+From 9005263270cd7d5dd72ea8b6177e13cfbd3978b6 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 27 Jul 2026 22:53:31 +0800
-Subject: [PATCH 10/13] fix: estimate missing chat usage for native compaction
+Subject: [PATCH 10/18] fix: estimate missing chat usage for native compaction
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  |  75 +++++++++++++
@@ -9,7 +9,7 @@ Subject: [PATCH 10/13] fix: estimate missing chat usage for native compaction
  2 files changed, 176 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index a009843..3fc0956 100644
+index 1318dfb..0bd53ea 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -2391,6 +2391,9 @@ impl ChatSseState {
@@ -109,7 +109,7 @@ index a009843..3fc0956 100644
      let Some(usage) = usage.filter(|value| value.is_object() && !value.is_null()) else {
          return default_responses_usage();
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 0f27f5e..f8ffff8 100644
+index 086ec3c..a07473e 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -15,7 +15,7 @@ use codex_plus_core::settings::{
@@ -121,7 +121,7 @@ index 0f27f5e..f8ffff8 100644
  use std::io::{Read, Write};
  use std::net::TcpListener;
  use std::path::{Path, PathBuf};
-@@ -1587,6 +1587,106 @@ data: [DONE]
+@@ -1588,6 +1588,106 @@ data: [DONE]
      assert!(converted.contains("data: [DONE]"));
  }
  

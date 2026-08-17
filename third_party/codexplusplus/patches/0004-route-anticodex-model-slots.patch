@@ -1,7 +1,7 @@
-From 0cdbce3f6e536af87a0d126ec43469eeaab16f66 Mon Sep 17 00:00:00 2001
+From 573995dd9ad342f09095fd498eae1b5e4071164a Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
-Subject: [PATCH 04/13] fix: route Anti-Codex model slots
+Subject: [PATCH 04/18] fix: route Anti-Codex model slots
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 386 ++++++++++++++++++-

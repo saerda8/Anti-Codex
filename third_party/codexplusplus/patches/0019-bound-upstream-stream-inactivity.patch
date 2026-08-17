@@ -1,11 +1,14 @@
-From 1111111111111111111111111111111111111111 Mon Sep 17 00:00:00 2001
+From e3f25c1f1753a3e32961329f625eb3e3cc7630ef Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 19:00:00 +0800
-Subject: [PATCH] bound upstream stream inactivity
+Subject: [PATCH 18/18] bound upstream stream inactivity
 
 ---
+ crates/codex-plus-core/src/launcher.rs | 176 ++++++++++++++++++++++---
+ 1 file changed, 161 insertions(+), 15 deletions(-)
+
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 32f349e2..445c3c8a 100644
+index eb92b5f..f55651f 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -30,6 +30,7 @@ const LOCAL_HELPER_BIND_HOST: &str = "127.0.0.1";
@@ -16,7 +19,7 @@ index 32f349e2..445c3c8a 100644
  
  /// Asynchronous callback used by the bridge watchdog to restore a launcher-specific bridge.
  ///
-@@ -1570,6 +1571,16 @@ async fn collect_loopback_body(
+@@ -1600,6 +1601,16 @@ async fn collect_loopback_body(
      Ok(response.into_body().collect().await?.to_bytes().to_vec())
  }
  
@@ -33,7 +36,7 @@ index 32f349e2..445c3c8a 100644
  async fn try_handle_cancel_aware_protocol_proxy_stream(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
-@@ -1645,14 +1656,25 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1675,14 +1686,25 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
      if wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
          loop {
              tokio::select! {
@@ -63,7 +66,7 @@ index 32f349e2..445c3c8a 100644
                  },
                  _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
              }
-@@ -1664,8 +1686,8 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1694,8 +1716,8 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
          let mut stream_failed = false;
          loop {
              tokio::select! {
@@ -74,7 +77,7 @@ index 32f349e2..445c3c8a 100644
                          if let Ok(bytes) = frame.into_data() {
                              let converted = converter.push_bytes(&bytes);
                              if !converted.is_empty() {
-@@ -1673,7 +1695,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1703,7 +1725,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
                              }
                          }
                      }
@@ -83,7 +86,7 @@ index 32f349e2..445c3c8a 100644
                          let failed = converter.fail(
                              format!("Stream error: {error}"),
                              Some("stream_error".to_string()),
-@@ -1684,7 +1706,28 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1714,7 +1736,28 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
                          stream_failed = true;
                          break;
                      }
@@ -113,7 +116,7 @@ index 32f349e2..445c3c8a 100644
                  },
                  _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
              }
-@@ -1779,14 +1822,25 @@ async fn try_handle_cancel_aware_chat_completions_proxy_stream(
+@@ -1809,14 +1852,25 @@ async fn try_handle_cancel_aware_chat_completions_proxy_stream(
      let (mut downstream_reader, mut downstream_writer) = stream.split();
      loop {
          tokio::select! {
@@ -143,7 +146,7 @@ index 32f349e2..445c3c8a 100644
              },
              _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
          }
-@@ -1883,7 +1937,27 @@ async fn handle_protocol_proxy_connection(
+@@ -1913,7 +1967,27 @@ async fn handle_protocol_proxy_connection(
          write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
          if upstream.wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
              let mut bytes_stream = upstream.response.bytes_stream();
@@ -172,7 +175,7 @@ index 32f349e2..445c3c8a 100644
                  if let Ok(bytes) = chunk {
                      stream.write_all(&bytes).await?;
                  } else {
-@@ -1906,7 +1980,37 @@ async fn handle_protocol_proxy_connection(
+@@ -1936,7 +2010,37 @@ async fn handle_protocol_proxy_connection(
              .unwrap_or_default();
          let mut bytes_stream = upstream.response.bytes_stream();
          let mut stream_failed = false;
@@ -211,7 +214,7 @@ index 32f349e2..445c3c8a 100644
              match chunk {
                  Ok(bytes) => {
                      let converted = converter.push_bytes(&bytes);
-@@ -2109,7 +2213,27 @@ async fn handle_chat_completions_proxy_connection(
+@@ -2139,7 +2243,27 @@ async fn handle_chat_completions_proxy_connection(
      if upstream.is_stream && is_success {
          write_http_stream_headers(stream, &status, &content_type).await?;
          let mut bytes_stream = upstream.response.bytes_stream();
@@ -240,7 +243,7 @@ index 32f349e2..445c3c8a 100644
              stream.write_all(&chunk?).await?;
          }
          log_helper_response(
-@@ -3625,6 +3749,28 @@ mod tests {
+@@ -3655,6 +3779,28 @@ mod tests {
          assert!(HELPER_BODY_IDLE_TIMEOUT <= std::time::Duration::from_secs(30));
      }
  
@@ -269,5 +272,3 @@ index 32f349e2..445c3c8a 100644
      #[test]
      fn launcher_stays_alive_while_injected_cdp_endpoint_is_available() {
          assert!(launcher_target_alive(false, true));
--- 
-2.51.0.windows.1

@@ -1,7 +1,7 @@
-From b2fa0c376f876084b640828e7b981cdf6860ada1 Mon Sep 17 00:00:00 2001
+From 7228a66fd62833d6a121ceb0c9a64ffad1ebe247 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 05/13] fix: preserve image tool outputs for chat relays
+Subject: [PATCH 05/18] fix: preserve image tool outputs for chat relays
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 152 +++++++++++++++++-
@@ -204,10 +204,10 @@ index a4ab0f3..3bf1c49 100644
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index c2f9260..557698b 100644
+index 2f8fb5c..b735c34 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -943,6 +943,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+@@ -944,6 +944,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
      );
  }
  

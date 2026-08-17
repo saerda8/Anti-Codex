@@ -1,18 +1,18 @@
-From 3bb3dd9ee05d223c90808657ef2dc7bed59b5986 Mon Sep 17 00:00:00 2001
+From 45752a33d6e4df0cf1526e035e4e2e8ba95d532b Mon Sep 17 00:00:00 2001
 From: Anti-Codex Diagnostic <anticodex@example.invalid>
 Date: Fri, 14 Aug 2026 14:30:00 +0800
-Subject: [PATCH] route native compaction metadata header
+Subject: [PATCH 16/18] route native compaction metadata header
 
 ---
- crates/codex-plus-core/src/launcher.rs       |  24 +++--
- crates/codex-plus-core/src/protocol_proxy.rs | 116 +++++++++++++++----
+ crates/codex-plus-core/src/launcher.rs       |  24 ++--
+ crates/codex-plus-core/src/protocol_proxy.rs | 116 ++++++++++++++++---
  2 files changed, 116 insertions(+), 24 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 8eeeb1ff..32f349e2 100644
+index 846849b..eb92b5f 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
-@@ -1109,6 +1109,10 @@ async fn handle_helper_connection_with_proxy_token(
+@@ -1136,6 +1136,10 @@ async fn handle_helper_connection_with_proxy_token(
          }
      };
      let request_content_encoding = header_value_from_headers(&request_headers, "content-encoding");
@@ -23,7 +23,7 @@ index 8eeeb1ff..32f349e2 100644
  
      let _ = crate::diagnostic_log::append_diagnostic_log(
          "helper.request",
-@@ -1188,6 +1192,7 @@ async fn handle_helper_connection_with_proxy_token(
+@@ -1215,6 +1219,7 @@ async fn handle_helper_connection_with_proxy_token(
              &mut stream,
              &request_body,
              request_user_agent.as_deref(),
@@ -31,7 +31,7 @@ index 8eeeb1ff..32f349e2 100644
              method,
              path,
              remote_addr_text,
-@@ -1569,6 +1574,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1599,6 +1604,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
      request_user_agent: Option<&str>,
@@ -39,7 +39,7 @@ index 8eeeb1ff..32f349e2 100644
      request_json: Option<&serde_json::Value>,
      method: &str,
      path: &str,
-@@ -1578,6 +1584,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1608,6 +1614,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
          request_body,
          request_user_agent,
          path,
@@ -47,7 +47,7 @@ index 8eeeb1ff..32f349e2 100644
      );
      let open_result = tokio::select! {
          result = open_upstream => result,
-@@ -1799,6 +1806,7 @@ async fn handle_protocol_proxy_connection(
+@@ -1829,6 +1836,7 @@ async fn handle_protocol_proxy_connection(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
      request_user_agent: Option<&str>,
@@ -55,7 +55,7 @@ index 8eeeb1ff..32f349e2 100644
      method: &str,
      path: &str,
      remote_addr_text: Option<String>,
-@@ -1809,6 +1817,7 @@ async fn handle_protocol_proxy_connection(
+@@ -1839,6 +1847,7 @@ async fn handle_protocol_proxy_connection(
              stream,
              request_body,
              request_user_agent,
@@ -63,7 +63,7 @@ index 8eeeb1ff..32f349e2 100644
              request_json.as_ref(),
              method,
              path,
-@@ -1818,13 +1827,14 @@ async fn handle_protocol_proxy_connection(
+@@ -1848,13 +1857,14 @@ async fn handle_protocol_proxy_connection(
      {
          return Ok(());
      }
@@ -86,7 +86,7 @@ index 8eeeb1ff..32f349e2 100644
          Err(error) => {
              let body = serde_json::to_vec(
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 5773710e..31741244 100644
+index 6709fad..c66f73c 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -69,7 +69,7 @@ const ANTICODEX_THIRD_PARTY_RELAY_ID: &str = "anticodex-third-party";
@@ -332,5 +332,3 @@ index 5773710e..31741244 100644
      let directed_relay = select_anticodex_relay_for_model(&settings, &mut request_json)?;
      let source_model = request_json
          .get("model")
--- 
-2.51.0.windows.2

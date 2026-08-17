@@ -10,92 +10,92 @@
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-      "sha256": "640470f4cb33c7f25b59b2b528aea510b852cba67fe30478600328fb8d2a3236",
+      "sha256": "b6ba467522ffcb0adae3e0e5f1ed41fe10d7968359b38c50a82062583b87164c",
       "scope": "state, ports, branded executable selection, process paths and global watcher isolation, including canonical exact copied-app root validation before any restart target can be stopped"
     },
     {
       "file": "patches/0002-cancel-loopback-streams-without-resets.patch",
-      "sha256": "744d9347b567bcc5a6c53ce42534215a1903ed31a3bc7bea17daa66b6f8ea399",
+      "sha256": "226042a76e9352e5dd4b4569199118d64fef3d1e39399a8c135196094b98e815",
       "scope": "one-shot cancel-aware loopback-only HTTP streams with bounded header-first parsing, fixed-route bearer authorization before any large body read, bounded body reads and concurrency, unauthenticated slow-body permit-release regression coverage, plus shared response-header timeouts for direct Chat requests"
     },
     {
       "file": "patches/0003-native-codex-helper-requests-text-only.patch",
-      "sha256": "5c715cf406e365474b642a5651748c4d95a6673db2a627de96d34a7710be8d04",
+      "sha256": "05c74719b91058607daeb98d6b4e908e09c64cbe5088e09224e1c118ebd6de76",
       "scope": "strip project tool controls only from exact official Codex title and task-suggestion helper requests; ordinary user tasks and all other conversion behavior remain upstream"
     },
     {
       "file": "patches/0004-route-anticodex-model-slots.patch",
-      "sha256": "a08e0fba27ea1504f67c60bd91d9c6b0e6eed340bf5c46628b3cd1d406062620",
-      "scope": "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction preserves an explicit routable request model and uses isolated config only when that model is missing or unknown, directed requests fail closed without fallback, and ordinary v1.2.47 provider-scoped per-model routes remain available on both direct and cancel-aware transports"
+      "sha256": "767ac289efcba917d9c63213f3639cbe6afdd63cdbb10c11c3032e08646dd5f4",
+      "scope": "route only reserved Anti-Codex frontend model slots and exact Antigravity catalog models to one of two resident relay profiles; generic slots resolve the saved model, third-party namespaces are stripped, canonical native compaction preserves an explicit routable request model and uses isolated config only when that model is missing or unknown, directed requests fail closed without fallback, and ordinary v1.2.48 provider-scoped per-model routes remain available on both direct and cancel-aware transports"
     },
     {
       "file": "patches/0005-preserve-image-tool-outputs-for-chat-relays.patch",
-      "sha256": "9a6699b776aa8c477ebf50dfe3e962d5e15b4c315c6f3b03d3864dfcfbab811e",
+      "sha256": "dd6aaba2b5124e4b4d26227271fd443da878b80472b540de7f3c714c642f6db5",
       "scope": "convert image-bearing Responses tool outputs to standard multimodal Chat content instead of textual JSON/Base64; ordinary tool text, tool association, streaming, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0006-guide-models-to-structured-patch-tools.patch",
-      "sha256": "d9dde79f846f4e4e93fa21ab95f521973aa4aa4d64c4ddfdc77a6563b30ffd6b",
+      "sha256": "b89126eefa1407a5c01b660ce3860088d99495e8ba57ac8ad5ea7cb216545c8c",
       "scope": "expose an exact-name structured apply_patch function before compatibility proxies and command tools, accumulate fragmented streamed tool identities before emitting stable added/delta/done events, reconstruct only explicit apply_patch proxy names so ordinary suffix-named custom tools remain unchanged, and append immutable command guidance against cross-shell destructive retries, unverified recursive targets, unrequested global toolchain changes, broad environment enumeration, retrying timed-out processes or containers before verified exit, replacing still-running timed-out instances, and global Docker stop, kill, remove, or prune operations without exact current-task container ownership; command execution, routing, history, retries and task control remain unchanged"
     },
     {
       "file": "patches/0007-ignore-late-reasoning-after-visible-text.patch",
-      "sha256": "e35481dcaba3897492728cc89762f34ad29fd8b61bbb4a1f5e92ef92ad3c7ed2",
+      "sha256": "76273452925e5444ded4a329b82d4487d64050752988786d8b6f4269ff8046b7",
       "scope": "map balanced leading think or thinking blocks to reasoning and ignore a separate reasoning delta only after visible text has already started; visible text, reasoning-first streams, tools, routing, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0008-chore-audit-Codex-tool-conversion.patch",
-      "sha256": "6684996bb37d7697759ffa0562c743bbfca9ad52556154885379d45bb942e8dd",
+      "sha256": "b4165f28945ef9bdf6aba4a51538f03e65433e851653c1e3f6c25d432468b99d",
       "scope": "record only native and converted tool counts, names and types for local relay diagnosis; request content, arguments, credentials, routing and model behavior remain unchanged"
     },
     {
       "file": "patches/0009-fix-allow-long-multimodal-helper-requests.patch",
-      "sha256": "395c13715e4f4431530b05fa5535f5d76cb7264480f4dd841a7e0dc73a6a6d8d",
+      "sha256": "2fd783ce780e0db5a8c67df5bd230cecdc04b884d4acdb5087a5acbb38793835",
       "scope": "raise the bounded loopback helper request limit from 32 MiB to 128 MiB for long multimodal Codex turns while preserving explicit 413 rejection above the limit; routing, translation, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
-      "sha256": "72e0653dc8e2de48581577c92aaf80eb6f229e49e05bfa05be69381d9bee7985",
+      "sha256": "e7f27549b29c2d47dc941c4c388f40d98d55408e39e3b990a1474b831ed2a5fc",
       "scope": "when Chat SSE omits usage, conservatively estimate Responses input, output and total usage from text and tool context for native Codex auto-compaction; real upstream usage remains authoritative and embedded image Base64 is excluded; routing, retries, history and task control remain unchanged"
     },
     {
       "file": "patches/0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
-      "sha256": "f168f6a136b050d337ba5e42d751bdc94b53258fa78d52c5128dacc91489ade3",
+      "sha256": "b4edd5097dad8dd7c9530985f726f8ebeb3eb44d551ab8baf152177bd07ccfae",
       "scope": "apply the isolated prompt policy only to the exact reserved Anti-Codex relays before the Responses/Chat branch; default and invalid policy input preserve request JSON, disabled/custom modes replace only system/developer carriers, user messages and AGENTS remain intact, the optional user instruction is added once, and a no-secret native prompt snapshot is written atomically"
     },
     {
       "file": "patches/0013-fix-format-dreamskin-installer-test.patch",
-      "sha256": "043cc44fb337baaa87d99031c72b063926019b9963caf7d64ea79fb6bbb83f73",
+      "sha256": "958439a33824fce1cb5ba70587b476ad2beb4232a605f2940841ba7fe33b2ac7",
       "scope": "normalize only the upstream v1.2.46 DreamSkin installer metadata assertion required by stable rustfmt; runtime behavior is unchanged"
     },
     {
       "file": "patches/0014-fix-format-dreamskin-runtime-test.patch",
-      "sha256": "4211f425655e971c55b8e77901a4205fa34d41580cc5ee2594b4cc1a6b781080",
+      "sha256": "ca95ce252f85cadeba2172368892dcd575f156bfd9541efc800e9e0b7ee5bd7f",
       "scope": "normalize only the upstream v1.2.47 DreamSkin runtime layout assertion required by stable rustfmt; runtime behavior is unchanged"
     },
     {
       "file": "patches/0015-enforce-Anti-Codex-command-tool-safety.patch",
-      "sha256": "9c144978e1b376c34ff965db8235fb43a7134afef48289863e9e4d6cafd6f195",
+      "sha256": "d3229fdb5f2d0b113a2b17b9964afd0e2a67005c94daf6606dad3ecc1bac00c0",
       "scope": "when an exact structured apply_patch tool is available, enforce command-tool safety at nonstream and streaming tool-call exits by replacing unsafe direct source edits, stdin-fed Python source writers, Git worktree rewrites, wrapped apply_patch calls, test pipelines that mask the producer exit status, Docker creation without automatic cleanup or the deterministic anticodex-<task-id> name and matching ownership label, and global Docker cleanup with a deterministic local policy rejection; read-only Python and Git checks, test pipelines that preserve producer status, ordinary build commands, plus requests without apply_patch remain compatible"
     },
     {
       "file": "patches/0016-block-forced-Docker-interruption.patch",
-      "sha256": "8ba0bec4921f54eb97c7f74cabee047e61a555058cf95e31eeac555c97addf10",
+      "sha256": "e3349935be91d4dd8abbd424d96d740d740c86e3e253a645daf3c01934cadd9c",
       "scope": "while structured apply_patch is available, reject Docker stop, kill, restart and force-remove command calls so a timed-out container must be waited on instead of interrupted or replaced; docker wait and non-forced removal of an already exited container remain available"
     },
     {
       "file": "patches/0017-route-native-compaction-header.patch",
-      "sha256": "bbcb1fd0474fbca5e29371791c8082b27207146cdd7ec7aa53c5069564fce448",
+      "sha256": "9990017bef459e555f016b0e1c54ce997f2612daf8eac3446c93dfb751e318e6",
       "scope": "consume only the canonical Codex HTTP x-codex-turn-metadata compaction marker at the helper boundary, preserve the body metadata fallback, and route marked compaction through the current isolated model selection on direct and cancel-aware transports; ordinary turns remain unchanged and the header value is neither logged nor forwarded"
     },
     {
       "file": "patches/0018-route-compaction-by-current-thread-model.patch",
-      "sha256": "247e2bff290e933c784fc590838d9a05822d1141dc471a3a80727b31a8734d92",
+      "sha256": "b71ee92baa4bd4fcc22987c79ec8e65b3b06112a11a0e91441125ab3469a81e5",
       "scope": "for canonically marked compaction only, resolve a validated thread or session id to the latest matching isolated rollout thread_settings_applied model within a bounded tail and let that current task selection replace a stale routable model across third-party, Claude and Gemini switches; missing or invalid thread state retains the existing fallback, ordinary turns remain unchanged, and rollout contents are neither logged nor forwarded"
     },
     {
       "file": "patches/0019-bound-upstream-stream-inactivity.patch",
-      "sha256": "eab4d67dcc18ab68a3dec83202e578b279ab6424d83e40408f32423f10c45b56",
+      "sha256": "08da583a3c46cae2cba792f3ece1f66528430762564491b336348c56ede66c4e",
       "scope": "bound every successful Responses and Chat streaming helper read to 120 seconds of upstream inactivity, emit a Responses failure for converted Chat streams, close direct streams deterministically, and record timeout rather than success; routing, retries, history, tools and task control remain unchanged"
     }
   ],
