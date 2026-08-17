@@ -152,8 +152,8 @@ if ($SourceBinary) {
                 }
                 $expectedBuildCommands = @(
                     "fmt --all -- --check",
-                    "test --locked -p codex-plus-core --test protocol_proxy",
-                    "test --locked -p codex-plus-core --test watcher",
+                    "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+                    "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
                     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
                     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher"
                 )
