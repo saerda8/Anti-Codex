@@ -17,7 +17,7 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
   assert.equal(accepted.version, "1.2.47");
   assert.equal(accepted.tag, "v1.2.47");
   assert.equal(accepted.upstreamCommit, "900d12756297f169f8c3ec45ca5a53dadb80ea2b");
-  assert.equal(accepted.patchCommit, "3714b9e36d29862185833a04e1995a54a9d03f4b");
+  assert.equal(accepted.patchCommit, "8e5f2adc6ea2dab9e99aaa0f85b6ab2827768fd5");
   assert.equal(accepted.patches.length, 18);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
   assert.equal(accepted.patches.at(-1).file, "patches/0019-bound-upstream-stream-inactivity.patch");
@@ -28,7 +28,7 @@ test("v1.2.47 promotion targets the reviewed upstream tag", () => {
   assert.match(accepted.verification.patchReplay, /tree c4d09bc03419a2d6703ff8070776faa35e6d8fa4$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:36457e386e8aca1c2ac37b5207dac64c5c5d345103f38b9b239bdad8d343bfa9",
+    "sha256:6ff183dc4ddf8ef63bee98b4b99b15ad2e6ebf8aa89b7102c236f98f0ca2e430",
   );
 });
 
