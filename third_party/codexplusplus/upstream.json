@@ -2,11 +2,11 @@
   "component": "CodexPlusPlus",
   "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
   "license": "AGPL-3.0-only",
-  "version": "1.2.47",
-  "tag": "v1.2.47",
-  "upstreamCommit": "900d12756297f169f8c3ec45ca5a53dadb80ea2b",
-  "isolationPatchCommit": "3f186f2efdd5f58e78cd396cdd93ec0de03ad73e",
-  "patchCommit": "8e5f2adc6ea2dab9e99aaa0f85b6ab2827768fd5",
+  "version": "1.2.48",
+  "tag": "v1.2.48",
+  "upstreamCommit": "fb3ebd9a82383aedd8d098aa9ae3aef9426d13a4",
+  "isolationPatchCommit": "af7b44d60dcba088d09b296076f3ffd316759bad",
+  "patchCommit": "f3a7dee9b984622ec3d6edaddc04ba1722b8b59f",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -97,16 +97,21 @@
       "file": "patches/0019-bound-upstream-stream-inactivity.patch",
       "sha256": "08da583a3c46cae2cba792f3ece1f66528430762564491b336348c56ede66c4e",
       "scope": "bound every successful Responses and Chat streaming helper read to 120 seconds of upstream inactivity, emit a Responses failure for converted Chat streams, close direct streams deterministically, and record timeout rather than success; routing, retries, history, tools and task control remain unchanged"
+    },
+    {
+      "file": "patches/0020-fix-format-v1.2.48-upstream.patch",
+      "sha256": "2ce5f30fed88f67202dc385f8199428e227ba3a032b00c27a5792e178af5837e",
+      "scope": "normalize only the upstream v1.2.48 and merged isolation formatting required by stable rustfmt; runtime behavior is unchanged"
     }
   ],
   "verification": {
-    "patchReplay": "18 project patches replayed without automatic conflict resolution; head 8e5f2adc6ea2dab9e99aaa0f85b6ab2827768fd5; tree c4d09bc03419a2d6703ff8070776faa35e6d8fa4",
+    "patchReplay": "19 project patches replayed without automatic conflict resolution; head f3a7dee9b984622ec3d6edaddc04ba1722b8b59f; tree 52dfae5bc4d61c6ad5bdba4d5c74b79d207f174b",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:6ff183dc4ddf8ef63bee98b4b99b15ad2e6ebf8aa89b7102c236f98f0ca2e430",
+    "launcherReleaseBuild": "sha256:79257e3b64462e17c283be5f90b807c64f11bc05c2f453b309b588c07fbf9e58",
     "runtimeIsolation": "candidate only; not activated"
   }
 }

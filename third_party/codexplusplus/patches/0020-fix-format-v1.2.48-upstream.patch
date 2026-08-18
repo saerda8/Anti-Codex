@@ -1,0 +1,222 @@
+From 4d54965752faf1774012532de94e53f03a20855f Mon Sep 17 00:00:00 2001
+From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
+Date: Tue, 18 Aug 2026 12:30:18 +0800
+Subject: [PATCH] fix: format v1.2.48 upstream
+
+---
+ apps/codex-plus-launcher/src/main.rs          |  9 ++--
+ .../src-tauri/src/commands.rs                 | 53 +++++++++----------
+ crates/codex-plus-core/src/routes.rs          |  1 -
+ crates/codex-plus-core/src/settings.rs        |  5 +-
+ crates/codex-plus-core/tests/bridge_routes.rs |  1 -
+ crates/codex-plus-core/tests/relay_config.rs  |  5 +-
+ .../codex-plus-data/tests/storage_adapter.rs  |  4 +-
+ 7 files changed, 36 insertions(+), 42 deletions(-)
+
+diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
+index 46f8695..17e66d8 100644
+--- a/apps/codex-plus-launcher/src/main.rs
++++ b/apps/codex-plus-launcher/src/main.rs
+@@ -73,11 +73,7 @@ async fn main() -> Result<()> {
+     Ok(())
+ }
+ 
+-async fn launcher_main(
+-    args: Vec<String>,
+-    helper_only: bool,
+-    options: LaunchOptions,
+-) -> Result<()> {
++async fn launcher_main(args: Vec<String>, helper_only: bool, options: LaunchOptions) -> Result<()> {
+     if helper_only {
+         let hooks = LauncherHooks::default();
+         hooks.start_helper(options.helper_port).await?;
+@@ -1163,7 +1159,8 @@ mod tests {
+ 
+         hooks.bridge_context(9229, &test_dir).await.unwrap();
+         let ctx = hooks.watchdog_bridge_context().unwrap();
+-        let result = codex_plus_core::routes::handle_bridge_request(ctx, "/backend-status", json!({})).await;
++        let result =
++            codex_plus_core::routes::handle_bridge_request(ctx, "/backend-status", json!({})).await;
+ 
+         assert_ne!(result["message"], "Unknown bridge path");
+     }
+diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
+index 96e8d2c..7da4da7 100644
+--- a/apps/codex-plus-manager/src-tauri/src/commands.rs
++++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
+@@ -636,12 +636,8 @@ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
+         },
+         Err(error) => {
+             let message = format!("重启 Codex++ 失败：{error}");
+-            let _ = save_requested_launch_status(
+-                &request,
+-                "failed",
+-                &message,
+-                launch_started_at_ms,
+-            );
++            let _ =
++                save_requested_launch_status(&request, "failed", &message, launch_started_at_ms);
+             failed(
+                 &message,
+                 json!({
+@@ -874,12 +870,8 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+         },
+         Err(error) => {
+             let message = format!("启动静默入口失败：{error}");
+-            let _ = save_requested_launch_status(
+-                &request,
+-                "failed",
+-                &message,
+-                launch_started_at_ms,
+-            );
++            let _ =
++                save_requested_launch_status(&request, "failed", &message, launch_started_at_ms);
+             failed(
+                 &message,
+                 json!({
+@@ -959,15 +951,11 @@ pub async fn weixin_connect_qr_start(
+     base_url: String,
+     route_tag: String,
+ ) -> CommandResult<WeixinQrPayload> {
+-    match codex_plus_core::connect::weixin::WeixinClient::fetch_qr_code(
+-        &base_url,
+-        &route_tag,
+-    )
+-    .await
++    match codex_plus_core::connect::weixin::WeixinClient::fetch_qr_code(&base_url, &route_tag).await
+     {
+         Ok(qr) => {
+-            let qr_svg = codex_plus_core::connect::weixin::render_qr_svg(&qr.qr_content)
+-                .unwrap_or_default();
++            let qr_svg =
++                codex_plus_core::connect::weixin::render_qr_svg(&qr.qr_content).unwrap_or_default();
+             let session = WeixinQrSession {
+                 base_url: if base_url.trim().is_empty() {
+                     codex_plus_core::connect::DEFAULT_WEIXIN_BASE_URL.to_string()
+@@ -1013,7 +1001,10 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
+         })
+     });
+     let Some(session) = session else {
+-        return failed("当前没有待确认的微信二维码。", empty_weixin_qr_payload("missing"));
++        return failed(
++            "当前没有待确认的微信二维码。",
++            empty_weixin_qr_payload("missing"),
++        );
+     };
+ 
+     let result = codex_plus_core::connect::weixin::WeixinClient::poll_qr_status(
+@@ -1058,7 +1049,8 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
+         settings.weixin_connect_token = qr_status.bot_token;
+         settings.weixin_connect_account_id = qr_status.ilink_bot_id.clone();
+         if !qr_status.baseurl.trim().is_empty() {
+-            settings.weixin_connect_base_url = qr_status.baseurl.trim().trim_end_matches('/').to_string();
++            settings.weixin_connect_base_url =
++                qr_status.baseurl.trim().trim_end_matches('/').to_string();
+         } else {
+             settings.weixin_connect_base_url = session.base_url.clone();
+         }
+@@ -1128,11 +1120,17 @@ pub fn weixin_connect_start() -> CommandResult<codex_plus_core::connect::WeixinC
+     }
+     settings.weixin_connect_enabled = true;
+     if let Err(error) = store.save(&settings) {
+-        return failed(&format!("保存微信连接设置失败：{error}"), current_weixin_status());
++        return failed(
++            &format!("保存微信连接设置失败：{error}"),
++            current_weixin_status(),
++        );
+     }
+     match spawn_weixin_connect(settings) {
+         Ok(status) => ok("微信连接正在启动。", status),
+-        Err(error) => failed(&format!("启动微信连接失败：{error}"), current_weixin_status()),
++        Err(error) => failed(
++            &format!("启动微信连接失败：{error}"),
++            current_weixin_status(),
++        ),
+     }
+ }
+ 
+@@ -1210,12 +1208,9 @@ fn spawn_weixin_connect(
+     let task_status = Arc::clone(&status);
+     let task_stop = Arc::clone(&stop);
+     tauri::async_runtime::spawn(async move {
+-        if let Err(error) = codex_plus_core::connect::run_weixin_connect(
+-            config,
+-            stop,
+-            Arc::clone(&task_status),
+-        )
+-        .await
++        if let Err(error) =
++            codex_plus_core::connect::run_weixin_connect(config, stop, Arc::clone(&task_status))
++                .await
+             && let Ok(mut current) = task_status.lock()
+         {
+             current.state = "error".to_string();
+diff --git a/crates/codex-plus-core/src/routes.rs b/crates/codex-plus-core/src/routes.rs
+index 8603e60..db78b26 100644
+--- a/crates/codex-plus-core/src/routes.rs
++++ b/crates/codex-plus-core/src/routes.rs
+@@ -584,7 +584,6 @@ impl BridgeDataService for UnavailableDataService {
+     ) -> anyhow::Result<Option<SessionRef>> {
+         Ok(None)
+     }
+-
+ }
+ 
+ fn settings_payload_value(
+diff --git a/crates/codex-plus-core/src/settings.rs b/crates/codex-plus-core/src/settings.rs
+index caa1a4a..5e64a18 100644
+--- a/crates/codex-plus-core/src/settings.rs
++++ b/crates/codex-plus-core/src/settings.rs
+@@ -2523,7 +2523,10 @@ experimental_bearer_token = "sk-existing""#
+             .unwrap();
+ 
+         assert!(updated.weixin_connect_enabled);
+-        assert_eq!(updated.weixin_connect_base_url, "https://ilink.example.test");
++        assert_eq!(
++            updated.weixin_connect_base_url,
++            "https://ilink.example.test"
++        );
+         assert_eq!(updated.weixin_connect_token, "token");
+         assert_eq!(updated.weixin_connect_account_id, "bot-1");
+         assert_eq!(updated.weixin_connect_allow_from, "user@im.wechat");
+diff --git a/crates/codex-plus-core/tests/bridge_routes.rs b/crates/codex-plus-core/tests/bridge_routes.rs
+index 459fcc1..744451c 100644
+--- a/crates/codex-plus-core/tests/bridge_routes.rs
++++ b/crates/codex-plus-core/tests/bridge_routes.rs
+@@ -1412,7 +1412,6 @@ impl BridgeDataService for FakeData {
+             title,
+         }))
+     }
+-
+ }
+ 
+ #[derive(Clone)]
+diff --git a/crates/codex-plus-core/tests/relay_config.rs b/crates/codex-plus-core/tests/relay_config.rs
+index 9c63d61..d34a8b1 100644
+--- a/crates/codex-plus-core/tests/relay_config.rs
++++ b/crates/codex-plus-core/tests/relay_config.rs
+@@ -3865,7 +3865,10 @@ requires_openai_auth = true
+     let config = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
+     let parsed: toml::Value = toml::from_str(&config).unwrap();
+     assert_eq!(parsed["features"]["code_mode_only"].as_bool(), Some(true));
+-    assert_eq!(parsed["features"]["code_mode"]["enabled"].as_bool(), Some(true));
++    assert_eq!(
++        parsed["features"]["code_mode"]["enabled"].as_bool(),
++        Some(true)
++    );
+ 
+     let catalog: serde_json::Value = serde_json::from_str(
+         &std::fs::read_to_string(
+diff --git a/crates/codex-plus-data/tests/storage_adapter.rs b/crates/codex-plus-data/tests/storage_adapter.rs
+index 2e35731..b394785 100644
+--- a/crates/codex-plus-data/tests/storage_adapter.rs
++++ b/crates/codex-plus-data/tests/storage_adapter.rs
+@@ -1,7 +1,5 @@
+ use codex_plus_core::models::{DeleteStatus, SessionRef};
+-use codex_plus_data::{
+-    BackupStore, SQLiteStorageAdapter, delete_local_from_paths,
+-};
++use codex_plus_data::{BackupStore, SQLiteStorageAdapter, delete_local_from_paths};
+ use rusqlite::Connection;
+ use serde_json::json;
+ use std::fs;
