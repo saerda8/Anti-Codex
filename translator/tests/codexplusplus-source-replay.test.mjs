@@ -11,13 +11,13 @@ const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
 
-test("v1.2.48 promotion targets the reviewed upstream tag", () => {
+test("v1.2.49 promotion targets the reviewed upstream tag", () => {
   const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
 
-  assert.equal(accepted.version, "1.2.48");
-  assert.equal(accepted.tag, "v1.2.48");
-  assert.equal(accepted.upstreamCommit, "fb3ebd9a82383aedd8d098aa9ae3aef9426d13a4");
-  assert.equal(accepted.patchCommit, "f3a7dee9b984622ec3d6edaddc04ba1722b8b59f");
+  assert.equal(accepted.version, "1.2.49");
+  assert.equal(accepted.tag, "v1.2.49");
+  assert.equal(accepted.upstreamCommit, "93c9ec4acfed583681ce1b8e7271cb35bd7b9b87");
+  assert.equal(accepted.patchCommit, "04f9f3252728b3fee2cf6e3158798c4ff2fcf6c8");
   assert.equal(accepted.patches.length, 19);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
   assert.equal(accepted.patches.at(-1).file, "patches/0020-fix-format-v1.2.48-upstream.patch");
@@ -25,10 +25,10 @@ test("v1.2.48 promotion targets the reviewed upstream tag", () => {
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree 52dfae5bc4d61c6ad5bdba4d5c74b79d207f174b$/);
+  assert.match(accepted.verification.patchReplay, /tree cc892e347a8e358148aaa54e4ec8da6b18b91665$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:79257e3b64462e17c283be5f90b807c64f11bc05c2f453b309b588c07fbf9e58",
+    "sha256:5044c8ff0d1efa199a3ff207b0dd20e00467b771bfdf0e1eba89d1827cfa3437",
   );
 });
 
@@ -173,11 +173,11 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation records the accepted v1.2.48 promotion", () => {
+test("component documentation records the accepted v1.2.49 promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.2\.48`/);
-  assert.match(readme, /checkout fb3ebd9a82383aedd8d098aa9ae3aef9426d13a4/);
+  assert.match(readme, /Accepted version: `v1\.2\.49`/);
+  assert.match(readme, /checkout 93c9ec4acfed583681ce1b8e7271cb35bd7b9b87/);
   assert.match(readme, /carries exactly nineteen narrow Anti-Codex compatibility patches/);
   assert.match(readme, /All nineteen patches replayed without conflict/);
   assert.match(readme, /120 seconds without upstream data/);

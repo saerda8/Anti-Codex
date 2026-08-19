@@ -5,8 +5,8 @@ This directory pins the separately licensed CodexPlusPlus component and carries 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.2.48`
-- Accepted commit: `fb3ebd9a82383aedd8d098aa9ae3aef9426d13a4`
+- Accepted version: `v1.2.49`
+- Accepted commit: `93c9ec4acfed583681ce1b8e7271cb35bd7b9b87`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -27,7 +27,7 @@ The second patch changes only plain-HTTP loopback model transport. It uses a one
 
 The third patch removes tools only from exact official Codex title and task-suggestion helper requests. Ordinary user turns and all upstream conversion behavior remain unchanged.
 
-The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, an explicit routable request model remains authoritative; isolated config is only a fallback for a missing or unknown request model. Directed Anti-Codex requests take precedence and fail closed instead of rotating to another provider; ordinary v1.2.48 provider-scoped per-model routes remain available on both direct and cancel-aware transports.
+The fourth patch recognizes only reserved Anti-Codex model slots and exact Antigravity models selected by the native frontend. It chooses the resident `anticodex-antigravity` or `anticodex-third-party` relay, resolves generic slots to the saved model, and strips the namespace from an explicit third-party model. When official Codex explicitly marks a request as native compaction, an explicit routable request model remains authoritative; isolated config is only a fallback for a missing or unknown request model. Directed Anti-Codex requests take precedence and fail closed instead of rotating to another provider; ordinary v1.2.49 provider-scoped per-model routes remain available on both direct and cancel-aware transports.
 
 The fifth patch changes only image-bearing tool output conversion. It keeps ordinary tool output unchanged, replaces textual JSON/Base64 image payloads with standard Chat `image_url` content parts, and preserves the original tool call association. This prevents valid local image results from being counted as hundreds of thousands of text tokens by Chat-only providers.
 
@@ -67,7 +67,7 @@ Apply the patch to the pinned upstream commit:
 
 ```powershell
 git clone https://github.com/BigPizzaV3/CodexPlusPlus.git
-git -C CodexPlusPlus checkout fb3ebd9a82383aedd8d098aa9ae3aef9426d13a4
+git -C CodexPlusPlus checkout 93c9ec4acfed583681ce1b8e7271cb35bd7b9b87
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch
 git -C CodexPlusPlus am <path-to-deepcodex>\third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch
@@ -101,11 +101,11 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- All nineteen patches replayed without conflict on pinned upstream `v1.2.48`; the managed promotion candidate commit is `f3a7dee9b984622ec3d6edaddc04ba1722b8b59f`, and the source overlay produces tree `52dfae5bc4d61c6ad5bdba4d5c74b79d207f174b`.
-- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,888,256-byte launcher has SHA-256 `79257e3b64462e17c283be5f90b807c64f11bc05c2f453b309b588c07fbf9e58`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership. The response conversion boundary now enforces those Docker rules and structured source editing, including rejection of stop, restart and forced removal while retaining passive wait on the same container, before an unsafe command can reach the command tool. Canonically marked HTTP compaction now validates the current task identity and follows that task's most recent model-bearing selection in either direction among third-party, Claude and Gemini routes, while ordinary turns remain unchanged. Successful helper streams now terminate after 120 seconds without upstream data instead of hanging indefinitely, and converted Chat streams surface `stream_timeout`; the two focused timeout unit tests, focused routing suite, protocol proxy suite 78/78 and watcher suite 11/11 passed with Rust test threads capped at two.
+- All nineteen patches replayed without conflict on pinned upstream `v1.2.49`; the managed promotion candidate commit is `04f9f3252728b3fee2cf6e3158798c4ff2fcf6c8`, and the source overlay produces tree `cc892e347a8e358148aaa54e4ec8da6b18b91665`.
+- The managed build, Windows launchability and candidate publication passed through the fixed runner image and Docker pre/postflight checks. The resulting 17,796,608-byte launcher has SHA-256 `5044c8ff0d1efa199a3ff207b0dd20e00467b771bfdf0e1eba89d1827cfa3437`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership. The response conversion boundary now enforces those Docker rules and structured source editing, including rejection of stop, restart and forced removal while retaining passive wait on the same container, before an unsafe command can reach the command tool. Canonically marked HTTP compaction now validates the current task identity and follows that task's most recent model-bearing selection in either direction among third-party, Claude and Gemini routes, while ordinary turns remain unchanged. Successful helper streams now terminate after 120 seconds without upstream data instead of hanging indefinitely, and converted Chat streams surface `stream_timeout`; the two focused timeout unit tests, focused routing suite, protocol proxy suite 78/78 and watcher suite 11/11 passed with Rust test threads capped at two.
 - Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
-- The project metadata is `v1.2.48` with nineteen accepted patches; the managed launcher hash above is the promotion candidate pending guarded activation.
+- The project metadata is `v1.2.49` with nineteen accepted patches; the managed launcher hash above is the promotion candidate pending guarded activation.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.
