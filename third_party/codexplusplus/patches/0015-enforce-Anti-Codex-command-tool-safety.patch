@@ -1,7 +1,7 @@
-From de1c87762e408f48874c163bfea910a6bcb9738b Mon Sep 17 00:00:00 2001
+From c62b076425e4244d96b8edf1d6242204c6d58e42 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Diagnostic <anticodex@example.invalid>
 Date: Fri, 14 Aug 2026 12:25:25 +0800
-Subject: [PATCH 14/18] enforce Anti-Codex command tool safety
+Subject: [PATCH 14/19] enforce Anti-Codex command tool safety
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 423 +++++++++++++++++-

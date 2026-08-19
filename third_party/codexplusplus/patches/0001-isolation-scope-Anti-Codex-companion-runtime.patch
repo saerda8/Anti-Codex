@@ -1,7 +1,7 @@
-From 87cb3ee8053cf62d546ab53456806c5f030a026e Mon Sep 17 00:00:00 2001
+From a6b68ea83979fe29e57cb4fed8b3e6c17fe6e8d9 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sat, 1 Aug 2026 00:55:02 +0800
-Subject: [PATCH 01/18] isolation: scope Anti-Codex companion runtime
+Subject: [PATCH 01/19] isolation: scope Anti-Codex companion runtime
 
 ---
  apps/codex-plus-launcher/src/main.rs          |  51 ++++-
@@ -17,7 +17,7 @@ Subject: [PATCH 01/18] isolation: scope Anti-Codex companion runtime
  10 files changed, 743 insertions(+), 58 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index ea846b9..46f8695 100644
+index a445527..ddacdd4 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -85,7 +85,11 @@ async fn launcher_main(
@@ -105,7 +105,7 @@ index ea846b9..46f8695 100644
      let mut activated = false;
      #[cfg(windows)]
      {
-@@ -1043,11 +1069,18 @@ mod tests {
+@@ -1029,11 +1055,18 @@ mod tests {
          assert_eq!(options.helper_port, LaunchOptions::default().helper_port);
      }
  
@@ -126,7 +126,7 @@ index ea846b9..46f8695 100644
          assert!(source.contains("launcher.already_running"));
          assert!(source.contains("Existing Codex instance activated"));
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index 4129ce3..96e8d2c 100644
+index a747ca0..c4aca42 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
 @@ -576,8 +576,27 @@ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
@@ -213,7 +213,7 @@ index 4129ce3..96e8d2c 100644
          );
      }
      if relay.relay_mode == codex_plus_core::settings::RelayMode::Official
-@@ -757,7 +809,7 @@ fn sync_active_relay_to_home(
+@@ -755,7 +807,7 @@ fn sync_active_relay_to_home(
      let mut protocol = relay.protocol;
      if relay.has_model_routes() {
          base_url = codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
@@ -222,7 +222,7 @@ index 4129ce3..96e8d2c 100644
          );
          protocol = codex_plus_core::settings::RelayProtocol::Responses;
      }
-@@ -767,7 +819,7 @@ fn sync_active_relay_to_home(
+@@ -765,7 +817,7 @@ fn sync_active_relay_to_home(
              &base_url,
              &relay.api_key,
              protocol,
@@ -231,7 +231,7 @@ index 4129ce3..96e8d2c 100644
          );
      }
  
-@@ -780,7 +832,7 @@ fn sync_active_relay_to_home(
+@@ -778,7 +830,7 @@ fn sync_active_relay_to_home(
          &base_url,
          &relay.api_key,
          protocol,
@@ -240,7 +240,7 @@ index 4129ce3..96e8d2c 100644
      )
  }
  
-@@ -879,6 +931,10 @@ fn current_timestamp_ms() -> u64 {
+@@ -877,6 +929,10 @@ fn current_timestamp_ms() -> u64 {
  }
  
  fn spawn_silent_launcher(request: &LaunchRequest) -> anyhow::Result<()> {
@@ -251,7 +251,7 @@ index 4129ce3..96e8d2c 100644
      let mut args = Vec::new();
      if !request.app_path.trim().is_empty() {
          args.push("--app-path".to_string());
-@@ -4379,7 +4435,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
+@@ -4376,7 +4432,7 @@ pub fn apply_relay_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -260,7 +260,7 @@ index 4129ce3..96e8d2c 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -4420,11 +4476,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
+@@ -4417,11 +4473,11 @@ fn apply_aggregate_relay_injection_to_home(home: &Path) -> CommandResult<RelayPa
      match codex_plus_core::relay_config::apply_relay_config_to_home_with_protocol(
          home,
          &codex_plus_core::protocol_proxy::local_responses_proxy_base_url(
@@ -274,7 +274,7 @@ index 4129ce3..96e8d2c 100644
      ) {
          Ok(result) => {
              let status = codex_plus_core::relay_config::relay_status_from_home(home);
-@@ -4520,7 +4576,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
+@@ -4516,7 +4572,7 @@ pub fn apply_pure_api_injection() -> CommandResult<RelayPayload> {
          &relay.base_url,
          &relay.api_key,
          relay.protocol,
@@ -283,7 +283,7 @@ index 4129ce3..96e8d2c 100644
      ) {
          Ok(result) => {
              finish_codex_app_state_after_provider_switch(
-@@ -4640,6 +4696,10 @@ fn log_relay_apply_request(
+@@ -4636,6 +4692,10 @@ fn log_relay_apply_request(
      settings: &BackendSettings,
      relay: &codex_plus_core::settings::RelayProfile,
  ) {
@@ -294,7 +294,7 @@ index 4129ce3..96e8d2c 100644
      let _ = codex_plus_core::diagnostic_log::append_diagnostic_log(
          event,
          json!({
-@@ -4651,7 +4711,7 @@ fn log_relay_apply_request(
+@@ -4647,7 +4707,7 @@ fn log_relay_apply_request(
              "baseUrl": relay.base_url,
              "hasConfigContents": !relay.config_contents.trim().is_empty(),
              "hasAuthContents": !relay.auth_contents.trim().is_empty(),
@@ -303,7 +303,7 @@ index 4129ce3..96e8d2c 100644
          }),
      );
  }
-@@ -5264,6 +5324,34 @@ mod tests {
+@@ -5260,6 +5320,34 @@ mod tests {
          );
      }
  
@@ -648,10 +648,10 @@ index 08f027b..f6b4c33 100644
      for spec in APP_PACKAGE_SPECS {
          let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 102404f..e23e267 100644
+index d21ec59..0b52aaa 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
-@@ -342,7 +342,7 @@ where
+@@ -319,7 +319,7 @@ where
          let protocol_proxy_enabled = relay_protocol_proxy_enabled(&settings)
              || remote_control_provider_proxy_enabled(&settings);
          if protocol_proxy_enabled {
@@ -660,7 +660,7 @@ index 102404f..e23e267 100644
          }
          if settings.enhancements_enabled || protocol_proxy_enabled {
              hooks.start_helper(helper_port).await?;
-@@ -952,6 +952,10 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -858,6 +858,10 @@ impl LaunchHooks for DefaultLaunchHooks {
          launch: &CodexLaunch,
          debug_port: u16,
      ) -> anyhow::Result<()> {
@@ -671,7 +671,7 @@ index 102404f..e23e267 100644
          match launch {
              CodexLaunch::Process { .. } => {
                  if let Some(mut child) = self.child.lock().await.take() {
-@@ -974,7 +978,10 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -880,7 +884,10 @@ impl LaunchHooks for DefaultLaunchHooks {
          }
          let mut empty_streak = 0u32;
          loop {
@@ -783,7 +783,7 @@ index 037a478..da48299 100644
  enum ChatReasoningStyle {
      Default,
 diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
-index 108909b..63df040 100644
+index a781f83..dae0e28 100644
 --- a/crates/codex-plus-core/src/relay_config.rs
 +++ b/crates/codex-plus-core/src/relay_config.rs
 @@ -244,7 +244,7 @@ pub fn responses_proxy_configured_in_home(home: &Path) -> bool {
@@ -813,7 +813,7 @@ index 108909b..63df040 100644
      )
  }
  
-@@ -625,7 +625,7 @@ const OPENAI_BASE_URL_KEY: &str = "openai_base_url";
+@@ -588,7 +588,7 @@ const OPENAI_BASE_URL_KEY: &str = "openai_base_url";
  
  fn managed_openai_base_url() -> String {
      crate::protocol_proxy::local_responses_proxy_base_url(
@@ -822,7 +822,7 @@ index 108909b..63df040 100644
      )
  }
  
-@@ -763,7 +763,7 @@ pub fn backfill_relay_profile_from_home_with_common(
+@@ -713,7 +713,7 @@ pub fn backfill_relay_profile_from_home_with_common(
          && provider_string_from_config(&profile.config_contents, "base_url").as_deref()
              == Some(
                  crate::protocol_proxy::local_responses_proxy_base_url(
@@ -831,7 +831,7 @@ index 108909b..63df040 100644
                  )
                  .as_str(),
              )
-@@ -2307,7 +2307,7 @@ pub fn relay_profile_model(profile: &RelayProfile) -> String {
+@@ -2238,7 +2238,7 @@ pub fn relay_profile_model(profile: &RelayProfile) -> String {
  pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
      if profile.relay_mode == crate::settings::RelayMode::Aggregate {
          return crate::protocol_proxy::local_responses_proxy_base_url(
@@ -840,7 +840,7 @@ index 108909b..63df040 100644
          );
      }
      if profile.has_model_routes() {
-@@ -2317,7 +2317,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
+@@ -2248,7 +2248,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
          if !profile.base_url.trim().is_empty()
              && profile.base_url.trim()
                  != crate::protocol_proxy::local_responses_proxy_base_url(
@@ -849,7 +849,7 @@ index 108909b..63df040 100644
                  )
          {
              return profile.base_url.trim().to_string();
-@@ -2342,7 +2342,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
+@@ -2273,7 +2273,7 @@ pub fn relay_profile_base_url(profile: &RelayProfile) -> String {
      if profile.protocol == RelayProtocol::ChatCompletions
          && provider_base_url
              == crate::protocol_proxy::local_responses_proxy_base_url(
@@ -858,7 +858,7 @@ index 108909b..63df040 100644
              )
      {
          String::new()
-@@ -2439,13 +2439,13 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
+@@ -2370,13 +2370,13 @@ fn complete_relay_profile_config(profile: &RelayProfile) -> anyhow::Result<Strin
      }
      let provider_base_url = if profile.has_model_routes() {
          crate::protocol_proxy::local_responses_proxy_base_url(

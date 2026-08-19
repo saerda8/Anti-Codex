@@ -1,7 +1,7 @@
-From df6f84bc0fef6c4f037cf6c883def1b9582f58f6 Mon Sep 17 00:00:00 2001
+From 0bd3419740ed57a5b4e807fd8f3556c5d3289042 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 16:13:39 +0800
-Subject: [PATCH 17/18] route compaction by current thread model
+Subject: [PATCH 17/19] route compaction by current thread model
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 256 ++++++++++++++++++-

@@ -1,7 +1,7 @@
-From bcb8d3765885e405d355490794bec8bbb74c2fa0 Mon Sep 17 00:00:00 2001
+From d192a8b572b4ffb3dceda954561e11a91c3e536e Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 08:09:32 +0800
-Subject: [PATCH 07/18] handle third-party thinking tags without interleaving
+Subject: [PATCH 07/19] handle third-party thinking tags without interleaving
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 47 +++++++++----

@@ -1,7 +1,7 @@
-From 9005263270cd7d5dd72ea8b6177e13cfbd3978b6 Mon Sep 17 00:00:00 2001
+From cd6cedf0d926a440252618ebc60afbefc368cd80 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 27 Jul 2026 22:53:31 +0800
-Subject: [PATCH 10/18] fix: estimate missing chat usage for native compaction
+Subject: [PATCH 10/19] fix: estimate missing chat usage for native compaction
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  |  75 +++++++++++++

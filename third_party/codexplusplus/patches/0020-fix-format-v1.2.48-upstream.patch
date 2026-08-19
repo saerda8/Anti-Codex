@@ -1,7 +1,7 @@
-From 4d54965752faf1774012532de94e53f03a20855f Mon Sep 17 00:00:00 2001
+From c14d6a9da6bea459dda0b47beaf5c8884b53d461 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Tue, 18 Aug 2026 12:30:18 +0800
-Subject: [PATCH] fix: format v1.2.48 upstream
+Subject: [PATCH 19/19] fix: format v1.2.48 upstream
 
 ---
  apps/codex-plus-launcher/src/main.rs          |  9 ++--
@@ -14,7 +14,7 @@ Subject: [PATCH] fix: format v1.2.48 upstream
  7 files changed, 36 insertions(+), 42 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 46f8695..17e66d8 100644
+index ddacdd4..010c606 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -73,11 +73,7 @@ async fn main() -> Result<()> {
@@ -30,7 +30,7 @@ index 46f8695..17e66d8 100644
      if helper_only {
          let hooks = LauncherHooks::default();
          hooks.start_helper(options.helper_port).await?;
-@@ -1163,7 +1159,8 @@ mod tests {
+@@ -1144,7 +1140,8 @@ mod tests {
  
          hooks.bridge_context(9229, &test_dir).await.unwrap();
          let ctx = hooks.watchdog_bridge_context().unwrap();
@@ -41,7 +41,7 @@ index 46f8695..17e66d8 100644
          assert_ne!(result["message"], "Unknown bridge path");
      }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index 96e8d2c..7da4da7 100644
+index c4aca42..b69204a 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
 @@ -636,12 +636,8 @@ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
@@ -59,7 +59,7 @@ index 96e8d2c..7da4da7 100644
              failed(
                  &message,
                  json!({
-@@ -874,12 +870,8 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
+@@ -872,12 +868,8 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
          },
          Err(error) => {
              let message = format!("启动静默入口失败：{error}");
@@ -74,7 +74,7 @@ index 96e8d2c..7da4da7 100644
              failed(
                  &message,
                  json!({
-@@ -959,15 +951,11 @@ pub async fn weixin_connect_qr_start(
+@@ -957,15 +949,11 @@ pub async fn weixin_connect_qr_start(
      base_url: String,
      route_tag: String,
  ) -> CommandResult<WeixinQrPayload> {
@@ -93,7 +93,7 @@ index 96e8d2c..7da4da7 100644
              let session = WeixinQrSession {
                  base_url: if base_url.trim().is_empty() {
                      codex_plus_core::connect::DEFAULT_WEIXIN_BASE_URL.to_string()
-@@ -1013,7 +1001,10 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
+@@ -1011,7 +999,10 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
          })
      });
      let Some(session) = session else {
@@ -105,7 +105,7 @@ index 96e8d2c..7da4da7 100644
      };
  
      let result = codex_plus_core::connect::weixin::WeixinClient::poll_qr_status(
-@@ -1058,7 +1049,8 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
+@@ -1056,7 +1047,8 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
          settings.weixin_connect_token = qr_status.bot_token;
          settings.weixin_connect_account_id = qr_status.ilink_bot_id.clone();
          if !qr_status.baseurl.trim().is_empty() {
@@ -115,7 +115,7 @@ index 96e8d2c..7da4da7 100644
          } else {
              settings.weixin_connect_base_url = session.base_url.clone();
          }
-@@ -1128,11 +1120,17 @@ pub fn weixin_connect_start() -> CommandResult<codex_plus_core::connect::WeixinC
+@@ -1126,11 +1118,17 @@ pub fn weixin_connect_start() -> CommandResult<codex_plus_core::connect::WeixinC
      }
      settings.weixin_connect_enabled = true;
      if let Err(error) = store.save(&settings) {
@@ -135,7 +135,7 @@ index 96e8d2c..7da4da7 100644
      }
  }
  
-@@ -1210,12 +1208,9 @@ fn spawn_weixin_connect(
+@@ -1208,12 +1206,9 @@ fn spawn_weixin_connect(
      let task_status = Arc::clone(&status);
      let task_stop = Arc::clone(&stop);
      tauri::async_runtime::spawn(async move {
@@ -164,10 +164,10 @@ index 8603e60..db78b26 100644
  
  fn settings_payload_value(
 diff --git a/crates/codex-plus-core/src/settings.rs b/crates/codex-plus-core/src/settings.rs
-index caa1a4a..5e64a18 100644
+index 59a2403..ab73f4d 100644
 --- a/crates/codex-plus-core/src/settings.rs
 +++ b/crates/codex-plus-core/src/settings.rs
-@@ -2523,7 +2523,10 @@ experimental_bearer_token = "sk-existing""#
+@@ -2514,7 +2514,10 @@ experimental_bearer_token = "sk-existing""#
              .unwrap();
  
          assert!(updated.weixin_connect_enabled);
@@ -192,10 +192,10 @@ index 459fcc1..744451c 100644
  
  #[derive(Clone)]
 diff --git a/crates/codex-plus-core/tests/relay_config.rs b/crates/codex-plus-core/tests/relay_config.rs
-index 9c63d61..d34a8b1 100644
+index 1ecbb58..eba3cd2 100644
 --- a/crates/codex-plus-core/tests/relay_config.rs
 +++ b/crates/codex-plus-core/tests/relay_config.rs
-@@ -3865,7 +3865,10 @@ requires_openai_auth = true
+@@ -3756,7 +3756,10 @@ requires_openai_auth = true
      let config = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
      let parsed: toml::Value = toml::from_str(&config).unwrap();
      assert_eq!(parsed["features"]["code_mode_only"].as_bool(), Some(true));

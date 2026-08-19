@@ -1,7 +1,7 @@
-From 62f8f5556808e207a54ceb34da7e31a94caa32dc Mon Sep 17 00:00:00 2001
+From e5b870b7e59442daf9c5f7701b1847f350911563 Mon Sep 17 00:00:00 2001
 From: Anti-Codex <anticodex@local.invalid>
 Date: Sat, 1 Aug 2026 12:05:44 +0800
-Subject: [PATCH 11/18] feat: apply Anti-Codex prompt policy at common request
+Subject: [PATCH 11/19] feat: apply Anti-Codex prompt policy at common request
  entry
 
 ---

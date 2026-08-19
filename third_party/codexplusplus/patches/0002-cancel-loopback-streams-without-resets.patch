@@ -1,7 +1,7 @@
-From 5315ab21a25cac692d702983036eb92d285306b7 Mon Sep 17 00:00:00 2001
+From 6192ed10da281c3390e7e8ec1c38b45a4a8becb6 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sat, 1 Aug 2026 00:59:58 +0800
-Subject: [PATCH 02/18] fix: cancel loopback streams without resets
+Subject: [PATCH 02/19] fix: cancel loopback streams without resets
 
 ---
  Cargo.lock                                   |   4 +
@@ -16,7 +16,7 @@ Subject: [PATCH 02/18] fix: cancel loopback streams without resets
  create mode 100644 crates/codex-plus-core/src/loopback_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
-index f12fc37..479c8e0 100644
+index 0bf61a6..02fedc4 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -424,10 +424,14 @@ dependencies = [
@@ -35,7 +35,7 @@ index f12fc37..479c8e0 100644
   "rusqlite",
   "serde",
 diff --git a/Cargo.toml b/Cargo.toml
-index 4e554ca..b812512 100644
+index 043f602..7b4aa09 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -17,9 +17,13 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
@@ -71,10 +71,10 @@ index 5672ba6..797a047 100644
  qrcode = { version = "0.14", default-features = false, features = ["svg"] }
  rusqlite.workspace = true
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index e23e267..4093dad 100644
+index 0b52aaa..8d0ec9b 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
-@@ -11,10 +11,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
+@@ -11,16 +11,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
  use anyhow::Context;
  use async_trait::async_trait;
  use futures_util::StreamExt;
@@ -87,8 +87,7 @@ index e23e267..4093dad 100644
  
  use crate::settings::{BackendSettings, SettingsStore, normalize_codex_extra_args};
  use crate::status::{LaunchStatus, StatusStore};
-@@ -25,6 +26,10 @@ const POST_LAUNCH_COMPUTER_USE_GUARD_SECONDS: &[u64] = &[0, 5, 15, 30, 60, 120,
- const POST_LAUNCH_COMPUTER_USE_GUARD_STABLE_ATTEMPTS: usize = 3;
+ 
  static PET_OVERLAY_SYNC_FAILED: AtomicBool = AtomicBool::new(false);
  static PET_CURSOR_DRIVER_FAILED: AtomicBool = AtomicBool::new(false);
 +const LOCAL_HELPER_BIND_HOST: &str = "127.0.0.1";
@@ -98,7 +97,7 @@ index e23e267..4093dad 100644
  
  /// Asynchronous callback used by the bridge watchdog to restore a launcher-specific bridge.
  ///
-@@ -527,12 +532,8 @@ impl DefaultLaunchHooks {
+@@ -501,12 +506,8 @@ impl DefaultLaunchHooks {
      }
  }
  
@@ -113,7 +112,7 @@ index e23e267..4093dad 100644
  }
  
  #[async_trait(?Send)]
-@@ -678,8 +679,8 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -636,8 +637,8 @@ impl LaunchHooks for DefaultLaunchHooks {
      }
  
      async fn start_helper(&self, helper_port: u16) -> anyhow::Result<()> {
@@ -124,7 +123,7 @@ index e23e267..4093dad 100644
              .await
              .with_context(|| {
                  format!("failed to bind helper runtime on {bind_host}:{helper_port}")
-@@ -693,15 +694,33 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -651,15 +652,33 @@ impl LaunchHooks for DefaultLaunchHooks {
              }),
          );
          let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
@@ -162,7 +161,7 @@ index e23e267..4093dad 100644
                          }
                      }
                  }
-@@ -1048,19 +1067,58 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -950,19 +969,58 @@ impl LaunchHooks for DefaultLaunchHooks {
  }
  
  async fn handle_helper_connection(
@@ -225,7 +224,7 @@ index e23e267..4093dad 100644
                  "application/json; charset=utf-8",
                  &body,
              )
-@@ -1068,17 +1126,16 @@ async fn handle_helper_connection(
+@@ -970,17 +1028,16 @@ async fn handle_helper_connection(
              stream.shutdown().await?;
              return Ok(());
          }
@@ -251,7 +250,7 @@ index e23e267..4093dad 100644
  
      let _ = crate::diagnostic_log::append_diagnostic_log(
          "helper.request",
-@@ -1290,6 +1347,25 @@ async fn handle_helper_connection(
+@@ -1192,6 +1249,25 @@ async fn handle_helper_connection(
      Ok(())
  }
  
@@ -277,7 +276,7 @@ index e23e267..4093dad 100644
  fn decode_protocol_proxy_request_body(
      body: &[u8],
      content_encoding: Option<&str>,
-@@ -1493,6 +1569,262 @@ async fn handle_models_proxy_connection(
+@@ -1395,6 +1471,262 @@ async fn handle_models_proxy_connection(
      stream.shutdown().await?;
      Ok(())
  }
@@ -540,7 +539,7 @@ index e23e267..4093dad 100644
  async fn handle_protocol_proxy_connection(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
-@@ -1502,6 +1834,20 @@ async fn handle_protocol_proxy_connection(
+@@ -1404,6 +1736,20 @@ async fn handle_protocol_proxy_connection(
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
      let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
@@ -561,7 +560,7 @@ index e23e267..4093dad 100644
      let upstream = match crate::protocol_proxy::open_responses_proxy_request_for_path(
          request_body,
          request_user_agent,
-@@ -1730,6 +2076,20 @@ async fn handle_chat_completions_proxy_connection(
+@@ -1632,6 +1978,20 @@ async fn handle_chat_completions_proxy_connection(
      path: &str,
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
@@ -582,7 +581,7 @@ index e23e267..4093dad 100644
      let upstream = match crate::protocol_proxy::open_chat_completions_proxy_request(
          request_body,
          request_user_agent,
-@@ -1881,11 +2241,65 @@ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+@@ -1783,11 +2143,65 @@ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
  const MAX_HTTP_BODY_BYTES: usize = 32 * 1024 * 1024;
  const MAX_HTTP_ENCODED_BODY_BYTES: usize = 64 * 1024 * 1024;
  
@@ -648,7 +647,7 @@ index e23e267..4093dad 100644
  #[derive(Debug)]
  struct HttpRequestReadError {
      status: &'static str,
-@@ -1907,6 +2321,13 @@ impl HttpRequestReadError {
+@@ -1809,6 +2223,13 @@ impl HttpRequestReadError {
          }
      }
  
@@ -662,7 +661,7 @@ index e23e267..4093dad 100644
      fn status(&self) -> &'static str {
          self.status
      }
-@@ -2024,65 +2445,97 @@ impl ChunkedScanState {
+@@ -1926,65 +2347,97 @@ impl ChunkedScanState {
      }
  }
  
@@ -798,7 +797,7 @@ index e23e267..4093dad 100644
              ChunkedBody::Complete(body) => body,
              ChunkedBody::Incomplete => {
                  return Err(HttpRequestReadError::bad_request(
-@@ -3155,6 +3608,43 @@ mod tests {
+@@ -2944,6 +3397,43 @@ mod tests {
          })
      }
  
@@ -842,7 +841,7 @@ index e23e267..4093dad 100644
      #[test]
      fn launcher_stays_alive_while_injected_cdp_endpoint_is_available() {
          assert!(launcher_target_alive(false, true));
-@@ -3423,6 +3913,147 @@ mod tests {
+@@ -3212,6 +3702,147 @@ mod tests {
          crate::paths::set_settings_path_for_tests(previous_settings_path);
      }
  
@@ -990,7 +989,7 @@ index e23e267..4093dad 100644
      async fn send_raw_helper_request(request: &[u8]) -> Vec<u8> {
          let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
              .await
-@@ -3516,13 +4147,17 @@ mod tests {
+@@ -3305,13 +3936,17 @@ mod tests {
          let helper_addr = helper_listener.local_addr().unwrap();
          let helper = tokio::spawn(async move {
              let (stream, remote_addr) = helper_listener.accept().await.unwrap();
@@ -1013,10 +1012,10 @@ index e23e267..4093dad 100644
          for fragment in headers.as_bytes().chunks(7) {
              client.write_all(fragment).await.unwrap();
 diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
-index acf65be..3d78202 100644
+index 5ea4620..4748406 100644
 --- a/crates/codex-plus-core/src/lib.rs
 +++ b/crates/codex-plus-core/src/lib.rs
-@@ -21,6 +21,7 @@ pub mod env_conflicts;
+@@ -20,6 +20,7 @@ pub mod env_conflicts;
  pub mod http_client;
  pub mod install;
  pub mod launcher;
@@ -1413,10 +1412,10 @@ index da48299..9363c89 100644
      let status_code = upstream.status().as_u16();
      let content_type = upstream
 diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
-index 63df040..32db6ce 100644
+index dae0e28..f79b3da 100644
 --- a/crates/codex-plus-core/src/relay_config.rs
 +++ b/crates/codex-plus-core/src/relay_config.rs
-@@ -2596,7 +2596,7 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
+@@ -2527,7 +2527,7 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
              .unwrap_or(false)
  }
  
