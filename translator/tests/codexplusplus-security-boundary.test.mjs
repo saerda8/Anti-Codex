@@ -39,10 +39,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 18);
+  assert.equal(metadata.patches.length, 19);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0019-bound-upstream-stream-inactivity.patch",
+    "patches/0020-fix-format-v1.2.48-upstream.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -138,7 +138,7 @@ test("Anti-Codex command safety binds one deterministic container name to the cu
 
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch13, /^From [0-9a-f]{40} /m);
-  assert.match(patch13, /^Subject: \[PATCH 12\/13\] fix: format DreamSkin installer metadata test$/m);
+  assert.match(patch13, /^Subject: \[PATCH 12\/19\] fix: format DreamSkin installer metadata test$/m);
   assert.deepEqual(
     [...patch13.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
     [[
@@ -163,7 +163,7 @@ test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", ()
 
 test("v1.2.47 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch14, /^From [0-9a-f]{40} /m);
-  assert.match(patch14, /^Subject: \[PATCH 13\/13\] fix: format DreamSkin runtime test$/m);
+  assert.match(patch14, /^Subject: \[PATCH 13\/19\] fix: format DreamSkin runtime test$/m);
   assert.deepEqual(
     [...patch14.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
     [[
