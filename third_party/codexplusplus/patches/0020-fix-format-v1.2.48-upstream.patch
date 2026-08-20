@@ -1,20 +1,19 @@
-From c14d6a9da6bea459dda0b47beaf5c8884b53d461 Mon Sep 17 00:00:00 2001
+From 8fa0b8472666051521f9c73aea9f65f77df1eb17 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Tue, 18 Aug 2026 12:30:18 +0800
 Subject: [PATCH 19/19] fix: format v1.2.48 upstream
 
 ---
- apps/codex-plus-launcher/src/main.rs          |  9 ++--
+ apps/codex-plus-launcher/src/main.rs          |  6 +--
  .../src-tauri/src/commands.rs                 | 53 +++++++++----------
  crates/codex-plus-core/src/routes.rs          |  1 -
  crates/codex-plus-core/src/settings.rs        |  5 +-
  crates/codex-plus-core/tests/bridge_routes.rs |  1 -
  crates/codex-plus-core/tests/relay_config.rs  |  5 +-
- .../codex-plus-data/tests/storage_adapter.rs  |  4 +-
- 7 files changed, 36 insertions(+), 42 deletions(-)
+ 6 files changed, 33 insertions(+), 38 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index ddacdd4..010c606 100644
+index 7464c86..51644f7 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -73,11 +73,7 @@ async fn main() -> Result<()> {
@@ -30,18 +29,8 @@ index ddacdd4..010c606 100644
      if helper_only {
          let hooks = LauncherHooks::default();
          hooks.start_helper(options.helper_port).await?;
-@@ -1144,7 +1140,8 @@ mod tests {
- 
-         hooks.bridge_context(9229, &test_dir).await.unwrap();
-         let ctx = hooks.watchdog_bridge_context().unwrap();
--        let result = codex_plus_core::routes::handle_bridge_request(ctx, "/backend-status", json!({})).await;
-+        let result =
-+            codex_plus_core::routes::handle_bridge_request(ctx, "/backend-status", json!({})).await;
- 
-         assert_ne!(result["message"], "Unknown bridge path");
-     }
 diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index c4aca42..b69204a 100644
+index 579465b..3262de9 100644
 --- a/apps/codex-plus-manager/src-tauri/src/commands.rs
 +++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
 @@ -636,12 +636,8 @@ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
@@ -135,7 +124,7 @@ index c4aca42..b69204a 100644
      }
  }
  
-@@ -1208,12 +1206,9 @@ fn spawn_weixin_connect(
+@@ -1237,12 +1235,9 @@ fn spawn_weixin_connect(
      let task_status = Arc::clone(&status);
      let task_stop = Arc::clone(&stop);
      tauri::async_runtime::spawn(async move {
@@ -207,16 +196,3 @@ index 1ecbb58..eba3cd2 100644
  
      let catalog: serde_json::Value = serde_json::from_str(
          &std::fs::read_to_string(
-diff --git a/crates/codex-plus-data/tests/storage_adapter.rs b/crates/codex-plus-data/tests/storage_adapter.rs
-index 2e35731..b394785 100644
---- a/crates/codex-plus-data/tests/storage_adapter.rs
-+++ b/crates/codex-plus-data/tests/storage_adapter.rs
-@@ -1,7 +1,5 @@
- use codex_plus_core::models::{DeleteStatus, SessionRef};
--use codex_plus_data::{
--    BackupStore, SQLiteStorageAdapter, delete_local_from_paths,
--};
-+use codex_plus_data::{BackupStore, SQLiteStorageAdapter, delete_local_from_paths};
- use rusqlite::Connection;
- use serde_json::json;
- use std::fs;

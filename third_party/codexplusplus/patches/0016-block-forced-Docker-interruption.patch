@@ -1,4 +1,4 @@
-From e7cfed959bf46bda0769bcd9eb3de94d8f9ef285 Mon Sep 17 00:00:00 2001
+From 8923a4a53e1e71f052b3c38136728f8c3a2c246a Mon Sep 17 00:00:00 2001
 From: Anti-Codex Diagnostic <anticodex@example.invalid>
 Date: Fri, 14 Aug 2026 13:05:39 +0800
 Subject: [PATCH 15/19] block forced Docker interruption
@@ -9,10 +9,10 @@ Subject: [PATCH 15/19] block forced Docker interruption
  2 files changed, 42 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 880d056..6709fad 100644
+index ab2f5e0..4cab409 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -4218,6 +4218,16 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
+@@ -4219,6 +4219,16 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
                              "docker run/create container name and ownership label must identify the same current task; use --name anticodex-<current task id>",
                          );
                      }
@@ -29,7 +29,7 @@ index 880d056..6709fad 100644
                      if nested == "ls" && has_quiet_option(nested_arguments) {
                          has_quiet_container_list = true;
                      }
-@@ -4228,7 +4238,17 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
+@@ -4229,7 +4239,17 @@ fn command_policy_violation(command: &str) -> Option<&'static str> {
                      return Some("global Docker cleanup is forbidden");
                  }
                  "ps" if has_quiet_option(arguments) => has_quiet_container_list = true,
@@ -48,7 +48,7 @@ index 880d056..6709fad 100644
                  _ => {}
              }
          }
-@@ -4540,6 +4560,16 @@ fn has_quiet_option(tokens: &[String]) -> bool {
+@@ -4541,6 +4561,16 @@ fn has_quiet_option(tokens: &[String]) -> bool {
      })
  }
  

@@ -1,4 +1,4 @@
-From df1dccaebf5e894ed29afe4498a9f67d987b5d90 Mon Sep 17 00:00:00 2001
+From 2adb1c0174a3daffac98e63f8f457e84c04d1ce2 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
 Subject: [PATCH 05/19] fix: preserve image tool outputs for chat relays
@@ -9,10 +9,10 @@ Subject: [PATCH 05/19] fix: preserve image tool outputs for chat relays
  2 files changed, 215 insertions(+), 4 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index a4ab0f3..3bf1c49 100644
+index e8efc89..55282d3 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -2767,7 +2767,7 @@ fn append_responses_item(
+@@ -2768,7 +2768,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -21,7 +21,7 @@ index a4ab0f3..3bf1c49 100644
              }));
          }
          Some("custom_tool_call") => {
-@@ -2813,7 +2813,7 @@ fn append_responses_item(
+@@ -2814,7 +2814,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -30,7 +30,7 @@ index a4ab0f3..3bf1c49 100644
              }));
          }
          Some("tool_call") => {
-@@ -2859,7 +2859,7 @@ fn append_responses_item(
+@@ -2860,7 +2860,7 @@ fn append_responses_item(
              messages.push(json!({
                  "role": "tool",
                  "tool_call_id": call_id,
@@ -39,7 +39,7 @@ index a4ab0f3..3bf1c49 100644
              }));
          }
          Some("reasoning") => {
-@@ -2896,11 +2896,26 @@ fn append_responses_item(
+@@ -2897,11 +2897,26 @@ fn append_responses_item(
  }
  
  fn orphan_tool_output_message(call_id: &str, output: &Value) -> Value {
@@ -67,7 +67,7 @@ index a4ab0f3..3bf1c49 100644
          )
      })
  }
-@@ -4285,6 +4300,135 @@ fn response_output_text(value: &Value) -> String {
+@@ -4286,6 +4301,135 @@ fn response_output_text(value: &Value) -> String {
      }
  }
  

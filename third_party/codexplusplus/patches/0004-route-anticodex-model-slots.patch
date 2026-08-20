@@ -1,4 +1,4 @@
-From c3f190c0320f133759800afb2ded4989c3174b5c Mon Sep 17 00:00:00 2001
+From aef814a933d775962877634ebd19be3e35b022df Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
 Subject: [PATCH 04/19] fix: route Anti-Codex model slots
@@ -8,7 +8,7 @@ Subject: [PATCH 04/19] fix: route Anti-Codex model slots
  1 file changed, 376 insertions(+), 10 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 560c26d..a4ab0f3 100644
+index f271f79..e8efc89 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;

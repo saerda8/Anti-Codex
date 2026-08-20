@@ -1,4 +1,4 @@
-From 0bd3419740ed57a5b4e807fd8f3556c5d3289042 Mon Sep 17 00:00:00 2001
+From 45fe54e62d97cd2179c5c87da74d69fc910da6cd Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 16:13:39 +0800
 Subject: [PATCH 17/19] route compaction by current thread model
@@ -8,7 +8,7 @@ Subject: [PATCH 17/19] route compaction by current thread model
  1 file changed, 255 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index c66f73c..c3fdb06 100644
+index 3a8bd4a..1b49023 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,6 +4,7 @@
