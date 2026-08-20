@@ -2,11 +2,11 @@
   "component": "CodexPlusPlus",
   "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
   "license": "AGPL-3.0-only",
-  "version": "1.2.49",
-  "tag": "v1.2.49",
-  "upstreamCommit": "93c9ec4acfed583681ce1b8e7271cb35bd7b9b87",
-  "isolationPatchCommit": "f518b28cece816e29fb82820440f59953a97c1bd",
-  "patchCommit": "04f9f3252728b3fee2cf6e3158798c4ff2fcf6c8",
+  "version": "1.2.50",
+  "tag": "v1.2.50",
+  "upstreamCommit": "888f2bdc0e720aee26221b0d40dd7f3634a630b1",
+  "isolationPatchCommit": "51d8fcb44ca91490e8ba877cca9df20814df4987",
+  "patchCommit": "62d17b7cb11fb11d08b1f2c87f33064086c02a96",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -110,13 +110,13 @@
     }
   ],
   "verification": {
-    "patchReplay": "19 project patches replayed without automatic conflict resolution; head 04f9f3252728b3fee2cf6e3158798c4ff2fcf6c8; tree cc892e347a8e358148aaa54e4ec8da6b18b91665",
+    "patchReplay": "20 project patches replayed without automatic conflict resolution; head 62d17b7cb11fb11d08b1f2c87f33064086c02a96; tree ca8098c7ef14a86488bab384a00022a68dac384b",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:5044c8ff0d1efa199a3ff207b0dd20e00467b771bfdf0e1eba89d1827cfa3437",
+    "launcherReleaseBuild": "sha256:9d21e8ddc079ff7d389977d0f0ee74b5acbcd4bf7f90f78317836c41065b9579",
     "runtimeIsolation": "candidate only; not activated"
   }
 }

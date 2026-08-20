@@ -39,10 +39,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 19);
+  assert.equal(metadata.patches.length, 20);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0020-fix-format-v1.2.48-upstream.patch",
+    "patches/0021-fix-format-v1.2.50-upstream.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
