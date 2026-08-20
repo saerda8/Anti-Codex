@@ -443,10 +443,13 @@ export function collectCodexRolloutMarkerEvidence(records = [], marker = "") {
     if (record.type !== "response_item") continue;
 
     const item = payload;
+    const userMessageText = item.type === "message" && item.role === "user"
+      ? responseItemText(item.content)
+      : "";
     const isMarkerPrompt = item.type === "message"
       && item.role === "user"
       && needle
-      && responseItemText(item.content).includes(needle);
+      && (userMessageText.includes(needle) || userMessageText.replaceAll("\\_", "_").includes(needle));
     if (isMarkerPrompt) {
       const markerTurnId = currentTurnId
         || String(item.id || record.timestamp || `marker-user-${index}`);

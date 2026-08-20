@@ -126,6 +126,26 @@ test("native Codex rollout evidence confirms one fixed-route task without a lega
   assert.equal(evidence.contextItems.length, 2);
 });
 
+test("native Codex rollout evidence accepts escaped underscores only in the submitted user marker", () => {
+  const marker = "UI_ESCAPED_MARKER_123";
+  const escapedMarker = marker.replaceAll("_", "\\_");
+  const evidence = collectCodexRolloutMarkerEvidence([
+    { type: "session_meta", payload: { id: "thread-escaped" } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: "turn-escaped" } },
+    { type: "turn_context", payload: { turn_id: "turn-escaped", model: "anticodex/third-party/mimo-v2.5-pro" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: escapedMarker }] } },
+    { type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: escapedMarker }] } },
+    { type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: marker }] } },
+    { type: "event_msg", payload: { type: "task_complete", turn_id: "turn-escaped" } },
+  ], marker);
+
+  assert.equal(evidence.sessionId, "thread-escaped");
+  assert.equal(evidence.userMarkerSeen, true);
+  assert.deepEqual(evidence.models, ["anticodex/third-party/mimo-v2.5-pro"]);
+  assert.equal(evidence.assistantMarkerCount, 1);
+  assert.equal(evidence.latestMarkerTurnComplete, true);
+});
+
 test("native Codex rollout evidence ignores assistant and tool data before the marker-scoped user turn", () => {
   const marker = "UI_FIXED_ROUTE_TOOL_456";
   const evidence = collectCodexRolloutMarkerEvidence([
