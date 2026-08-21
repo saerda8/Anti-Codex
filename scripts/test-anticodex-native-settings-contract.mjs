@@ -80,6 +80,26 @@ assert.deepEqual(
   ["conditional", "future-settings"],
 );
 
+const registeredButNotNavigableSource = [
+  'import{fT as sections}from"./app-initial.js";',
+  'const pages={agent:A,personalization:B,teams:C,conditional:D};',
+  visibilityFunction("useVisibleSettingsSections", "teams"),
+  'export{useVisibleSettingsSections as n,pages as r};',
+].join("");
+const registeredButNotNavigableNavigationSource = [
+  'const nativeSettingsSections=[{slug:`agent`},{slug:`personalization`},{slug:`conditional`}];',
+  'export{nativeSettingsSections as fT};',
+].join("");
+assert.deepEqual(
+  nativeSettingsContract.extractNativeSettingsGateSlugs(
+    registeredButNotNavigableSource,
+    moduleEvidence(registeredButNotNavigableSource, {
+      "webview/assets/app-initial.js": registeredButNotNavigableNavigationSource,
+    }),
+  ),
+  ["conditional", "teams"],
+);
+
 const renamedVisibilityWithTailDecoy = [
   'import{fT as sections}from"./app-initial.js";',
   registrationSource,

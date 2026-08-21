@@ -260,7 +260,6 @@ function readNavigationRegistryEvidence({ candidate, definitionSource, modulePat
   const navigationSlugs = extractSlugArray(navigationSource, navigationExports[0].localName);
   if (!navigationSlugs.includes("agent") || !navigationSlugs.includes("personalization")) return null;
   if (navigationSlugs.some((slug) => !registered.has(slug))) return null;
-  if (candidate.gatedSlugs.some((slug) => !navigationSlugs.includes(slug))) return null;
   return navigationSlugs;
 }
 
