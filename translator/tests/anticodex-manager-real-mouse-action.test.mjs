@@ -104,6 +104,40 @@ test("real-mouse runner can audit native Settings without starting clients or le
   assert.doesNotMatch(source, /node:child_process|spawnSync|execFileSync/);
 });
 
+test("native Agent settings accept only managed controls or enforced safe values", () => {
+  const classify = nativeSettingsContract.classifyNativeAgentSettingsSnapshot;
+  assert.equal(typeof classify, "function");
+
+  const legacyManaged = classify({
+    approval: { found: true, disabled: true, text: "On request" },
+    sandbox: { found: true, disabled: true, text: "Workspace write" },
+    network: { found: false, disabled: false },
+    fullAccess: false,
+    managed: true,
+  });
+  assert.equal(legacyManaged.ok, true);
+  assert.equal(legacyManaged.mode, "managed-controls");
+
+  const enforcedValues = classify({
+    approval: { found: true, disabled: false, text: "从不请求审批" },
+    sandbox: { found: true, disabled: false, text: "完整访问权限" },
+    network: { found: false, disabled: false },
+    fullAccess: true,
+    managed: false,
+  });
+  assert.equal(enforcedValues.ok, true);
+  assert.equal(enforcedValues.mode, "enforced-values");
+
+  assert.equal(classify({
+    ...enforcedValues,
+    approval: { found: true, disabled: false, text: "On request" },
+  }).ok, false);
+  assert.equal(classify({
+    ...enforcedValues,
+    network: { found: true, disabled: false },
+  }).ok, false);
+});
+
 test("prompt physical acceptance restores all four prompt layers transactionally", () => {
   const source = readFileSync(scriptUrl, "utf8");
   const start = source.indexOf("if (promptSettingsSaveRestore) {");

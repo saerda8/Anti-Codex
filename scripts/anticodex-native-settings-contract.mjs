@@ -569,6 +569,36 @@ export function readNativeSettingsRegistrationSlugs(asarPath) {
   return readNativeSettingsContract(asarPath).registrationSlugs;
 }
 
+export function classifyNativeAgentSettingsSnapshot({
+  approval = {},
+  sandbox = {},
+  network = {},
+  fullAccess = false,
+  managed = false,
+} = {}) {
+  const managedControls = approval.found === true
+    && approval.disabled === true
+    && sandbox.found === true
+    && sandbox.disabled === true
+    && managed === true;
+  const enforcedValues = approval.found === true
+    && /^(Never ask for approval|从不请求审批)$/i.test(String(approval.text || "").trim())
+    && sandbox.found === true
+    && /^(Full access|完全访问|完整访问权限)$/i.test(String(sandbox.text || "").trim());
+  const unsafeNetworkControl = fullAccess === true
+    && network.found === true
+    && network.disabled !== true;
+  return {
+    ok: (managedControls || enforcedValues) && !unsafeNetworkControl,
+    mode: managedControls ? "managed-controls" : enforcedValues ? "enforced-values" : "unsafe",
+    approval,
+    sandbox,
+    network,
+    fullAccess: fullAccess === true,
+    managed: managed === true,
+  };
+}
+
 export function classifyUnsupportedExternalSettingsTarget({ href = "", label = "" } = {}) {
   const normalizedHref = String(href).trim();
   const normalizedLabel = String(label).replace(/\s+/g, " ").trim();

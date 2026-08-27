@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   captureExactFileSnapshot,
+  classifyNativeAgentSettingsSnapshot,
   classifyNativeSettingsCrashSnapshot,
   classifyUnsupportedExternalSettingsTarget,
   compareNativeSettingsRuntimeContract,
@@ -592,25 +593,25 @@ async function auditNativeAgentSettings() {
         if (control) return {
           found: true,
           disabled: Boolean(control.disabled) || control.getAttribute('aria-disabled') === 'true' || control.hasAttribute('data-disabled'),
+          text: String(control.innerText || control.textContent || control.value || '').replace(/\s+/g, ' ').trim(),
         };
         container = container.parentElement;
       }
-      return { found: Boolean(label), disabled: false };
+      return { found: Boolean(label), disabled: false, text: '' };
     };
     const approval = findControl(/^(Approval policy|批准策略)$/i);
     const sandbox = findControl(/^(Sandbox settings|沙盒设置)$/i);
     const network = findControl(/^(Allow network access|允许网络访问)$/i);
-    const fullAccess = /(Full access|完全访问)/i.test(text);
+    const fullAccess = /(Full access|完全访问|完整访问权限)/i.test(text);
     const managed = /(restricted by this installation|managed by admin policy|受此次安装的限制|管理员策略管理)/i.test(text);
-    return {
-      ok: approval.found && approval.disabled && sandbox.found && sandbox.disabled && managed
-        && !(fullAccess && network.found && !network.disabled),
+    const classifyNativeAgentSettingsSnapshot = ${classifyNativeAgentSettingsSnapshot.toString()};
+    return classifyNativeAgentSettingsSnapshot({
       approval,
       sandbox,
       network,
       fullAccess,
       managed,
-    };
+    });
   })()`, (value) => value?.ok === true);
   if (!snapshot?.ok) throw new Error(`Native Agent settings are not truthfully managed: ${JSON.stringify(snapshot)}`);
   return snapshot;
