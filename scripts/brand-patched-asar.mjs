@@ -21,6 +21,7 @@ import {
   patchStartupMcpConfigReload,
   patchSettingsExternalNavigation,
   patchSettingsExternalNavigationRender,
+  patchWebviewHtmlTitle,
   patchWindowsTrayIconSelection,
   selectCrashRecoveryBundleCandidate,
 } from "./brand-patch-compat.mjs";
@@ -111,26 +112,6 @@ function patchPackageJson(text) {
     throw new Error(`package.json grew too large: ${next.length} > ${text.length}`);
   }
   return next + " ".repeat(text.length - next.length);
-}
-
-function patchWebviewHtmlTitle(text) {
-  if (text.includes("<title>Anti-Codex</title>")) return text;
-  let next = text.replace("<title>Codex</title>", "<title>Anti-Codex</title>");
-  if (next === text) throw new Error("webview HTML title pattern not found");
-  let extra = next.length - text.length;
-  while (extra > 0) {
-    let changed = false;
-    next = next.replace(/ {2,}/, (match) => {
-      if (extra <= 0) return match;
-      const remove = Math.min(extra, match.length - 1);
-      extra -= remove;
-      changed = true;
-      return " ".repeat(match.length - remove);
-    });
-    if (!changed) break;
-  }
-  if (extra > 0 || next.length !== text.length) throw new Error("webview HTML title size changed after branding patch");
-  return next;
 }
 
 function patchBootstrapAppUserModelId(text) {
@@ -447,9 +428,10 @@ function findWebviewHtmlTitlePatch(fd, header, dataOffset) {
   const entry = walkToEntry(header, rel);
   const { buf } = readFileFromAsar(fd, entry, dataOffset);
   const text = buf.toString("utf8");
-  if (text.includes("<title>Codex</title>") || text.includes("<title>Anti-Codex</title>")) {
+  try {
+    patchWebviewHtmlTitle(text);
     return [rel, patchWebviewHtmlTitle];
-  }
+  } catch {}
   throw new Error("Could not find webview HTML title");
 }
 

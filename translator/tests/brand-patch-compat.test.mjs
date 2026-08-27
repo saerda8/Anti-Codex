@@ -10,6 +10,24 @@ const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asa
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+test("brands Codex and ChatGPT webview titles without changing HTML size", () => {
+  for (const title of ["Codex", "ChatGPT"]) {
+    const source = `<!doctype html>\n  <head>\n    <title>${title}</title>\n  </head>\n`;
+    const patched = brandPatchCompat.patchWebviewHtmlTitle(source);
+
+    assert.equal(patched.length, source.length);
+    assert.match(patched, /<title>Anti-Codex<\/title>/);
+    assert.equal(brandPatchCompat.patchWebviewHtmlTitle(patched), patched);
+  }
+});
+
+test("discovers webview titles through the shared compatibility patch", () => {
+  const finder = brandPatcherSource.match(
+    /function findWebviewHtmlTitlePatch[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.match(finder, /patchWebviewHtmlTitle\(text\)/);
+});
+
 const crashRecoveryBundle = [
   'function U(e){if(e===`idle`)return A.appUpdates?.checkForUpdates(),j(Z,{id:`appUpdate.recovery.updateCodex`,defaultMessage:`Update {appName}`,description:`Button label shown on the full-screen error page to install a desktop app update`,values:{appName:P}});if(e===`ready`)return A.appUpdates?.installUpdate()}',
   'function C(e){let {fatalError:n,onReset:R}=e;let c;c=j(`h1`,{children:j(Z,{id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`Title shown when the Codex app-server process crashes`,values:{appName:P}})});let l;l=jsxs(`div`,{children:[c,j(`p`,{children:j(Z,{id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`,description:`Recovery guidance shown when the Codex app-server process crashes`,values:{appName:P,documentationLink:j(`button`,{onClick:D,children:`documentation`})}})})]});let u;u=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let d;d=j(B,{onClick:O,children:j(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`,description:`Button label to open the Config.toml file`})});let f;f=j(Z,{id:`appServerCrash.restart`,defaultMessage:`Restart`,description:`Button label that restarts the Codex app-server after a crash`});let p;p=j(B,{onClick:R,children:f});let m;m=jsxs(`div`,{children:[u,d,p]});return jsxs(`main`,{children:[s,l,m,h]})}',
@@ -249,6 +267,19 @@ function appServerSpawnFixture({ command = "e", proc = "t", spawn = "(0,d.spawn)
   return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${proc}=${spawn}(${resolver}.resolve(${command},{env:this.options.env})??${command},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
 }
 
+function appServerResolvedSpawnFixture({
+  command = "e",
+  resolved = "t",
+  proc = "n",
+  spawn = "(0,d.spawn)",
+  resolver = "GI",
+  coreRoot = "r",
+  coreResolver = "BP",
+  pathModule = "i",
+} = {}) {
+  return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${resolved}=${resolver}.resolve(${command},{env:this.options.env})??${command},${proc}=${spawn}(${resolved},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);let ${coreRoot}=${coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===\`win32\`&&${coreRoot}!=null&&${resolved}===(0,${pathModule}.join)(${coreRoot},\`codex.exe\`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
+}
+
 test("injects managed approval and sandbox session flags into only the native app-server argv", () => {
   for (const source of [
     appServerSpawnFixture(),
@@ -299,6 +330,37 @@ test("injects managed approval and sandbox session flags into only the native ap
     () => new FailingSpawnClass({ executablePath: "codex.exe", env: {}, args: ["app-server"] }).spawnProcess(),
     /Codex CLI spawn failed/,
   );
+});
+
+test("injects managed session flags when command resolution is hoisted", () => {
+  const source = appServerResolvedSpawnFixture();
+  const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal((patched.match(/approval_policy="never"/g) ?? []).length, 1);
+  assert.equal((patched.match(/sandbox_mode="danger-full-access"/g) ?? []).length, 1);
+  assert.match(patched, /coreRuntimeInUse/);
+  assert.equal(brandPatchCompat.patchAppServerManagedSessionFlags(patched), patched);
+
+  const calls = [];
+  const SpawnClass = new Function("d", "GI", "BP", "i", `${patched};return C;`)(
+    { spawn: (command, args) => (calls.push({ command, args }), { pid: 1 }) },
+    { resolve: (command) => command },
+    () => "runtime",
+    { join: (root, file) => `${root}/${file}` },
+  );
+  new SpawnClass({
+    executablePath: "codex.exe",
+    env: {},
+    args: ["-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"],
+  }).spawnProcess();
+
+  assert.deepEqual(calls[0].args, [
+    "-c", "features.code_mode_host=true",
+    "-c", 'approval_policy="never"',
+    "-c", 'sandbox_mode="danger-full-access"',
+    "app-server", "--analytics-default-enabled",
+  ]);
 });
 
 test("fails closed when app-server spawn anchors are missing or repeated", () => {
