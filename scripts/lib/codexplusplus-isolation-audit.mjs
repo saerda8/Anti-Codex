@@ -10,6 +10,7 @@ const SOURCE_PATHS = {
   launcher: "crates/codex-plus-core/src/launcher.rs",
   paths: "crates/codex-plus-core/src/paths.rs",
   protocolProxy: "crates/codex-plus-core/src/protocol_proxy.rs",
+  relayConfig: "crates/codex-plus-core/src/relay_config.rs",
   ports: "crates/codex-plus-core/src/ports.rs",
   watcher: "crates/codex-plus-core/src/watcher.rs",
 };
@@ -35,6 +36,16 @@ export async function auditCodexPlusPlusIsolation(root) {
       ]),
     ),
   );
+  const fixedProtocolProxyConsumers = [
+    source.managerCommands,
+    source.managerLib,
+    source.launcher,
+    source.relayConfig,
+  ].filter((contents) => contents.includes("protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT"));
+  const hardcodedHelperPortDefault =
+    /fn default_(?:dream_skin_)?helper_port\(\) -> u16 \{\s*57321\s*\}/.test(
+      source.managerCommands,
+    );
 
   const checks = [
     check(
@@ -87,6 +98,12 @@ export async function auditCodexPlusPlusIsolation(root) {
       source.protocolProxy.includes("CODEX_PLUS_PROTOCOL_PROXY_PORT"),
       "The Chat/Responses protocol proxy port is independently configurable.",
       "The protocol proxy is fixed to one process-wide port and cannot coexist independently.",
+    ),
+    check(
+      "isolated_protocol_proxy_consumers",
+      fixedProtocolProxyConsumers.length === 0 && !hardcodedHelperPortDefault,
+      "Every runtime protocol-proxy consumer resolves the isolated port.",
+      "A runtime protocol-proxy consumer still bypasses CODEX_PLUS_PROTOCOL_PROXY_PORT.",
     ),
     check(
       "target_scoped_process_watcher",

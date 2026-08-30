@@ -17,6 +17,7 @@ const FILES = {
   "crates/codex-plus-core/src/launcher.rs": "Command::new(executable).spawn() find_codex_processes_for_app_path",
   "crates/codex-plus-core/src/paths.rs": "std::env::var_os(\"CODEX_PLUS_STATE_DIR\")",
   "crates/codex-plus-core/src/protocol_proxy.rs": "std::env::var(\"CODEX_PLUS_PROTOCOL_PROXY_PORT\")",
+  "crates/codex-plus-core/src/relay_config.rs": "protocol_proxy::protocol_proxy_port()",
   "crates/codex-plus-core/src/ports.rs": "CODEX_PLUS_LAUNCHER_GUARD_PORT",
   "crates/codex-plus-core/src/watcher.rs": "find_codex_processes_for_app_path find_codex_processes_from_snapshot_for_executable target_app_path build_codex_executable(target_app_path) isolated_instance_watcher_disabled",
 };
@@ -45,6 +46,38 @@ test("accepts a CodexPlusPlus tree with independently configurable state, ports 
   assert.equal(result.checks.every((check) => check.ok), true);
 });
 
+test("rejects runtime protocol-proxy consumers that bypass the isolated port", async (t) => {
+  const root = await writeFixture({
+    "apps/codex-plus-manager/src-tauri/src/lib.rs":
+      `${FILES["apps/codex-plus-manager/src-tauri/src/lib.rs"]} protocol_proxy::DEFAULT_PROTOCOL_PROXY_PORT`,
+  });
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  const result = await auditCodexPlusPlusIsolation(root);
+
+  assert.equal(result.compatibilityReady, false);
+  assert.equal(
+    result.blockers.some((blocker) => blocker.id === "isolated_protocol_proxy_consumers"),
+    true,
+  );
+});
+
+test("rejects a hard-coded serde helper-port default", async (t) => {
+  const root = await writeFixture({
+    "apps/codex-plus-manager/src-tauri/src/commands.rs":
+      `${FILES["apps/codex-plus-manager/src-tauri/src/commands.rs"]}\nfn default_helper_port() -> u16 { 57321 }`,
+  });
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  const result = await auditCodexPlusPlusIsolation(root);
+
+  assert.equal(result.compatibilityReady, false);
+  assert.equal(
+    result.blockers.some((blocker) => blocker.id === "isolated_protocol_proxy_consumers"),
+    true,
+  );
+});
+
 test("reports the exact upstream isolation gaps without hiding reusable capabilities", async (t) => {
   const root = await writeFixture({
     "crates/codex-plus-core/src/app_paths.rs": "ChatGPT.exe Codex.exe",
@@ -69,7 +102,13 @@ test("reports the exact upstream isolation gaps without hiding reusable capabili
   );
   assert.deepEqual(
     result.checks.filter((check) => check.ok).map((check) => check.id),
-    ["alternate_app_path", "isolated_codex_home", "inherited_child_environment", "isolated_guard_port"],
+    [
+      "alternate_app_path",
+      "isolated_codex_home",
+      "inherited_child_environment",
+      "isolated_guard_port",
+      "isolated_protocol_proxy_consumers",
+    ],
   );
 });
 
