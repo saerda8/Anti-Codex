@@ -354,7 +354,6 @@ function Test-AntiCodexAsarPatches {
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
     $requiredMarkers = @(
-        '.app.name=`Anti-Codex`',
         "AntiCodex",
         'icon:`icon.ico`',
         "__ANTICODEX_OPEN_MANAGER__",
@@ -364,6 +363,12 @@ function Test-AntiCodexAsarPatches {
         if (-not $text.Contains($marker)) {
             throw "Anti-Codex host app.asar is missing actual patch marker: $marker"
         }
+    }
+    $appNameDirectCount = [regex]::Matches($text, '\.app\.name=`Anti-Codex`').Count
+    $productNameMapperPattern = 'function (?<fn>[A-Za-z_$][\w$]*)\((?<arg>[A-Za-z_$][\w$]*)\)\{let (?<flavor>[A-Za-z_$][\w$]*)=(?<resolve>[A-Za-z_$][\w$]*)\(\k<arg>\);return \k<flavor>\?`Anti-Codex \(\$\{\k<flavor>\}\)`:`Anti-Codex`\}'
+    $productNameMapperCount = [regex]::Matches($text, $productNameMapperPattern).Count
+    if (($appNameDirectCount + $productNameMapperCount) -ne 1) {
+        throw "Anti-Codex host app.asar product-name patch is missing or ambiguous."
     }
     if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5, 6, 7)) {
         $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
@@ -405,6 +410,49 @@ function Test-AntiCodexAsarPatches {
         return $writes.Count -eq 2 -and $segmentWrites.Count -eq 2 -and
             -not [string]::IsNullOrWhiteSpace($MemoPattern) -and
             [regex]::Matches($segment, $MemoPattern).Count -eq 1
+    }
+    $v2TitleOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`').Count
+    $v2ConfigOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn''t load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`').Count
+    $v2DescriptionOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart ChatGPT to try again\.`,description:`[^`]+`').Count
+    $v2RestartOriginalCount = [regex]::Matches($text, 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`').Count
+    $v2TitlePatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\})').Count
+    $v2ConfigPatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn''t load your configuration\. Review it, then restart to try again\.`(?=\})').Count
+    $v2DescriptionPatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})').Count
+    $v2RestartPatchedCount = [regex]::Matches($text, 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})').Count
+    $v2CrashRecoveryMarkerCount = [regex]::Matches($text, '/\*anticodex-crash-recovery-actions-v2\*/children:\[[A-Za-z_$][\w$]*,[A-Za-z_$][\w$]*,[A-Za-z_$][\w$]*\]').Count
+    $v2AppCrashConfigBindingValid = $false
+    $v2AppCrashHandlerBindingValid = $false
+    $v2AppCrashFeedbackBindingValid = $false
+    $v2AppCrashUpdaterHidden = $false
+    $v2RegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,9000}?id:``appServerCrash\.recoveryTitle``,defaultMessage:``Anti-Codex hit a snag``(?=\})(?:(?!function $identifier\()[\s\S]){0,9000}?id:``appServerCrash\.configurationRecoveryDescription``,defaultMessage:``Anti-Codex couldn't load your configuration\. Review it, then restart to try again\.``(?=\})(?:(?!function $identifier\()[\s\S]){0,9000}?id:``appServerCrash\.recoveryDescription``,defaultMessage:``Something went wrong\. Restart Anti-Codex to try again\.``(?=\})(?:(?!function $identifier\()[\s\S]){0,9000}?id:``appServerCrash\.restartChatGPT``,defaultMessage:``Restart Anti-Codex``(?=\})(?:(?!function $identifier\()[\s\S]){0,9000}?hideUnavailable:!0(?:(?!function $identifier\()[\s\S]){0,4000}?/\*anticodex-crash-recovery-actions-v2\*/children:\[(?<restart>$identifier),(?<feedback>$identifier),(?<config>$identifier)\](?:(?!function $identifier\()[\s\S]){0,4000}?\}function (?<openConfig>$identifier)\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}"
+    $v2Regions = [regex]::Matches($text, $v2RegionPattern)
+    if ($v2Regions.Count -eq 1) {
+        $v2Region = $v2Regions[0].Value
+        $v2Props = [regex]::Escape($v2Regions[0].Groups['props'].Value)
+        $v2RestartVariable = $v2Regions[0].Groups['restart'].Value
+        $v2FeedbackVariable = $v2Regions[0].Groups['feedback'].Value
+        $v2ConfigVariable = $v2Regions[0].Groups['config'].Value
+        $v2OpenConfig = [regex]::Escape($v2Regions[0].Groups['openConfig'].Value)
+        $v2Restart = [regex]::Escape($v2RestartVariable)
+        $v2Feedback = [regex]::Escape($v2FeedbackVariable)
+        $v2Config = [regex]::Escape($v2ConfigVariable)
+        $v2RestartBindings = [regex]::Matches($v2Region, "\{fatalError:$identifier,onReset:(?<handler>$identifier)\}=$v2Props(?:[,;])")
+        if ($v2RestartBindings.Count -eq 1) {
+            $v2RestartHandler = [regex]::Escape($v2RestartBindings[0].Groups['handler'].Value)
+            $v2RestartPattern = "(?s)let (?<label>$identifier);[\s\S]{0,650}?\b\k<label>=[\s\S]{0,350}?id:``appServerCrash\.restartChatGPT``,defaultMessage:``Restart Anti-Codex``(?=\})[\s\S]{0,350}?let $v2Restart;[\s\S]{0,450}?\b$v2Restart=[\s\S]{0,220}?onClick:$v2RestartHandler,children:\k<label>"
+            $v2RestartMatches = [regex]::Matches($v2Region, $v2RestartPattern)
+            $v2RestartLabel = if ($v2RestartMatches.Count -eq 1) { [regex]::Escape($v2RestartMatches[0].Groups['label'].Value) } else { "" }
+            $v2RestartMemoPattern = "^let $v2Restart;(?<cache>$identifier)\[(?<dependencyIndex>\d+)\]===$v2RestartHandler\?$v2Restart=\k<cache>\[(?<valueIndex>\d+)\]:\($v2Restart=(?:(?!=>|function)[\s\S]){1,600}?onClick:$v2RestartHandler,children:$v2RestartLabel(?:(?!=>|function)[\s\S]){0,150}?,\k<cache>\[\k<dependencyIndex>\]=$v2RestartHandler,\k<cache>\[\k<valueIndex>\]=$v2Restart\);?$"
+            $v2AppCrashHandlerBindingValid = $v2RestartMatches.Count -eq 1 -and
+                (Test-SupportedControlAssignments -Region $v2Region -Variable $v2RestartVariable -MemoPattern $v2RestartMemoPattern)
+        }
+        $v2ConfigBindings = [regex]::Matches($v2Region, "\b$v2Config=[^;]{0,1200}?onClick:$v2OpenConfig[^;]{0,800}?id:``appServerCrash\.reviewConfiguration``")
+        $v2Dependency = "$identifier(?:\.$identifier)*"
+        $v2ConfigMemoPattern = "^let $v2Config;(?<cache>$identifier)\[(?<firstIndex>\d+)\]!==?(?<first>$v2Dependency)\|\|\k<cache>\[(?<secondIndex>\d+)\]!==?(?<second>$v2Dependency)\?\($v2Config=(?:(?!=>|function)[\s\S]){1,1300}?onClick:$v2OpenConfig(?:(?!=>|function)[\s\S]){1,900}?id:``appServerCrash\.reviewConfiguration``(?:(?!=>|function)[\s\S]){0,500}?,\k<cache>\[\k<firstIndex>\]=\k<first>,\k<cache>\[\k<secondIndex>\]=\k<second>,\k<cache>\[(?<valueIndex>\d+)\]=$v2Config\):$v2Config=\k<cache>\[\k<valueIndex>\];?$"
+        $v2AppCrashConfigBindingValid = $v2ConfigBindings.Count -eq 1 -and
+            (Test-SupportedControlAssignments -Region $v2Region -Variable $v2ConfigVariable -MemoPattern $v2ConfigMemoPattern)
+        $v2AppCrashFeedbackBindingValid = [regex]::Matches($v2Region, "\b$v2Feedback=[^;]{0,900}?onClick:$identifier[^;]{0,700}?id:``appServerCrash\.sendFeedback``").Count -eq 1
+        $v2AppCrashUpdaterHidden = [regex]::Matches($v2Region, "children:\[$v2Restart,$v2Feedback,$v2Config,$identifier\]").Count -eq 0
     }
     $appCrashConfigBindingValid = $false
     $appCrashHandlerBindingValid = $false
@@ -455,11 +503,27 @@ function Test-AntiCodexAsarPatches {
         }
     }
     if ($ExpectedHostPatchRevision -in @(5, 6, 7)) {
-        if ($crashTitleOriginalCount -ne 0 -or $crashDescriptionOriginalCount -ne 0 -or
-            $crashTitlePatchedCount -ne 1 -or $crashDescriptionPatchedCount -ne 1 -or $crashRecoveryMarkerCount -ne 1 -or
+        $legacyCrashPatchValid = $crashTitleOriginalCount -eq 0 -and $crashDescriptionOriginalCount -eq 0 -and
+            $crashTitlePatchedCount -eq 1 -and $crashDescriptionPatchedCount -eq 1 -and $crashRecoveryMarkerCount -eq 1 -and
+            $appCrashConfigBindingValid -and $appCrashHandlerBindingValid -and
+            $v2TitleOriginalCount -eq 0 -and $v2ConfigOriginalCount -eq 0 -and
+            $v2DescriptionOriginalCount -eq 0 -and $v2RestartOriginalCount -eq 0 -and
+            $v2TitlePatchedCount -eq 0 -and $v2ConfigPatchedCount -eq 0 -and
+            $v2DescriptionPatchedCount -eq 0 -and $v2RestartPatchedCount -eq 0 -and
+            $v2CrashRecoveryMarkerCount -eq 0
+        $v2CrashPatchValid = $v2TitleOriginalCount -eq 0 -and $v2ConfigOriginalCount -eq 0 -and
+            $v2DescriptionOriginalCount -eq 0 -and $v2RestartOriginalCount -eq 0 -and
+            $v2TitlePatchedCount -eq 1 -and $v2ConfigPatchedCount -eq 1 -and
+            $v2DescriptionPatchedCount -eq 1 -and $v2RestartPatchedCount -eq 1 -and
+            $v2CrashRecoveryMarkerCount -eq 1 -and $v2AppCrashConfigBindingValid -and
+            $v2AppCrashHandlerBindingValid -and $v2AppCrashFeedbackBindingValid -and $v2AppCrashUpdaterHidden -and
+            $crashTitleOriginalCount -eq 0 -and $crashDescriptionOriginalCount -eq 0 -and
+            $crashTitlePatchedCount -eq 0 -and $crashDescriptionPatchedCount -eq 0 -and
+            $crashRecoveryMarkerCount -eq 0
+        if ((-not $legacyCrashPatchValid -and -not $v2CrashPatchValid) -or
             $genericErrorOriginalCount -ne 1 -or $genericRetryOriginalCount -ne 1 -or
-            $genericErrorPatchedCount -ne 1 -or $genericRetryPatchedCount -ne 1 -or $genericErrorMarkerCount -ne 1 -or
-            -not $appCrashConfigBindingValid -or -not $appCrashHandlerBindingValid -or -not $genericRetryHandlerBindingValid) {
+            $genericErrorPatchedCount -ne 1 -or $genericRetryPatchedCount -ne 1 -or
+            $genericErrorMarkerCount -ne 1 -or -not $genericRetryHandlerBindingValid) {
             throw "Anti-Codex host app.asar crash recovery page patch is invalid."
         }
     } elseif ($ExpectedHostPatchRevision -in @(2, 3, 4)) {

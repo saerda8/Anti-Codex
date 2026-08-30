@@ -564,7 +564,6 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /Test-AntiCodexAsarPatches/);
   const asarValidator = extractFunction(rollback, "Test-AntiCodexAsarPatches");
   for (const marker of [
-    ".app.name=`Anti-Codex`",
     "AntiCodex",
     "icon:`icon.ico`",
     "__ANTICODEX_OPEN_MANAGER__",
@@ -572,6 +571,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   ]) {
     assert.match(asarValidator, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.match(asarValidator, /appNameDirectCount/);
+  assert.match(asarValidator, /productNameMapperPattern/);
+  assert.match(asarValidator, /\(\$appNameDirectCount \+ \$productNameMapperCount\) -ne 1/);
   assert.doesNotMatch(asarValidator, /legacyRequiredMarkers|authMethod:`apikey`|requiresAuth:!1|marketplaces:\[\]/);
   assert.match(asarValidator, /fixed shell host contains a retired feature patch/i);
   assert.match(asarValidator, /configWriteBridgePattern/);
@@ -636,6 +638,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
       "\\u7ba1\\u7406",
       "codex-tray.ico codex-tray.ico codex-tray.ico codex-tray.ico",
     ].join(";");
+    const productNameMapper = 'function yT(e){let t=vT(e);return t?`Anti-Codex (${t})`:`Anti-Codex`}';
     const configWriteBridge = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
     const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
     const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
@@ -650,6 +653,9 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const previousSettingsPatch = 'q={/*anticodex-local-settings-only*/};Z.securitySettings.message';
     const genericErrorOriginal = 'id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`};id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`}';
     const crashRecoveryPatch = `function C(e){let {fatalError:n,onReset:R}=e;id:\`appServerCrash.title\`,defaultMessage:\`{appName} stopped unexpectedly\`,values:{appName:\`Anti-Codex\`};id:\`appServerCrash.description\`,defaultMessage:\`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}\`,values:{appName:\`Anti-Codex\`,documentationLink:x};let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:\`loadingPage.openConfigToml\`,defaultMessage:\`Open Config.toml\`})});let f;f=(0,j.jsx)(Z,{id:\`appServerCrash.restart\`,defaultMessage:\`Restart\`});let p;p=(0,j.jsx)(B,{onClick:R,children:f});/*anticodex-crash-recovery-actions*/children:[d,p]}function O(){return D.dispatchMessage(\`open-config-toml\`,{})}function G(e){let {resetError:n}=e,r=M();id:\`codex.errorBoundary.genericError\`,defaultMessage:\`Oops, an error has occurred\`};let s;s=()=>{n(),r(\`/\`)};let c;c=(0,j.jsx)(Z,{id:\`codex.errorBoundary.goHome\`,defaultMessage:\`Try again\`});/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]}var R,z,J;${genericErrorOriginal}`;
+    const crashRecoveryV2 = `function C(e){let{fatalError:n,onReset:r}=e;id:\`appServerCrash.recoveryTitle\`,defaultMessage:\`Anti-Codex hit a snag\`};id:\`appServerCrash.configurationRecoveryDescription\`,defaultMessage:\`Anti-Codex couldn't load your configuration. Review it, then restart to try again.\`};id:\`appServerCrash.recoveryDescription\`,defaultMessage:\`Something went wrong. Restart Anti-Codex to try again.\`};let p;p=(0,j.jsx)(Z,{id:\`appServerCrash.restartChatGPT\`,defaultMessage:\`Restart Anti-Codex\`});let m;m=(0,j.jsx)(B,{onClick:r,children:p});let h;h=(0,j.jsx)(B,{onClick:F,children:(0,j.jsx)(Z,{id:\`appServerCrash.sendFeedback\`})});let g;g=(0,j.jsx)(B,{onClick:L,children:(0,j.jsx)(Z,{id:\`appServerCrash.reviewConfiguration\`})});let _;_=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{hideUnavailable:!0})});/*anticodex-crash-recovery-actions-v2*/children:[m,h,g]}function L(){return D.dispatchMessage(\`open-config-toml\`,{})}function G(e){let {resetError:n}=e,r=M();id:\`codex.errorBoundary.genericError\`,defaultMessage:\`Oops, an error has occurred\`};let s;s=()=>{n(),r(\`/\`)};let c;c=(0,j.jsx)(Z,{id:\`codex.errorBoundary.goHome\`,defaultMessage:\`Try again\`});/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]}var R,z,J;${genericErrorOriginal}`;
+    const legacyOriginalFragment = 'id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`,description:`title`,values:{appName:X};id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`,description:`description`,values:{appName:X,documentationLink:x}';
+    const v2OriginalFragment = 'id:`appServerCrash.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`title`};id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn\'t load your configuration. Review it, then restart to try again.`,description:`config`};id:`appServerCrash.recoveryDescription`,defaultMessage:`Something went wrong. Restart ChatGPT to try again.`,description:`description`};id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`restart`}';
     const crashRecoveryConfigHandlerSwap = crashRecoveryPatch.replace("onClick:O,children:", "onClick:U,children:");
     const crashRecoveryMemoPatch = crashRecoveryPatch
       .replace('let d;d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})});', 'let d;t[6]===n.hostId?d=t[7]:(d=(0,j.jsx)(B,{onClick:O,children:(0,j.jsx)(Z,{id:`loadingPage.openConfigToml`,defaultMessage:`Open Config.toml`})}),t[6]=n.hostId,t[7]=d);')
@@ -675,6 +681,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const revision2Hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
     const hook = revision2Hook.replace(",n()", "");
     const officialTracker = "trackPrimaryWindow(e){this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
+    const currentV2Base = `${patchedBase.replace(".app.name=`Anti-Codex`", productNameMapper)};${officialTracker};${currentSettingsPatch};${crashRecoveryV2}`;
     const focusOnlyHook = revision2Hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
     const legacyRestoreOnlyHook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
     const paths = {
@@ -715,6 +722,13 @@ test("rollback patch compatibility accepts the current and supported predecessor
       currentConfigThunkDecoy: join(fixture, "current-config-thunk-decoy.asar"),
       currentRestartThunkDecoy: join(fixture, "current-restart-thunk-decoy.asar"),
       currentGenericRetryThunkDecoy: join(fixture, "current-generic-retry-thunk-decoy.asar"),
+      currentV2: join(fixture, "current-v2.asar"),
+      currentV2MissingProductName: join(fixture, "current-v2-missing-product-name.asar"),
+      currentV2UpdaterDecoy: join(fixture, "current-v2-updater-decoy.asar"),
+      currentV2RestartHandlerSwap: join(fixture, "current-v2-restart-handler-swap.asar"),
+      currentV2ConfigHandlerSwap: join(fixture, "current-v2-config-handler-swap.asar"),
+      currentLegacyWithV2Original: join(fixture, "current-legacy-with-v2-original.asar"),
+      currentV2WithLegacyOriginal: join(fixture, "current-v2-with-legacy-original.asar"),
     };
     writeFileSync(paths.zero, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch}`);
     writeFileSync(paths.one, `${patchedBase};${hook};${currentSettingsPatch};${crashRecoveryPatch}`);
@@ -753,6 +767,13 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.currentConfigThunkDecoy, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryConfigThunkDecoy}`);
     writeFileSync(paths.currentRestartThunkDecoy, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryRestartThunkDecoy}`);
     writeFileSync(paths.currentGenericRetryThunkDecoy, `${patchedBase};${officialTracker};${currentSettingsPatch};${genericRetryThunkDecoy}`);
+    writeFileSync(paths.currentV2, currentV2Base);
+    writeFileSync(paths.currentV2MissingProductName, currentV2Base.replace(productNameMapper, "function yT(e){return `ChatGPT`}"));
+    writeFileSync(paths.currentV2UpdaterDecoy, currentV2Base.replace("/*anticodex-crash-recovery-actions-v2*/", "children:[m,h,g,_];/*anticodex-crash-recovery-actions-v2*/"));
+    writeFileSync(paths.currentV2RestartHandlerSwap, currentV2Base.replace("onClick:r,children:p", "onClick:U,children:p"));
+    writeFileSync(paths.currentV2ConfigHandlerSwap, currentV2Base.replace("onClick:L,children:", "onClick:U,children:"));
+    writeFileSync(paths.currentLegacyWithV2Original, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryPatch};${v2OriginalFragment}`);
+    writeFileSync(paths.currentV2WithLegacyOriginal, `${currentV2Base};${legacyOriginalFragment}`);
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
@@ -764,6 +785,14 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDef
         return $true
     } catch {
         return $false
+    }
+}
+function Get-AsarError([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDeferred, [int]$ExpectedFocusRestore, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
+    try {
+        Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowDeferredRestoreRepaintCount $ExpectedDeferred -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedFocusRestore -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore -ExpectedHostPatchRevision $ExpectedHostPatchRevision
+        return ""
+    } catch {
+        return [string]$_.Exception.Message
     }
 }
 $current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
@@ -800,6 +829,14 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
     currentConfigThunkDecoy = Accept-Asar ${quote(paths.currentConfigThunkDecoy)} 1 0 0 0 7
     currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 0 0 0 7
     currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 0 0 0 7
+    currentV2 = Accept-Asar ${quote(paths.currentV2)} 1 0 0 0 7
+    currentV2Error = Get-AsarError ${quote(paths.currentV2)} 1 0 0 0 7
+    currentV2MissingProductName = Accept-Asar ${quote(paths.currentV2MissingProductName)} 1 0 0 0 7
+    currentV2UpdaterDecoy = Accept-Asar ${quote(paths.currentV2UpdaterDecoy)} 1 0 0 0 7
+    currentV2RestartHandlerSwap = Accept-Asar ${quote(paths.currentV2RestartHandlerSwap)} 1 0 0 0 7
+    currentV2ConfigHandlerSwap = Accept-Asar ${quote(paths.currentV2ConfigHandlerSwap)} 1 0 0 0 7
+    currentLegacyWithV2Original = Accept-Asar ${quote(paths.currentLegacyWithV2Original)} 1 0 0 0 7
+    currentV2WithLegacyOriginal = Accept-Asar ${quote(paths.currentV2WithLegacyOriginal)} 1 0 0 0 7
     revision2Hook = Accept-Asar ${quote(paths.revision2)} 1 0 1 0 2
     revision2RejectsCurrent = Accept-Asar ${quote(paths.one)} 1 0 1 0 2
     currentFocusOnlyHook = Accept-Asar ${quote(paths.focusOnly)} 1 0 0 0 7
@@ -858,6 +895,14 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
       currentConfigThunkDecoy: false,
       currentRestartThunkDecoy: false,
       currentGenericRetryThunkDecoy: false,
+      currentV2: true,
+      currentV2Error: "",
+      currentV2MissingProductName: false,
+      currentV2UpdaterDecoy: false,
+      currentV2RestartHandlerSwap: false,
+      currentV2ConfigHandlerSwap: false,
+      currentLegacyWithV2Original: false,
+      currentV2WithLegacyOriginal: false,
       revision2Hook: true,
       revision2RejectsCurrent: false,
       currentFocusOnlyHook: false,
