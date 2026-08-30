@@ -103,6 +103,7 @@ export function createAntigravityCascadeClient(options = {}) {
     const timeoutMs = positiveInteger(request.timeoutMs, defaultTimeoutMs);
     const modelEntries = await listModels({ signal, timeoutMs: request.modelTimeoutMs });
     const model = resolveModel(modelEntries, request.model);
+    const maxMessageTokens = requirePositiveModelTokenLimit(model.maxTokens, model.id);
     const activeConnection = connection();
     const originalPromptSections = renderSystemPromptSections(request.systemSections);
     const systemPromptSections = withToolCompatibilitySection(originalPromptSections, request.tools);
@@ -159,6 +160,7 @@ export function createAntigravityCascadeClient(options = {}) {
           conversationHistoryConfig: { enabled: false, maxConversations: 0 },
           plannerConfig: {
             planModel: model.internalModel,
+            maxMessageTokens,
             toolConfig: modelOnlyToolConfig(),
           },
         },
@@ -899,6 +901,17 @@ function sleep(ms, signal) {
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function requirePositiveModelTokenLimit(value, modelId) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new AntigravityCascadeError(
+      `Antigravity model ${modelId} must expose positive maxTokens.`,
+      { statusCode: 503 },
+    );
+  }
+  return parsed;
 }
 
 class AntigravityCascadeError extends Error {

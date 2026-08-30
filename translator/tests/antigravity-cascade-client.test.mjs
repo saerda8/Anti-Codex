@@ -194,8 +194,8 @@ test("discovers standard model metadata and account readiness through the local 
     "gemini-flash-agent",
   ]);
   assert.deepEqual(await client.listModels(), [
-    { id: "gemini-pro-agent", model: "MODEL_PRO", displayName: "Gemini Pro", internalModel: "MODEL_PRO" },
-    { id: "gemini-flash-agent", model: "MODEL_FLASH", displayName: "Gemini Flash", internalModel: "MODEL_FLASH" },
+    { id: "gemini-pro-agent", model: "MODEL_PRO", displayName: "Gemini Pro", maxTokens: 272_000, internalModel: "MODEL_PRO" },
+    { id: "gemini-flash-agent", model: "MODEL_FLASH", displayName: "Gemini Flash", maxTokens: 272_000, internalModel: "MODEL_FLASH" },
   ]);
   const readiness = await client.getReadiness();
   assert.equal(readiness.signedIn, true);
@@ -237,6 +237,31 @@ test("model normalization retains native capability fields", async () => {
     minThinkingBudget: 32,
     internalModel: "MODEL_PRO",
   }]);
+});
+
+test("rejects a selected model without a positive message-token limit before starting Cascade", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse({
+      response: {
+        models: {
+          "gemini-pro-agent": {
+            model: "MODEL_PRO",
+            displayName: "Gemini Pro",
+            maxTokens: 0,
+          },
+        },
+        agentModelSorts: [{ groups: [{ modelIds: ["gemini-pro-agent"] }] }],
+      },
+    }),
+    StartCascade: () => jsonResponse({ cascadeId: "must_not_start" }),
+  });
+  const client = clientFor(service.fetch);
+
+  await assert.rejects(
+    collect(client.start({ model: "gemini-pro-agent", userText: "hello", tools: [] })),
+    /positive maxTokens/i,
+  );
+  assert.deepEqual(service.calls.map((call) => call.method), ["GetAvailableModels"]);
 });
 
 test("starts a workspace-blind Cascade and returns one text terminal outcome", async () => {
@@ -282,6 +307,7 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.deepEqual(send.body.items, [{ text: "current user text" }]);
   assert.equal(send.body.blocking, false);
   assert.equal(send.body.cascadeConfig.plannerConfig.planModel, "MODEL_PRO");
+  assert.equal(send.body.cascadeConfig.plannerConfig.maxMessageTokens, 272_000);
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.runCommand.forceDisable, true);
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
 });
@@ -843,8 +869,8 @@ function modelPayload() {
   return {
     response: {
       models: {
-        "gemini-pro-agent": { model: "MODEL_PRO", displayName: "Gemini Pro" },
-        "gemini-flash-agent": { model: "MODEL_FLASH", displayName: "Gemini Flash" },
+        "gemini-pro-agent": { model: "MODEL_PRO", displayName: "Gemini Pro", maxTokens: 272_000 },
+        "gemini-flash-agent": { model: "MODEL_FLASH", displayName: "Gemini Flash", maxTokens: 272_000 },
         "tab-internal-preview": { model: "MODEL_TAB_INTERNAL", displayName: "tab-internal-preview" },
       },
       agentModelSorts: [{ groups: [{ modelIds: ["gemini-pro-agent", "gemini-flash-agent"] }] }],
