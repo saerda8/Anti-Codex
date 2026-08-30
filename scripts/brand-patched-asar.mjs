@@ -16,6 +16,7 @@ import {
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchCrashRecoveryPage,
+  patchElectronProductName,
   patchLocalModelAvailability,
   patchProductNameDrivenSessionTitle,
   patchStartupMcpConfigReload,
@@ -412,15 +413,24 @@ function findBootstrapAppUserModelIdPatch(fd, header, dataOffset) {
 }
 
 function findBootstrapAppNamePatch(fd, header, dataOffset) {
+  const productNameCandidates = [];
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes(".app.setName(") || text.includes(".app.name=`Anti-Codex`")) {
-      return [rel, patchBootstrapAppName];
+      try {
+        patchBootstrapAppName(text);
+        return [rel, patchBootstrapAppName];
+      } catch {}
     }
+    try {
+      patchElectronProductName(text);
+      productNameCandidates.push([rel, patchElectronProductName]);
+    } catch {}
   }
-  throw new Error("Could not find Electron app.setName bootstrap code");
+  if (productNameCandidates.length === 1) return productNameCandidates[0];
+  throw new Error(`Expected exactly one Electron app-name patch target, found ${productNameCandidates.length}`);
 }
 
 function findWebviewHtmlTitlePatch(fd, header, dataOffset) {

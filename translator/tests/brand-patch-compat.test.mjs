@@ -35,6 +35,13 @@ const crashRecoveryBundle = [
   'function G(e){let {resetError:n}=e,r=M();let a;a=(0,j.jsx)(Z,{id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`});let q;q=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let s;s=()=>{n(),r(`/`)};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`});let l;return l=(0,j.jsxs)(`div`,{children:[a,(0,j.jsxs)(`div`,{children:[q,(0,j.jsx)(B,{onClick:s,children:c})]})]}),l}var R,z,J;',
 ].join("");
 
+const latestCrashRecoveryBundle = [
+  'function U(e){let{appUpdateLifecycleState:c}=e;switch(c){case`idle`:case`ready`:{let h;h=()=>{c===`idle`&&o!==`macOS`?A.appUpdates?.checkForUpdates():A.appUpdates?.installUpdate()};return j(Z,{id:`appUpdate.recovery.updateChatGPT`,defaultMessage:`Update ChatGPT`,onClick:h})}}}',
+  'function C(e){let t=c(28),{fatalError:n,onReset:r}=e;let l;l=j(Z,{id:`appServerCrash.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`Title on the full-screen app recovery page after an unexpected error`});let u;u=n.bad?j(Z,{id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn\'t load your configuration. Review it, then restart to try again.`,description:`Recovery guidance when invalid configuration prevents the app from starting`}):j(Z,{id:`appServerCrash.recoveryDescription`,defaultMessage:`Something went wrong. Restart ChatGPT to try again.`,description:`Recovery guidance after an unexpected app error`});let p;p=j(Z,{id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`Button that restarts the app-server after an error`});let m;m=j(B,{onClick:r,children:p});let h;h=j(B,{onClick:F,children:`feedback`});let g;g=j(B,{onClick:L,children:`config`});let _;t[18]===S?(_=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{hideUnavailable:!0})}),t[18]=_):_=t[18];let v;v=jsxs(`div`,{children:[m,h,g,_]});return jsxs(`main`,{children:[l,u,v]})}',
+  'function L(){return A.dispatchMessage(`open-config-toml`,{})}',
+  'function G(e){let {resetError:n}=e,r=M();let a;a=(0,j.jsx)(Z,{id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`});let q;q=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let s;s=()=>{n(),r(`/`)};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`});let l;return l=(0,j.jsxs)(`div`,{children:[a,(0,j.jsxs)(`div`,{children:[q,(0,j.jsx)(B,{onClick:s,children:c})]})]}),l}var R,z,J;',
+].join("");
+
 test("brands and narrows the crash recovery page atomically without changing bundle length", () => {
   const patched = brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle);
 
@@ -332,6 +339,21 @@ test("injects managed approval and sandbox session flags into only the native ap
   );
 });
 
+test("brands and narrows the 26.825 crash recovery page without changing bundle length", () => {
+  const patched = brandPatchCompat.patchCrashRecoveryPage(latestCrashRecoveryBundle);
+
+  assert.equal(patched.length, latestCrashRecoveryBundle.length);
+  assert.match(patched, /defaultMessage:`Anti-Codex hit a snag`/);
+  assert.match(patched, /defaultMessage:`Anti-Codex couldn't load your configuration\./);
+  assert.match(patched, /defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`/);
+  assert.match(patched, /defaultMessage:`Restart Anti-Codex`/);
+  assert.match(patched, /\/\*anticodex-crash-recovery-actions-v2\*\/children:\[m,h,g\]/);
+  assert.doesNotMatch(patched, /children:\[m,h,g,_\]/);
+  assert.match(patched, /\/\*anticodex-generic-error-actions\*\/children:/);
+  assert.match(patched, /dispatchMessage\(`open-config-toml`,\{\}\)/);
+  assert.equal(brandPatchCompat.patchCrashRecoveryPage(patched), patched);
+});
+
 test("injects managed session flags when command resolution is hoisted", () => {
   const source = appServerResolvedSpawnFixture();
   const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
@@ -513,6 +535,18 @@ test("patches the extracted 26.727 local-model availability helper without chang
   assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(), model: visible, useHiddenModels: true }), true);
 });
 
+test("patches the 26.825 startup MCP reload default used by the batch-write call", () => {
+  const source = "async function os({appServerConnection:e,reloadUserConfig:c=!0,resourcesPath:p}){return await e.sendAppServerRequest(`config/batchWrite`,{edits:w,expectedVersion:null,filePath:null,reloadUserConfig:c})}";
+  const unrelated = "async function os({reloadUserConfig:c=!0}){return doSomethingElse(c)}";
+
+  assert.equal(brandPatchCompat.hasStartupMcpConfigReload(source), true);
+  const patched = brandPatchCompat.patchStartupMcpConfigReload(source);
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /reloadUserConfig:c=!1/);
+  assert.equal(brandPatchCompat.patchStartupMcpConfigReload(patched), patched);
+  assert.equal(brandPatchCompat.hasStartupMcpConfigReload(unrelated), false);
+});
+
 test("patches the extracted 26.810 local-model availability helper without changing its new guards", () => {
   const source = "function vti({additionalAvailableModels:e,authMethod:t,availableModels:n,isCustomModelProvider:r,model:i,useHiddenModels:a}){return e?.has(i.model)===!0||i.model!==`codex-auto-review`&&(a&&!r&&t!==`amazonBedrock`?n.has(i.model):!i.hidden)}";
   const patched = brandPatchCompat.patchLocalModelAvailability(source);
@@ -528,6 +562,34 @@ test("patches the extracted 26.810 local-model availability helper without chang
   assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["hidden"]), isCustomModelProvider: false, model: hidden, useHiddenModels: true }), false);
   assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["visible"]), isCustomModelProvider: false, model: visible, useHiddenModels: true }), true);
   assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["codex-auto-review"]), isCustomModelProvider: false, model: review, useHiddenModels: true }), false);
+});
+
+test("patches the 26.825 local-model helper while preserving configured-catalog and review guards", () => {
+  const source = "function $ii({additionalAvailableModels:e,authMethod:t,availableModels:n,hasConfiguredModelCatalog:r,isCustomModelProvider:i,model:a,useHiddenModels:o}){return e?.has(a.model)===!0||a.model!==`codex-auto-review`&&(r&&!a.hidden||(o&&!i&&t!==`amazonBedrock`?n.has(a.model):!a.hidden))}";
+  const patched = brandPatchCompat.patchLocalModelAvailability(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(patched), true);
+  assert.equal(brandPatchCompat.patchLocalModelAvailability(patched), patched);
+  const filter = new Function(`${patched};return $ii;`)();
+  const hidden = { model: "hidden", hidden: true };
+  const visible = { model: "visible", hidden: false };
+  const review = { model: "codex-auto-review", hidden: false };
+  assert.equal(filter({ additionalAvailableModels: new Set(["hidden"]), authMethod: "chatgpt", availableModels: new Set(), hasConfiguredModelCatalog: false, isCustomModelProvider: false, model: hidden, useHiddenModels: true }), true);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(["hidden"]), hasConfiguredModelCatalog: false, isCustomModelProvider: false, model: hidden, useHiddenModels: true }), false);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(), hasConfiguredModelCatalog: true, isCustomModelProvider: false, model: visible, useHiddenModels: true }), true);
+  assert.equal(filter({ additionalAvailableModels: new Set(), authMethod: "chatgpt", availableModels: new Set(), hasConfiguredModelCatalog: true, isCustomModelProvider: false, model: review, useHiddenModels: true }), false);
+});
+
+test("patches the 26.825 Electron product-name mapper when the bootstrap call no longer has room", () => {
+  const source = "function vT(e){switch(e){case ry.Dev:return`Dev`;case ry.Prod:return null}}function yT(e){let t=vT(e);return t==null?`ChatGPT`:`ChatGPT (${t})`}";
+  assert.equal(typeof brandPatchCompat.patchElectronProductName, "function");
+  const patched = brandPatchCompat.patchElectronProductName(source);
+
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /return t\?`Anti-Codex \(\$\{t\}\)`:`Anti-Codex`/);
+  assert.equal(brandPatchCompat.patchElectronProductName(patched), patched);
+  assert.match(brandPatcherSource, /patchElectronProductName/);
 });
 
 test("patches Codex 26.609 system window titles without changing bundle size", () => {
@@ -619,6 +681,23 @@ test("routes every Windows tray brand to the Anti-Codex tray resource", () => {
     () => brandPatchCompat.patchWindowsTrayIconSelection(`${source}${officialTrayGuid}`),
     /tray GUID/i,
   );
+});
+
+test("routes the 26.825 one-argument Windows tray selector to the Anti-Codex resource", () => {
+  const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
+  const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
+  const source = [
+    `function dEe(e){switch(e){case\`Prod\`:return\`${officialTrayGuid}\`;default:return}}`,
+    "function SS(e){return e===a.a.Agent?{dark:`icon-agent.ico`,light:`icon-agent.ico`}:{dark:`chatgpt-tray-dark.ico`,light:`chatgpt-tray-light.ico`}}",
+  ].join("");
+  const patched = brandPatchCompat.patchWindowsTrayIconSelection(source);
+
+  assert.equal(patched.length, source.length);
+  assert.doesNotMatch(patched, /icon-agent\.ico|chatgpt-tray-(?:dark|light)\.ico/);
+  assert.equal((patched.match(/codex-tray\.ico/g) || []).length, 4);
+  assert.equal((patched.match(new RegExp(officialTrayGuid, "g")) || []).length, 0);
+  assert.equal((patched.match(new RegExp(antiCodexTrayGuid, "g")) || []).length, 1);
+  assert.equal(brandPatchCompat.patchWindowsTrayIconSelection(patched), patched);
 });
 
 test("preserves an empty notify array as an Anti-Codex legacy-notify opt-out", () => {

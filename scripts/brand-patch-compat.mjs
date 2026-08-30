@@ -12,6 +12,8 @@ const WINDOWS_TRAY_BRAND_ICONS = [
 
 const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
   /await [\w$]+\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+\([\w$]+\),expectedVersion:null,filePath:null,reloadUserConfig:!(?<reload>[01])\}\)/;
+const STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN =
+  /async function [\w$]+\(\{(?=[^{}]{0,1600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,1600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,1600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+,expectedVersion:null,filePath:null,reloadUserConfig:\k<reload>\}\)/;
 const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
   /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:(?<accountIcon>[\w$]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:(?<securityIcon>[\w$]+),message:\k<messages>\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
@@ -42,6 +44,30 @@ const CRASH_DESCRIPTION_ORIGINAL_PATTERN =
   /id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,description:`[^`]+`,values:\{appName:[A-Za-z_$][\w$]*,documentationLink:/g;
 const CRASH_DESCRIPTION_PATCHED_PATTERN =
   /id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,values:\{appName:`Anti-Codex`,documentationLink:/g;
+const CRASH_RECOVERY_V2_REGION_PATTERN = new RegExp(
+  String.raw`function ${IDENTIFIER_SOURCE}\(${IDENTIFIER_SOURCE}\)\{[\s\S]{0,9000}?id:\`appServerCrash\.recoveryTitle\`[\s\S]{0,9000}?id:\`appServerCrash\.configurationRecoveryDescription\`[\s\S]{0,9000}?id:\`appServerCrash\.recoveryDescription\`[\s\S]{0,9000}?id:\`appServerCrash\.restartChatGPT\`[\s\S]{0,9000}?hideUnavailable:!0[\s\S]{0,4000}?\}function ${IDENTIFIER_SOURCE}\(\)\{return ${IDENTIFIER_SOURCE}\.dispatchMessage\(\`open-config-toml\`,\{\}\)\}`,
+  "g",
+);
+const CRASH_RECOVERY_V2_UPDATE_SLOT_PATTERN = new RegExp(
+  String.raw`let (?<slot>${IDENTIFIER_SOURCE});[\s\S]{0,360}?\k<slot>=\(0,(?<jsx>${IDENTIFIER_SOURCE})\.jsx\)\(\k<jsx>\.Fragment,\{children:\(0,\k<jsx>\.jsx\)\((?<updateFn>${IDENTIFIER_SOURCE}),\{hideUnavailable:!0\}\)\}\)`,
+  "g",
+);
+const CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`/g;
+const CRASH_RECOVERY_V2_TITLE_PATCHED_PATTERN =
+  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\})/g;
+const CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn't load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`/g;
+const CRASH_RECOVERY_V2_CONFIG_PATCHED_PATTERN =
+  /id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn't load your configuration\. Review it, then restart to try again\.`(?=\})/g;
+const CRASH_RECOVERY_V2_DESCRIPTION_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart ChatGPT to try again\.`,description:`[^`]+`/g;
+const CRASH_RECOVERY_V2_DESCRIPTION_PATCHED_PATTERN =
+  /id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})/g;
+const CRASH_RECOVERY_V2_RESTART_ORIGINAL_PATTERN =
+  /id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`/g;
+const CRASH_RECOVERY_V2_RESTART_PATCHED_PATTERN =
+  /id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})/g;
 const CRASH_UPDATE_SLOT_PATTERN = new RegExp(
   String.raw`let (?<slot>${IDENTIFIER_SOURCE});[\s\S]{0,260}?\b\k<slot>=\(0,(?<jsx>${IDENTIFIER_SOURCE})\.jsx\)\(\k<jsx>\.Fragment,\{children:\(0,\k<jsx>\.jsx\)\((?<updateFn>${IDENTIFIER_SOURCE}),\{\}\)\}\)`,
   "g",
@@ -103,6 +129,29 @@ export function patchWebviewHtmlTitle(text) {
   return next;
 }
 
+export function patchElectronProductName(text) {
+  const source = String(text ?? "");
+  const originalPattern = new RegExp(
+    String.raw`function (?<fn>${IDENTIFIER_SOURCE})\((?<arg>${IDENTIFIER_SOURCE})\)\{let (?<flavor>${IDENTIFIER_SOURCE})=(?<resolve>${IDENTIFIER_SOURCE})\(\k<arg>\);return \k<flavor>==null\?\`ChatGPT\`:\`ChatGPT \(\$\{\k<flavor>\}\)\`\}`,
+    "g",
+  );
+  const patchedPattern = new RegExp(
+    String.raw`function (?<fn>${IDENTIFIER_SOURCE})\((?<arg>${IDENTIFIER_SOURCE})\)\{let (?<flavor>${IDENTIFIER_SOURCE})=(?<resolve>${IDENTIFIER_SOURCE})\(\k<arg>\);return \k<flavor>\?\`Anti-Codex \(\$\{\k<flavor>\}\)\`:\`Anti-Codex\`\}`,
+    "g",
+  );
+  const originals = allMatches(source, originalPattern);
+  const patched = allMatches(source, patchedPattern);
+  if (originals.length === 0 && patched.length === 1) return source;
+  if (originals.length !== 1 || patched.length !== 0) {
+    throw new Error("Expected exactly one supported Electron product-name mapper");
+  }
+  const match = originals[0];
+  const replacement = `function ${match.groups.fn}(${match.groups.arg}){let ${match.groups.flavor}=${match.groups.resolve}(${match.groups.arg});return ${match.groups.flavor}?\`Anti-Codex ($\{${match.groups.flavor}})\`:\`Anti-Codex\`}`;
+  return source.slice(0, match.index)
+    + padReplacement(match[0], replacement)
+    + source.slice(match.index + match[0].length);
+}
+
 function exactlyOne(source, pattern) {
   const matches = allMatches(source, pattern);
   return matches.length === 1 ? matches[0] : null;
@@ -150,9 +199,17 @@ function requireSupportedUpdaterComponent(source, updateFunctionName) {
   nextFunction.lastIndex = updateStart + updateFunctionMatches[0][0].length;
   const nextFunctionMatch = nextFunction.exec(source);
   const updateRegion = source.slice(updateStart, nextFunctionMatch?.index ?? source.length);
-  if ((updateRegion.match(/appUpdate\.recovery\.updateCodex/g) ?? []).length < 1
-      || (updateRegion.match(/appUpdates\?\.checkForUpdates\(\)/g) ?? []).length !== 1
-      || (updateRegion.match(/appUpdates\?\.installUpdate\(\)/g) ?? []).length !== 1) {
+  const checkCount = (updateRegion.match(/appUpdates\?\.checkForUpdates\(\)/g) ?? []).length;
+  const installCount = (updateRegion.match(/appUpdates\?\.installUpdate\(\)/g) ?? []).length;
+  const legacy = (updateRegion.match(/appUpdate\.recovery\.updateCodex/g) ?? []).length >= 1
+    && checkCount === 1 && installCount === 1;
+  const latestHandler = /(?<state>[\w$]+)===`idle`&&[\w$]+!==`macOS`\?(?<api>[\w$]+)\.appUpdates\?\.checkForUpdates\(\):\k<api>\.appUpdates\?\.installUpdate\(\)/.exec(updateRegion);
+  const latest = (updateRegion.match(/id:`appUpdate\.recovery\.updateChatGPT`/g) ?? []).length === 1
+    && (updateRegion.match(/defaultMessage:`Update ChatGPT`/g) ?? []).length === 1
+    && Boolean(latestHandler)
+    && updateRegion.includes(`switch(${latestHandler?.groups?.state}){case\`idle\`:case\`ready\``)
+    && checkCount === 1 && installCount === 1;
+  if (!legacy && !latest) {
     throw new Error("Anti-Codex crash recovery update slot is not backed by the supported upstream updater");
   }
 }
@@ -357,9 +414,118 @@ function crashRecoveryState(text) {
   };
 }
 
+function hasLatestCrashRecoveryPageSignature(text) {
+  const source = String(text ?? "");
+  return [
+    "id:`appServerCrash.recoveryTitle`",
+    "id:`appServerCrash.configurationRecoveryDescription`",
+    "id:`appServerCrash.recoveryDescription`",
+    "id:`appServerCrash.restartChatGPT`",
+    "id:`codex.errorBoundary.genericError`",
+    "id:`codex.errorBoundary.goHome`",
+  ].every((anchor) => source.includes(anchor));
+}
+
+function latestCrashRecoveryState(text) {
+  const source = String(text ?? "");
+  const regionMatches = allMatches(source, CRASH_RECOVERY_V2_REGION_PATTERN);
+  if (regionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex 26.825 crash recovery page");
+  }
+  const regionMatch = regionMatches[0];
+  const region = regionMatch[0];
+  const updateSlot = exactlyOne(region, CRASH_RECOVERY_V2_UPDATE_SLOT_PATTERN);
+  if (!updateSlot?.groups) {
+    throw new Error("Expected exactly one supported Anti-Codex 26.825 crash recovery update slot");
+  }
+  requireSupportedUpdaterComponent(source, updateSlot.groups.updateFn);
+
+  const slot = escapeRegExp(updateSlot.groups.slot);
+  const originalAction = exactlyOne(region, new RegExp(
+    String.raw`children:\[(?<actions>${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2}),${slot}\]`,
+    "g",
+  ));
+  const patchedAction = exactlyOne(region, new RegExp(
+    String.raw`/\*anticodex-crash-recovery-actions-v2\*/children:\[(?<actions>${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2})\]`,
+    "g",
+  ));
+  const states = [
+    [CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_TITLE_PATCHED_PATTERN],
+    [CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_CONFIG_PATCHED_PATTERN],
+    [CRASH_RECOVERY_V2_DESCRIPTION_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_DESCRIPTION_PATCHED_PATTERN],
+    [CRASH_RECOVERY_V2_RESTART_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_RESTART_PATCHED_PATTERN],
+  ].map(([originalPattern, patchedPattern]) => ({
+    original: allMatches(region, originalPattern).length,
+    patched: allMatches(region, patchedPattern).length,
+  }));
+  const original = states.every((state) => state.original === 1 && state.patched === 0)
+    && Boolean(originalAction) && !patchedAction;
+  const patched = states.every((state) => state.original === 0 && state.patched === 1)
+    && !originalAction && Boolean(patchedAction);
+  if (!original && !patched) {
+    throw new Error("Detected a partially patched Anti-Codex 26.825 crash recovery page");
+  }
+  const generic = genericErrorState(source);
+  if ((patched && generic.state !== "patched") || (original && generic.state !== "original")) {
+    throw new Error("Detected mixed Anti-Codex 26.825 crash recovery page states");
+  }
+  return {
+    source,
+    region,
+    regionIndex: regionMatch.index,
+    originalAction,
+    generic,
+    state: patched ? "patched" : "original",
+  };
+}
+
+function patchLatestCrashRecoveryPage(text) {
+  const state = latestCrashRecoveryState(text);
+  if (state.state === "patched") return state.source;
+
+  let replacement = state.region
+    .replace(CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN, (match) => match
+      .replace("defaultMessage:`ChatGPT hit a snag`", "defaultMessage:`Anti-Codex hit a snag`")
+      .replace(/,description:`[^`]+`/, ""))
+    .replace(CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN, (match) => match
+      .replace("defaultMessage:`ChatGPT couldn't load your configuration. Review it, then restart to try again.`", "defaultMessage:`Anti-Codex couldn't load your configuration. Review it, then restart to try again.`")
+      .replace(/,description:`[^`]+`/, ""))
+    .replace(CRASH_RECOVERY_V2_DESCRIPTION_ORIGINAL_PATTERN, (match) => match
+      .replace("Restart ChatGPT", "Restart Anti-Codex")
+      .replace(/,description:`[^`]+`/, ""))
+    .replace(CRASH_RECOVERY_V2_RESTART_ORIGINAL_PATTERN, (match) => match
+      .replace("Restart ChatGPT", "Restart Anti-Codex")
+      .replace(/,description:`[^`]+`/, ""));
+  replacement = replacement.replace(
+    state.originalAction[0],
+    `/*anticodex-crash-recovery-actions-v2*/children:[${state.originalAction.groups.actions}]`,
+  );
+  const appPadded = padReplacement(state.region, replacement);
+  let genericReplacement = state.generic.region
+    .replace(GENERIC_ERROR_TITLE_ORIGINAL_PATTERN, "id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`")
+    .replace(GENERIC_ERROR_RETRY_ORIGINAL_PATTERN, "id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`");
+  genericReplacement = genericReplacement.replace(
+    state.generic.originalAction[0],
+    `/*anticodex-generic-error-actions*/children:[${state.generic.originalAction.groups.retry}]`,
+  );
+  const genericPadded = padReplacement(state.generic.region, genericReplacement);
+  let patched = state.source.slice(0, state.regionIndex)
+    + appPadded
+    + state.source.slice(state.regionIndex + state.region.length);
+  patched = patched.slice(0, state.generic.regionIndex)
+    + genericPadded
+    + patched.slice(state.generic.regionIndex + state.generic.region.length);
+  if (patched.length !== state.source.length || latestCrashRecoveryState(patched).state !== "patched") {
+    throw new Error("Anti-Codex 26.825 crash recovery page patch validation failed");
+  }
+  return patched;
+}
+
 export function hasCrashRecoveryPagePatch(text) {
   try {
-    return crashRecoveryState(text).state === "patched";
+    return (hasLatestCrashRecoveryPageSignature(text)
+      ? latestCrashRecoveryState(text)
+      : crashRecoveryState(text)).state === "patched";
   } catch {
     return false;
   }
@@ -367,7 +533,7 @@ export function hasCrashRecoveryPagePatch(text) {
 
 export function hasCrashRecoveryPageSignature(text) {
   const source = String(text ?? "");
-  return [
+  return hasLatestCrashRecoveryPageSignature(source) || [
     "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
     "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
     "id:`appServerCrash.restart`,defaultMessage:`Restart`",
@@ -386,6 +552,9 @@ export function selectCrashRecoveryBundleCandidate(candidates) {
 }
 
 export function patchCrashRecoveryPage(text) {
+  if (hasLatestCrashRecoveryPageSignature(text)) {
+    return patchLatestCrashRecoveryPage(text);
+  }
   const state = crashRecoveryState(text);
   if (state.state === "patched") return state.source;
 
@@ -542,19 +711,29 @@ export function patchAppServerManagedSessionFlags(text) {
 }
 
 export function hasStartupMcpConfigReload(text) {
-  return STARTUP_MCP_CONFIG_RELOAD_PATTERN.test(String(text ?? ""));
+  const source = String(text ?? "");
+  return STARTUP_MCP_CONFIG_RELOAD_PATTERN.test(source)
+    || STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.test(source);
 }
 
 export function patchStartupMcpConfigReload(text) {
   const source = String(text ?? "");
   const match = STARTUP_MCP_CONFIG_RELOAD_PATTERN.exec(source);
-  if (!match?.groups) {
-    throw new Error("Startup MCP config reload pattern not found");
+  if (match?.groups) {
+    if (match.groups.reload === "1") return source;
+    const patched = match[0].replace("reloadUserConfig:!0", "reloadUserConfig:!1");
+    return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
   }
-  if (match.groups.reload === "1") return source;
 
-  const patched = match[0].replace("reloadUserConfig:!0", "reloadUserConfig:!1");
-  return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
+  const latest = STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.exec(source);
+  if (!latest?.groups) throw new Error("Startup MCP config reload pattern not found");
+  if (latest.groups.value === "1") return source;
+  const marker = `reloadUserConfig:${latest.groups.reload}=!0`;
+  const markerIndex = latest.index + latest[0].indexOf(marker);
+  if (markerIndex < latest.index) throw new Error("Startup MCP config reload default not found");
+  return source.slice(0, markerIndex)
+    + marker.replace("!0", "!1")
+    + source.slice(markerIndex + marker.length);
 }
 
 export function patchConfigWriteHandler(text) {
@@ -647,7 +826,8 @@ export function hasPatchedLocalModelAvailability(text) {
   const source = String(text ?? "");
   return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(source) ||
     /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
-    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),isCustomModelProvider:[\w$]+,model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source);
+    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),isCustomModelProvider:[\w$]+,model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
+    /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:(?<catalog>[\w$]+),isCustomModelProvider:[\w$]+,model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<catalog>&&!\k<model>\.hidden\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\)\}/.test(source);
 }
 
 export function patchLocalModelAvailability(text) {
@@ -669,6 +849,12 @@ export function patchLocalModelAvailability(text) {
   if (extractedWithCustomProvider?.groups) {
     const gate = `${extractedWithCustomProvider.groups.hidden}&&!${extractedWithCustomProvider.groups.custom}&&${extractedWithCustomProvider.groups.auth}!==\`amazonBedrock\``;
     const gateIndex = extractedWithCustomProvider.index + extractedWithCustomProvider[0].indexOf(gate);
+    return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
+  }
+  const extractedWithConfiguredCatalog = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:(?<catalog>[\w$]+),isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<catalog>&&!\k<model>\.hidden\|\|\(\k<hidden>&&!\k<custom>&&\k<auth>!==`amazonBedrock`\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\)\}/.exec(source);
+  if (extractedWithConfiguredCatalog?.groups) {
+    const gate = `${extractedWithConfiguredCatalog.groups.hidden}&&!${extractedWithConfiguredCatalog.groups.custom}&&${extractedWithConfiguredCatalog.groups.auth}!==\`amazonBedrock\``;
+    const gateIndex = extractedWithConfiguredCatalog.index + extractedWithConfiguredCatalog[0].indexOf(gate);
     return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
   }
   if (hasPatchedLocalModelAvailability(source)) return source;
@@ -727,28 +913,30 @@ export function patchProductNameDrivenSessionTitle(text) {
 }
 
 function findWindowsTrayIconSelector(text) {
-  let anchor = text.indexOf(ANTI_CODEX_TRAY_ICON);
-  while (anchor >= 0) {
-    const start = text.lastIndexOf("function ", anchor);
-    const nextFunction = text.indexOf("function ", anchor + ANTI_CODEX_TRAY_ICON.length);
-    const end = nextFunction >= 0 ? nextFunction : text.length;
-    if (start >= 0 && end - start <= 2000) {
-      const selector = text.slice(start, end);
-      const codexIconCount = selector.split(ANTI_CODEX_TRAY_ICON).length - 1;
-      const alternateIconCount = WINDOWS_TRAY_BRAND_ICONS.reduce(
-        (count, icon) => count + selector.split(icon).length - 1,
-        0,
-      );
-      if (
-        /^function [\w$]+\([\w$]+,[\w$]+\)\{/.test(selector) &&
-        selector.includes("dark:") &&
-        selector.includes("light:") &&
-        (alternateIconCount > 0 || codexIconCount >= 4)
-      ) {
-        return { start, end, selector, alternateIconCount, codexIconCount };
+  for (const iconAnchor of [ANTI_CODEX_TRAY_ICON, ...WINDOWS_TRAY_BRAND_ICONS]) {
+    let anchor = text.indexOf(iconAnchor);
+    while (anchor >= 0) {
+      const start = text.lastIndexOf("function ", anchor);
+      const nextFunction = text.indexOf("function ", anchor + iconAnchor.length);
+      const end = nextFunction >= 0 ? nextFunction : text.length;
+      if (start >= 0 && end - start <= 2000) {
+        const selector = text.slice(start, end);
+        const codexIconCount = selector.split(ANTI_CODEX_TRAY_ICON).length - 1;
+        const alternateIconCount = WINDOWS_TRAY_BRAND_ICONS.reduce(
+          (count, icon) => count + selector.split(icon).length - 1,
+          0,
+        );
+        if (
+          /^function [\w$]+\([\w$]+(?:,[\w$]+)?\)\{/.test(selector) &&
+          selector.includes("dark:") &&
+          selector.includes("light:") &&
+          (alternateIconCount > 0 || codexIconCount >= 4)
+        ) {
+          return { start, end, selector, alternateIconCount, codexIconCount };
+        }
       }
+      anchor = text.indexOf(iconAnchor, anchor + iconAnchor.length);
     }
-    anchor = text.indexOf(ANTI_CODEX_TRAY_ICON, anchor + ANTI_CODEX_TRAY_ICON.length);
   }
   return null;
 }
