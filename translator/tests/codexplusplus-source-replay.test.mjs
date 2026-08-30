@@ -11,24 +11,24 @@ const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
 
-test("v1.2.50 promotion targets the reviewed upstream tag", () => {
+test("v1.2.56 promotion targets the reviewed upstream tag", () => {
   const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
 
-  assert.equal(accepted.version, "1.2.50");
-  assert.equal(accepted.tag, "v1.2.50");
-  assert.equal(accepted.upstreamCommit, "888f2bdc0e720aee26221b0d40dd7f3634a630b1");
-  assert.equal(accepted.patchCommit, "62d17b7cb11fb11d08b1f2c87f33064086c02a96");
-  assert.equal(accepted.patches.length, 20);
+  assert.equal(accepted.version, "1.2.56");
+  assert.equal(accepted.tag, "v1.2.56");
+  assert.equal(accepted.upstreamCommit, "696d3ef1714b55ec5eb14b0828ae682b55eb9252");
+  assert.equal(accepted.patchCommit, "a7ac6eb1e8017132a170c9047f1e832273368a98");
+  assert.equal(accepted.patches.length, 21);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0021-fix-format-v1.2.50-upstream.patch");
+  assert.equal(accepted.patches.at(-1).file, "patches/0022-fix-format-v1.2.56-upstream.patch");
   assert.equal(
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree ca8098c7ef14a86488bab384a00022a68dac384b$/);
+  assert.match(accepted.verification.patchReplay, /tree 83776151c0c0656d53f383f82d4489f21a2751b4$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:9d21e8ddc079ff7d389977d0f0ee74b5acbcd4bf7f90f78317836c41065b9579",
+    "sha256:c0fb008c5f5055025b506d30531080a9d57bcc0be20dbad4acc1c00086c3ace5",
   );
 });
 
@@ -173,16 +173,16 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation records the accepted v1.2.50 promotion", () => {
+test("component documentation records the accepted v1.2.56 promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.2\.50`/);
-  assert.match(readme, /checkout 888f2bdc0e720aee26221b0d40dd7f3634a630b1/);
-  assert.match(readme, /carries exactly twenty narrow Anti-Codex compatibility patches/);
-  assert.match(readme, /All twenty patches replayed without conflict/);
+  assert.match(readme, /Accepted version: `v1\.2\.56`/);
+  assert.match(readme, /checkout 696d3ef1714b55ec5eb14b0828ae682b55eb9252/);
+  assert.match(readme, /carries exactly twenty-one narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All twenty-one patches replayed without automatic conflict resolution/);
   assert.match(readme, /120 seconds without upstream data/);
   assert.match(readme, /historical source-replay record/);
-  assert.match(readme, /managed build, Windows launchability and candidate publication passed/);
+  assert.match(readme, /candidate-local build and Windows launchability checks passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);
   assert.doesNotMatch(readme, /checkout 77091ccaee4423f35a1b2c51c4ecd703e6201092/);
 });

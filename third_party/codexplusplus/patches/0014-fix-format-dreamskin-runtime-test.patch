@@ -1,7 +1,7 @@
-From c3bb833bae6913f57209fcfba9762a448b69f4d9 Mon Sep 17 00:00:00 2001
+From 8978049d93a3f3eeb262494d31bce038027c222f Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <noreply@local.invalid>
 Date: Thu, 13 Aug 2026 21:50:55 +0800
-Subject: [PATCH 13/19] fix: format DreamSkin runtime test
+Subject: [PATCH 13/21] fix: format DreamSkin runtime test
 
 ---
  crates/codex-plus-core/tests/dream_skin_runtime.rs | 3 +--
@@ -21,3 +21,6 @@ index 433d362..f68a00a 100644
                  || source.contains("data-dream-home-layout=\\\"soft\\\"")
                  || source.contains("data-dream-home-layout=\\\"structured\\\""),
              "missing soft layout CSS in {relative_path}"
+-- 
+2.55.0.windows.5
+

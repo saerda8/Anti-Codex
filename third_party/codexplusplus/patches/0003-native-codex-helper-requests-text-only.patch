@@ -1,7 +1,7 @@
-From 0d6ca907a5700ccf1d74271c32325043a8ae07f1 Mon Sep 17 00:00:00 2001
+From 810a5d5df3e78963c33b2500a451b1bb8910df0a Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Fri, 17 Jul 2026 13:35:15 +0800
-Subject: [PATCH 03/19] fix: keep native helper requests text-only
+Subject: [PATCH 03/21] fix: keep native helper requests text-only
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 105 ++++++++++++++---
@@ -9,10 +9,10 @@ Subject: [PATCH 03/19] fix: keep native helper requests text-only
  2 files changed, 197 insertions(+), 17 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 7378583..f271f79 100644
+index e3711d7..09891b3 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -236,25 +236,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -242,25 +242,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
  
      apply_chat_reasoning_options(&mut result, &body, model);
  
@@ -62,7 +62,7 @@ index 7378583..f271f79 100644
          }
      }
  
-@@ -4271,6 +4278,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
+@@ -4713,6 +4720,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
      }
  }
  
@@ -134,10 +134,10 @@ index 7378583..f271f79 100644
      match value {
          Value::String(text) => normalize_chat_tool_arguments_string(text),
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 358b32c..2f8fb5c 100644
+index 7f2ea8a..510af80 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -518,6 +518,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
+@@ -743,6 +743,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
      assert!(converted.get("parallel_tool_calls").is_none());
  }
  
@@ -253,3 +253,6 @@ index 358b32c..2f8fb5c 100644
  #[test]
  fn responses_request_normalizes_function_tool_parameters() {
      let converted = responses_to_chat_completions(json!({
+-- 
+2.55.0.windows.5
+

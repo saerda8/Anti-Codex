@@ -1,14 +1,14 @@
-From aef814a933d775962877634ebd19be3e35b022df Mon Sep 17 00:00:00 2001
+From ac64beac492f41ef56337614441b599cf1b3c5d4 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Mon, 20 Jul 2026 03:05:24 +0800
-Subject: [PATCH 04/19] fix: route Anti-Codex model slots
+Subject: [PATCH 04/21] fix: route Anti-Codex model slots
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 386 ++++++++++++++++++-
  1 file changed, 376 insertions(+), 10 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index f271f79..e8efc89 100644
+index 09891b3..94cf553 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
@@ -19,8 +19,8 @@ index f271f79..e8efc89 100644
 +use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, SettingsStore};
  
  pub const DEFAULT_PROTOCOL_PROXY_PORT: u16 = 57321;
- const PROTOCOL_PROXY_PORT_ENV: &str = "CODEX_PLUS_PROTOCOL_PROXY_PORT";
-@@ -54,6 +54,13 @@ mod direct_chat_timeout_contract_tests {
+ pub const NO_AUTH_PROXY_BEARER_TOKEN: &str = "codex-plus-no-auth";
+@@ -55,6 +55,13 @@ mod direct_chat_timeout_contract_tests {
      }
  }
  const ERROR_BODY_PREVIEW_LIMIT: usize = 1024;
@@ -34,7 +34,7 @@ index f271f79..e8efc89 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -624,6 +631,316 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+@@ -630,6 +637,316 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
          .await
  }
  
@@ -351,7 +351,7 @@ index f271f79..e8efc89 100644
  async fn open_responses_proxy_request_with_settings_and_user_agent(
      body: &str,
      settings: crate::settings::BackendSettings,
-@@ -631,6 +948,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -637,6 +954,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      request_path: &str,
  ) -> anyhow::Result<UpstreamProxyResponse> {
      let mut request_json: Value = serde_json::from_str(body)?;
@@ -361,7 +361,7 @@ index f271f79..e8efc89 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -641,7 +961,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -647,7 +967,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
          .map(str::trim)
          .unwrap_or("")
          .to_string();
@@ -374,7 +374,7 @@ index f271f79..e8efc89 100644
      if let Some(route) = &model_route
          && route.upstream_model != source_model
      {
-@@ -650,7 +974,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -656,7 +980,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let context = RotationContext {
          conversation_id: conversation_id_from_responses_request(&request_json),
      };
@@ -385,7 +385,7 @@ index f271f79..e8efc89 100644
          (route.relay.clone(), vec![route.relay.clone()])
      } else {
          let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
-@@ -681,6 +1007,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -687,6 +1013,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
@@ -393,7 +393,7 @@ index f271f79..e8efc89 100644
                  "headerTimeoutSeconds": header_timeout.as_secs(),
                  "modelRoute": model_route.as_ref().map(|route| json!({
                      "sourceRelayId": route.source_relay_id,
-@@ -835,12 +1162,14 @@ fn select_model_route(
+@@ -841,12 +1168,14 @@ fn select_model_route(
          source_model: model.to_string(),
          upstream_model,
      }))
@@ -409,7 +409,7 @@ index f271f79..e8efc89 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -850,14 +1179,44 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -856,14 +1185,44 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
@@ -459,7 +459,7 @@ index f271f79..e8efc89 100644
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -879,7 +1238,14 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -885,7 +1244,14 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,
@@ -475,3 +475,6 @@ index f271f79..e8efc89 100644
              }),
          );
          let upstream = match crate::loopback_http::post_json(
+-- 
+2.55.0.windows.5
+

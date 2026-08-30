@@ -1,7 +1,7 @@
-From be016669c14de47d6866d4c9152b3efeed1b5e6e Mon Sep 17 00:00:00 2001
+From 04687e721264d36c5c72d82e3a12ec20b13de8d3 Mon Sep 17 00:00:00 2001
 From: Anti-Codex <anticodex@local.invalid>
 Date: Sat, 1 Aug 2026 12:05:44 +0800
-Subject: [PATCH 11/19] feat: apply Anti-Codex prompt policy at common request
+Subject: [PATCH 11/21] feat: apply Anti-Codex prompt policy at common request
  entry
 
 ---
@@ -9,7 +9,7 @@ Subject: [PATCH 11/19] feat: apply Anti-Codex prompt policy at common request
  1 file changed, 658 insertions(+)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 4683d5b..4e1177f 100644
+index e0313d7..5bca841 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,10 +4,14 @@
@@ -27,7 +27,7 @@ index 4683d5b..4e1177f 100644
  
  use crate::relay_rotation::{RotationContext, RotationEvent};
  use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, SettingsStore};
-@@ -67,6 +71,659 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
+@@ -68,6 +72,659 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
  const ANTICODEX_THIRD_PARTY_MODEL_PREFIX: &str = "anticodex/third-party/";
  const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata";
  const CODEX_COMPACTION_REQUEST_KIND: &str = "compaction";
@@ -687,7 +687,7 @@ index 4683d5b..4e1177f 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -1630,6 +2287,7 @@ async fn upstream_request_parts(
+@@ -1627,6 +2284,7 @@ async fn upstream_request_parts(
      if compact && relay.protocol == RelayProtocol::ChatCompletions {
          anyhow::bail!("Chat Completions 协议暂不支持 Responses compact 请求");
      }
@@ -695,3 +695,6 @@ index 4683d5b..4e1177f 100644
      let mut body = match relay.protocol {
          RelayProtocol::Responses => request_json,
          RelayProtocol::ChatCompletions => responses_to_chat_completions(request_json)?,
+-- 
+2.55.0.windows.5
+

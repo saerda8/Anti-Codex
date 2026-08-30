@@ -1,19 +1,14 @@
-From 8fa0b8472666051521f9c73aea9f65f77df1eb17 Mon Sep 17 00:00:00 2001
+From dcc5ad567b9638bb673267342cd52a7681188250 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Tue, 18 Aug 2026 12:30:18 +0800
-Subject: [PATCH 19/19] fix: format v1.2.48 upstream
+Subject: [PATCH 19/21] fix: format v1.2.48 upstream
 
 ---
- apps/codex-plus-launcher/src/main.rs          |  6 +--
- .../src-tauri/src/commands.rs                 | 53 +++++++++----------
- crates/codex-plus-core/src/routes.rs          |  1 -
- crates/codex-plus-core/src/settings.rs        |  5 +-
- crates/codex-plus-core/tests/bridge_routes.rs |  1 -
- crates/codex-plus-core/tests/relay_config.rs  |  5 +-
- 6 files changed, 33 insertions(+), 38 deletions(-)
+ apps/codex-plus-launcher/src/main.rs | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
 
 diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
-index 7464c86..51644f7 100644
+index 3599ac4..ed1e766 100644
 --- a/apps/codex-plus-launcher/src/main.rs
 +++ b/apps/codex-plus-launcher/src/main.rs
 @@ -73,11 +73,7 @@ async fn main() -> Result<()> {
@@ -29,170 +24,6 @@ index 7464c86..51644f7 100644
      if helper_only {
          let hooks = LauncherHooks::default();
          hooks.start_helper(options.helper_port).await?;
-diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
-index 579465b..3262de9 100644
---- a/apps/codex-plus-manager/src-tauri/src/commands.rs
-+++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
-@@ -636,12 +636,8 @@ pub fn restart_codex_plus(request: LaunchRequest) -> CommandResult<Value> {
-         },
-         Err(error) => {
-             let message = format!("重启 Codex++ 失败：{error}");
--            let _ = save_requested_launch_status(
--                &request,
--                "failed",
--                &message,
--                launch_started_at_ms,
--            );
-+            let _ =
-+                save_requested_launch_status(&request, "failed", &message, launch_started_at_ms);
-             failed(
-                 &message,
-                 json!({
-@@ -872,12 +868,8 @@ fn spawn_codex_plus_launch(request: LaunchRequest, accepted_message: &str) -> Co
-         },
-         Err(error) => {
-             let message = format!("启动静默入口失败：{error}");
--            let _ = save_requested_launch_status(
--                &request,
--                "failed",
--                &message,
--                launch_started_at_ms,
--            );
-+            let _ =
-+                save_requested_launch_status(&request, "failed", &message, launch_started_at_ms);
-             failed(
-                 &message,
-                 json!({
-@@ -957,15 +949,11 @@ pub async fn weixin_connect_qr_start(
-     base_url: String,
-     route_tag: String,
- ) -> CommandResult<WeixinQrPayload> {
--    match codex_plus_core::connect::weixin::WeixinClient::fetch_qr_code(
--        &base_url,
--        &route_tag,
--    )
--    .await
-+    match codex_plus_core::connect::weixin::WeixinClient::fetch_qr_code(&base_url, &route_tag).await
-     {
-         Ok(qr) => {
--            let qr_svg = codex_plus_core::connect::weixin::render_qr_svg(&qr.qr_content)
--                .unwrap_or_default();
-+            let qr_svg =
-+                codex_plus_core::connect::weixin::render_qr_svg(&qr.qr_content).unwrap_or_default();
-             let session = WeixinQrSession {
-                 base_url: if base_url.trim().is_empty() {
-                     codex_plus_core::connect::DEFAULT_WEIXIN_BASE_URL.to_string()
-@@ -1011,7 +999,10 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
-         })
-     });
-     let Some(session) = session else {
--        return failed("当前没有待确认的微信二维码。", empty_weixin_qr_payload("missing"));
-+        return failed(
-+            "当前没有待确认的微信二维码。",
-+            empty_weixin_qr_payload("missing"),
-+        );
-     };
- 
-     let result = codex_plus_core::connect::weixin::WeixinClient::poll_qr_status(
-@@ -1056,7 +1047,8 @@ pub async fn weixin_connect_qr_status() -> CommandResult<WeixinQrPayload> {
-         settings.weixin_connect_token = qr_status.bot_token;
-         settings.weixin_connect_account_id = qr_status.ilink_bot_id.clone();
-         if !qr_status.baseurl.trim().is_empty() {
--            settings.weixin_connect_base_url = qr_status.baseurl.trim().trim_end_matches('/').to_string();
-+            settings.weixin_connect_base_url =
-+                qr_status.baseurl.trim().trim_end_matches('/').to_string();
-         } else {
-             settings.weixin_connect_base_url = session.base_url.clone();
-         }
-@@ -1126,11 +1118,17 @@ pub fn weixin_connect_start() -> CommandResult<codex_plus_core::connect::WeixinC
-     }
-     settings.weixin_connect_enabled = true;
-     if let Err(error) = store.save(&settings) {
--        return failed(&format!("保存微信连接设置失败：{error}"), current_weixin_status());
-+        return failed(
-+            &format!("保存微信连接设置失败：{error}"),
-+            current_weixin_status(),
-+        );
-     }
-     match spawn_weixin_connect(settings) {
-         Ok(status) => ok("微信连接正在启动。", status),
--        Err(error) => failed(&format!("启动微信连接失败：{error}"), current_weixin_status()),
-+        Err(error) => failed(
-+            &format!("启动微信连接失败：{error}"),
-+            current_weixin_status(),
-+        ),
-     }
- }
- 
-@@ -1237,12 +1235,9 @@ fn spawn_weixin_connect(
-     let task_status = Arc::clone(&status);
-     let task_stop = Arc::clone(&stop);
-     tauri::async_runtime::spawn(async move {
--        if let Err(error) = codex_plus_core::connect::run_weixin_connect(
--            config,
--            stop,
--            Arc::clone(&task_status),
--        )
--        .await
-+        if let Err(error) =
-+            codex_plus_core::connect::run_weixin_connect(config, stop, Arc::clone(&task_status))
-+                .await
-             && let Ok(mut current) = task_status.lock()
-         {
-             current.state = "error".to_string();
-diff --git a/crates/codex-plus-core/src/routes.rs b/crates/codex-plus-core/src/routes.rs
-index 8603e60..db78b26 100644
---- a/crates/codex-plus-core/src/routes.rs
-+++ b/crates/codex-plus-core/src/routes.rs
-@@ -584,7 +584,6 @@ impl BridgeDataService for UnavailableDataService {
-     ) -> anyhow::Result<Option<SessionRef>> {
-         Ok(None)
-     }
--
- }
- 
- fn settings_payload_value(
-diff --git a/crates/codex-plus-core/src/settings.rs b/crates/codex-plus-core/src/settings.rs
-index 59a2403..ab73f4d 100644
---- a/crates/codex-plus-core/src/settings.rs
-+++ b/crates/codex-plus-core/src/settings.rs
-@@ -2514,7 +2514,10 @@ experimental_bearer_token = "sk-existing""#
-             .unwrap();
- 
-         assert!(updated.weixin_connect_enabled);
--        assert_eq!(updated.weixin_connect_base_url, "https://ilink.example.test");
-+        assert_eq!(
-+            updated.weixin_connect_base_url,
-+            "https://ilink.example.test"
-+        );
-         assert_eq!(updated.weixin_connect_token, "token");
-         assert_eq!(updated.weixin_connect_account_id, "bot-1");
-         assert_eq!(updated.weixin_connect_allow_from, "user@im.wechat");
-diff --git a/crates/codex-plus-core/tests/bridge_routes.rs b/crates/codex-plus-core/tests/bridge_routes.rs
-index 459fcc1..744451c 100644
---- a/crates/codex-plus-core/tests/bridge_routes.rs
-+++ b/crates/codex-plus-core/tests/bridge_routes.rs
-@@ -1412,7 +1412,6 @@ impl BridgeDataService for FakeData {
-             title,
-         }))
-     }
--
- }
- 
- #[derive(Clone)]
-diff --git a/crates/codex-plus-core/tests/relay_config.rs b/crates/codex-plus-core/tests/relay_config.rs
-index 1ecbb58..eba3cd2 100644
---- a/crates/codex-plus-core/tests/relay_config.rs
-+++ b/crates/codex-plus-core/tests/relay_config.rs
-@@ -3756,7 +3756,10 @@ requires_openai_auth = true
-     let config = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
-     let parsed: toml::Value = toml::from_str(&config).unwrap();
-     assert_eq!(parsed["features"]["code_mode_only"].as_bool(), Some(true));
--    assert_eq!(parsed["features"]["code_mode"]["enabled"].as_bool(), Some(true));
-+    assert_eq!(
-+        parsed["features"]["code_mode"]["enabled"].as_bool(),
-+        Some(true)
-+    );
- 
-     let catalog: serde_json::Value = serde_json::from_str(
-         &std::fs::read_to_string(
+-- 
+2.55.0.windows.5
+

@@ -1,14 +1,14 @@
-From cee77b8daad276cb0e1a1b16c2d9b44afb594c19 Mon Sep 17 00:00:00 2001
+From ba19474a5d481d8b6c1f7650955eaa1b9b8d567b Mon Sep 17 00:00:00 2001
 From: Anti-Codex Project <anticodex-project@example.invalid>
 Date: Tue, 11 Aug 2026 00:26:23 +0800
-Subject: [PATCH 12/19] fix: format DreamSkin installer metadata test
+Subject: [PATCH 12/21] fix: format DreamSkin installer metadata test
 
 ---
  crates/codex-plus-core/tests/installers.rs | 6 +++++-
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/tests/installers.rs b/crates/codex-plus-core/tests/installers.rs
-index 6a55e9d..a3a22ca 100644
+index 4d6d388..78edc7e 100644
 --- a/crates/codex-plus-core/tests/installers.rs
 +++ b/crates/codex-plus-core/tests/installers.rs
 @@ -81,7 +81,11 @@ fn macos_bundle_metadata_contains_silent_and_manager_apps() {
@@ -24,3 +24,6 @@ index 6a55e9d..a3a22ca 100644
      assert!(!silent.info_plist.contains("<string>dreamskin</string>"));
      assert_eq!(
          silent.binary_target_name.as_deref(),
+-- 
+2.55.0.windows.5
+

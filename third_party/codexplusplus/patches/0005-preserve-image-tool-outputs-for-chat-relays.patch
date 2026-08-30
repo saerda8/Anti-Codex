@@ -1,74 +1,32 @@
-From 2adb1c0174a3daffac98e63f8f457e84c04d1ce2 Mon Sep 17 00:00:00 2001
+From c1a509d7e480857638374fa9ca1ed3b657d721ec Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 05/19] fix: preserve image tool outputs for chat relays
+Subject: [PATCH 05/21] fix: preserve image tool outputs for chat relays
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 152 +++++++++++++++++-
- .../codex-plus-core/tests/protocol_proxy.rs   |  67 ++++++++
- 2 files changed, 215 insertions(+), 4 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs  | 133 +++++++++++++++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   |  71 ++++++++++
+ 2 files changed, 202 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e8efc89..55282d3 100644
+index 94cf553..9ebe007 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -2768,7 +2768,7 @@ fn append_responses_item(
-             messages.push(json!({
-                 "role": "tool",
-                 "tool_call_id": call_id,
--                "content": response_output_text(item.get("output").unwrap_or(&Value::Null))
-+                "content": response_output_to_chat_content(item.get("output").unwrap_or(&Value::Null))
-             }));
-         }
-         Some("custom_tool_call") => {
-@@ -2814,7 +2814,7 @@ fn append_responses_item(
-             messages.push(json!({
-                 "role": "tool",
-                 "tool_call_id": call_id,
--                "content": response_output_text(item.get("output").unwrap_or(&Value::Null))
-+                "content": response_output_to_chat_content(item.get("output").unwrap_or(&Value::Null))
-             }));
-         }
-         Some("tool_call") => {
-@@ -2860,7 +2860,7 @@ fn append_responses_item(
-             messages.push(json!({
-                 "role": "tool",
-                 "tool_call_id": call_id,
--                "content": response_output_text(output)
-+                "content": response_output_to_chat_content(output)
-             }));
-         }
-         Some("reasoning") => {
-@@ -2897,11 +2897,26 @@ fn append_responses_item(
- }
- 
- fn orphan_tool_output_message(call_id: &str, output: &Value) -> Value {
-+    let content = response_output_to_chat_content(output);
-+    if let Some(parts) = content.as_array() {
-+        let mut parts = parts.clone();
-+        parts.insert(
-+            0,
-+            json!({
-+                "type": "text",
-+                "text": format!("Function call output ({call_id}):")
-+            }),
-+        );
-+        return json!({
-+            "role": "user",
-+            "content": parts
-+        });
-+    }
-     json!({
-         "role": "user",
-         "content": format!(
-             "Function call output ({call_id}): {}",
--            response_output_text(output)
-+            content.as_str().unwrap_or_default()
-         )
-     })
- }
-@@ -4286,6 +4301,135 @@ fn response_output_text(value: &Value) -> String {
+@@ -4697,10 +4697,10 @@ fn guard_inline_image_data_urls(value: &mut Value) -> bool {
+ /// 无图时原样返回 `response_output_text` 的结果，保持既有行为不变。
+ fn tool_output_content(output: &Value) -> Value {
+     let Some(parts) = output.as_array() else {
+-        return json!(response_output_text(output));
++        return response_output_to_chat_content(output);
+     };
+     if !parts.iter().any(is_image_part) {
+-        return json!(response_output_text(output));
++        return response_output_to_chat_content(output);
      }
+ 
+     let mut chat_parts = Vec::new();
+@@ -4728,6 +4728,135 @@ fn tool_output_content(output: &Value) -> Value {
+     Value::Array(chat_parts)
  }
  
 +const TOOL_IMAGE_PLACEHOLDER: &str = "[image output forwarded as image_url]";
@@ -204,10 +162,10 @@ index e8efc89..55282d3 100644
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 2f8fb5c..b735c34 100644
+index 510af80..1b1a1be 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -944,6 +944,73 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+@@ -1169,6 +1169,77 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
      );
  }
  
@@ -239,7 +197,9 @@ index 2f8fb5c..b735c34 100644
 +    }))
 +    .unwrap();
 +
-+    let content = converted["messages"][1]["content"].as_array().unwrap();
++    let tool_content = converted["messages"][1]["content"].as_str().unwrap();
++    assert!(!tool_content.contains(image_data));
++    let content = converted["messages"][2]["content"].as_array().unwrap();
 +    assert_eq!(content[0]["type"], "text");
 +    assert!(!content[0]["text"].as_str().unwrap().contains(image_data));
 +    assert_eq!(content[1]["type"], "image_url");
@@ -272,7 +232,9 @@ index 2f8fb5c..b735c34 100644
 +    }))
 +    .unwrap();
 +
-+    let content = converted["messages"][1]["content"].as_array().unwrap();
++    let tool_content = converted["messages"][1]["content"].as_str().unwrap();
++    assert!(!tool_content.contains(image_url));
++    let content = converted["messages"][2]["content"].as_array().unwrap();
 +    assert_eq!(content[0]["type"], "text");
 +    assert!(!content[0]["text"].as_str().unwrap().contains(image_url));
 +    assert_eq!(content[1]["image_url"]["url"], image_url);
@@ -281,3 +243,6 @@ index 2f8fb5c..b735c34 100644
  #[test]
  fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
      let converted = responses_to_chat_completions(json!({
+-- 
+2.55.0.windows.5
+

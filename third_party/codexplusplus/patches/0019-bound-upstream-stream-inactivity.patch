@@ -1,14 +1,14 @@
-From 21a67d2e0bb6e72f6eda1c01a7a698a706a5f327 Mon Sep 17 00:00:00 2001
+From 14e245e722e7d5e9a821d1403923049f9eb27024 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 19:00:00 +0800
-Subject: [PATCH 18/19] bound upstream stream inactivity
+Subject: [PATCH 18/21] bound upstream stream inactivity
 
 ---
  crates/codex-plus-core/src/launcher.rs | 176 ++++++++++++++++++++++---
  1 file changed, 161 insertions(+), 15 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 8942a98..8fba748 100644
+index ba99f5e..c508ab6 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -28,6 +28,7 @@ const LOCAL_HELPER_BIND_HOST: &str = "127.0.0.1";
@@ -17,9 +17,9 @@ index 8942a98..8fba748 100644
  const HELPER_BODY_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 +const UPSTREAM_STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
  
- /// Asynchronous callback used by the bridge watchdog to restore a launcher-specific bridge.
- ///
-@@ -1527,6 +1528,16 @@ async fn collect_loopback_body(
+ /// 协议代理的端口写死在 `config.toml` 的 `base_url = "http://127.0.0.1:57321/v1"` 里，
+ /// 不能像普通 helper 端口那样临时换一个空闲的，否则 Codex CLI 会连到没人监听的地址。
+@@ -1622,6 +1623,16 @@ async fn collect_loopback_body(
      Ok(response.into_body().collect().await?.to_bytes().to_vec())
  }
  
@@ -36,7 +36,7 @@ index 8942a98..8fba748 100644
  async fn try_handle_cancel_aware_protocol_proxy_stream(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
-@@ -1602,14 +1613,25 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1697,14 +1708,25 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
      if wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
          loop {
              tokio::select! {
@@ -66,7 +66,7 @@ index 8942a98..8fba748 100644
                  },
                  _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
              }
-@@ -1621,8 +1643,8 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1716,8 +1738,8 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
          let mut stream_failed = false;
          loop {
              tokio::select! {
@@ -77,7 +77,7 @@ index 8942a98..8fba748 100644
                          if let Ok(bytes) = frame.into_data() {
                              let converted = converter.push_bytes(&bytes);
                              if !converted.is_empty() {
-@@ -1630,7 +1652,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1725,7 +1747,7 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
                              }
                          }
                      }
@@ -86,7 +86,7 @@ index 8942a98..8fba748 100644
                          let failed = converter.fail(
                              format!("Stream error: {error}"),
                              Some("stream_error".to_string()),
-@@ -1641,7 +1663,28 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+@@ -1736,7 +1758,28 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
                          stream_failed = true;
                          break;
                      }
@@ -116,7 +116,7 @@ index 8942a98..8fba748 100644
                  },
                  _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
              }
-@@ -1736,14 +1779,25 @@ async fn try_handle_cancel_aware_chat_completions_proxy_stream(
+@@ -1831,14 +1874,25 @@ async fn try_handle_cancel_aware_chat_completions_proxy_stream(
      let (mut downstream_reader, mut downstream_writer) = stream.split();
      loop {
          tokio::select! {
@@ -146,7 +146,7 @@ index 8942a98..8fba748 100644
              },
              _ = wait_for_downstream_disconnect(&mut downstream_reader) => return Ok(true),
          }
-@@ -1840,7 +1894,27 @@ async fn handle_protocol_proxy_connection(
+@@ -1935,7 +1989,27 @@ async fn handle_protocol_proxy_connection(
          write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
          if upstream.wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
              let mut bytes_stream = upstream.response.bytes_stream();
@@ -175,7 +175,7 @@ index 8942a98..8fba748 100644
                  if let Ok(bytes) = chunk {
                      stream.write_all(&bytes).await?;
                  } else {
-@@ -1863,7 +1937,37 @@ async fn handle_protocol_proxy_connection(
+@@ -1958,7 +2032,37 @@ async fn handle_protocol_proxy_connection(
              .unwrap_or_default();
          let mut bytes_stream = upstream.response.bytes_stream();
          let mut stream_failed = false;
@@ -214,7 +214,7 @@ index 8942a98..8fba748 100644
              match chunk {
                  Ok(bytes) => {
                      let converted = converter.push_bytes(&bytes);
-@@ -2066,7 +2170,27 @@ async fn handle_chat_completions_proxy_connection(
+@@ -2161,7 +2265,27 @@ async fn handle_chat_completions_proxy_connection(
      if upstream.is_stream && is_success {
          write_http_stream_headers(stream, &status, &content_type).await?;
          let mut bytes_stream = upstream.response.bytes_stream();
@@ -243,7 +243,7 @@ index 8942a98..8fba748 100644
              stream.write_all(&chunk?).await?;
          }
          log_helper_response(
-@@ -3505,6 +3629,28 @@ mod tests {
+@@ -3600,6 +3724,28 @@ mod tests {
          assert!(HELPER_BODY_IDLE_TIMEOUT <= std::time::Duration::from_secs(30));
      }
  
@@ -272,3 +272,6 @@ index 8942a98..8fba748 100644
      #[test]
      fn launcher_stays_alive_while_injected_cdp_endpoint_is_available() {
          assert!(launcher_target_alive(false, true));
+-- 
+2.55.0.windows.5
+

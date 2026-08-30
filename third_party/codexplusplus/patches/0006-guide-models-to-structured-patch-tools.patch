@@ -1,20 +1,20 @@
-From c31a00f6ced8a8aa7c31da96a1e95e8e59a64b3e Mon Sep 17 00:00:00 2001
+From 465c8b2266ceae2eab235e9ba26c2a99a21ca03a Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 03:30:19 +0800
-Subject: [PATCH 06/19] guide models to structured patch tools
+Subject: [PATCH 06/21] guide models to structured patch tools
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs  | 140 ++++++++--
+ crates/codex-plus-core/src/protocol_proxy.rs  | 138 ++++++++--
  .../codex-plus-core/tests/protocol_proxy.rs   | 240 +++++++++++++++++-
- 2 files changed, 353 insertions(+), 27 deletions(-)
+ 2 files changed, 351 insertions(+), 27 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 55282d3..133ca92 100644
+index 9ebe007..47dfd41 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -209,6 +209,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
-         append_responses_input(input, &mut messages);
-     }
+@@ -215,6 +215,15 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+     relocate_tool_output_images(&mut messages);
+     ensure_tool_call_reasoning_content(&mut messages);
      normalize_chat_messages(&mut messages);
 +    let user_text = current_responses_user_text(body.get("input"));
 +    let suppress_tools = is_native_codex_title_request(&user_text)
@@ -28,7 +28,7 @@ index 55282d3..133ca92 100644
      let messages = collapse_system_messages_to_head(messages);
      result["messages"] = json!(messages);
  
-@@ -244,10 +253,6 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -250,10 +259,6 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
      apply_chat_reasoning_options(&mut result, &body, model);
  
      // Native title and task-suggestion helpers are text-only background requests.
@@ -39,7 +39,7 @@ index 55282d3..133ca92 100644
      if !suppress_tools {
          let tool_context = build_codex_tool_context(body.get("tools"));
          let mut has_chat_tools = false;
-@@ -2226,19 +2231,23 @@ impl ChatSseState {
+@@ -2245,12 +2250,12 @@ impl ChatSseState {
  
          {
              let state = self.tools.entry(chat_index).or_default();
@@ -58,19 +58,18 @@ index 55282d3..133ca92 100644
                  }
              }
              if !args_delta.is_empty() {
-                 state.arguments.push_str(&args_delta);
-             }
- 
--            if !state.added && (!state.call_id.is_empty() || !state.name.is_empty()) {
-+            if !state.added
+@@ -2265,7 +2270,9 @@ impl ChatSseState {
+             let waiting_for_custom_tool_name =
+                 self.tool_context.has_custom_tools && state.name.is_empty();
+             if !state.added
+-                && (!state.call_id.is_empty() || !state.name.is_empty())
 +                && !state.call_id.is_empty()
 +                && !state.name.is_empty()
 +                && !state.arguments.is_empty()
-+            {
+                 && !waiting_for_custom_tool_name
+             {
                  should_add = true;
-                 pending_arguments = state.arguments.clone();
-             } else if state.added {
-@@ -2507,6 +2516,16 @@ impl ChatSseState {
+@@ -2536,6 +2543,16 @@ impl ChatSseState {
      }
  }
  
@@ -87,7 +86,7 @@ index 55282d3..133ca92 100644
  fn take_sse_block(buffer: &mut String) -> Option<String> {
      let lf = buffer.find("\n\n").map(|index| (index, 2));
      let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
-@@ -3298,6 +3317,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
+@@ -3589,6 +3606,7 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
  
  fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) -> Vec<Value> {
      let mut converted = Vec::new();
@@ -95,7 +94,7 @@ index 55282d3..133ca92 100644
      for tool in tools {
          if let Some(name) = tool.as_str().filter(|name| !name.is_empty()) {
              converted.push(generic_custom_proxy_tool(name, ""));
-@@ -3321,7 +3341,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3612,7 +3630,7 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
                      .and_then(Value::as_str)
                      .unwrap_or("");
                  if detect_codex_custom_tool_kind(tool, name) == CodexCustomToolKind::ApplyPatch {
@@ -104,7 +103,7 @@ index 55282d3..133ca92 100644
                  } else {
                      converted.push(generic_custom_proxy_tool(name, description));
                  }
-@@ -3330,7 +3350,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
+@@ -3621,7 +3639,57 @@ fn responses_tools_to_chat_tools(tools: &[Value], context: &CodexToolContext) ->
              _ => {}
          }
      }
@@ -163,7 +162,7 @@ index 55282d3..133ca92 100644
  }
  
  fn detect_codex_custom_tool_kind(tool: &Value, name: &str) -> CodexCustomToolKind {
-@@ -3494,6 +3564,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
+@@ -3785,6 +3853,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
  
  fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      vec![
@@ -179,7 +178,7 @@ index 55282d3..133ca92 100644
          function_tool(
              &format!("{name}_add_file"),
              &patch_proxy_description(
-@@ -3542,6 +3621,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
+@@ -3833,6 +3910,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      ]
  }
  
@@ -200,7 +199,7 @@ index 55282d3..133ca92 100644
  fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
      json!({
          "type": "function",
-@@ -3554,11 +3647,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
+@@ -3845,11 +3936,13 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
  }
  
  fn patch_proxy_description(description: &str, action: &str, default_description: &str) -> String {
@@ -216,7 +215,7 @@ index 55282d3..133ca92 100644
  }
  
  fn apply_patch_add_file_schema() -> Value {
-@@ -3663,15 +3758,16 @@ fn apply_patch_hunks_schema() -> Value {
+@@ -3954,15 +4047,16 @@ fn apply_patch_hunks_schema() -> Value {
  }
  
  fn proxy_action_from_upstream_name(name: &str) -> Option<CodexPatchProxyAction> {
@@ -238,7 +237,7 @@ index 55282d3..133ca92 100644
          Some(CodexPatchProxyAction::Batch)
      } else {
          None
-@@ -3740,7 +3836,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
+@@ -4031,7 +4125,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
              let name = object.get("name").and_then(Value::as_str)?;
              let spec = context.custom_tools.get(name)?;
              let upstream_name = if spec.kind == CodexCustomToolKind::ApplyPatch {
@@ -250,10 +249,10 @@ index 55282d3..133ca92 100644
                  spec.openai_name.clone()
              };
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index b735c34..b8e714f 100644
+index 1b1a1be..899900a 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -715,9 +715,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
+@@ -940,9 +940,20 @@ fn responses_request_maps_codex_custom_and_namespace_tools_to_chat_functions() {
  fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      let converted = responses_to_chat_completions(json!({
          "model": "gpt-5-mini",
@@ -274,7 +273,7 @@ index b735c34..b8e714f 100644
              {
                  "type": "custom",
                  "name": "apply_patch",
-@@ -729,6 +740,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -954,6 +965,13 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      .unwrap();
  
      assert_eq!(converted["stream_options"]["include_usage"], true);
@@ -288,7 +287,7 @@ index b735c34..b8e714f 100644
      let names: Vec<_> = converted["tools"]
          .as_array()
          .unwrap()
-@@ -738,21 +756,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
+@@ -963,21 +981,56 @@ fn responses_request_stream_includes_usage_and_apply_patch_proxy_tools() {
      assert_eq!(
          names,
          vec![
@@ -349,7 +348,7 @@ index b735c34..b8e714f 100644
      );
  }
  
-@@ -1027,12 +1080,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+@@ -1256,12 +1309,18 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
      }))
      .unwrap();
  
@@ -370,7 +369,7 @@ index b735c34..b8e714f 100644
          "{\"content\":\"# Test\",\"path\":\"docs/test.md\"}"
      );
  }
-@@ -1295,6 +1354,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
+@@ -1592,6 +1651,41 @@ fn chat_completion_response_reconstructs_apply_patch_proxy_call() {
      );
  }
  
@@ -412,7 +411,7 @@ index b735c34..b8e714f 100644
  #[test]
  fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      let converted = chat_completion_to_response_with_request(
-@@ -1332,6 +1426,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
+@@ -1629,6 +1723,53 @@ fn chat_completion_response_remaps_string_apply_patch_proxy_tools() {
      );
  }
  
@@ -466,8 +465,8 @@ index b735c34..b8e714f 100644
  #[test]
  fn chat_completion_response_maps_gemini_and_claude_cache_usage_like_ccx() {
      let gemini = chat_completion_to_response(json!({
-@@ -1511,6 +1652,93 @@ data: [DONE]
-     assert!(converted.contains("data: [DONE]"));
+@@ -1835,6 +1976,93 @@ data: [DONE]
+     assert!(converted.contains("\"input\":\"pwd\""));
  }
  
 +#[test]
@@ -560,3 +559,6 @@ index b735c34..b8e714f 100644
  #[test]
  fn chat_sse_converter_handles_partial_chunks_and_utf8_boundaries() {
      let sse = "data: {\"id\":\"chatcmpl_utf8\",\"created\":123,\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":\"stop\"}]}\r\n\r\n";
+-- 
+2.55.0.windows.5
+
