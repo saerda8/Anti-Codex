@@ -199,6 +199,46 @@ function Accept-Crash([string]$Text) {
   }
 });
 
+test("candidate crash-page validation accepts only the patched 26.825 safe-action shape", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-candidate-crash-v2-"));
+  try {
+    const validator = extractFunction(candidateValidator, "Test-AntiCodexCrashRecoveryPage");
+    const app = 'function C(e){let{fatalError:n,onReset:r}=e;id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`};id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn\'t load your configuration. Review it, then restart to try again.`};id:`appServerCrash.recoveryDescription`,defaultMessage:`Something went wrong. Restart Anti-Codex to try again.`};let p;p=(0,j.jsx)(Z,{id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart Anti-Codex`});let m;m=(0,j.jsx)(B,{onClick:r,children:p});let h;h=(0,j.jsx)(B,{onClick:F,children:(0,j.jsx)(Z,{id:`appServerCrash.sendFeedback`})});let g;g=(0,j.jsx)(B,{onClick:L,children:(0,j.jsx)(Z,{id:`appServerCrash.reviewConfiguration`})});let _;_=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{hideUnavailable:!0})});/*anticodex-crash-recovery-actions-v2*/children:[m,h,g]}function L(){return A.dispatchMessage(`open-config-toml`,{})}';
+    const generic = 'function G(e){let {resetError:n}=e,r=M();let s;s=()=>{n(),r(`/`)};id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`});/*anticodex-generic-error-actions*/children:[(0,j.jsx)(B,{onClick:s,children:c})]}var R,z,J;';
+    const fallback = 'id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`};id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`}';
+    const valid = `${app}${generic}${fallback}`;
+    const harness = join(fixture, "candidate-crash-v2.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
+${validator}
+function Accept-Crash([string]$Text) {
+  try { Test-AntiCodexCrashRecoveryPage -Text $Text | Out-Null; return $true } catch { return $false }
+}
+[pscustomobject]@{
+  valid = Accept-Crash ${quotePowerShell(valid)}
+  updaterDecoy = Accept-Crash ${quotePowerShell(valid.replace("/*anticodex-crash-recovery-actions-v2*/", "children:[m,h,g,_];/*anticodex-crash-recovery-actions-v2*/"))}
+  roleSwap = Accept-Crash ${quotePowerShell(valid.replace("children:[m,h,g]", "children:[m,g,h]"))}
+  restartHandlerSwap = Accept-Crash ${quotePowerShell(valid.replace("onClick:r,children:p", "onClick:U,children:p"))}
+  configHandlerSwap = Accept-Crash ${quotePowerShell(valid.replace("onClick:L,children:(0,j.jsx)(Z,{id:`appServerCrash.reviewConfiguration`})", "onClick:U,children:(0,j.jsx)(Z,{id:`appServerCrash.reviewConfiguration`})"))}
+  missingBrand = Accept-Crash ${quotePowerShell(valid.replace("defaultMessage:`Anti-Codex hit a snag`", "defaultMessage:`ChatGPT hit a snag`"))}
+} | ConvertTo-Json -Compress
+`, "utf8");
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      valid: true,
+      updaterDecoy: false,
+      roleSwap: false,
+      restartHandlerSwap: false,
+      configHandlerSwap: false,
+      missingBrand: false,
+    });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test("candidate and rollback validators require both preserved Settings messages", () => {
   for (const source of [candidateValidator, rollback]) {
     const pattern = source.match(/\$settingsDefinitionPattern\s*=\s*'([^']+)'/)?.[1] ?? "";

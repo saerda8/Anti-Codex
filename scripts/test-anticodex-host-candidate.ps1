@@ -113,6 +113,105 @@ function Test-AntiCodexCrashRecoveryPage {
             -not [string]::IsNullOrWhiteSpace($MemoPattern) -and
             [regex]::Matches($segment, $MemoPattern).Count -eq 1
     }
+    $v2TitlePatched = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\})'
+    $v2ConfigPatched = 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn''t load your configuration\. Review it, then restart to try again\.`(?=\})'
+    $v2DescriptionPatched = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})'
+    $v2RestartPatched = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})'
+    if ([regex]::Matches($Text, 'id:`appServerCrash\.recoveryTitle`').Count -gt 0) {
+        $v2AppRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,9000}?$v2TitlePatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2ConfigPatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2DescriptionPatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2RestartPatched(?:(?!function $identifier\()[\s\S]){0,9000}?hideUnavailable:!0(?:(?!function $identifier\()[\s\S]){0,4000}?/\*anticodex-crash-recovery-actions-v2\*/children:\[$identifier,$identifier,$identifier\](?:(?!function $identifier\()[\s\S]){0,4000}?\}function $identifier\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}"
+        $v2AppRegions = [regex]::Matches($Text, $v2AppRegionPattern)
+        if ($v2AppRegions.Count -ne 1) {
+            throw "Anti-Codex candidate must contain exactly one patched 26.825 app-server crash region."
+        }
+        $appRegion = $v2AppRegions[0].Value
+        $appProps = [regex]::Escape($v2AppRegions[0].Groups['props'].Value)
+        $actionMatches = [regex]::Matches($appRegion, "/\*anticodex-crash-recovery-actions-v2\*/children:\[(?<restart>$identifier),(?<feedback>$identifier),(?<config>$identifier)\]")
+        if ($actionMatches.Count -ne 1) {
+            throw "Anti-Codex candidate 26.825 crash actions are missing or ambiguous."
+        }
+        $restartVariable = $actionMatches[0].Groups['restart'].Value
+        $feedbackVariable = $actionMatches[0].Groups['feedback'].Value
+        $configVariable = $actionMatches[0].Groups['config'].Value
+        $restart = [regex]::Escape($restartVariable)
+        $feedback = [regex]::Escape($feedbackVariable)
+        $config = [regex]::Escape($configVariable)
+
+        $restartBindings = [regex]::Matches($appRegion, "\{fatalError:$identifier,onReset:(?<handler>$identifier)\}=$appProps(?:[,;])")
+        if ($restartBindings.Count -ne 1) {
+            throw "Anti-Codex candidate 26.825 restart control is not bound to the component onReset handler."
+        }
+        $restartHandler = [regex]::Escape($restartBindings[0].Groups['handler'].Value)
+        $restartPattern = "(?s)let (?<label>$identifier);[\s\S]{0,650}?\b\k<label>=[\s\S]{0,350}?id:``appServerCrash\.restartChatGPT``,defaultMessage:``Restart Anti-Codex``(?=\})[\s\S]{0,350}?let $restart;[\s\S]{0,450}?\b$restart=[\s\S]{0,220}?onClick:$restartHandler,children:\k<label>"
+        $restartMatches = [regex]::Matches($appRegion, $restartPattern)
+        $restartLabel = if ($restartMatches.Count -eq 1) { [regex]::Escape($restartMatches[0].Groups['label'].Value) } else { "" }
+        $restartMemoPattern = "^let $restart;(?<cache>$identifier)\[(?<dependencyIndex>\d+)\]===$restartHandler\?$restart=\k<cache>\[(?<valueIndex>\d+)\]:\($restart=(?:(?!=>|function)[\s\S]){1,600}?onClick:$restartHandler,children:$restartLabel(?:(?!=>|function)[\s\S]){0,150}?,\k<cache>\[\k<dependencyIndex>\]=$restartHandler,\k<cache>\[\k<valueIndex>\]=$restart\);?$"
+        if ($restartMatches.Count -ne 1 -or -not (Test-SupportedControlAssignments -Region $appRegion -Variable $restartVariable -MemoPattern $restartMemoPattern)) {
+            throw "Anti-Codex candidate 26.825 crash actions do not retain the restart control."
+        }
+
+        $feedbackMatches = [regex]::Matches($appRegion, "\b$feedback=[^;]{0,900}?onClick:$identifier[^;]{0,700}?id:``appServerCrash\.sendFeedback``")
+        if ($feedbackMatches.Count -ne 1) {
+            throw "Anti-Codex candidate 26.825 crash actions do not retain the feedback control."
+        }
+
+        $configMatches = [regex]::Matches($appRegion, "\b$config=[^;]{0,1200}?onClick:(?<openConfig>$identifier)[^;]{0,800}?id:``appServerCrash\.reviewConfiguration``")
+        $openConfigName = if ($configMatches.Count -eq 1) { $configMatches[0].Groups['openConfig'].Value } else { "" }
+        $openConfig = [regex]::Escape($openConfigName)
+        $dependency = "$identifier(?:\.$identifier)*"
+        $configMemoPattern = "^let $config;(?<cache>$identifier)\[(?<firstIndex>\d+)\]!==?(?<first>$dependency)\|\|\k<cache>\[(?<secondIndex>\d+)\]!==?(?<second>$dependency)\?\($config=(?:(?!=>|function)[\s\S]){1,1300}?onClick:$openConfig(?:(?!=>|function)[\s\S]){1,900}?id:``appServerCrash\.reviewConfiguration``(?:(?!=>|function)[\s\S]){0,500}?,\k<cache>\[\k<firstIndex>\]=\k<first>,\k<cache>\[\k<secondIndex>\]=\k<second>,\k<cache>\[(?<valueIndex>\d+)\]=$config\):$config=\k<cache>\[\k<valueIndex>\];?$"
+        if ($configMatches.Count -ne 1 -or -not (Test-SupportedControlAssignments -Region $appRegion -Variable $configVariable -MemoPattern $configMemoPattern)) {
+            throw "Anti-Codex candidate 26.825 crash actions do not retain the config control."
+        }
+        if ([regex]::Matches($Text, "function $openConfig\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}").Count -ne 1) {
+            throw "Anti-Codex candidate 26.825 config control is not bound to the isolated config dispatcher."
+        }
+        if ([regex]::Matches($appRegion, "children:\[$restart,$feedback,$config,$identifier\]").Count -ne 0) {
+            throw "Anti-Codex candidate 26.825 crash page still renders the upstream updater."
+        }
+
+        $genericRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,1800}?id:``codex\.errorBoundary\.genericError``,defaultMessage:``Oops, an error has occurred``(?=\})(?:(?!function $identifier\()[\s\S]){0,1800}?id:``codex\.errorBoundary\.goHome``,defaultMessage:``Try again``(?=\})(?:(?!function $identifier\()[\s\S]){0,1800}?\}var $identifier(?:,$identifier){2,}"
+        $genericRegions = [regex]::Matches($Text, $genericRegionPattern)
+        if ($genericRegions.Count -ne 1) {
+            throw "Anti-Codex candidate must contain exactly one patched generic error region."
+        }
+        $genericRegion = $genericRegions[0].Value
+        $genericProps = [regex]::Escape($genericRegions[0].Groups['props'].Value)
+        $resetBindings = [regex]::Matches($genericRegion, "\{resetError:(?<handler>$identifier)\}=$genericProps(?:[,;])")
+        $genericActionPattern = "(?s)(?<retryLabel>$identifier)=\(0,$identifier\.jsx\)\($identifier,\{id:``codex\.errorBoundary\.goHome``,defaultMessage:``Try again``\}\)[\s\S]{0,1200}?/\*anticodex-generic-error-actions\*/children:\[\(0,$identifier\.jsx\)\($identifier,\{onClick:(?<retryHandler>$identifier),children:\k<retryLabel>\}\)\]"
+        $genericActions = [regex]::Matches($genericRegion, $genericActionPattern)
+        if ($resetBindings.Count -ne 1 -or $genericActions.Count -ne 1) {
+            throw "Anti-Codex candidate generic error page does not retain exactly one retry action."
+        }
+        $resetHandler = [regex]::Escape($resetBindings[0].Groups['handler'].Value)
+        $retryHandlerVariable = $genericActions[0].Groups['retryHandler'].Value
+        $retryHandler = [regex]::Escape($retryHandlerVariable)
+        $retryMemoPattern = "^let $retryHandler;(?<cache>$identifier)\[(?<routeIndex>\d+)\]!==?(?<route>$identifier)\|\|\k<cache>\[(?<resetIndex>\d+)\]!==?$resetHandler\?\($retryHandler=\(\)=>\{$resetHandler\(\),\k<route>\(``/``\)\},\k<cache>\[\k<routeIndex>\]=\k<route>,\k<cache>\[\k<resetIndex>\]=$resetHandler,\k<cache>\[(?<valueIndex>\d+)\]=$retryHandler\):$retryHandler=\k<cache>\[\k<valueIndex>\];?$"
+        if ([regex]::Matches($genericRegion, "\b$retryHandler=\(\)=>\{?$resetHandler\(\)(?:[,;}])").Count -ne 1 -or
+            -not (Test-SupportedControlAssignments -Region $genericRegion -Variable $retryHandlerVariable -MemoPattern $retryMemoPattern) -or
+            [regex]::Matches($genericRegion, "children:\[$identifier,\(0,$identifier\.jsx\)\($identifier,\{onClick:$identifier,children:$identifier\}\)\]").Count -ne 0) {
+            throw "Anti-Codex candidate generic error retry is incomplete or still renders the updater."
+        }
+
+        $v2TitleOriginal = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`'
+        $v2ConfigOriginal = 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn''t load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`'
+        $v2DescriptionOriginal = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart ChatGPT to try again\.`,description:`[^`]+`'
+        $v2RestartOriginal = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`'
+        $genericTitleOriginal = 'id:`codex\.errorBoundary\.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`'
+        $genericRetryOriginal = 'id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`'
+        if ([regex]::Matches($Text, $v2TitleOriginal).Count -ne 0 -or
+            [regex]::Matches($Text, $v2ConfigOriginal).Count -ne 0 -or
+            [regex]::Matches($Text, $v2DescriptionOriginal).Count -ne 0 -or
+            [regex]::Matches($Text, $v2RestartOriginal).Count -ne 0 -or
+            [regex]::Matches($Text, $v2TitlePatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v2ConfigPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v2DescriptionPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v2RestartPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $genericTitleOriginal).Count -ne 1 -or
+            [regex]::Matches($Text, $genericRetryOriginal).Count -ne 1) {
+            throw "Anti-Codex candidate 26.825 crash recovery page markers are incomplete or duplicated."
+        }
+        return $true
+    }
     $titlePatched = 'id:`appServerCrash\.title`,defaultMessage:`\{appName\} stopped unexpectedly`,values:\{appName:`Anti-Codex`\}'
     $descriptionPatched = 'id:`appServerCrash\.description`,defaultMessage:`Restart \{appName\} to continue\. If the problem persists, check your configuration or visit the \{documentationLink\}`,values:\{appName:`Anti-Codex`,documentationLink:'
     $appRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,2500}?$titlePatched(?:(?!function $identifier\()[\s\S]){0,2500}?$descriptionPatched(?:(?!function $identifier\()[\s\S]){0,8000}?id:``appServerCrash\.restart``,defaultMessage:``Restart``(?:(?!function $identifier\()[\s\S]){0,3000}?\}function $identifier\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}"
