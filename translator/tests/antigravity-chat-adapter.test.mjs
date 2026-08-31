@@ -33,6 +33,7 @@ test("exposes only anonymized Antigravity account readiness", async () => {
 test("maps Chat messages into structured Cascade input without task semantics", async () => {
   const client = fakeClient({
     startEvents: [
+      { type: "ready" },
       { type: "text_delta", delta: "完成" },
       { type: "done", usage: { prompt_tokens: 11, completion_tokens: 2 } },
     ],
@@ -913,6 +914,7 @@ test("aborted requests reach the Cascade client and emit no terminal chunk", asy
   const observed = { aborted: false };
   const client = fakeClient({
     startEvents: async function* ({ signal }) {
+      yield { type: "ready" };
       await new Promise((resolve, reject) => {
         const onAbort = () => {
           observed.aborted = true;

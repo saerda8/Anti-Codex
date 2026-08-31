@@ -88,12 +88,11 @@ export function createAntigravityChatAdapter(options = {}) {
     const base = { id, object: "chat.completion.chunk", created, model };
     let continuation = null;
     let terminal = false;
+    let roleSent = false;
     let nativeHelperText = "";
     const resumedByOwner = prepared.kind === "resume" && prepared.claimMode === "owner";
     const replayedResume = prepared.kind === "resume" && !resumedByOwner;
     const replayEvents = [];
-
-    yield chunk(base, { role: "assistant" }, null);
 
     try {
       let events;
@@ -127,14 +126,29 @@ export function createAntigravityChatAdapter(options = {}) {
             code: "multiple_terminal_events",
           });
         }
+        if (event?.type === "ready") {
+          if (!roleSent) {
+            roleSent = true;
+            yield chunk(base, { role: "assistant" }, null);
+          }
+          continue;
+        }
         if (event?.type === "text_delta") {
           const delta = String(event.delta ?? "");
+          if (delta && !roleSent) {
+            roleSent = true;
+            yield chunk(base, { role: "assistant" }, null);
+          }
           if (delta && prepared.nativeHelperKind) nativeHelperText += delta;
           else if (delta) yield chunk(base, { content: delta }, null);
           continue;
         }
         if (event?.type === "reasoning_delta") {
           const delta = String(event.delta ?? "");
+          if (delta && !roleSent) {
+            roleSent = true;
+            yield chunk(base, { role: "assistant" }, null);
+          }
           if (delta) yield chunk(base, { reasoning_content: delta }, null);
           continue;
         }
@@ -153,6 +167,10 @@ export function createAntigravityChatAdapter(options = {}) {
             });
           }
           if (resumedByOwner) sessions.complete(prepared.record, replayEvents);
+          if (!roleSent) {
+            roleSent = true;
+            yield chunk(base, { role: "assistant" }, null);
+          }
           yield chunk(base, {
             tool_calls: calls.map((call, index) => ({
               index,
@@ -170,9 +188,16 @@ export function createAntigravityChatAdapter(options = {}) {
         }
         if (event?.type === "done") {
           if (resumedByOwner) sessions.complete(prepared.record, replayEvents);
+          const nativeHelperOutput = prepared.nativeHelperKind
+            ? normalizeNativeCodexHelperOutput(prepared.nativeHelperKind, nativeHelperText)
+            : "";
+          if (!roleSent) {
+            roleSent = true;
+            yield chunk(base, { role: "assistant" }, null);
+          }
           if (prepared.nativeHelperKind) {
             yield chunk(base, {
-              content: normalizeNativeCodexHelperOutput(prepared.nativeHelperKind, nativeHelperText),
+              content: nativeHelperOutput,
             }, null);
           }
           terminal = true;

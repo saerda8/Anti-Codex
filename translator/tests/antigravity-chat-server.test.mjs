@@ -166,6 +166,59 @@ test("streams standard Chat chunks followed by exactly one DONE marker", async (
   }
 });
 
+test("commits streaming headers after Cascade acceptance without waiting for the first model token", async () => {
+  let releaseFirstToken;
+  const firstToken = new Promise((resolve) => { releaseFirstToken = resolve; });
+  const adapter = {
+    async models() {
+      return { object: "list", data: [] };
+    },
+    async complete() {
+      throw new Error("not used");
+    },
+    stream() {
+      return (async function* () {
+        yield {
+          id: "chatcmpl_ready",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "claude-sonnet-4-6",
+          choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }],
+        };
+        await firstToken;
+        yield {
+          id: "chatcmpl_ready",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "claude-sonnet-4-6",
+          choices: [{ index: 0, delta: { content: "done" }, finish_reason: null }],
+        };
+      }());
+    },
+  };
+  const server = await createAntigravityChatServer({ adapter });
+  const responsePromise = authorizedFetch(server, "/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body({ stream: true })),
+  });
+  try {
+    const headers = await Promise.race([
+      responsePromise.then((response) => ({ ready: true, response })),
+      new Promise((resolve) => setTimeout(() => resolve({ ready: false, response: null }), 200)),
+    ]);
+    assert.equal(headers.ready, true);
+    assert.equal(headers.response.status, 200);
+    assert.match(headers.response.headers.get("content-type"), /^text\/event-stream/);
+    releaseFirstToken();
+    assert.match(await headers.response.text(), /\"content\":\"done\"/);
+  } finally {
+    releaseFirstToken();
+    await responsePromise.catch(() => {});
+    await server.close();
+  }
+});
+
 test("returns OpenAI-shaped JSON errors before streaming headers", async () => {
   const client = {
     ...fakeClient([]),

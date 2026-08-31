@@ -166,6 +166,8 @@ export function createAntigravityCascadeClient(options = {}) {
         },
       }, { fetchImpl, signal, timeoutMs });
 
+      yield { type: "ready" };
+
       yield* observeCascade(continuation, {
         fetchImpl,
         signal,
@@ -206,6 +208,7 @@ export function createAntigravityCascadeClient(options = {}) {
       }
       continuation.pendingCalls = [];
       continuation.retained = false;
+      yield { type: "ready" };
       yield* observeCascade(continuation, {
         fetchImpl,
         signal,

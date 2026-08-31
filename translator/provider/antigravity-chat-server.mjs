@@ -211,6 +211,7 @@ function chatChunkCommitsResponse(value) {
   return choices.some((choice) => {
     const delta = choice?.delta;
     return choice?.finish_reason !== null
+      || typeof delta?.role === "string"
       || typeof delta?.content === "string"
       || typeof delta?.reasoning_content === "string"
       || Array.isArray(delta?.tool_calls);

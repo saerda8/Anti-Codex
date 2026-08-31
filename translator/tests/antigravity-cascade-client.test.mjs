@@ -290,6 +290,7 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   }));
 
   assert.deepEqual(events, [
+    { type: "ready" },
     { type: "text_delta", delta: "final text" },
     { type: "done", result: { cascadeId: "cascade_text", model: "gemini-pro-agent" } },
   ]);
@@ -478,7 +479,7 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
       function: { name: "read_file", description: "Read", parameters: { type: "object" } },
     }],
   })[Symbol.asyncIterator]();
-  const firstItem = await firstIterator.next();
+  const firstItem = await nextAfterReady(firstIterator);
   assert.equal(firstItem.done, false);
   await firstIterator.return();
   const firstEvents = [firstItem.value];
@@ -516,6 +517,7 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
     isError: false,
   }]);
   assert.deepEqual(secondEvents, [
+    { type: "ready" },
     { type: "text_delta", delta: "tool accepted" },
     { type: "done", result: { cascadeId: "cascade_tool", model: "gemini-pro-agent" } },
   ]);
@@ -564,7 +566,7 @@ test("returns the canonical Codex name for an Antigravity native tool alias", as
     systemSections: [],
     tools: [{ type: "function", function: { name: "shell_command", parameters: { type: "object" } } }],
   })[Symbol.asyncIterator]();
-  const first = await iterator.next();
+  const first = await nextAfterReady(iterator);
   await iterator.return();
 
   assert.deepEqual(first.value.calls, [{
@@ -621,7 +623,7 @@ test("pairs parallel native calls by call identity instead of arrival order", as
     ],
   })[Symbol.asyncIterator]();
 
-  const first = await iterator.next();
+  const first = await nextAfterReady(iterator);
   await iterator.return();
   assert.deepEqual(first.value.calls, [
     { callId: "bridge_a", name: "tool_a", arguments: { value: "A" } },
@@ -670,7 +672,7 @@ test("exact native IDs disambiguate identical parallel calls", async () => {
     tools: [{ type: "function", function: { name: "same_tool", parameters: { type: "object" } } }],
   })[Symbol.asyncIterator]();
 
-  const first = await iterator.next();
+  const first = await nextAfterReady(iterator);
   await iterator.return();
   assert.deepEqual(first.value.calls, [
     { callId: "bridge_a", name: "same_tool", arguments: { value: 1 } },
@@ -710,7 +712,7 @@ test("retries a transient empty-trajectory idle race without replaying the tool 
     systemSections: [],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   })[Symbol.asyncIterator]();
-  const first = await firstIterator.next();
+  const first = await nextAfterReady(firstIterator);
   await firstIterator.return();
 
   const resumed = await collect(client.resume(
@@ -722,6 +724,7 @@ test("retries a transient empty-trajectory idle race without replaying the tool 
   assert.equal(resumeIdleCalls, 2);
   assert.equal(bridge.completions.length, 1);
   assert.deepEqual(resumed, [
+    { type: "ready" },
     { type: "text_delta", delta: "continued after idle race" },
     { type: "done", result: { cascadeId: "cascade_idle_race", model: "gemini-pro-agent" } },
   ]);
@@ -764,7 +767,7 @@ test("waits through successful stale idle snapshots after a tool result without 
     systemSections: [],
     tools: [{ type: "function", function: { name: "read_file", parameters: { type: "object" } } }],
   })[Symbol.asyncIterator]();
-  const first = await firstIterator.next();
+  const first = await nextAfterReady(firstIterator);
   await firstIterator.return();
 
   const resumed = await collect(client.resume(
@@ -776,6 +779,7 @@ test("waits through successful stale idle snapshots after a tool result without 
   assert.equal(resumeIdleCalls, 5);
   assert.equal(bridge.completions.length, 1);
   assert.deepEqual(resumed, [
+    { type: "ready" },
     { type: "text_delta", delta: "continued after stale idle snapshots" },
     { type: "done", result: { cascadeId: "cascade_stale_idle", model: "gemini-pro-agent" } },
   ]);
@@ -863,6 +867,13 @@ function clientFor(fetchImpl, overrides = {}) {
     timeoutMs: 1000,
     ...overrides,
   });
+}
+
+async function nextAfterReady(iterator) {
+  const ready = await iterator.next();
+  assert.equal(ready.done, false);
+  assert.deepEqual(ready.value, { type: "ready" });
+  return iterator.next();
 }
 
 function modelPayload() {
