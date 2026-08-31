@@ -6,7 +6,7 @@
   "tag": "v1.2.56",
   "upstreamCommit": "696d3ef1714b55ec5eb14b0828ae682b55eb9252",
   "isolationPatchCommit": "efbb682979cab63f8ede9e87365d8b03d989626d",
-  "patchCommit": "a7ac6eb1e8017132a170c9047f1e832273368a98",
+  "patchCommit": "197d9e52a44106f602dc6962df14f53282d14e2c",
   "patches": [
     {
       "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -112,16 +112,21 @@
       "file": "patches/0022-fix-format-v1.2.56-upstream.patch",
       "sha256": "d0fae885a7b61fb8681f406f0fca84bf950b4d7d85d0738dc564431d584c3fe3",
       "scope": "normalize only the upstream v1.2.56 and merged compatibility formatting required by stable rustfmt; runtime behavior is unchanged"
+    },
+    {
+      "file": "patches/0023-fix-proxy-stop-retries-on-payment-errors.patch",
+      "sha256": "bab5872cf1d1d7391e35f9798105f2e53bcb62018ea7280e50e69058e5704b25",
+      "scope": "for streamed Responses requests only, translate an upstream HTTP 402 payment failure into one terminal insufficient_quota Responses event so native Codex stops reconnecting; preserve the upstream message and original 402 diagnostics while all nonstream requests and other statuses remain unchanged"
     }
   ],
   "verification": {
-    "patchReplay": "21 project patches replayed without automatic conflict resolution; head a7ac6eb1e8017132a170c9047f1e832273368a98; tree 83776151c0c0656d53f383f82d4489f21a2751b4",
+    "patchReplay": "22 project patches replayed without automatic conflict resolution; head 197d9e52a44106f602dc6962df14f53282d14e2c; tree 28dc6de370214f6ec3ee0c9a35a0f94620690fda",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:c0fb008c5f5055025b506d30531080a9d57bcc0be20dbad4acc1c00086c3ace5",
+    "launcherReleaseBuild": "sha256:24f20dc4036226ed605ada82c832856c765a6dd17345b6bebf302538642d513f",
     "runtimeIsolation": "candidate only; not activated"
   }
 }

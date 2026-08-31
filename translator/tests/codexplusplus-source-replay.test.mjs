@@ -17,18 +17,18 @@ test("v1.2.56 promotion targets the reviewed upstream tag", () => {
   assert.equal(accepted.version, "1.2.56");
   assert.equal(accepted.tag, "v1.2.56");
   assert.equal(accepted.upstreamCommit, "696d3ef1714b55ec5eb14b0828ae682b55eb9252");
-  assert.equal(accepted.patchCommit, "a7ac6eb1e8017132a170c9047f1e832273368a98");
-  assert.equal(accepted.patches.length, 21);
+  assert.equal(accepted.patchCommit, "197d9e52a44106f602dc6962df14f53282d14e2c");
+  assert.equal(accepted.patches.length, 22);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0022-fix-format-v1.2.56-upstream.patch");
+  assert.equal(accepted.patches.at(-1).file, "patches/0023-fix-proxy-stop-retries-on-payment-errors.patch");
   assert.equal(
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree 83776151c0c0656d53f383f82d4489f21a2751b4$/);
+  assert.match(accepted.verification.patchReplay, /tree 28dc6de370214f6ec3ee0c9a35a0f94620690fda$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:c0fb008c5f5055025b506d30531080a9d57bcc0be20dbad4acc1c00086c3ace5",
+    "sha256:24f20dc4036226ed605ada82c832856c765a6dd17345b6bebf302538642d513f",
   );
 });
 
@@ -178,9 +178,10 @@ test("component documentation records the accepted v1.2.56 promotion", () => {
 
   assert.match(readme, /Accepted version: `v1\.2\.56`/);
   assert.match(readme, /checkout 696d3ef1714b55ec5eb14b0828ae682b55eb9252/);
-  assert.match(readme, /carries exactly twenty-one narrow Anti-Codex compatibility patches/);
-  assert.match(readme, /All twenty-one patches replayed without automatic conflict resolution/);
+  assert.match(readme, /carries exactly twenty-two narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All twenty-two patches replayed without automatic conflict resolution/);
   assert.match(readme, /120 seconds without upstream data/);
+  assert.match(readme, /one `insufficient_quota` event instead of native reconnects/);
   assert.match(readme, /historical source-replay record/);
   assert.match(readme, /candidate-local build and Windows launchability checks passed/);
   assert.doesNotMatch(readme, /Version: `v1\.2\.44`/);

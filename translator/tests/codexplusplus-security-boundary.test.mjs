@@ -22,6 +22,8 @@ const patch18Path = join(root, "third_party", "codexplusplus", "patches", "0018-
 const patch18 = existsSync(patch18Path) ? readFileSync(patch18Path, "utf8") : "";
 const patch19Path = join(root, "third_party", "codexplusplus", "patches", "0019-bound-upstream-stream-inactivity.patch");
 const patch19 = existsSync(patch19Path) ? readFileSync(patch19Path, "utf8") : "";
+const patch23Path = join(root, "third_party", "codexplusplus", "patches", "0023-fix-proxy-stop-retries-on-payment-errors.patch");
+const patch23 = existsSync(patch23Path) ? readFileSync(patch23Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
   .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
@@ -39,10 +41,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 21);
+  assert.equal(metadata.patches.length, 22);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0022-fix-format-v1.2.56-upstream.patch",
+    "patches/0023-fix-proxy-stop-retries-on-payment-errors.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -53,6 +55,20 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   assert.match(metadata.patchCommit, /^[0-9a-f]{40}$/);
   assert.match(metadata.verification.patchReplay, new RegExp(metadata.patchCommit));
   assert.match(metadata.verification.patchReplay, /tree [0-9a-f]{40}$/);
+});
+
+test("streamed payment failures become one terminal quota event", () => {
+  assert.match(patch23, /^Subject: \[PATCH 23\/23\] fix\(proxy\): stop retries on payment errors$/m);
+  assert.match(patch23, /status_code != 402/);
+  assert.match(patch23, /value\.get\("stream"\)/);
+  assert.match(patch23, /Some\(true\)/);
+  assert.match(patch23, /insufficient_quota/);
+  assert.match(patch23, /streamed_payment_required_becomes_terminal_quota_event/);
+  assert.ok(
+    (patch23.match(/responses_terminal_failure_sse_from_upstream\(/g) ?? []).length >= 3,
+    "the helper definition and both streamed proxy branches must be present",
+  );
+  assert.doesNotMatch(patch23, /429 Too Many Requests|status_code\s*=\s*429/);
 });
 
 test("upstream stream inactivity terminates every helper streaming path without a false success", () => {
