@@ -4777,6 +4777,8 @@ function sameChatClickExpression(titleNeedle, expectedTaskId = "") {
         && rect.height > 1
         && rect.left < 420
         && rect.right <= 520
+        && rect.bottom > 0
+        && rect.top < window.innerHeight
         && style.display !== "none"
         && style.visibility !== "hidden";
     };

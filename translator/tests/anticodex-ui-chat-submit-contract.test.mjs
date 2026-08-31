@@ -465,6 +465,10 @@ test("same-chat title matching is confined to the history sidebar", () => {
     uiSmoke,
     /function sameChatClickExpression[\s\S]*?querySelectorAll\('\[data-app-action-sidebar-thread-id\]'\)[\s\S]*?data-app-action-sidebar-thread-title/,
   );
+  assert.match(
+    uiSmoke,
+    /function sameChatClickExpression[\s\S]*?rect\.bottom > 0[\s\S]*?rect\.top < window\.innerHeight/,
+  );
 });
 
 function loadSameChatActiveExpression() {
