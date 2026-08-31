@@ -196,7 +196,7 @@ test("commits streaming headers after Cascade acceptance without waiting for the
       }());
     },
   };
-  const server = await createAntigravityChatServer({ adapter });
+  const server = await createAntigravityChatServer({ adapter, streamHeartbeatMs: 10 });
   const responsePromise = authorizedFetch(server, "/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -210,8 +210,11 @@ test("commits streaming headers after Cascade acceptance without waiting for the
     assert.equal(headers.ready, true);
     assert.equal(headers.response.status, 200);
     assert.match(headers.response.headers.get("content-type"), /^text\/event-stream/);
+    await new Promise((resolve) => setTimeout(resolve, 35));
     releaseFirstToken();
-    assert.match(await headers.response.text(), /\"content\":\"done\"/);
+    const streamText = await headers.response.text();
+    assert.match(streamText, /: keep-alive/);
+    assert.match(streamText, /\"content\":\"done\"/);
   } finally {
     releaseFirstToken();
     await responsePromise.catch(() => {});

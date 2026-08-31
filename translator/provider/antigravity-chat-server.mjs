@@ -23,6 +23,7 @@ export async function createAntigravityChatServer(options = {}) {
     MAX_CHAT_BODY_BYTES,
     MAX_CHAT_BODY_BYTES,
   );
+  const streamHeartbeatMs = boundedPositiveInteger(options.streamHeartbeatMs, 15_000, 60_000);
   const authToken = String(options.authToken || randomBytes(32).toString("base64url"));
   const active = new Set();
 
@@ -87,7 +88,11 @@ export async function createAntigravityChatServer(options = {}) {
           response.write(`data: ${JSON.stringify(value)}\n\n`);
         }
         while (true) {
-          const item = await iterator.next();
+          const item = await nextStreamingItemWithHeartbeat(
+            iterator,
+            response,
+            streamHeartbeatMs,
+          );
           if (item.done) break;
           if (response.destroyed || controller.signal.aborted) return;
           response.write(`data: ${JSON.stringify(item.value)}\n\n`);
@@ -147,9 +152,24 @@ export async function createAntigravityChatServer(options = {}) {
     authToken,
     host: address.address,
     maxBodyBytes,
+    streamHeartbeatMs,
     port: address.port,
     close,
   };
+}
+
+async function nextStreamingItemWithHeartbeat(iterator, response, heartbeatMs) {
+  const timer = setInterval(() => {
+    if (!response.destroyed && !response.writableEnded) {
+      response.write(": keep-alive\n\n");
+    }
+  }, heartbeatMs);
+  timer.unref?.();
+  try {
+    return await iterator.next();
+  } finally {
+    clearInterval(timer);
+  }
 }
 
 function bearerMatches(header, expected) {
