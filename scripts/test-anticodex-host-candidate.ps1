@@ -117,6 +117,59 @@ function Test-AntiCodexCrashRecoveryPage {
     $v2ConfigPatched = 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn''t load your configuration\. Review it, then restart to try again\.`(?=\})'
     $v2DescriptionPatched = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})'
     $v2RestartPatched = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})'
+    $v3MarkerPattern = "/\*anticodex-crash-recovery-actions-v3\*/children:\[(?<restart>$identifier),(?<feedback>$identifier),(?<config>$identifier)\]"
+    if ([regex]::Matches($Text, $v3MarkerPattern).Count -gt 0) {
+        $v3TitlePatched = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\s*\})'
+        $v3ConfigPatched = 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn''t load your configuration\. Review it, then restart to try again\.`(?=\s*\})'
+        $v3DescriptionPatched = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\s*\})'
+        $v3RestartPatched = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\s*\})'
+        $v3RegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{.{0,16000}?$v3ConfigPatched.{0,6000}?$v3DescriptionPatched.{0,6000}?$v3RestartPatched.{0,7000}?hideUnavailable:!0.{0,3500}?$v3MarkerPattern.{0,3000}?\}function (?<openConfig>$identifier)\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}"
+        $v3Regions = [regex]::Matches($Text, $v3RegionPattern)
+        if ($v3Regions.Count -ne 1 -or [regex]::Matches($Text, $v3TitlePatched).Count -ne 1) {
+            throw "Anti-Codex candidate must contain exactly one patched 26.901 crash region and title."
+        }
+        $v3Region = $v3Regions[0].Value
+        $v3Props = [regex]::Escape($v3Regions[0].Groups['props'].Value)
+        $v3RestartVariable = $v3Regions[0].Groups['restart'].Value
+        $v3FeedbackVariable = $v3Regions[0].Groups['feedback'].Value
+        $v3ConfigVariable = $v3Regions[0].Groups['config'].Value
+        $v3OpenConfigName = $v3Regions[0].Groups['openConfig'].Value
+        $v3Restart = [regex]::Escape($v3RestartVariable)
+        $v3Feedback = [regex]::Escape($v3FeedbackVariable)
+        $v3Config = [regex]::Escape($v3ConfigVariable)
+        $v3OpenConfig = [regex]::Escape($v3OpenConfigName)
+        $v3RestartBindings = [regex]::Matches($v3Region, "\{fatalError:$identifier,onReset:(?<handler>$identifier)\}=$v3Props(?:[,;])")
+        if ($v3RestartBindings.Count -ne 1) {
+            throw "Anti-Codex candidate 26.901 restart control is not bound to onReset."
+        }
+        $v3RestartHandler = [regex]::Escape($v3RestartBindings[0].Groups['handler'].Value)
+        $v3RestartActions = [regex]::Matches($v3Region, "(?s)\b$v3Restart=[^;]{0,1200}?onClick:$v3RestartHandler,children:(?<label>$identifier)")
+        $v3RestartLabel = if ($v3RestartActions.Count -eq 1) { [regex]::Escape($v3RestartActions[0].Groups['label'].Value) } else { "" }
+        $v3RestartLabels = @(if ($v3RestartLabel) { [regex]::Matches($v3Region, "\b$v3RestartLabel=[^;]{0,700}?$v3RestartPatched") })
+        $v3FeedbackActions = [regex]::Matches($v3Region, "(?s)\b$v3Feedback=[^;]{0,1400}?onClick:$identifier[^;]{0,900}?id:``appServerCrash\.sendFeedback``")
+        $v3ConfigActions = [regex]::Matches($v3Region, "(?s)\b$v3Config=[^;]{0,1800}?onClick:(?<handler>$identifier)[^;]{0,1000}?id:``appServerCrash\.reviewConfiguration``")
+        if ($v3RestartActions.Count -ne 1 -or $v3RestartLabels.Count -ne 1 -or
+            $v3FeedbackActions.Count -ne 1 -or $v3ConfigActions.Count -ne 1 -or
+            $v3ConfigActions[0].Groups['handler'].Value -ne $v3OpenConfigName -or
+            [regex]::Matches($Text, "function $v3OpenConfig\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}").Count -ne 1 -or
+            [regex]::Matches($v3Region, "children:\[$v3Restart,$v3Feedback,$v3Config,$identifier\]").Count -ne 0) {
+            throw "Anti-Codex candidate 26.901 crash actions are incomplete or still render the updater."
+        }
+        $v3OriginalPatterns = @(
+            'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`',
+            'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn''t load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`',
+            'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart ChatGPT to try again\.`,description:`[^`]+`',
+            'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`'
+        )
+        if (@($v3OriginalPatterns | Where-Object { [regex]::Matches($Text, $_).Count -ne 0 }).Count -ne 0 -or
+            [regex]::Matches($Text, $v3ConfigPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v3DescriptionPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v3RestartPatched).Count -ne 1 -or
+            [regex]::Matches($Text, $v3MarkerPattern).Count -ne 1) {
+            throw "Anti-Codex candidate 26.901 crash recovery markers are incomplete or duplicated."
+        }
+        return $true
+    }
     if ([regex]::Matches($Text, 'id:`appServerCrash\.recoveryTitle`').Count -gt 0) {
         $v2AppRegionPattern = "(?s)function $identifier\((?<props>$identifier)\)\{(?:(?!function $identifier\()[\s\S]){0,9000}?$v2TitlePatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2ConfigPatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2DescriptionPatched(?:(?!function $identifier\()[\s\S]){0,9000}?$v2RestartPatched(?:(?!function $identifier\()[\s\S]){0,9000}?hideUnavailable:!0(?:(?!function $identifier\()[\s\S]){0,4000}?/\*anticodex-crash-recovery-actions-v2\*/children:\[$identifier,$identifier,$identifier\](?:(?!function $identifier\()[\s\S]){0,4000}?\}function $identifier\(\)\{return $identifier\.dispatchMessage\(``open-config-toml``,\{\}\)\}"
         $v2AppRegions = [regex]::Matches($Text, $v2AppRegionPattern)
@@ -419,8 +472,8 @@ $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
 $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
 $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
 $settingsAccountHiddenPattern = '/\*anticodex-hide-external-account\*/null'
-$settingsSecurityDisabledPattern = 'securitySettingsEnabled:0\s*\}'
-$settingsDynamicWrapperPattern = '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*\}'
+$settingsSecurityDisabledPattern = 'securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
+$settingsDynamicWrapperPattern = '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
 if ([regex]::Matches($asarText, $settingsDefinitionPattern).Count -ne 1 -or
     [regex]::Matches($asarText, $settingsAccountHiddenPattern).Count -ne 1 -or
     [regex]::Matches($asarText, $settingsSecurityDisabledPattern).Count -ne 1 -or

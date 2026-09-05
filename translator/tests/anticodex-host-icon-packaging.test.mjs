@@ -199,6 +199,78 @@ function Accept-Crash([string]$Text) {
   }
 });
 
+test("candidate and rollback settings validators accept the Codex 26.901 trailing Mini label prop", () => {
+  for (const source of [candidateValidator, rollback]) {
+    assert.ok(source.includes("securitySettingsEnabled:0\\s*(?:,showMiniPetsLabel:"));
+    assert.ok(source.includes("securitySettingsEnabled:[A-Za-z_$][\\w$]*\\s*(?:,showMiniPetsLabel:"));
+  }
+});
+
+test("candidate crash-page validation accepts only the split Codex 26.901 safe-action shape", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-candidate-crash-v3-"));
+  try {
+    const validator = extractFunction(candidateValidator, "Test-AntiCodexCrashRecoveryPage");
+    const title = 'function T(e){return q({id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag` })}';
+    const app = 'function C(e){let{fatalError:n,onReset:r}=e;let c;c=q({id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn\'t load your configuration. Review it, then restart to try again.` });c=q({id:`appServerCrash.recoveryDescription`,defaultMessage:`Something went wrong. Restart Anti-Codex to try again.` });let d;d=q({id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart Anti-Codex` });let f;f=b({onClick:r,children:d});let p;p=b({onClick:F,children:q({id:`appServerCrash.sendFeedback`})});let m;m=b({onClick:L,children:q({id:`appServerCrash.reviewConfiguration`})});let h;h=x(U,{hideUnavailable:!0});/*anticodex-crash-recovery-actions-v3*/children:[f,p,m]}function L(){return A.dispatchMessage(`open-config-toml`,{})}';
+    const valid = `${title}${app}`;
+    const harness = join(fixture, "candidate-crash-v3.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
+${validator}
+function Accept-Crash([string]$Text) {
+  try { Test-AntiCodexCrashRecoveryPage -Text $Text | Out-Null; return $true } catch { return $false }
+}
+[pscustomobject]@{
+  valid = Accept-Crash ${quotePowerShell(valid)}
+  updaterDecoy = Accept-Crash ${quotePowerShell(valid.replace("/*anticodex-crash-recovery-actions-v3*/", "children:[f,p,m,h];/*anticodex-crash-recovery-actions-v3*/"))}
+  roleSwap = Accept-Crash ${quotePowerShell(valid.replace("children:[f,p,m]", "children:[f,m,p]"))}
+  restartHandlerSwap = Accept-Crash ${quotePowerShell(valid.replace("onClick:r,children:d", "onClick:U,children:d"))}
+  configHandlerSwap = Accept-Crash ${quotePowerShell(valid.replace("onClick:L,children:q({id:`appServerCrash.reviewConfiguration`})", "onClick:U,children:q({id:`appServerCrash.reviewConfiguration`})"))}
+  missingBrand = Accept-Crash ${quotePowerShell(valid.replace("defaultMessage:`Anti-Codex hit a snag`", "defaultMessage:`ChatGPT hit a snag`"))}
+} | ConvertTo-Json -Compress
+`, "utf8");
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness,
+    ], { cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {
+      valid: true,
+      updaterDecoy: false,
+      roleSwap: false,
+      restartHandlerSwap: false,
+      configHandlerSwap: false,
+      missingBrand: false,
+    });
+
+    const rollbackValidator = extractFunction(rollback, "Test-AntiCodexCrashRecoveryV3");
+    const rollbackHarness = join(fixture, "rollback-crash-v3.ps1");
+    writeFileSync(rollbackHarness, `$ErrorActionPreference = "Stop"
+${rollbackValidator}
+[pscustomobject]@{
+  valid = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid)}
+  updaterDecoy = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid.replace("/*anticodex-crash-recovery-actions-v3*/", "children:[f,p,m,h];/*anticodex-crash-recovery-actions-v3*/"))}
+  roleSwap = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid.replace("children:[f,p,m]", "children:[f,m,p]"))}
+  restartHandlerSwap = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid.replace("onClick:r,children:d", "onClick:U,children:d"))}
+  configHandlerSwap = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid.replace("onClick:L,children:q({id:`appServerCrash.reviewConfiguration`})", "onClick:U,children:q({id:`appServerCrash.reviewConfiguration`})"))}
+  missingBrand = Test-AntiCodexCrashRecoveryV3 ${quotePowerShell(valid.replace("defaultMessage:`Anti-Codex hit a snag`", "defaultMessage:`ChatGPT hit a snag`"))}
+} | ConvertTo-Json -Compress
+`, "utf8");
+    const rollbackResult = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", rollbackHarness,
+    ], { cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true });
+    assert.equal(rollbackResult.status, 0, rollbackResult.stderr || rollbackResult.stdout);
+    assert.deepEqual(JSON.parse(rollbackResult.stdout.trim()), {
+      valid: true,
+      updaterDecoy: false,
+      roleSwap: false,
+      restartHandlerSwap: false,
+      configHandlerSwap: false,
+      missingBrand: false,
+    });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test("candidate crash-page validation accepts only the patched 26.825 safe-action shape", () => {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-candidate-crash-v2-"));
   try {
@@ -244,7 +316,7 @@ test("candidate and rollback validators require both preserved Settings messages
     const pattern = source.match(/\$settingsDefinitionPattern\s*=\s*'([^']+)'/)?.[1] ?? "";
     assert.match(pattern, /message:\(\?<messages>/);
     assert.match(pattern, /message:\\k<messages>\\\.securitySettings/);
-    assert.match(source, /securitySettingsEnabled:0\\s\*\\\}/);
+    assert.match(source, /securitySettingsEnabled:0\\s\*\(\?:,showMiniPetsLabel:/);
   }
 });
 
