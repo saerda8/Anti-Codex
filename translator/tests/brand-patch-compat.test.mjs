@@ -42,6 +42,13 @@ const latestCrashRecoveryBundle = [
   'function G(e){let {resetError:n}=e,r=M();let a;a=(0,j.jsx)(Z,{id:`codex.errorBoundary.genericError`,defaultMessage:`Oops, an error has occurred`,description:`Generic error message shown when the extension webview fails`});let q;q=(0,j.jsx)(j.Fragment,{children:(0,j.jsx)(U,{})});let s;s=()=>{n(),r(`/`)};let c;c=(0,j.jsx)(Z,{id:`codex.errorBoundary.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`});let l;return l=(0,j.jsxs)(`div`,{children:[a,(0,j.jsxs)(`div`,{children:[q,(0,j.jsx)(B,{onClick:s,children:c})]})]}),l}var R,z,J;',
 ].join("");
 
+const currentCrashRecoveryBundle = [
+  'function OEa(e){let{appUpdateLifecycleState:c}=e;switch(c){case`idle`:case`ready`:{let h;h=()=>{c===`idle`&&o!==`macOS`?A.appUpdates?.checkForUpdates():A.appUpdates?.installUpdate()};return j(Z,{id:`appUpdate.recovery.updateChatGPT`,defaultMessage:`Update ChatGPT`,onClick:h})}}}',
+  'function NEa(e){return j(`h1`,{children:j(q,{id:`appServerCrash.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`Title on the full-screen app recovery page after an unexpected error`})})}',
+  'function Cas(e){let t=c(24),{fatalError:n,onReset:r}=e,i=UE(),a=!i,o=[n.errorMessage,n.cliErrorMessage].some(Eas),s=o,c;c=(0,f5.jsx)(`p`,{children:s?(0,f5.jsx)(q,{id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn\'t load your configuration. Review it, then restart to try again.`,description:`Recovery guidance when invalid configuration prevents the app from starting`}):(0,f5.jsx)(q,{id:`appServerCrash.recoveryDescription`,defaultMessage:`Something went wrong. Restart ChatGPT to try again.`,description:`Recovery guidance after an unexpected app error`})});let d;d=(0,f5.jsx)(q,{id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`Button that restarts the app-server after an error`});let f;f=(0,f5.jsx)(zN,{onClick:r,children:d});let p;p=a?(0,f5.jsx)(zN,{onClick:Tas,children:(0,f5.jsx)(q,{id:`appServerCrash.sendFeedback`,defaultMessage:`Send feedback`})}):null;let m;m=s?(0,f5.jsx)(zN,{onClick:was,children:(0,f5.jsx)(q,{id:`appServerCrash.reviewConfiguration`,defaultMessage:`Review configuration`})}):null;let h;h=(0,f5.jsx)(f5.Fragment,{children:(0,f5.jsx)(OEa,{hideUnavailable:!0})});let g;g=(0,f5.jsxs)(f5.Fragment,{children:[f,p,m,h]});return(0,f5.jsx)(NEa,{description:c,actions:g})}',
+  'function was(){return U.dispatchMessage(`open-config-toml`,{})}',
+].join("");
+
 test("brands and narrows the crash recovery page atomically without changing bundle length", () => {
   const patched = brandPatchCompat.patchCrashRecoveryPage(crashRecoveryBundle);
 
@@ -192,6 +199,7 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
   const modelFinder = brandPatcherSource.match(/function findLocalModelAvailabilityPatch[\s\S]*?(?=function findLocalPluginCatalogPatch)/)?.[0] ?? "";
 
   assert.match(profileFinder, /webview\/assets\/app-initial-/);
+  assert.match(profileFinder, /webview\/assets\/app-primary-/);
   assert.match(modelFinder, /webview\/assets\/app-initial-/);
   assert.match(modelFinder, /const candidates = \[\]/);
   assert.match(modelFinder, /candidates\.length !== 1/);
@@ -228,6 +236,8 @@ test("hides only ChatGPT account and web security settings links across supporte
 
 const settingsExternalRenderFixture = "e.key===(ee?`personal`:`settings`)?(0,Q.jsx)(sn,{canCollapse:h,externalTooltip:he,hideLabels:S}):null;let ye;ye=!w&&m?(0,Q.jsx)(ln,{canCollapse:h,externalTooltip:he,hideLabels:S}):null;function Yt(e){let n=oe(ut);return (0,Q.jsx)(Zt,{...e,securitySettingsEnabled:n})}";
 
+const currentSettingsExternalRenderFixture = "e.key===(x?`personal`:`settings`)?(0,Z.jsx)(Dn,{canCollapse:b,externalTooltip:Oe,hideLabels:D}):null;function vn(e){let n=xe(Et),r=xe(`1532120159`);return (0,Z.jsx)(yn,{...e,securitySettingsEnabled:n,showMiniPetsLabel:r})}";
+
 test("hides external account and security controls without deleting their shared definitions", () => {
   const patched = brandPatchCompat.patchSettingsExternalNavigationRender(settingsExternalRenderFixture);
   assert.equal(patched.length, settingsExternalRenderFixture.length);
@@ -245,6 +255,15 @@ test("keeps a padded multi-character security flag idempotent", () => {
   const patched = brandPatchCompat.patchSettingsExternalNavigationRender(source);
   assert.equal(patched.length, source.length);
   assert.match(patched, /securitySettingsEnabled:0\s+\}/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patched), patched);
+});
+
+test("hides external settings controls when the security flag has a trailing Mini label prop", () => {
+  const patched = brandPatchCompat.patchSettingsExternalNavigationRender(currentSettingsExternalRenderFixture);
+
+  assert.equal(patched.length, currentSettingsExternalRenderFixture.length);
+  assert.match(patched, /anticodex-hide-external-account/);
+  assert.match(patched, /securitySettingsEnabled:0\s*,showMiniPetsLabel:r/);
   assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patched), patched);
 });
 
@@ -283,8 +302,10 @@ function appServerResolvedSpawnFixture({
   coreRoot = "r",
   coreResolver = "BP",
   pathModule = "i",
+  cwd = false,
 } = {}) {
-  return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${resolved}=${resolver}.resolve(${command},{env:this.options.env})??${command},${proc}=${spawn}(${resolved},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);let ${coreRoot}=${coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===\`win32\`&&${coreRoot}!=null&&${resolved}===(0,${pathModule}.join)(${coreRoot},\`codex.exe\`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
+  const cwdOption = cwd ? ",cwd:this.options.cwd" : "";
+  return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${resolved}=${resolver}.resolve(${command},{env:this.options.env})??${command},${proc}=${spawn}(${resolved},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env${cwdOption}});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);let ${coreRoot}=${coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===\`win32\`&&${coreRoot}!=null&&${resolved}===(0,${pathModule}.join)(${coreRoot},\`codex.exe\`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
 }
 
 test("injects managed approval and sandbox session flags into only the native app-server argv", () => {
@@ -354,6 +375,21 @@ test("brands and narrows the 26.825 crash recovery page without changing bundle 
   assert.equal(brandPatchCompat.patchCrashRecoveryPage(patched), patched);
 });
 
+test("brands and narrows the split Codex 26.901 crash recovery page", () => {
+  const patched = brandPatchCompat.patchCrashRecoveryPage(currentCrashRecoveryBundle);
+
+  assert.equal(patched.length, currentCrashRecoveryBundle.length);
+  assert.match(patched, /defaultMessage:`Anti-Codex hit a snag`/);
+  assert.match(patched, /defaultMessage:`Anti-Codex couldn't load your configuration\./);
+  assert.match(patched, /defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`/);
+  assert.match(patched, /defaultMessage:`Restart Anti-Codex`/);
+  assert.match(patched, /anticodex-crash-recovery-actions-v3/);
+  assert.match(patched, /children:\[f,p,m\]/);
+  assert.doesNotMatch(patched, /children:\[f,p,m,h\]/);
+  assert.match(patched, /dispatchMessage\(`open-config-toml`,\{\}\)/);
+  assert.equal(brandPatchCompat.patchCrashRecoveryPage(patched), patched);
+});
+
 test("injects managed session flags when command resolution is hoisted", () => {
   const source = appServerResolvedSpawnFixture();
   const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
@@ -383,6 +419,27 @@ test("injects managed session flags when command resolution is hoisted", () => {
     "-c", 'sandbox_mode="danger-full-access"',
     "app-server", "--analytics-default-enabled",
   ]);
+});
+
+test("preserves the Codex 26.901 app-server working directory while injecting managed flags", () => {
+  const source = appServerResolvedSpawnFixture({ cwd: true });
+  const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
+
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /cwd:[\w$]+\.cwd/);
+  assert.match(patched, /approval_policy="never"/);
+  assert.equal(brandPatchCompat.patchAppServerManagedSessionFlags(patched), patched);
+});
+
+const currentAppRouteFixture = "function lwo(){let e=(0,uwo.c)(15),t=hb(Q),n=rT(),r=UR(),i=Wjn(),x=nwo({auth:r,codexFeatureAccess:i,backendOnboardingCompleted:!0,isFinalStepLoading:!1,shouldShowFinalStep:!1,forcedOverride:null,isOnboardingContextFetched:!0,isOnboardingContextLoading:!1,projectlessOnboardingCompleted:!0,workspaceRootsData:null,workspaceRootsIsLoading:!1});(0,dwo.useEffect)(()=>{if(!x)return;let e=x===`app`?`app`:`onboarding`;U.dispatchMessage(`electron-set-window-mode`,{mode:e})},[x]);let w=n.pathname,T=!1;{let t=XCo({target:x,path:w,isOnboardingPath:T});if(t!=null)return(0,fwo.jsx)(oT,{to:t,replace:!0})}return(0,fwo.jsx)(sT,{})}";
+
+test("forces the Codex 26.901 app route target to the local app", () => {
+  const patched = brandPatchCompat.patchAppRouteGate(currentAppRouteFixture);
+
+  assert.equal(patched.length, currentAppRouteFixture.length);
+  assert.match(patched, /anticodex-app-route/);
+  assert.match(patched, /x=`app`/);
+  assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
 });
 
 test("fails closed when app-server spawn anchors are missing or repeated", () => {

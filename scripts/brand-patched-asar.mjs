@@ -13,6 +13,7 @@ import {
   hasWindowsTrayIconPatchCandidate,
   hasWindowsTrayIconSelection,
   patchAppServerManagedSessionFlags,
+  patchAppRouteGate,
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
   patchCrashRecoveryPage,
@@ -262,19 +263,6 @@ function patchOnboardingGate(text) {
     ",e[0]=h",
     "v=()=>{},y=[h,_]",
   );
-}
-
-function patchAppRouteGate(text) {
-  const marker = "to:`/login`,replace:!0";
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex < 0) return text;
-  if (text.lastIndexOf("if(!0){", markerIndex) > text.lastIndexOf("if(", markerIndex)) return text;
-  const gateStart = text.lastIndexOf("if(", markerIndex);
-  const gateEnd = text.indexOf("{", gateStart) + 1;
-  if (gateStart < 0 || gateEnd <= gateStart) return text;
-  const search = text.slice(gateStart, gateEnd);
-  if (!/^if\([\w$]+\|\|![\w$]+\)\{$/.test(search)) return text;
-  return replacePadded(text, search, "if(!0){");
 }
 
 function patchAppearanceSettings(text) {
@@ -626,6 +614,10 @@ function findAppRouteGatePatch(fd, header, dataOffset) {
          text.includes("function dE(){let e=Zr().pathname,t=e===cE||e===lE||e===uE;"))) {
       return [rel, patchAppRouteGate];
     }
+    try {
+      patchAppRouteGate(text);
+      return [rel, patchAppRouteGate];
+    } catch {}
   }
   throw new Error("Could not find webview app route gate");
 }
@@ -659,7 +651,8 @@ function findGeneralAppearanceSettingsPatch(fd, header, dataOffset) {
 function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if ((!rel.startsWith("webview/assets/profile-dropdown-") &&
-         !rel.startsWith("webview/assets/app-initial-")) ||
+         !rel.startsWith("webview/assets/app-initial-") &&
+         !rel.startsWith("webview/assets/app-primary-")) ||
         !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");

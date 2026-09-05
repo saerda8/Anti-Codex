@@ -21,14 +21,14 @@ const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN =
   /[\w$]+\.key===\([\w$]+\?`personal`:`settings`\)\?\(0,[\w$]+\.jsx\)\([\w$]+,\{canCollapse:[\w$]+,externalTooltip:[\w$]+,hideLabels:[\w$]+\}\):null/g;
 const SETTINGS_SECURITY_ENABLED_PATTERN =
-  /(?<prefix>\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:)(?<value>[A-Za-z_$][\w$]*)(?<suffix>\}\))/g;
+  /(?<prefix>\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:)(?<value>[A-Za-z_$][\w$]*)(?<suffix>(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\))/g;
 const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
-  /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*\}\)/g;
+  /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const APP_SERVER_NATIVE_SPAWN_PATTERN =
-  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
+  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN =
-  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[\w$]+)=(?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\(\k<resolved>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);let (?<coreRoot>[\w$]+)=(?<coreResolver>[\w$]+)\(\);this\.logger\.info\(`stdio_transport_spawned`,\{safe:\{executablePath:this\.options\.executablePath,argsCount:this\.options\.args\.length,coreRuntimeInUse:process\.platform===`win32`&&\k<coreRoot>!=null&&\k<resolved>===\(0,(?<pathModule>[\w$]+)\.join\)\(\k<coreRoot>,`codex\.exe`\),spawnCommand:this\.options\.spawnCommand\?\?this\.options\.executablePath,pid:\k<proc>\.pid\},sensitive:\{\}\}\),/g;
+  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[\w$]+)=(?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\(\k<resolved>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);let (?<coreRoot>[\w$]+)=(?<coreResolver>[\w$]+)\(\);this\.logger\.info\(`stdio_transport_spawned`,\{safe:\{executablePath:this\.options\.executablePath,argsCount:this\.options\.args\.length,coreRuntimeInUse:process\.platform===`win32`&&\k<coreRoot>!=null&&\k<resolved>===\(0,(?<pathModule>[\w$]+)\.join\)\(\k<coreRoot>,`codex\.exe`\),spawnCommand:this\.options\.spawnCommand\?\?this\.options\.executablePath,pid:\k<proc>\.pid\},sensitive:\{\}\}\),/g;
 const APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN =
   /spawnProcess\(\)\{let [\w$]+=this\.options,[\s\S]{0,600}?approval_policy="never"[\s\S]{0,200}?sandbox_mode="danger-full-access"[\s\S]{0,600}?Error`Codex CLI spawn failed`;/g;
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_$][\w$]*`;
@@ -52,10 +52,18 @@ const CRASH_RECOVERY_V2_UPDATE_SLOT_PATTERN = new RegExp(
   String.raw`let (?<slot>${IDENTIFIER_SOURCE});[\s\S]{0,360}?\k<slot>=\(0,(?<jsx>${IDENTIFIER_SOURCE})\.jsx\)\(\k<jsx>\.Fragment,\{children:\(0,\k<jsx>\.jsx\)\((?<updateFn>${IDENTIFIER_SOURCE}),\{hideUnavailable:!0\}\)\}\)`,
   "g",
 );
+const CRASH_RECOVERY_V3_REGION_PATTERN = new RegExp(
+  String.raw`function ${IDENTIFIER_SOURCE}\(${IDENTIFIER_SOURCE}\)\{[\s\S]{0,14000}?id:\`appServerCrash\.configurationRecoveryDescription\`[\s\S]{0,5000}?id:\`appServerCrash\.recoveryDescription\`[\s\S]{0,5000}?id:\`appServerCrash\.restartChatGPT\`[\s\S]{0,6000}?hideUnavailable:!0[\s\S]{0,3000}?(?:/\*anticodex-crash-recovery-actions-v3\*/)?children:\[${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2,3}\][\s\S]{0,3000}?\}function ${IDENTIFIER_SOURCE}\(\)\{return ${IDENTIFIER_SOURCE}\.dispatchMessage\(\`open-config-toml\`,\{\}\)\}`,
+  "g",
+);
+const CRASH_RECOVERY_V3_UPDATE_SLOT_PATTERN = new RegExp(
+  String.raw`let (?<slot>${IDENTIFIER_SOURCE});(?:(?!;let ${IDENTIFIER_SOURCE};)[\s\S]){0,900}?\b\k<slot>=(?:(?!;let ${IDENTIFIER_SOURCE};)[\s\S]){0,700}?\(0,${IDENTIFIER_SOURCE}\.jsx\)\((?<updateFn>${IDENTIFIER_SOURCE}),\{hideUnavailable:!0\}\)(?:(?!;let ${IDENTIFIER_SOURCE};)[\s\S]){0,300}?(?=;let ${IDENTIFIER_SOURCE};)`,
+  "g",
+);
 const CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN =
   /id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`/g;
 const CRASH_RECOVERY_V2_TITLE_PATCHED_PATTERN =
-  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\})/g;
+  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\s*\})/g;
 const CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN =
   /id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn't load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`/g;
 const CRASH_RECOVERY_V2_CONFIG_PATCHED_PATTERN =
@@ -100,6 +108,46 @@ function padReplacement(match, replacement) {
     );
   }
   return replacement + " ".repeat(match.length - replacement.length);
+}
+
+export function patchAppRouteGate(text) {
+  const source = String(text ?? "");
+  if (source.includes("/*anticodex-app-route*/")) return source;
+
+  const loginMarker = "to:`/login`,replace:!0";
+  const markerIndex = source.indexOf(loginMarker);
+  if (markerIndex >= 0) {
+    if (source.lastIndexOf("if(!0){", markerIndex) > source.lastIndexOf("if(", markerIndex)) return source;
+    const gateStart = source.lastIndexOf("if(", markerIndex);
+    const gateEnd = source.indexOf("{", gateStart) + 1;
+    const search = source.slice(gateStart, gateEnd);
+    if (gateStart >= 0 && gateEnd > gateStart && /^if\([\w$]+\|\|![\w$]+\)\{$/.test(search)) {
+      return source.slice(0, gateStart)
+        + padReplacement(search, "if(!0){")
+        + source.slice(gateEnd);
+    }
+  }
+
+  if ((source.includes("function XS(){") && source.includes("function ZS(")) ||
+      (source.includes("function dE(){") && source.includes("function fE(e){"))) {
+    return source;
+  }
+
+  const currentPattern = new RegExp(
+    String.raw`(?<target>${IDENTIFIER_SOURCE})=(?<gate>${IDENTIFIER_SOURCE})\(\{auth:${IDENTIFIER_SOURCE},codexFeatureAccess:${IDENTIFIER_SOURCE},[^{}]{0,1400}?workspaceRootsIsLoading:[^{};]{1,220}\}\)(?=;\(0,${IDENTIFIER_SOURCE}\.useEffect\)\(\(\)=>\{if\(!\k<target>\)return;)`,
+    "g",
+  );
+  const matches = allMatches(source, currentPattern);
+  if (matches.length !== 1) throw new Error("Expected exactly one supported webview app route gate");
+  const match = matches[0];
+  if (!source.includes("electron-set-window-mode") ||
+      !source.includes(`{target:${match.groups.target},path:`)) {
+    throw new Error("Expected exactly one supported webview app route gate");
+  }
+  const replacement = `/*anticodex-app-route*/${match.groups.target}=\`app\``;
+  return source.slice(0, match.index)
+    + padReplacement(match[0], replacement)
+    + source.slice(match.index + match[0].length);
 }
 
 export function patchWebviewHtmlTitle(text) {
@@ -426,6 +474,105 @@ function hasLatestCrashRecoveryPageSignature(text) {
   ].every((anchor) => source.includes(anchor));
 }
 
+function hasCurrentCrashRecoveryPageSignature(text) {
+  const source = String(text ?? "");
+  return !source.includes("id:`codex.errorBoundary.genericError`") && [
+    "id:`appServerCrash.recoveryTitle`",
+    "id:`appServerCrash.configurationRecoveryDescription`",
+    "id:`appServerCrash.recoveryDescription`",
+    "id:`appServerCrash.restartChatGPT`",
+    "dispatchMessage(`open-config-toml`,{})",
+  ].every((anchor) => source.includes(anchor));
+}
+
+function currentCrashRecoveryState(text) {
+  const source = String(text ?? "");
+  const regionMatches = allMatches(source, CRASH_RECOVERY_V3_REGION_PATTERN);
+  if (regionMatches.length !== 1) {
+    throw new Error("Expected exactly one supported Anti-Codex 26.901 crash recovery page");
+  }
+  const regionMatch = regionMatches[0];
+  const region = regionMatch[0];
+  const updateSlot = exactlyOne(region, CRASH_RECOVERY_V3_UPDATE_SLOT_PATTERN);
+  if (!updateSlot?.groups) {
+    throw new Error("Expected exactly one supported Anti-Codex 26.901 crash recovery update slot");
+  }
+  requireSupportedUpdaterComponent(source, updateSlot.groups.updateFn);
+
+  const slot = escapeRegExp(updateSlot.groups.slot);
+  const originalAction = exactlyOne(region, new RegExp(
+    String.raw`children:\[(?<actions>${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2}),${slot}\]`,
+    "g",
+  ));
+  const patchedAction = exactlyOne(region, new RegExp(
+    String.raw`/\*anticodex-crash-recovery-actions-v3\*/children:\[(?<actions>${IDENTIFIER_SOURCE}(?:,${IDENTIFIER_SOURCE}){2})\]`,
+    "g",
+  ));
+  if (!region.includes("id:`appServerCrash.reviewConfiguration`") ||
+      !region.includes("id:`appServerCrash.sendFeedback`")) {
+    throw new Error("Anti-Codex 26.901 crash recovery actions are incomplete");
+  }
+
+  const states = [
+    [source, CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_TITLE_PATCHED_PATTERN],
+    [region, CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_CONFIG_PATCHED_PATTERN],
+    [region, CRASH_RECOVERY_V2_DESCRIPTION_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_DESCRIPTION_PATCHED_PATTERN],
+    [region, CRASH_RECOVERY_V2_RESTART_ORIGINAL_PATTERN, CRASH_RECOVERY_V2_RESTART_PATCHED_PATTERN],
+  ].map(([scope, originalPattern, patchedPattern]) => ({
+    original: allMatches(scope, originalPattern).length,
+    patched: allMatches(scope, patchedPattern).length,
+  }));
+  const original = states.every((state) => state.original === 1 && state.patched === 0)
+    && Boolean(originalAction) && !patchedAction;
+  const patched = states.every((state) => state.original === 0 && state.patched === 1)
+    && !originalAction && Boolean(patchedAction);
+  if (!original && !patched) {
+    throw new Error("Detected a partially patched Anti-Codex 26.901 crash recovery page");
+  }
+  return {
+    source,
+    region,
+    regionIndex: regionMatch.index,
+    originalAction,
+    state: patched ? "patched" : "original",
+  };
+}
+
+function patchCurrentCrashRecoveryPage(text) {
+  const state = currentCrashRecoveryState(text);
+  if (state.state === "patched") return state.source;
+
+  let replacement = state.region
+    .replace(CRASH_RECOVERY_V2_CONFIG_ORIGINAL_PATTERN, (match) => match
+      .replace("defaultMessage:`ChatGPT couldn't load your configuration. Review it, then restart to try again.`", "defaultMessage:`Anti-Codex couldn't load your configuration. Review it, then restart to try again.`")
+      .replace(/,description:`[^`]+`/, ""))
+    .replace(CRASH_RECOVERY_V2_DESCRIPTION_ORIGINAL_PATTERN, (match) => match
+      .replace("Restart ChatGPT", "Restart Anti-Codex")
+      .replace(/,description:`[^`]+`/, ""))
+    .replace(CRASH_RECOVERY_V2_RESTART_ORIGINAL_PATTERN, (match) => match
+      .replace("Restart ChatGPT", "Restart Anti-Codex")
+      .replace(/,description:`[^`]+`/, ""));
+  replacement = replacement.replace(
+    state.originalAction[0],
+    `/*anticodex-crash-recovery-actions-v3*/children:[${state.originalAction.groups.actions}]`,
+  );
+  let patched = state.source.slice(0, state.regionIndex)
+    + padReplacement(state.region, replacement)
+    + state.source.slice(state.regionIndex + state.region.length);
+  const title = exactlyOne(patched, CRASH_RECOVERY_V2_TITLE_ORIGINAL_PATTERN);
+  if (!title) throw new Error("Expected exactly one supported Anti-Codex 26.901 crash recovery title");
+  const titleReplacement = title[0]
+    .replace("defaultMessage:`ChatGPT hit a snag`", "defaultMessage:`Anti-Codex hit a snag`")
+    .replace(/,description:`[^`]+`/, "");
+  patched = patched.slice(0, title.index)
+    + padReplacement(title[0], titleReplacement)
+    + patched.slice(title.index + title[0].length);
+  if (patched.length !== state.source.length || currentCrashRecoveryState(patched).state !== "patched") {
+    throw new Error("Anti-Codex 26.901 crash recovery page patch validation failed");
+  }
+  return patched;
+}
+
 function latestCrashRecoveryState(text) {
   const source = String(text ?? "");
   const regionMatches = allMatches(source, CRASH_RECOVERY_V2_REGION_PATTERN);
@@ -523,7 +670,9 @@ function patchLatestCrashRecoveryPage(text) {
 
 export function hasCrashRecoveryPagePatch(text) {
   try {
-    return (hasLatestCrashRecoveryPageSignature(text)
+    return (hasCurrentCrashRecoveryPageSignature(text)
+      ? currentCrashRecoveryState(text)
+      : hasLatestCrashRecoveryPageSignature(text)
       ? latestCrashRecoveryState(text)
       : crashRecoveryState(text)).state === "patched";
   } catch {
@@ -533,7 +682,7 @@ export function hasCrashRecoveryPagePatch(text) {
 
 export function hasCrashRecoveryPageSignature(text) {
   const source = String(text ?? "");
-  return hasLatestCrashRecoveryPageSignature(source) || [
+  return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) || [
     "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
     "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
     "id:`appServerCrash.restart`,defaultMessage:`Restart`",
@@ -552,6 +701,9 @@ export function selectCrashRecoveryBundleCandidate(candidates) {
 }
 
 export function patchCrashRecoveryPage(text) {
+  if (hasCurrentCrashRecoveryPageSignature(text)) {
+    return patchCurrentCrashRecoveryPage(text);
+  }
   if (hasLatestCrashRecoveryPageSignature(text)) {
     return patchLatestCrashRecoveryPage(text);
   }
@@ -698,9 +850,10 @@ export function patchAppServerManagedSessionFlags(text) {
     .filter((alias) => !reserved.has(alias));
   if (aliases.length < 2) throw new Error("Could not reserve app-server patch aliases");
   const [options, args] = aliases;
+  const cwdOption = match.groups.cwd ? `,cwd:${options}.cwd` : "";
   const replacement = resolvedVariant
-    ? `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`),${match.groups.resolved};if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${match.groups.resolved}=${resolver}.resolve(${command},{env:${options}.env})??${command};${proc}=${spawn}(${match.groups.resolved},${args},{stdio:\`pipe\`,env:${options}.env});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;let ${match.groups.coreRoot}=${match.groups.coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,coreRuntimeInUse:process.platform===\`win32\`&&${match.groups.coreRoot}!=null&&${match.groups.resolved}===(0,${match.groups.pathModule}.join)(${match.groups.coreRoot},\`codex.exe\`),spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`
-    : `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`);if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${proc}=${spawn}(${resolver}.resolve(${command},{env:${options}.env})??${command},${args},{stdio:\`pipe\`,env:${options}.env});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`;
+    ? `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`),${match.groups.resolved};if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${match.groups.resolved}=${resolver}.resolve(${command},{env:${options}.env})??${command};${proc}=${spawn}(${match.groups.resolved},${args},{stdio:\`pipe\`,env:${options}.env${cwdOption}});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;let ${match.groups.coreRoot}=${match.groups.coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,coreRuntimeInUse:process.platform===\`win32\`&&${match.groups.coreRoot}!=null&&${match.groups.resolved}===(0,${match.groups.pathModule}.join)(${match.groups.coreRoot},\`codex.exe\`),spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`
+    : `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`);if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${proc}=${spawn}(${resolver}.resolve(${command},{env:${options}.env})??${command},${args},{stdio:\`pipe\`,env:${options}.env${cwdOption}});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`;
   if (replacement.length > target.length) {
     throw new Error(`Managed app-server session flags patch did not fit in place: ${replacement.length} > ${target.length}`);
   }

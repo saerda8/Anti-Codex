@@ -16,6 +16,16 @@ test("profile dropdown patch supports the latest compiled onOpenSettings menu st
   assert.equal(patchCompiledProfileDropdownSettings(patched), patched);
 });
 
+test("profile dropdown patch covers both compiled menu variants in one consolidated bundle", () => {
+  const source = `${latestProfileDropdownFixture}${latestProfileDropdownFixture.replace("function dn", "function en")}`;
+  const patched = patchCompiledProfileDropdownSettings(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal((patched.match(/anticodex-manager/g) ?? []).length, 2);
+  assert.equal((patched.match(/__ANTICODEX_OPEN_MANAGER__/g) ?? []).length, 2);
+  assert.equal(patchCompiledProfileDropdownSettings(patched), patched);
+});
+
 test("profile dropdown patch cannot consume unrelated code in a consolidated bundle", () => {
   const source = "const before=`keep-before`;let w;const decoy=`keep-decoy`;" +
     latestProfileDropdownFixture +
