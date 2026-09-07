@@ -1373,11 +1373,18 @@ function Repair-LegacyRollbackHostBinaryManifest {
     if (-not $recordedBinaryHash -or [string]$originalBinaryHash -ne $recordedBinaryHash) {
         throw "Anti-Codex rollback host executable differs from its marker."
     }
-    if ([string]$originalBinaryHash -eq [string]$sourceHash) {
+    $integrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
+    $integrity = if ($integrityProperty) { $integrityProperty.Value } else { $null }
+    $integrityHelper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
+    if ($integrity -and [string]$originalBinaryHash -ne [string]$sourceHash) {
+        & node.exe $integrityHelper --verify $sourceHost $antiCodexHost ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
+        if ($LASTEXITCODE -ne 0) { throw "Rollback ASAR integrity patch is invalid." }
+        return
+    }
+    if (-not $integrity -and [string]$originalBinaryHash -eq [string]$sourceHash) {
         return
     }
 
-    $manifest.files | Add-Member -NotePropertyName antiCodexExe -NotePropertyValue $sourceHash -Force
     $originalMarkerHash = Get-AntiCodexSha256 -Path $rollbackMarker
     $binaryTemporary = "$antiCodexHost.rollback-migration.tmp"
     $binaryBackup = "$antiCodexHost.rollback-migration.bak"
@@ -1401,6 +1408,12 @@ function Repair-LegacyRollbackHostBinaryManifest {
         if ([string](Get-AntiCodexSha256 -Path $binaryTemporary) -ne [string]$sourceHash) {
             throw "Anti-Codex rollback host migration staging failed."
         }
+        if ($integrity) {
+            & node.exe $integrityHelper --patch $sourceHost $binaryTemporary ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
+            if ($LASTEXITCODE -ne 0) { throw "Rollback ASAR integrity patch restoration failed." }
+        }
+        $desiredBinaryHash = Get-AntiCodexSha256 -Path $binaryTemporary
+        $manifest.files | Add-Member -NotePropertyName antiCodexExe -NotePropertyValue $desiredBinaryHash -Force
         $json = $manifest | ConvertTo-Json -Depth 8
         [IO.File]::WriteAllText($markerTemporary, $json, [Text.UTF8Encoding]::new($false))
 
@@ -1408,8 +1421,8 @@ function Repair-LegacyRollbackHostBinaryManifest {
         [IO.File]::Replace($markerTemporary, $rollbackMarker, $markerBackup, $true)
 
         $migratedManifest = Get-Content -LiteralPath $rollbackMarker -Raw | ConvertFrom-Json
-        if ([string](Get-AntiCodexSha256 -Path $antiCodexHost) -ne [string]$sourceHash -or
-            [string]$migratedManifest.files.antiCodexExe -ne [string]$sourceHash) {
+        if ([string](Get-AntiCodexSha256 -Path $antiCodexHost) -ne [string]$desiredBinaryHash -or
+            [string]$migratedManifest.files.antiCodexExe -ne [string]$desiredBinaryHash) {
             throw "Anti-Codex rollback host migration verification failed."
         }
     } catch {

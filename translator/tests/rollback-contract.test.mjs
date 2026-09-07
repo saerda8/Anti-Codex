@@ -323,19 +323,20 @@ function Accept-Host {
   return { fixture, result };
 }
 
-function createLegacyRollbackBinaryFixture({ readOnlyMarker = false } = {}) {
+function createLegacyRollbackBinaryFixture({ readOnlyMarker = false, asar = "" } = {}) {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-binary-"));
   const rollbackHost = join(fixture, "rollback-host");
   const rollbackMarker = join(fixture, "rollback-host.ok");
   const sourceHost = join(rollbackHost, "ChatGPT.exe");
   const antiCodexHost = join(rollbackHost, "Anti-Codex.exe");
-  const sourceBytes = Buffer.from("official-codex-host-bytes");
-  const legacyBytes = Buffer.from("legacy-rcedit-host-bytes");
+  const sourceBytes = Buffer.from(asar ? `host-${"a".repeat(64)}-end` : "official-codex-host-bytes");
+  const legacyBytes = asar ? Buffer.from(asar === "patched" ? `host-${"b".repeat(64)}-end` : sourceBytes) : Buffer.from("legacy-rcedit-host-bytes");
   mkdirSync(rollbackHost, { recursive: true });
   writeFileSync(sourceHost, sourceBytes);
   writeFileSync(antiCodexHost, legacyBytes);
   const markerText = JSON.stringify({
     schema: "anticodex-host-manifest-v2",
+    ...(asar ? { asarIntegrity: { originalHeaderHash: "a".repeat(64), patchedHeaderHash: "b".repeat(64) } } : {}),
     source: {
       desktopHostName: "ChatGPT.exe",
       codexHost: sha256(sourceBytes),
@@ -346,6 +347,7 @@ function createLegacyRollbackBinaryFixture({ readOnlyMarker = false } = {}) {
     },
   }, null, 2);
   writeFileSync(rollbackMarker, markerText);
+  if (asar) writeFileSync(join(fixture, "electron-asar-integrity-host.mjs"), readFileSync(join(root, "scripts", "electron-asar-integrity-host.mjs")));
   if (readOnlyMarker) chmodSync(rollbackMarker, 0o444);
 
   const rollback = readRollbackScript();
@@ -382,6 +384,18 @@ function runLegacyRollbackBinaryMigration(options) {
   );
   return { ...fixture, result };
 }
+
+test("rollback migration preserves required ASAR patches and restores a stripped patch", () => {
+  for (const asar of ["patched", "stripped"]) {
+    const fixture = runLegacyRollbackBinaryMigration({ asar });
+    try {
+      assert.equal(fixture.result.status, 0, fixture.result.stderr);
+      const expected = Buffer.from(`host-${"b".repeat(64)}-end`);
+      assert.deepEqual(readFileSync(fixture.antiCodexHost), expected);
+      assert.equal(JSON.parse(readFileSync(fixture.rollbackMarker, "utf8")).files.antiCodexExe, sha256(expected));
+    } finally { rmSync(fixture.fixture, { recursive: true, force: true }); }
+  }
+});
 
 function createRollbackCommitFailureFixture(failStep) {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-rollback-commit-"));
@@ -787,6 +801,7 @@ function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDef
         return $false
     }
 }
+
 function Get-AsarError([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDeferred, [int]$ExpectedFocusRestore, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
     try {
         Test-AntiCodexAsarPatches -Path $Path -PatchProfile "fixed-shell-v1" -ExpectedConfigWriteBridgeCount $ExpectedConfigWrite -ExpectedPrimaryWindowDeferredRestoreRepaintCount $ExpectedDeferred -ExpectedPrimaryWindowFocusRestoreRepaintCount $ExpectedFocusRestore -ExpectedLegacyPrimaryWindowRestoreRepaintCount $ExpectedLegacyRestore -ExpectedHostPatchRevision $ExpectedHostPatchRevision
