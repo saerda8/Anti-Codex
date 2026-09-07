@@ -283,7 +283,8 @@ function Write-HostManifest {
         [Parameter(Mandatory = $true)][string]$SourceRoot,
         [Parameter(Mandatory = $true)][string]$DesktopHostName,
         [Parameter(Mandatory = $true)][int]$HostPatchRevision,
-        [Parameter(Mandatory = $true)][object[]]$UnpackedFiles
+        [Parameter(Mandatory = $true)][object[]]$UnpackedFiles,
+        [Parameter(Mandatory = $true)][object]$AsarIntegrity
     )
 
     $marker = Join-Path $TargetRoot "codex-patched-app.ok"
@@ -308,6 +309,12 @@ function Write-HostManifest {
             codexCli = Get-AntiCodexSha256 -Path (Join-Path $SourceRoot "resources\codex.exe")
         }
         criticalPatches = @($fixedShellCriticalPatches)
+        asarIntegrity = [ordered]@{
+            originalHeaderHash = [string]$AsarIntegrity.originalHash
+            patchedHeaderHash = [string]$AsarIntegrity.patchedHash
+            executablePatched = [bool]$AsarIntegrity.patched
+            executablePatchOffset = $AsarIntegrity.offset
+        }
         unpackedFiles = @($UnpackedFiles)
         files = [ordered]@{
             antiCodexExe = Get-AntiCodexSha256 -Path (Join-Path $HostRoot "Anti-Codex.exe")
@@ -542,10 +549,24 @@ $brandResult = try { (($brandOutput -join [Environment]::NewLine) | ConvertFrom-
 if ([string]$brandResult.hostPatchRevision -ne "7") {
     throw "Anti-Codex compatibility patch revision is invalid."
 }
-if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path $antiCodexHost)) {
-    throw "Anti-Codex copied host bytes changed during activation."
+$asarIntegrityHostScript = Join-Path $ROOT "scripts\electron-asar-integrity-host.mjs"
+if (-not (Test-Path -LiteralPath $asarIntegrityHostScript -PathType Leaf)) {
+    throw "Anti-Codex Electron ASAR integrity host patcher is missing."
 }
-Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -HostPatchRevision ([int]$brandResult.hostPatchRevision) -UnpackedFiles $unpackedFiles
+$asarIntegrityOutput = @(& $node $asarIntegrityHostScript --patch $sourceDesktopHostPath $antiCodexHost ([string]$brandResult.oldHeaderHash) ([string]$brandResult.newHeaderHash) 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Anti-Codex isolated launcher ASAR integrity patch failed."
+}
+$asarIntegrityResult = try { (($asarIntegrityOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex isolated launcher ASAR integrity receipt is invalid." }
+if ($asarIntegrityResult.ok -ne $true -or
+    [string]$asarIntegrityResult.originalHash -ne [string]$brandResult.oldHeaderHash -or
+    [string]$asarIntegrityResult.patchedHash -ne [string]$brandResult.newHeaderHash) {
+    throw "Anti-Codex isolated launcher ASAR integrity receipt does not match the patched archive."
+}
+if ((Get-AntiCodexSha256 -Path $sourceDesktopHostPath) -ne (Get-AntiCodexSha256 -Path (Join-Path $sourceCodex $stagedDesktopHost))) {
+    throw "Anti-Codex copied source host bytes changed during activation."
+}
+Write-HostManifest -TargetRoot $resolvedTarget -HostRoot $copiedCodex -SourceRoot $sourceCodex -DesktopHostName $stagedDesktopHost -HostPatchRevision ([int]$brandResult.hostPatchRevision) -UnpackedFiles $unpackedFiles -AsarIntegrity $asarIntegrityResult
 
 $snapshotSync = Join-Path $runtime "scripts\sync-shared-codex-plugin-host.mjs"
 if (Test-Path -LiteralPath $snapshotSync -PathType Leaf) {

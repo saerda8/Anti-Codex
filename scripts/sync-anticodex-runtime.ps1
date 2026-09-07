@@ -306,6 +306,7 @@ $requiredSourceFiles = @(
     "scripts\lib\anticodex-release-binding.mjs",
     "scripts\anticodex-update-status.psm1",
     "scripts\brand-profile-dropdown.mjs",
+    "scripts\electron-asar-integrity-host.mjs",
     "scripts\sync-anticodex.ps1",
     "scripts\sync-anticodex-launcher.ps1",
     "scripts\rollback-anticodex.ps1",

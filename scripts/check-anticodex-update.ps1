@@ -460,8 +460,26 @@ function Test-ActiveHostGuardrails {
             }
         }
         $recordedAntiCodexHost = Get-ObjectPropertyValue -InputObject $manifestFiles -Name "antiCodexExe"
-        if (-not $recordedAntiCodexHost -or [string]$recordedAntiCodexHost -ne [string]$recordedSourceHost) {
-            $failures.Add("active Anti-Codex.exe does not preserve the copied source Codex host bytes") | Out-Null
+        if (-not $recordedAntiCodexHost) {
+            $failures.Add("active Anti-Codex.exe fingerprint is missing") | Out-Null
+        } elseif ([string]$recordedAntiCodexHost -ne [string]$recordedSourceHost) {
+            $integrity = Get-ObjectPropertyValue -InputObject $Manifest -Name "asarIntegrity"
+            $desktopHostName = [string](Get-ObjectPropertyValue -InputObject $manifestSource -Name "desktopHostName")
+            $sourceHostPath = if ($desktopHostName) { Join-Path $HostRoot $desktopHostName } else { "" }
+            $helper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
+            $node = $required.nodeRuntime
+            $originalHeaderHash = [string](Get-ObjectPropertyValue -InputObject $integrity -Name "originalHeaderHash")
+            $patchedHeaderHash = [string](Get-ObjectPropertyValue -InputObject $integrity -Name "patchedHeaderHash")
+            if (-not $sourceHostPath -or -not (Test-Path -LiteralPath $sourceHostPath -PathType Leaf) -or
+                -not (Test-Path -LiteralPath $helper -PathType Leaf) -or
+                -not (Test-Path -LiteralPath $node -PathType Leaf)) {
+                $failures.Add("active Anti-Codex.exe ASAR integrity provenance is incomplete") | Out-Null
+            } else {
+                & $node $helper --verify $sourceHostPath $required.antiCodexExe $originalHeaderHash $patchedHeaderHash *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    $failures.Add("active Anti-Codex.exe differs outside the isolated ASAR integrity hash") | Out-Null
+                }
+            }
         }
     }
 

@@ -755,6 +755,7 @@ function Test-AntiCodexHost {
         codexHost = (Join-Path $hostRootFull $detectedDesktopHost)
         appAsar = (Join-Path $hostRootFull "resources\app.asar")
         codexCli = (Join-Path $hostRootFull "resources\codex.exe")
+        nodeRuntime = (Join-Path $hostRootFull "resources\cua_node\bin\node.exe")
         hostIcon = (Join-Path $hostRootFull "resources\icon.ico")
         trayIcon = (Join-Path $hostRootFull "resources\codex-tray.ico")
         appRootIcon = (Join-Path $hostRootFull "icon.ico")
@@ -902,7 +903,7 @@ function Test-AntiCodexHost {
             -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
             -ExpectedHostPatchRevision $hostPatchRevision
     }
-    foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "hostIcon", "trayIcon", "appRootIcon")) {
+    foreach ($name in @("antiCodexExe", "appAsar", "codexCli", "nodeRuntime", "hostIcon", "trayIcon", "appRootIcon")) {
         $actual = Get-AntiCodexSha256 -Path $required[$name]
         if ([string]$manifest.files.$name -ne [string]$actual) { throw "Anti-Codex host marker hash mismatch: $name" }
     }
@@ -916,7 +917,16 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host source fingerprint mismatch: codexCli"
     }
     if ([string](Get-AntiCodexSha256 -Path $required.antiCodexExe) -ne [string](Get-AntiCodexSha256 -Path $required.codexHost)) {
-        throw "Anti-Codex host must preserve the copied source Codex host bytes."
+        $integrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
+        $integrity = if ($integrityProperty) { $integrityProperty.Value } else { $null }
+        $helper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
+        if (-not $integrity -or -not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+            throw "Anti-Codex host ASAR integrity provenance is incomplete."
+        }
+        & $required.nodeRuntime $helper --verify $required.codexHost $required.antiCodexExe ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Anti-Codex host differs outside the isolated ASAR integrity hash."
+        }
     }
     foreach ($iconPath in @($required.hostIcon, $required.trayIcon, $required.appRootIcon)) {
         if ((Test-AntiCodexIconPalette -Path $iconPath) -ne $true) {

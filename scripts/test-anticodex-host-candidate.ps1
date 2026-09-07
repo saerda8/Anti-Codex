@@ -462,6 +462,7 @@ if ($actualFiles.Count -ne $recordedFiles.Count) {
 $antiCodex = Join-Path $candidateAppRoot "Anti-Codex.exe"
 $asarPath = Join-Path $candidateAppRoot "resources\app.asar"
 $codex = Join-Path $candidateAppRoot "resources\codex.exe"
+$nodeRuntime = Join-Path $candidateAppRoot "resources\cua_node\bin\node.exe"
 $copiedSourceHost = Join-Path $candidateAppRoot $detectedDesktopHost
 $hostIcon = Join-Path $candidateAppRoot "resources\icon.ico"
 $trayIcon = Join-Path $candidateAppRoot "resources\codex-tray.ico"
@@ -566,8 +567,24 @@ if ([string]$manifest.source.codexHost -ne [string](Get-AntiCodexSha256 -Path $c
 if ([string]$manifest.source.codexCli -ne [string]$expectedHashes.codexCli) {
     throw "Anti-Codex candidate source CLI fingerprint does not match the copied Codex CLI."
 }
-if ([string]$expectedHashes.antiCodexExe -ne [string]$manifest.source.codexHost) {
-    throw "Anti-Codex candidate must preserve the copied source Codex host bytes."
+$asarIntegrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
+$asarIntegrity = if ($asarIntegrityProperty) { $asarIntegrityProperty.Value } else { $null }
+if (-not $asarIntegrity -or
+    [string]$asarIntegrity.originalHeaderHash -notmatch '^[a-fA-F0-9]{64}$' -or
+    [string]$asarIntegrity.patchedHeaderHash -notmatch '^[a-fA-F0-9]{64}$') {
+    throw "Anti-Codex candidate marker is missing Electron ASAR integrity provenance."
+}
+$asarIntegrityHostScript = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
+if (-not (Test-Path -LiteralPath $asarIntegrityHostScript -PathType Leaf)) {
+    throw "Anti-Codex candidate Electron ASAR integrity verifier is missing."
+}
+$asarIntegrityOutput = @(& $nodeRuntime $asarIntegrityHostScript --verify $copiedSourceHost $antiCodex ([string]$asarIntegrity.originalHeaderHash) ([string]$asarIntegrity.patchedHeaderHash) 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Anti-Codex candidate isolated launcher ASAR integrity patch is invalid."
+}
+$asarIntegrityResult = try { (($asarIntegrityOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex candidate ASAR integrity verification receipt is invalid." }
+if ($asarIntegrityResult.ok -ne $true -or [bool]$asarIntegrityResult.patched -ne [bool]$asarIntegrity.executablePatched) {
+    throw "Anti-Codex candidate ASAR integrity verification does not match its marker."
 }
 
 $asar = Get-Item -LiteralPath $asarPath
@@ -576,7 +593,6 @@ if ($asar.Length -lt 1MB) {
 }
 
 $asarIntegrityScript = Join-Path $PSScriptRoot "verify-anticodex-asar-integrity.mjs"
-$nodeRuntime = Join-Path $candidateAppRoot "resources\cua_node\bin\node.exe"
 & $nodeRuntime $asarIntegrityScript $asarPath
 if ($LASTEXITCODE -ne 0) {
     throw "Anti-Codex candidate ASAR integrity validation failed."

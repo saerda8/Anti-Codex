@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -16,6 +16,7 @@ const rollback = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1")
 const syncReadiness = readFileSync(resolve(root, "scripts", "test-anticodex-sync-readiness.ps1"), "utf8");
 const hostSync = readFileSync(resolve(root, "scripts", "sync-anticodex.ps1"), "utf8");
 const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
+const asarIntegrityHostHelper = resolve(root, "scripts", "electron-asar-integrity-host.mjs");
 
 function extractFunction(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -33,14 +34,20 @@ function quotePowerShell(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-test("host packaging preserves official host bytes and uses external Anti-Codex icons", () => {
+test("host packaging preserves the copied source host and patches only the isolated launcher ASAR hash", () => {
   assert.doesNotMatch(installer, /rcedit|Update-ExeVersionInfo/);
-  assert.match(installer, /Get-AntiCodexSha256\s+-Path\s+\$sourceDesktopHostPath[\s\S]*?Get-AntiCodexSha256\s+-Path\s+\$antiCodexHost/);
+  assert.match(installer, /electron-asar-integrity-host\.mjs/);
+  assert.match(installer, /--patch\s+\$sourceDesktopHostPath\s+\$antiCodexHost/);
+  assert.match(candidateValidator, /--verify\s+\$copiedSourceHost\s+\$antiCodex/);
+  assert.match(rollback, /--verify\s+\$required\.codexHost\s+\$required\.antiCodexExe/);
+  assert.match(updateChecker, /--verify\s+\$sourceHostPath\s+\$required\.antiCodexExe/);
+  assert.doesNotMatch(installer, /copied host bytes changed during activation/);
   assert.doesNotMatch(brandPatcher, /exePath|fs\.writeFileSync\([^,]*exe/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$resourceIcon\s+-Force/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$trayIcon\s+-Force/);
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$appRootIcon\s+-Force/);
   assert.doesNotMatch(installer, /patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT|&\s+\$PATCH_EXE_ICON_SCRIPT/);
+  assert.match(runtimeSync, /scripts\\electron-asar-integrity-host\.mjs/);
 });
 
 test("host gates require the local node_repl runtime and sandbox helper", () => {
@@ -194,6 +201,43 @@ function Accept-Crash([string]$Text) {
       genericDecoy: false,
       missingFallback: false,
     });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test("isolated launcher replaces only the embedded Electron ASAR header hash", () => {
+  assert.equal(existsSync(asarIntegrityHostHelper), true);
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-asar-host-hash-"));
+  try {
+    const originalHash = "a".repeat(64);
+    const patchedHash = "b".repeat(64);
+    const sourcePath = join(fixture, "ChatGPT.exe");
+    const targetPath = join(fixture, "Anti-Codex.exe");
+    const source = Buffer.from(`prefix-${originalHash}-suffix`, "ascii");
+    writeFileSync(sourcePath, source);
+    writeFileSync(targetPath, source);
+
+    const patched = spawnSync(process.execPath, [
+      asarIntegrityHostHelper, "--patch", sourcePath, targetPath, originalHash, patchedHash,
+    ], { cwd: root, encoding: "utf8", windowsHide: true });
+    assert.equal(patched.status, 0, patched.stderr || patched.stdout);
+    const target = readFileSync(targetPath);
+    assert.equal(target.length, source.length);
+    assert.equal(target.toString("ascii"), `prefix-${patchedHash}-suffix`);
+    assert.deepEqual(readFileSync(sourcePath), source);
+
+    const verified = spawnSync(process.execPath, [
+      asarIntegrityHostHelper, "--verify", sourcePath, targetPath, originalHash, patchedHash,
+    ], { cwd: root, encoding: "utf8", windowsHide: true });
+    assert.equal(verified.status, 0, verified.stderr || verified.stdout);
+
+    target[0] ^= 1;
+    writeFileSync(targetPath, target);
+    const rejected = spawnSync(process.execPath, [
+      asarIntegrityHostHelper, "--verify", sourcePath, targetPath, originalHash, patchedHash,
+    ], { cwd: root, encoding: "utf8", windowsHide: true });
+    assert.notEqual(rejected.status, 0);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
