@@ -4,6 +4,16 @@ import test from "node:test";
 
 const scriptUrl = new URL("../../scripts/test-anticodex-installed-overall.ps1", import.meta.url);
 
+test("installed overall verifies isolated ASAR host provenance instead of rejecting the permitted hash patch", async () => {
+  const source = await readFile(scriptUrl, "utf8");
+  const branding = source.slice(source.indexOf("$branding = $null"), source.indexOf("$rollbackOk ="));
+  assert.match(branding, /electron-asar-integrity-host\.mjs/);
+  assert.match(branding, /--verify/);
+  assert.match(branding, /\$LASTEXITCODE -eq 0/);
+  assert.match(branding, /\$sourceHash -eq \[string\]\$hostManifest\.source\.codexHost/);
+  assert.match(branding, /\$activeHash -eq \[string\]\$hostManifest\.files\.antiCodexExe/);
+});
+
 test("installed overall report never equates route readiness with model quota", async () => {
   const source = await readFile(scriptUrl, "utf8");
 
