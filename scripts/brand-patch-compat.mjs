@@ -1,11 +1,5 @@
 import { createHash } from "node:crypto";
 
-export function patchOwlAppIdentity(text) {
-  const pattern = /^UserDataDirectoryName=(?:Codex|Anti-Codex)(?=\r?$)/gm;
-  if ([...text.matchAll(pattern)].length !== 1) throw new Error("Expected one Owl application identity");
-  return text.replace(pattern, "UserDataDirectoryName=Anti-Codex");
-}
-
 const ANTI_CODEX_TITLE = "`Anti-Codex`";
 const ANTI_CODEX_TRAY_ICON = "`codex-tray.ico`";
 const OFFICIAL_CODEX_TRAY_GUID = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";

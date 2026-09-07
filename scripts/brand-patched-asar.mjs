@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildAsarIntegrity,
-  patchOwlAppIdentity,
   hasAppServerManagedSessionFlags,
   hasCrashRecoveryPageSignature,
   hasPatchedAuthRequirement,
@@ -949,10 +948,6 @@ fs.closeSync(fd);
 const newHeaderHash = crypto.createHash("sha256").update(nextHeaderBuf).digest("hex");
 
 const criticalSkipped = skipped.filter((item) => activeCriticalPatchNames.has(item.name));
-const owlAppIni = path.join(path.dirname(asarPath), "owl-app.ini");
-if (criticalSkipped.length === 0 && fs.existsSync(owlAppIni)) {
-  fs.writeFileSync(owlAppIni, patchOwlAppIdentity(fs.readFileSync(owlAppIni, "utf8")), "utf8");
-}
 console.log(JSON.stringify({
   asarPath,
   patchProfile,
