@@ -219,13 +219,16 @@ function runRollbackHostPatchMatrix() {
     mkdirSync(unpackedRoot, { recursive: true });
     const hostBytes = Buffer.from(`official-host-${name}`);
     const cliBytes = Buffer.from(`codex-cli-${name}`);
+    const nodeRuntimeBytes = Buffer.from(`node-runtime-${name}`);
     const asarBytes = Buffer.from(hasConfigWrite ? "with-config-bridge" : "without-bridge");
     const iconBytes = Buffer.from(`icon-${name}`);
     const unpackedBytes = Buffer.from(`runtime-${name}`);
+    mkdirSync(join(hostRoot, "resources", "cua_node", "bin"), { recursive: true });
     writeFileSync(join(hostRoot, "Anti-Codex.exe"), hostBytes);
     writeFileSync(join(hostRoot, "ChatGPT.exe"), hostBytes);
     writeFileSync(join(hostRoot, "resources", "app.asar"), asarBytes);
     writeFileSync(join(hostRoot, "resources", "codex.exe"), cliBytes);
+    writeFileSync(join(hostRoot, "resources", "cua_node", "bin", "node.exe"), nodeRuntimeBytes);
     writeFileSync(join(hostRoot, "resources", "icon.ico"), iconBytes);
     writeFileSync(join(hostRoot, "resources", "codex-tray.ico"), iconBytes);
     writeFileSync(join(hostRoot, "icon.ico"), iconBytes);
@@ -248,6 +251,7 @@ function runRollbackHostPatchMatrix() {
         antiCodexExe: sha256(hostBytes),
         appAsar: sha256(asarBytes),
         codexCli: sha256(cliBytes),
+        nodeRuntime: sha256(nodeRuntimeBytes),
         hostIcon: sha256(iconBytes),
         trayIcon: sha256(iconBytes),
         appRootIcon: sha256(iconBytes),
@@ -631,7 +635,9 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /manifest\.source\.codexHost/);
   assert.match(validator, /manifest\.source\.codexCli/);
   assert.match(validator, /Test-AntiCodexIconPalette/);
-  assert.match(validator, /preserve the copied source Codex host bytes/);
+  assert.match(validator, /asarIntegrity/);
+  assert.match(validator, /electron-asar-integrity-host\.mjs/);
+  assert.match(validator, /isolated ASAR integrity hash/);
   assert.match(validator, /required\.antiCodexExe/);
   assert.match(validator, /required\.codexHost/);
   assert.match(validator, /Anti-Codex\.exe/);
@@ -791,6 +797,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const quote = (value) => `'${value.replaceAll("'", "''")}'`;
     const harness = join(fixture, "matrix.ps1");
     writeFileSync(harness, `$ErrorActionPreference = "Stop"
+${extractFunction(rollback, "Test-AntiCodexCrashRecoveryV3")}
 ${asarValidator}
 ${patchSetValidator}
 function Accept-Asar([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedDeferred, [int]$ExpectedFocusRestore, [int]$ExpectedLegacyRestore, [int]$ExpectedHostPatchRevision = 0) {
