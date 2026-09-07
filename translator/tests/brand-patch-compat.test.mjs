@@ -10,6 +10,15 @@ const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asa
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+test("isolates Owl native application identity without changing version or other settings", () => {
+  const source = "[Owl]\r\nUserDataDirectoryName=Codex\r\nAppVersion=26.901.51231\r\n";
+  const expected = source.replace("UserDataDirectoryName=Codex", "UserDataDirectoryName=Anti-Codex");
+  assert.equal(typeof brandPatchCompat.patchOwlAppIdentity, "function");
+  assert.equal(brandPatchCompat.patchOwlAppIdentity(source), expected);
+  assert.equal(brandPatchCompat.patchOwlAppIdentity(expected), expected);
+  assert.throws(() => brandPatchCompat.patchOwlAppIdentity("[Owl]\nAppVersion=1\n"));
+});
+
 test("brands Codex and ChatGPT webview titles without changing HTML size", () => {
   for (const title of ["Codex", "ChatGPT"]) {
     const source = `<!doctype html>\n  <head>\n    <title>${title}</title>\n  </head>\n`;
