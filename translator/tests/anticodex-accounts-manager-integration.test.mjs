@@ -15,7 +15,7 @@ import { createAntiCodexManagerService } from "../../scripts/anticodex-manager-s
     assert.deepEqual(Array.from(ordered, (bucket) => bucket.window), ["5h", "weekly", "7d", "daily"]);
     assert.deepEqual(group.buckets.map((bucket) => bucket.window), ["7d", "5h", "weekly", "daily"]);
   assert.equal(ordered[1].remaining_fraction, 0.9);
-  assert.ok(/\.anticodex-quota-track\{[^}]*max-width:[1-5]\dpx/.test(ui), "Quota tracks must stay compact, including narrow layouts");
+  assert.ok(/\.anticodex-quota-track\{[^}]*max-width:[1-4]\dpx/.test(ui), "Quota tracks must stay compact, including narrow layouts");
 });
 
 test("account manager endpoints protect account data and serialize background changes", async (t) => {
