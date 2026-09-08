@@ -29,9 +29,15 @@ $existing = Get-AntigravityMainProcess -ExecutablePath $desktopPath
 if ($existing) {
     $focused = $false
     $desktopProcess = Get-Process -Id ([int]$existing.ProcessId) -ErrorAction SilentlyContinue
-    if ($desktopProcess -and $desktopProcess.MainWindowHandle -ne [IntPtr]::Zero) {
-        [AntiCodex.Native.WindowActivation]::ShowWindowAsync($desktopProcess.MainWindowHandle, 9) | Out-Null
-        $focused = [AntiCodex.Native.WindowActivation]::SetForegroundWindow($desktopProcess.MainWindowHandle)
+    for ($attempt = 0; $attempt -lt 12; $attempt += 1) {
+        if (-not $desktopProcess -or $desktopProcess.HasExited) { break }
+        $desktopProcess.Refresh()
+        if ($desktopProcess.MainWindowHandle -ne [IntPtr]::Zero) {
+            [AntiCodex.Native.WindowActivation]::ShowWindowAsync($desktopProcess.MainWindowHandle, 9) | Out-Null
+            $focused = [AntiCodex.Native.WindowActivation]::SetForegroundWindow($desktopProcess.MainWindowHandle)
+            break
+        }
+        Start-Sleep -Milliseconds 150
     }
     [pscustomobject]@{
         ok = $true

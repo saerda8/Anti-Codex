@@ -484,6 +484,27 @@ test("activation saves the latest previous credential and commits the target ide
   assertNoSecrets(result);
 });
 
+test("activation retries identity verification when desktop briefly reports stale account", async (t) => {
+  const stateRoot = await fixture(t);
+  const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota("Previous"), label: "Previous" };
+  const target = { capture: account("target@example.com", "target"), quota: rawQuota("Target"), label: "Target" };
+  await seedState(stateRoot, [previous, target], previous.capture.id);
+  const driver = makeDriver([previous, target], previous.capture.id);
+  const manager = createAntigravityAccountManager({ stateRoot, driver });
+  let identityChecks = 0;
+  driver.desktopIdentity = async () => {
+    identityChecks += 1;
+    if (identityChecks === 1) return previous.capture.id;
+    if (identityChecks === 2) return previous.capture.id;
+    return driver.currentId;
+  };
+
+  await manager.activate({ id: target.capture.id, acknowledgeRestart: true });
+
+  assert.ok(identityChecks >= 3);
+  assert.equal(driver.calls.find((call) => call === `restore:${target.capture.id}`) ? true : false, true);
+});
+
 test("activation restores the previous credential and active id on identity mismatch", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota("Previous"), label: "Previous" };

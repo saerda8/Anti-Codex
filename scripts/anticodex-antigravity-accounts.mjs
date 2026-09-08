@@ -146,6 +146,10 @@ function reportProgress(onProgress, message) {
   try { onProgress(message); } catch {}
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function captureWithQuotaFallback(driver) {
   try {
     return { captured: validateCapture(await driver.capture()), quota: null };
@@ -158,7 +162,17 @@ async function captureWithQuotaFallback(driver) {
 async function openAndVerifyIdentity(driver, expectedId) {
   try {
     await driver.openDesktop();
-    if (await driver.desktopIdentity() !== expectedId) throw new Error("identity mismatch");
+    let lastIdentityError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        if (await driver.desktopIdentity() === expectedId) return;
+        lastIdentityError = new Error("identity mismatch");
+      } catch (error) {
+        lastIdentityError = error;
+      }
+      if (attempt < 2) await sleep(300);
+    }
+    throw lastIdentityError || new Error("identity mismatch");
   } catch {
     const error = new Error("Antigravity Desktop identity could not be confirmed after opening.");
     error.credentialRestoreUnsafe = true;
