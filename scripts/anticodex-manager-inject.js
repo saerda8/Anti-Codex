@@ -1850,30 +1850,30 @@
     const tabs = el("div", { role: "tablist", "aria-label": "管理页面", style: "display:flex;gap:6px;flex-wrap:wrap" }, [statusTabButton, accountSettingsButton, promptSettingsButton]);
     const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [tabs, close])]);
     style.textContent += `
-      [data-anticodex-manager-view=accounts] .anticodex-panel{width:min(1500px,98vw);height:min(1040px,97vh);display:flex;flex-direction:column;overflow:hidden;padding:0 10px 7px}
+      [data-anticodex-manager-view=accounts] .anticodex-panel{width:min(1500px,98vw);height:min(1040px,97vh);display:flex;flex-direction:column;overflow:hidden;padding:0 8px 6px}
       [data-anticodex-manager-view=accounts] .anticodex-head{padding:14px 0 12px;margin:0;flex-shrink:0}
       [data-anticodex-manager-view=accounts] .anticodex-grid{display:block;overflow:auto;min-height:0;flex:1}
       [data-anticodex-manager-view=accounts] .anticodex-result-card{display:none}
       .anticodex-account-list{grid-column:1/-1;display:grid;gap:0}
       .anticodex-account-list h2{font-size:13px;margin:0 0 5px}
-      .anticodex-account-toolbar{display:flex;gap:2px;flex-wrap:wrap;align-items:center;margin-bottom:2px}
-      .anticodex-account-toolbar button{min-height:24px;padding:2px 5px;font-size:10px}
-      .anticodex-account-row{display:grid;grid-template-columns:minmax(92px,.66fr) minmax(112px,1fr) minmax(112px,1fr) 112px;gap:6px;padding:5px 3px;border-top:1px solid var(--ac-line);align-items:start}
+      .anticodex-account-toolbar{display:flex;gap:1px;flex-wrap:wrap;align-items:center;margin-bottom:1px}
+      .anticodex-account-toolbar button{min-height:23px;padding:2px 4px;font-size:9.8px}
+      .anticodex-account-row{display:grid;grid-template-columns:minmax(90px,.64fr) minmax(108px,1fr) minmax(108px,1fr) 108px;gap:5px;padding:4px 3px;border-top:1px solid var(--ac-line);align-items:start}
       .anticodex-account-row[data-active=true]{background:color-mix(in srgb,#71c59a 7%,transparent)}
       .anticodex-account-row[data-pending=true]{background:var(--ac-raised)}
       .anticodex-account-identity{overflow-wrap:anywhere;font-size:11px}.anticodex-account-identity strong{display:block;margin-bottom:2px}
-      .anticodex-account-meta{font-size:9px;color:var(--ac-muted);line-height:1.22;overflow-wrap:anywhere}
-      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 4px;border-radius:4px;margin:2px 0 0;font-size:9.5px}
-      .anticodex-account-group{display:grid;gap:3px;align-content:start}.anticodex-account-group h3{font-size:11.5px;margin:0}
+      .anticodex-account-meta{font-size:8.8px;color:var(--ac-muted);line-height:1.18;overflow-wrap:anywhere}
+      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 4px;border-radius:4px;margin:2px 0 0;font-size:9px}
+      .anticodex-account-group{display:grid;gap:2px;align-content:start}.anticodex-account-group h3{font-size:11px;margin:0}
       .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:120px}
       .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,72px) auto;column-gap:10px;align-items:center}
       .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1}
       .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
       .anticodex-quota-track{height:4px;width:100%;max-width:72px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
-      .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:2px;align-content:start}.anticodex-account-controls button{min-height:23px;padding:1px 4px;font-size:9.5px}
-      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:4px 4px;font-size:10.5px;min-height:24px;line-height:1.24;border-bottom:1px solid var(--ac-line)}
-      .anticodex-account-inline-status{grid-column:1/-1;font-size:10px;line-height:1.3;color:var(--ac-muted)}
+      .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:2px;align-content:start}.anticodex-account-controls button{min-height:22px;padding:1px 4px;font-size:9px}
+      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:4px 4px;font-size:10px;min-height:23px;line-height:1.2;border-bottom:1px solid var(--ac-line)}
+      .anticodex-account-inline-status{grid-column:1/-1;font-size:9.5px;line-height:1.24;color:var(--ac-muted)}
       .anticodex-account-feedback[aria-busy=true]::before{content:'◌';display:inline-block;margin-right:6px;animation:anticodex-account-spin 1s linear infinite}
       @keyframes anticodex-account-spin{to{transform:rotate(360deg)}}
       @media(prefers-reduced-motion:reduce){.anticodex-account-feedback[aria-busy=true]::before{animation:none}}
