@@ -1865,11 +1865,11 @@
       .anticodex-account-meta{font-size:11px;color:var(--ac-muted);line-height:1.4;overflow-wrap:anywhere}
       .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 5px;border-radius:4px;margin:3px 0;font-size:11px}
       .anticodex-account-group{display:grid;gap:5px;align-content:start}.anticodex-account-group h3{font-size:12px;margin:0}
-      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:180px}
-      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,180px) auto;column-gap:10px;align-items:center}
+      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:140px}
+      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,140px) auto;column-gap:10px;align-items:center}
       .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1}
       .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
-      .anticodex-quota-track{height:4px;width:100%;max-width:180px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
+      .anticodex-quota-track{height:4px;width:100%;max-width:140px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
       .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}.anticodex-account-controls button{min-height:28px;padding:3px 5px;font-size:12px}
       .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:7px 4px;font-size:12px;min-height:30px;line-height:1.4;border-bottom:1px solid var(--ac-line)}

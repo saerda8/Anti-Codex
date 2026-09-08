@@ -15,7 +15,7 @@ test("account quota puts five hours before seven days without changing source da
   assert.deepEqual(Array.from(ordered, (bucket) => bucket.window), ["5h", "weekly", "daily"]);
   assert.deepEqual(group.buckets.map((bucket) => bucket.window), ["weekly", "5h", "daily"]);
   assert.equal(ordered[1].remaining_fraction, 0);
-  assert.ok(/\.anticodex-quota-track\{[^}]*max-width:180px/.test(ui), "Quota tracks must stay compact, including narrow layouts");
+  assert.ok(/\.anticodex-quota-track\{[^}]*max-width:140px/.test(ui), "Quota tracks must stay compact, including narrow layouts");
 });
 
 test("account manager endpoints protect account data and serialize background changes", async (t) => {
