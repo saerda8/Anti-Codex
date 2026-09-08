@@ -1878,7 +1878,7 @@
       @keyframes anticodex-account-spin{to{transform:rotate(360deg)}}
       @media(prefers-reduced-motion:reduce){.anticodex-account-feedback[aria-busy=true]::before{animation:none}}
       .anticodex-head [role=tab][aria-selected=true]{border-color:#71c59a;color:#71c59a}
-      @media(max-width:1000px){.anticodex-account-row{gap:9px;grid-template-columns:minmax(110px,.8fr) minmax(140px,1fr) minmax(140px,1fr) 150px}}
+      @media(max-width:1000px){.anticodex-account-row{gap:6px;grid-template-columns:minmax(88px,.65fr) minmax(112px,1fr) minmax(112px,1fr) 108px;padding:5px 3px}}
       @media(max-width:1000px){.anticodex-quota-bucket{display:block}}
       @media(max-width:680px){.anticodex-account-row{grid-template-columns:1fr 1fr}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}.anticodex-account-controls{display:flex;flex-wrap:wrap}}
     `;
