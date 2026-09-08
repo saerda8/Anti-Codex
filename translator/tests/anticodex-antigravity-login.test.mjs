@@ -21,7 +21,7 @@ test("login connection discovery uses the current process instead of old address
   assert.equal(connection.csrfToken, "synthetic-current");
 });
 
-test("official account login uses the native callback and stops its login process before returning", async () => {
+test("successful official login keeps Desktop open until the caller finishes", async () => {
   assert.ok(fs.existsSync(moduleUrl), "Official Antigravity login adapter is missing");
   const { createAntigravityOfficialLogin } = await import(moduleUrl);
   const events = [];
@@ -40,6 +40,8 @@ test("official account login uses the native callback and stops its login proces
   await assert.rejects(login.login({}), /确认/);
   assert.deepEqual(events, []);
   await login.login({ acknowledgeRestart: true });
+  assert.deepEqual(events, ["launch", "login"]);
+  await login.cancelLogin();
   assert.deepEqual(events, ["launch", "login", "stop"]);
 });
 
@@ -79,7 +81,7 @@ test("login cleanup failure marks credential restoration unsafe", async () => {
     launchDesktop: async () => {},
     stopDesktop: async () => { throw new Error("synthetic-stop-failure"); },
     findConnection: () => ({ lsAddress: "127.0.0.1:49152", csrfToken: "synthetic-csrf" }),
-    fetchImpl: async () => ({ ok: true, json: async () => ({ authResult: { hasValidAuth: true } }) }),
+    fetchImpl: async () => ({ ok: false, json: async () => ({}) }),
   });
   await assert.rejects(login.login({ acknowledgeRestart: true }), (error) => {
     assert.equal(error.credentialRestoreUnsafe, true);

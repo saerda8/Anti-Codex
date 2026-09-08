@@ -2064,8 +2064,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v116"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v116"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v117"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v117"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
@@ -2158,11 +2158,13 @@ test("Manager form controls receive their live value when created", () => {
   assert.equal(textarea.value, "saved prompt");
 });
 
-test("Manager waits for its initial status load before accepting an exclusive operation", () => {
+test("Manager waits for initial status by default while account operations use their own live endpoint", () => {
   const openManagerBlock = extractNamedFunction(managerInject, "openManager");
   const runManagerExclusiveBlock = extractNamedFunction(openManagerBlock, "runManagerExclusive");
   assert.match(openManagerBlock, /let managerInitialLoadPromise = null;/);
-  assert.match(runManagerExclusiveBlock, /if \(managerInitialLoadPromise\) await managerInitialLoadPromise;/);
+  assert.match(runManagerExclusiveBlock, /waitForInitial = true/);
+  assert.match(runManagerExclusiveBlock, /if \(waitForInitial && managerInitialLoadPromise\) await managerInitialLoadPromise;/);
+  assert.ok(openManagerBlock.includes("runManagerExclusive(showAccountSettings, { waitForInitial: false })"));
   assert.match(runManagerExclusiveBlock, /if \(!root\.isConnected\) return false;/);
   assert.match(openManagerBlock, /managerInitialLoadPromise = load\(\{ updateResult: !preserveLastActionResult \}\)/);
   assert.match(openManagerBlock, /managerInitialLoadPromise = null;/);

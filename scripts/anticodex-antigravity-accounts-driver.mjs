@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
+import {
+  createAntigravityCascadeClient,
+  discoverAntigravityDesktopConnection,
+} from "../translator/provider/antigravity-cascade-client.mjs";
 
 const SEALED = /^dpapi:v1:[A-Za-z0-9+/]+={0,2}$/;
 const ACCOUNT_ID = /^sha256:[a-f0-9]{64}$/;
@@ -32,7 +36,9 @@ function defaultRunner(env) {
     const file = request.kind === "usage" ? request.file : powershell;
     const args = request.kind === "usage"
       ? request.args
-      : ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", request.script, "-Action", request.action];
+      : request.kind === "open"
+        ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", request.script]
+        : ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", request.script, "-Action", request.action];
     const child = spawn(file, args, {
       env: { ...process.env, ...env },
       windowsHide: true,
@@ -76,7 +82,17 @@ export function createAntigravityAccountDriver(options = {}) {
   if (!String(options.scriptsRoot || "").trim()) throw new TypeError("scriptsRoot is required.");
   if (!env.LOCALAPPDATA) throw new TypeError("LOCALAPPDATA is required.");
   const runner = options.runner || defaultRunner(env);
+  const findDesktopConnection = options.findDesktopConnection
+    || (() => discoverAntigravityDesktopConnection(env, { processOnly: true }));
+  const fetchImpl = options.fetchImpl || fetch;
+  const desktopClient = options.desktopClient || createAntigravityCascadeClient({
+    env,
+    fetchImpl,
+    discoverConnection: findDesktopConnection,
+    statusTimeoutMs: 10_000,
+  });
   const script = join(scriptsRoot, "anticodex-antigravity-credentials.ps1");
+  const openScript = join(scriptsRoot, "open-antigravity-account-switch.ps1");
 
   const runPowerShell = (action, input) => runner({ kind: "powershell", action, script, input });
 
@@ -167,7 +183,41 @@ export function createAntigravityAccountDriver(options = {}) {
     }
   }
 
-  const driver = { hasCredential, capture, restore, quota, beginChange, endChange };
+  async function openDesktop() {
+    try {
+      const value = parseJson(await runner({ kind: "open", script: openScript, input: "" }));
+      if (value?.ok !== true) throw new Error("open rejected");
+    } catch {
+      const error = new Error("Antigravity Desktop could not be opened or focused.");
+      error.credentialRestoreUnsafe = true;
+      throw error;
+    }
+  }
+
+  async function hasDesktop() {
+    try {
+      const value = parseJson(await runPowerShell("HasDesktop", {}));
+      if (typeof value?.running !== "boolean") throw new Error("invalid Desktop status");
+      return value.running;
+    } catch {
+      throw new Error("Antigravity Desktop status check failed.");
+    }
+  }
+
+  async function desktopIdentity() {
+    try {
+      const readiness = await desktopClient.getReadiness();
+      const id = String(readiness?.accountFingerprint || "").toLowerCase();
+      if (readiness?.signedIn !== true || !ACCOUNT_ID.test(id)) throw new Error("identity unavailable");
+      return id;
+    } catch {
+      const error = new Error("Antigravity Desktop account identity could not be verified.");
+      error.credentialRestoreUnsafe = true;
+      throw error;
+    }
+  }
+
+  const driver = { hasCredential, capture, restore, quota, beginChange, endChange, openDesktop, hasDesktop, desktopIdentity };
   if (typeof options.login === "function") {
     driver.login = async ({ acknowledgeRestart = false } = {}) => {
       if (acknowledgeRestart !== true) throw new Error("Antigravity restart acknowledgement is required.");

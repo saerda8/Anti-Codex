@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v116";
+  const VERSION = "native-panel-v117";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1850,19 +1850,37 @@
     const tabs = el("div", { role: "tablist", "aria-label": "管理页面", style: "display:flex;gap:6px;flex-wrap:wrap" }, [statusTabButton, accountSettingsButton, promptSettingsButton]);
     const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [tabs, close])]);
     style.textContent += `
-      .anticodex-account-list{grid-column:1/-1;display:grid;gap:12px}
-      .anticodex-account-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-      .anticodex-account-row{display:grid;grid-template-columns:minmax(140px,.9fr) minmax(180px,1.2fr) minmax(180px,1.2fr) 110px;gap:18px;padding:17px 0;border-top:1px solid var(--ac-line)}
-      .anticodex-account-identity{overflow-wrap:anywhere}.anticodex-account-identity strong{display:block;margin-bottom:6px}
-      .anticodex-account-meta{font-size:12px;color:var(--ac-muted);line-height:1.6;overflow-wrap:anywhere}
-      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:2px 7px;border-radius:5px;margin:6px 0;font-size:12px}
-      .anticodex-account-group{display:grid;gap:9px;align-content:start}.anticodex-account-group h3{font-size:13px;margin:0 0 3px}
+      [data-anticodex-manager-view=accounts] .anticodex-panel{width:min(1400px,97vw);height:min(980px,96vh);display:flex;flex-direction:column;overflow:hidden;padding:0 16px 12px}
+      [data-anticodex-manager-view=accounts] .anticodex-head{padding:14px 0 12px;margin:0;flex-shrink:0}
+      [data-anticodex-manager-view=accounts] .anticodex-grid{display:block;overflow:auto;min-height:0;flex:1}
+      [data-anticodex-manager-view=accounts] .anticodex-result-card{display:none}
+      .anticodex-account-list{grid-column:1/-1;display:grid;gap:0}
+      .anticodex-account-list h2{font-size:15px;margin:0 0 8px}
+      .anticodex-account-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+      .anticodex-account-toolbar button{min-height:30px;padding:3px 10px;font-size:12px}
+      .anticodex-account-row{display:grid;grid-template-columns:minmax(120px,.8fr) minmax(150px,1.2fr) minmax(150px,1.2fr) 150px;gap:14px;padding:10px 4px;border-top:1px solid var(--ac-line);align-items:center}
+      .anticodex-account-row[data-active=true]{background:color-mix(in srgb,#71c59a 7%,transparent)}
+      .anticodex-account-row[data-pending=true]{background:var(--ac-raised)}
+      .anticodex-account-identity{overflow-wrap:anywhere;font-size:13px}.anticodex-account-identity strong{display:block;margin-bottom:3px}
+      .anticodex-account-meta{font-size:11px;color:var(--ac-muted);line-height:1.4;overflow-wrap:anywhere}
+      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 5px;border-radius:4px;margin:3px 0;font-size:11px}
+      .anticodex-account-group{display:grid;gap:5px;align-content:start}.anticodex-account-group h3{font-size:12px;margin:0}
       .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px}
-      .anticodex-quota-track{height:6px;border-radius:4px;background:var(--ac-line);overflow:hidden;margin:6px 0}
+      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:center}
+      .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1/-1}
+      .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
+      .anticodex-quota-track{height:4px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
-      .anticodex-account-controls{display:grid;gap:6px;align-content:start}.anticodex-account-controls button{min-height:30px;padding:4px 8px}
+      .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}.anticodex-account-controls button{min-height:28px;padding:3px 5px;font-size:12px}
+      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:7px 4px;font-size:12px;min-height:30px;line-height:1.4;border-bottom:1px solid var(--ac-line)}
+      .anticodex-account-inline-status{grid-column:1/-1;font-size:11px;line-height:1.4;color:var(--ac-muted)}
+      .anticodex-account-feedback[aria-busy=true]::before{content:'◌';display:inline-block;margin-right:6px;animation:anticodex-account-spin 1s linear infinite}
+      @keyframes anticodex-account-spin{to{transform:rotate(360deg)}}
+      @media(prefers-reduced-motion:reduce){.anticodex-account-feedback[aria-busy=true]::before{animation:none}}
       .anticodex-head [role=tab][aria-selected=true]{border-color:#71c59a;color:#71c59a}
-      @media(max-width:850px){.anticodex-account-row{grid-template-columns:1fr 1fr}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}.anticodex-account-controls{display:flex;flex-wrap:wrap}}
+      @media(max-width:1000px){.anticodex-account-row{gap:9px;grid-template-columns:minmax(110px,.8fr) minmax(140px,1fr) minmax(140px,1fr) 150px}}
+      @media(max-width:1000px){.anticodex-quota-bucket{display:block}}
+      @media(max-width:680px){.anticodex-account-row{grid-template-columns:1fr 1fr}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}.anticodex-account-controls{display:flex;flex-wrap:wrap}}
     `;
     const actions = el("div", { className: "anticodex-actions" });
     const grid = el("div", { className: "anticodex-grid" });
@@ -1910,10 +1928,10 @@
     function setManagerOperationBusy(busy) {
       managerOperationInFlight = Boolean(busy);
       root.setAttribute("data-anticodex-busy", managerOperationInFlight ? "true" : "false");
+      for (const tab of [statusTabButton, accountSettingsButton, promptSettingsButton]) tab.disabled = managerOperationInFlight;
     }
 
-    async function runManagerExclusive(operation) {
-      if (managerInitialLoadPromise) await managerInitialLoadPromise;
+    async function runManagerExclusive(operation, { waitForInitial = true } = {}) {
       if (!root.isConnected) return false;
       const pendingAction = Object.keys(window.__ANTICODEX_MANAGER_PENDING_ACTIONS__ || {}).find(actionStillPending);
       const reportedAction = managerSnapshotRunningActionIds(window.__ANTICODEX_MANAGER_SNAPSHOT__).values().next().value || "";
@@ -1926,6 +1944,8 @@
       root.setAttribute("data-anticodex-operation-generation", String(managerOperationGeneration));
       setManagerOperationBusy(true);
       try {
+        if (waitForInitial && managerInitialLoadPromise) await managerInitialLoadPromise;
+        if (!root.isConnected) return false;
         await operation();
         return true;
       } finally {
@@ -1987,6 +2007,7 @@
           safeJson("/anticodex/model-routes", snapshotReadOptions),
         ]);
         const bootstrap = safeValue(bootstrapResult, {});
+        if (managerView !== "status" || !root.isConnected) return;
         const health = safeValue(healthResult, {});
         const models = safeValue(modelsResult, { data: [] });
         const diagnostics = safeValue(diagnosticsResult, {});
@@ -2119,13 +2140,13 @@
         ].filter(Boolean);
         grid.replaceChildren(...cards);
         result.classList.toggle("anticodex-error", loadErrors.length > 0);
-        if (updateResult && !actionInFlight && loadGeneration === actionGeneration) {
+        if (managerView === "status" && updateResult && !actionInFlight && loadGeneration === actionGeneration) {
           result.textContent = loadErrors.length
             ? `\u72b6\u6001\u5df2\u90e8\u5206\u5237\u65b0\uff0c\u4ee5\u4e0b\u9879\u9700\u590d\u6838\uff1a\n${loadErrors.join("\n")}`
             : "\u72b6\u6001\u5df2\u5237\u65b0\u3002";
         }
       } catch (error) {
-        if (updateResult && !actionInFlight && loadGeneration === actionGeneration) {
+        if (managerView === "status" && updateResult && !actionInFlight && loadGeneration === actionGeneration) {
           result.classList.add("anticodex-error");
           result.textContent = "\u8bfb\u53d6\u5931\u8d25\uff1a" + error.message;
         }
@@ -2141,7 +2162,25 @@
       if (minutes <= 0) return "已到恢复时间，请刷新确认";
       const days = Math.floor(minutes / 1440);
       const hours = Math.floor((minutes % 1440) / 60);
-      return `${new Date(reset).toLocaleString()} 恢复 · 剩余 ${days ? days + "天 " : ""}${hours}小时 ${minutes % 60}分`;
+      return `${days ? days + "天 " : ""}${hours}小时 ${minutes % 60}分后恢复`;
+    }
+
+    function setAccountFeedback(message, failed = false) {
+      result.textContent = message;
+      result.classList.toggle("anticodex-error", failed);
+      const feedback = root.querySelector("[data-account-feedback]");
+      if (feedback) { feedback.textContent = message; feedback.classList.toggle("anticodex-error", failed); }
+      const inline = root.querySelector("[data-pending=true] .anticodex-account-inline-status");
+      if (inline) inline.textContent = message;
+    }
+
+    function setAccountBusy(busy, id = "") {
+      for (const item of grid.querySelectorAll("button,input")) item.disabled = busy;
+      root.querySelector("[data-account-feedback]")?.setAttribute("aria-busy", String(busy));
+      for (const row of grid.querySelectorAll("[data-account-id]")) {
+        row.setAttribute("data-pending", String(busy && row.getAttribute("data-account-id") === id));
+        if (!busy) row.querySelector(".anticodex-account-inline-status").textContent = "";
+      }
     }
 
     function drawAccountSettings(payload) {
@@ -2153,7 +2192,7 @@
         item.onclick = handler;
         return item;
       };
-      const label = el("input", { type: "text", maxlength: "80", placeholder: "账号备注（可选）", "aria-label": "账号备注", style: "min-width:160px;max-width:240px;padding:10px;border:1px solid var(--ac-line);border-radius:7px;background:var(--ac-raised);color:var(--ac-text)" });
+      const label = el("input", { type: "text", maxlength: "80", placeholder: "账号备注（可选）", "aria-label": "账号备注", style: "width:160px;padding:6px 8px;border:1px solid var(--ac-line);border-radius:5px;background:var(--ac-raised);color:var(--ac-text);font-size:12px" });
       const toolbar = el("div", { className: "anticodex-account-toolbar" }, [
         label,
         button("添加 / 登录账号", (event) => accountOperation("login", { label: label.value }, true, event.currentTarget)),
@@ -2163,15 +2202,16 @@
       ]);
       const list = el("div", { className: "anticodex-account-list", "data-anticodex-account-list": "true" }, [
         el("h2", { text: `账号管理（${payload.accounts?.length || 0}）` }), toolbar,
-        el("div", { className: "anticodex-account-meta", text: "每个账号首次在 Google 官方页面登录一次。登录状态仅加密保存在本机；添加的新账号保存后会恢复原账号。手动启用或查询其他账号额度时，需要暂时重启 Antigravity。" }),
-        el("div", { className: "anticodex-account-meta", text: "以下额度是标注时间读取的快照；到达恢复时间不代表已验证补满。Google 对第三方接入存在账号限制，使用官方登录也不能保证账号不会被停用。" }),
+        el("div", { className: "anticodex-account-meta", text: "新登录账号直接启用；切换后自动打开 Antigravity。操作会重启 Antigravity，请先结束其中的任务。登录信息仅加密保存在本机。" }),
+        el("div", { className: "anticodex-account-meta", text: "额度为最近快照，到期请刷新确认；悬停恢复时间查看日期。官方登录不代表 Google 保证账号不会被停用。" }),
+        el("div", { className: "anticodex-account-feedback", "data-account-feedback": "true", role: "status", "aria-live": "polite", "aria-busy": String(busy), text: payload.job?.message || "选择账号，点击“启用并打开”。" }),
       ]);
       for (const account of payload.accounts || []) {
         const identity = el("div", { className: "anticodex-account-identity" }, [
           el("strong", { text: account.label || account.maskedEmail || "未命名账号" }),
           el("div", { className: "anticodex-account-meta", text: account.maskedEmail || "邮箱未提供" }),
           account.id === payload.activeId ? el("span", { className: "anticodex-account-badge", text: "已启用" }) : null,
-          el("div", { className: "anticodex-account-meta", text: account.quota?.fetchedAt ? `更新于 ${new Date(account.quota.fetchedAt).toLocaleString()}` : "额度尚未读取" }),
+          el("div", { className: "anticodex-account-meta", title: account.quota?.fetchedAt ? new Date(account.quota.fetchedAt).toLocaleString() : "", text: account.quota?.fetchedAt ? `更新 ${new Date(account.quota.fetchedAt).toLocaleTimeString()}` : "额度尚未读取" }),
         ]);
         const groups = account.quota?.groups?.length ? account.quota.groups : [
           { name: "Gemini", buckets: [{ window: "5h" }, { window: "weekly" }] },
@@ -2190,17 +2230,17 @@
               track.setAttribute("aria-valuenow", String(percent));
               track.append(el("div", { className: `anticodex-quota-fill${percent <= 10 ? " anticodex-quota-low" : ""}`, style: `width:${percent}%` }));
             }
-            node.append(el("div", {}, [
+            node.append(el("div", { className: "anticodex-quota-bucket" }, [
               el("div", { className: "anticodex-quota-title" }, [el("span", { text: windowLabel }), el("span", { text: known ? `${percent}% 剩余` : "未知" })]),
               track,
-              el("div", { className: "anticodex-account-meta", "data-account-reset": bucket.reset_time || "", text: accountResetText(bucket.reset_time) }),
+              el("div", { className: "anticodex-account-meta", "data-account-reset": bucket.reset_time || "", title: bucket.reset_time ? new Date(bucket.reset_time).toLocaleString() : "恢复时间未知", text: accountResetText(bucket.reset_time) }),
             ]));
           }
           return node;
         });
         let renameField = null;
         const controls = el("div", { className: "anticodex-account-controls" }, [
-          button(account.id === payload.activeId ? "重新启用" : "启用", (event) => accountOperation("activate", { id: account.id }, true, event.currentTarget)),
+          button(account.id === payload.activeId ? "打开" : "启用并打开", (event) => accountOperation("activate", { id: account.id }, true, event.currentTarget)),
           button("刷新额度", (event) => accountOperation("refresh", { id: account.id }, account.id !== payload.activeId, event.currentTarget)),
           button("修改备注", (event) => {
             if (renameField) { accountOperation("rename", { id: account.id, label: renameField.value }); return; }
@@ -2215,8 +2255,9 @@
             renameField.focus();
           }),
           button("移除", (event) => accountOperation("remove", { id: account.id }, false, event.currentTarget)),
+          el("span", { className: "anticodex-account-inline-status", role: "status" }),
         ]);
-        list.append(el("div", { className: "anticodex-account-row", "data-account-id": account.id }, [identity, ...groupNodes, controls]));
+        list.append(el("div", { className: "anticodex-account-row", "data-account-id": account.id, "data-active": String(account.id === payload.activeId) }, [identity, ...groupNodes, controls]));
       }
       if (!payload.accounts?.length) list.append(el("div", { className: "anticodex-result", text: "还没有保存的账号。已在 Antigravity 登录的账号可直接点“保存当前登录”，其他账号点“添加 / 登录账号”。" }));
       grid.replaceChildren(list);
@@ -2226,10 +2267,9 @@
       const deadline = Date.now() + 10 * 60 * 1000;
       while (root.isConnected && managerView === "accounts") {
         const payload = await managerGetLiveJson("/anticodex/accounts", { timeoutMs: 15000 });
-        drawAccountSettings(payload);
         if (payload.job?.id !== job.id) throw new Error("账号任务已变化，请重新读取列表确认结果。");
-        result.textContent = payload.job.message || "正在处理账号操作...";
-        result.classList.toggle("anticodex-error", payload.job.status === "failed");
+        if (payload.job.status !== "running") drawAccountSettings(payload);
+        setAccountFeedback(payload.job.message || "正在处理账号操作...", payload.job.status === "failed");
         if (payload.job.status !== "running") return;
         if (Date.now() >= deadline) throw new Error("操作仍在后台进行，请稍后重新读取列表；不要重复提交。");
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -2237,33 +2277,34 @@
     }
 
     function accountOperation(action, values = {}, needsRestart = false, button = null) {
+      if (managerOperationInFlight || actionInFlight) return;
       const signature = JSON.stringify([action, values.id || "", values.all === true]);
-      if (needsRestart || action === "remove") {
+      if ((needsRestart && action === "refresh") || action === "remove") {
         const confirmed = accountConfirmation?.signature === signature && accountConfirmation.button === button && button?.isConnected && Date.now() < accountConfirmation.until;
         if (!confirmed) {
           if (accountConfirmation?.button?.isConnected) accountConfirmation.button.textContent = accountConfirmation.label;
           accountConfirmation = { signature, button, label: button?.textContent || "确认操作", until: Date.now() + 30000 };
           if (button) button.textContent = action === "remove" ? "确认移除" : "确认执行";
-          result.classList.remove("anticodex-error");
-          result.textContent = action === "remove"
+          setAccountBusy(false);
+          button?.closest("[data-account-id]")?.setAttribute("data-pending", "true");
+          setAccountFeedback(action === "remove"
             ? "只移除此账号的本机保存记录，不会退出官方当前账号。请再点一次“确认移除”。"
-            : "此操作会暂时停止并重启官方 Antigravity，请先结束其中正在进行的任务；不会关闭官方 Codex。请再点一次“确认执行”。";
+            : "查询其他账号会暂时重启 Antigravity，结束后恢复当前账号。请先结束其中的任务，再点一次“确认执行”。");
           return;
         }
       }
       if (accountConfirmation?.button?.isConnected) accountConfirmation.button.textContent = accountConfirmation.label;
       accountConfirmation = null;
+      setAccountBusy(true, values.id);
+      setAccountFeedback(action === "activate" ? "正在启用并打开 Antigravity..." : action === "login" ? "正在准备官方登录页面..." : "正在提交账号操作...");
       void runManagerExclusive(async () => {
-        result.classList.remove("anticodex-error");
-        result.textContent = "正在提交账号操作...";
         try {
           const accepted = await managerPostJson("/anticodex/accounts/action", { action, ...values, acknowledgeRestart: needsRestart }, { retryCandidates: false, timeoutMs: 15000 });
           await waitAccountJob(accepted.job);
         } catch (error) {
-          result.classList.add("anticodex-error");
-          result.textContent = error.message;
+          setAccountFeedback(error.message, true);
         }
-      });
+      }, { waitForInitial: false }).finally(() => setAccountBusy(false));
     }
 
     async function showAccountSettings() {
@@ -2272,24 +2313,23 @@
       root.setAttribute("data-anticodex-manager-view", "accounts");
       actions.style.display = "none";
       setResultCardMode("status");
-      result.textContent = "正在读取本机保存的账号...";
+      if (!root.querySelector("[data-account-feedback]")) grid.replaceChildren(el("div", { className: "anticodex-account-feedback", "data-account-feedback": "true", role: "status", "aria-live": "polite" }));
+      setAccountFeedback("正在读取本机保存的账号...");
       try {
         const payload = await managerGetLiveJson("/anticodex/accounts", { timeoutMs: 15000 });
         drawAccountSettings(payload);
-        result.textContent = payload.job?.message || "账号登录状态仅保存在本机后台；额度查询不产生模型回合。";
-        result.classList.toggle("anticodex-error", payload.job?.status === "failed");
+        setAccountFeedback(payload.job?.message || "账号登录状态仅保存在本机后台；额度查询不产生模型回合。", payload.job?.status === "failed");
         if (!window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__) window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__ = setInterval(() => {
           if (!root.isConnected || managerView !== "accounts") return;
           root.querySelectorAll("[data-account-reset]").forEach((node) => { node.textContent = accountResetText(node.getAttribute("data-account-reset")); });
         }, 30000);
         if (payload.job?.status === "running") await waitAccountJob(payload.job);
       } catch (error) {
-        result.classList.add("anticodex-error");
-        result.textContent = "账号列表读取失败：" + error.message;
+        setAccountFeedback("账号列表读取失败：" + error.message, true);
       }
     }
 
-    accountSettingsButton.onclick = () => { void runManagerExclusive(showAccountSettings); };
+    accountSettingsButton.onclick = () => { void runManagerExclusive(showAccountSettings, { waitForInitial: false }); };
     statusTabButton.onclick = () => { void runManagerExclusive(async () => {
       managerView = "status";
       updateManagerTabs("status");

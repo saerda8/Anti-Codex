@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 import { createAntiCodexManagerService } from "../../scripts/anticodex-manager-service.mjs";
 
 test("account manager endpoints protect account data and serialize background changes", async (t) => {
@@ -12,7 +13,10 @@ test("account manager endpoints protect account data and serialize background ch
   const accountManager = {
     async list() { return { activeId: "a", accounts: [{ id: "a", label: "Personal", maskedEmail: "te***@example.test", quota: null }] }; },
     async activate(value) {
-      calls.push(value);
+      const { onProgress, ...args } = value;
+      calls.push(args);
+      assert.equal(typeof onProgress, "function");
+      onProgress("正在打开 Antigravity...");
       await new Promise((resolve) => { finishActivation = resolve; });
     },
   };
@@ -39,6 +43,8 @@ test("account manager endpoints protect account data and serialize background ch
   assert.equal(accepted.status, 202);
   const acceptedBody = await accepted.json();
   assert.equal(acceptedBody.job.status, "running");
+  const progress = await fetch(`${baseUrl}/anticodex/accounts`, { headers }).then((r) => r.json());
+  assert.equal(progress.job.message, "正在打开 Antigravity...");
   assert.deepEqual(calls, [{ id: "b", acknowledgeRestart: true }]);
   assert.equal((await post({ action: "activate", id: "c", acknowledgeRestart: true })).status, 409);
   finishActivation();
@@ -51,6 +57,49 @@ test("account manager endpoints protect account data and serialize background ch
   assert.equal(completed.job.id, acceptedBody.job.id);
   assert.equal(completed.job.status, "completed");
   assert.doesNotMatch(JSON.stringify(completed), /sealed|credentialHash|access_token|refresh_token/);
+});
+
+test("account polling updates progress without rebuilding rows before completion", async () => {
+  const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+  const source = ui.slice(ui.indexOf("async function waitAccountJob("), ui.indexOf("function accountOperation("));
+  let reads = 0;
+  const draws = [];
+  const messages = [];
+  const context = vm.createContext({
+    root: { isConnected: true }, managerView: "accounts",
+    result: { classList: { toggle() {} } },
+    managerGetLiveJson: async () => ({ job: { id: "job", status: ++reads < 3 ? "running" : "completed", message: `stage ${reads}` } }),
+    drawAccountSettings: (payload) => draws.push(payload.job.status),
+    setAccountFeedback: (message) => messages.push(message),
+    setAccountBusy() {}, setTimeout: (callback) => callback(),
+  });
+  await vm.runInContext(`${source}; waitAccountJob({id:"job"})`, context);
+  assert.deepEqual(draws, ["completed"]);
+  assert.deepEqual(messages, ["stage 1", "stage 2", "stage 3"]);
+});
+
+test("manager reserves its action lock before waiting for initial loading", async () => {
+  const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+  const source = ui.slice(ui.indexOf("async function runManagerExclusive("), ui.indexOf("const resultCard ="));
+  let releaseInitial;
+  let runs = 0;
+  const context = vm.createContext({
+    managerInitialLoadPromise: new Promise((resolve) => { releaseInitial = resolve; }),
+    root: { isConnected: true, setAttribute() {} }, window: {},
+    managerOperationInFlight: false, actionInFlight: false, managerOperationGeneration: 0,
+    managerSnapshotRunningActionIds: () => new Set(), actionStillPending: () => false,
+    result: { classList: { remove() {} } },
+    setManagerOperationBusy: (busy) => { context.managerOperationInFlight = busy; },
+    operation: () => { runs++; },
+  });
+  vm.runInContext(source, context);
+  const first = vm.runInContext("runManagerExclusive(operation)", context);
+  assert.equal(context.managerOperationInFlight, true);
+  assert.equal(await vm.runInContext("runManagerExclusive(operation)", context), false);
+  releaseInitial();
+  await first;
+  assert.equal(runs, 1);
+  assert.equal(context.managerOperationInFlight, false);
 });
 
 test("native account tab and bridge expose only the scoped account workflow", () => {
@@ -72,4 +121,23 @@ test("account confirmations and renaming stay inside the embedded page", () => {
   assert.ok(/accountConfirmation/.test(accountUi), "High-impact account actions need page-owned confirmation");
   assert.ok(/确认移除/.test(accountUi));
   assert.ok(/保存备注/.test(accountUi));
+});
+
+test("one activation click shows feedback before dispatch and does not require a second click", async () => {
+  const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+  const source = ui.slice(ui.indexOf("function accountOperation("), ui.indexOf("async function showAccountSettings("));
+  const events = [];
+  let operation;
+  const context = vm.createContext({
+    managerOperationInFlight: false, actionInFlight: false, accountConfirmation: null,
+    setAccountBusy: (busy, id) => events.push(["busy", busy, id]),
+    setAccountFeedback: (message) => events.push(["feedback", message]),
+    runManagerExclusive: (callback) => { operation = callback; events.push(["dispatch"]); return Promise.resolve(); },
+    managerPostJson: async (_path, value) => { events.push(["post", value.action, value.acknowledgeRestart]); return { job: { id: "job" } }; },
+    waitAccountJob: async () => {},
+  });
+  vm.runInContext(`${source}; accountOperation("activate",{id:"b"},true)`, context);
+  assert.deepEqual(events.slice(0, 3), [["busy", true, "b"], ["feedback", "正在启用并打开 Antigravity..."], ["dispatch"]]);
+  await operation();
+  assert.ok(events.some(([kind, action, ack]) => kind === "post" && action === "activate" && ack === true));
 });

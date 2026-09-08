@@ -141,6 +141,31 @@ function loginIdentityUncertainError() {
   return new Error("Antigravity 登录停止未确认，当前账号未知；请手动检查。");
 }
 
+function reportProgress(onProgress, message) {
+  if (typeof onProgress !== "function") return;
+  try { onProgress(message); } catch {}
+}
+
+async function captureWithQuotaFallback(driver) {
+  try {
+    return { captured: validateCapture(await driver.capture()), quota: null };
+  } catch {
+    const quota = quotaSnapshot(await driver.quota());
+    return { captured: validateCapture(await driver.capture()), quota };
+  }
+}
+
+async function openAndVerifyIdentity(driver, expectedId) {
+  try {
+    await driver.openDesktop();
+    if (await driver.desktopIdentity() !== expectedId) throw new Error("identity mismatch");
+  } catch {
+    const error = new Error("Antigravity Desktop identity could not be confirmed after opening.");
+    error.credentialRestoreUnsafe = true;
+    throw error;
+  }
+}
+
 async function writeStateAtomic(path, state) {
   const root = dirname(path);
   await mkdir(root, { recursive: true, mode: 0o700 });
@@ -177,7 +202,7 @@ export function createAntigravityAccountManager(options = {}) {
   const stateRoot = String(options.stateRoot || "").trim();
   const driver = options.driver;
   if (!stateRoot) throw new TypeError("stateRoot is required.");
-  for (const method of ["capture", "restore", "quota", "beginChange", "endChange"]) {
+  for (const method of ["capture", "restore", "quota", "beginChange", "endChange", "openDesktop", "hasDesktop", "desktopIdentity"]) {
     if (typeof driver?.[method] !== "function") throw new TypeError(`driver.${method}() is required.`);
   }
   const statePath = join(stateRoot, FILE_NAME);
@@ -196,35 +221,59 @@ export function createAntigravityAccountManager(options = {}) {
     }
   };
 
-  async function captureCurrent({ label } = {}) {
+  async function captureCurrent({ label, onProgress } = {}) {
     return withLock(async () => {
+      reportProgress(onProgress, "正在确认官方 Antigravity 登录状态。");
       if (typeof driver.hasCredential === "function" && !(await driver.hasCredential())) {
         throw new Error("请先在官方 Antigravity 中完成登录，再保存当前账号。");
       }
+      reportProgress(onProgress, "正在读取当前账号额度。");
       const quota = quotaSnapshot(await driver.quota());
       const captured = validateCapture(await driver.capture());
       const state = await load();
       const account = upsertAccount(state, captured, quota, label);
       state.activeId = captured.id;
       await save(state);
+      reportProgress(onProgress, "当前账号已保存。");
       return sanitizeAccount(account);
     });
   }
 
-  async function activate({ id, acknowledgeRestart = false } = {}) {
+  async function activate({ id, acknowledgeRestart = false, onProgress } = {}) {
     return withLock(async () => {
       const original = await load();
       const target = findAccount(original, id);
-      const observedQuota = quotaSnapshot(await driver.quota());
-      const observed = validateCapture(await driver.capture());
-      if (observed.id === target.id) {
+      const desktopRunning = await driver.hasDesktop();
+      let desktopIdentity = null;
+      if (desktopRunning) {
+        reportProgress(onProgress, "正在打开 Antigravity。");
+        await driver.openDesktop();
+        reportProgress(onProgress, "正在核对当前账号。");
+        desktopIdentity = await driver.desktopIdentity();
+      } else {
+        reportProgress(onProgress, "正在核对当前账号。");
+      }
+      if (desktopRunning && desktopIdentity === target.id) {
         const state = clone(original);
-        const current = upsertAccount(state, observed, observedQuota, target.label);
-        state.activeId = current.id;
+        state.activeId = target.id;
         if (JSON.stringify(state) !== JSON.stringify(original)) await save(state);
+        reportProgress(onProgress, "账号已启用，Antigravity 已打开并完成登录核验。");
+        return publicState(state);
+      }
+      const observedResult = await captureWithQuotaFallback(driver);
+      const observedQuota = observedResult.quota;
+      const observed = observedResult.captured;
+      if (!desktopRunning && observed.id === target.id) {
+        await openAndVerifyIdentity(driver, target.id);
+        const state = clone(original);
+        state.activeId = target.id;
+        await save(state);
+        reportProgress(onProgress, "账号已启用，Antigravity 已打开并完成登录核验。");
         return publicState(state);
       }
       if (acknowledgeRestart !== true) throw new Error("Antigravity restart acknowledgement is required.");
+      desktopIdentity ||= observed.id;
+      if (observed.id !== desktopIdentity) throw new Error("Antigravity Desktop and credential identities do not match.");
 
       let context;
       let endAttempted = false;
@@ -233,6 +282,7 @@ export function createAntigravityAccountManager(options = {}) {
       let previousCapture = observed;
       let stateCommitted = false;
       try {
+        reportProgress(onProgress, "正在安全切换账号。");
         context = await driver.beginChange({ acknowledgeRestart: true });
         previousCapture = validateCapture(await driver.capture());
         if (previousCapture.id !== observed.id) throw new Error("Antigravity previous account identity mismatch.");
@@ -244,6 +294,7 @@ export function createAntigravityAccountManager(options = {}) {
 
         credentialMayHaveChanged = true;
         await driver.restore(target.sealed);
+        reportProgress(onProgress, "正在验证目标账号。");
         const targetQuota = quotaSnapshot(await driver.quota());
         const targetCapture = validateCapture(await driver.capture());
         if (targetCapture.id !== target.id) throw new Error("Antigravity target account identity mismatch.");
@@ -252,8 +303,10 @@ export function createAntigravityAccountManager(options = {}) {
         committed.activeId = target.id;
         await save(committed);
         stateCommitted = true;
-        endAttempted = true;
-        await driver.endChange(context);
+        reportProgress(onProgress, "账号已切换，正在打开 Antigravity。");
+        await openAndVerifyIdentity(driver, target.id);
+        credentialMayHaveChanged = false;
+        reportProgress(onProgress, "账号已启用，Antigravity 已打开并完成登录核验。");
         return publicState(committed);
       } catch (error) {
         if (stateCommitted && error?.credentialRestoreUnsafe === true) throw startupUnconfirmedError();
@@ -270,7 +323,7 @@ export function createAntigravityAccountManager(options = {}) {
     });
   }
 
-  async function login({ label, acknowledgeRestart = false } = {}) {
+  async function login({ label, acknowledgeRestart = false, onProgress } = {}) {
     return withLock(async () => {
       if (acknowledgeRestart !== true) throw new Error("Antigravity restart acknowledgement is required.");
       if (typeof driver.login !== "function") throw new Error("Antigravity official login is unavailable.");
@@ -286,6 +339,7 @@ export function createAntigravityAccountManager(options = {}) {
       let rollbackState = clone(original);
       let stateCommitted = false;
       try {
+        reportProgress(onProgress, "正在保存当前账号。");
         context = await driver.beginChange({ acknowledgeRestart: true });
         const prepared = clone(original);
         if (hasPreviousCredential) {
@@ -299,23 +353,19 @@ export function createAntigravityAccountManager(options = {}) {
         }
         loginStarted = true;
         credentialMayHaveChanged = true;
+        reportProgress(onProgress, "请在官方 Antigravity 完成登录。");
         await driver.login({ acknowledgeRestart: true });
+        reportProgress(onProgress, "正在保存新账号。");
         const newQuota = quotaSnapshot(await driver.quota());
         const added = validateCapture(await driver.capture());
         upsertAccount(prepared, added, newQuota, label);
-        if (previousCapture) {
-          const restored = added.id === previousCapture.id ? added : previousCapture;
-          await driver.restore(restored.sealed);
-          prepared.activeId = previousCapture.id;
-          credentialMayHaveChanged = restored.id === added.id;
-        } else {
-          prepared.activeId = added.id;
-        }
+        prepared.activeId = added.id;
         await save(prepared);
-        credentialMayHaveChanged = false;
         stateCommitted = true;
-        endAttempted = true;
-        await driver.endChange(context);
+        reportProgress(onProgress, "新账号已启用，正在打开 Antigravity。");
+        await openAndVerifyIdentity(driver, added.id);
+        credentialMayHaveChanged = false;
+        reportProgress(onProgress, "账号已启用，Antigravity 已打开并完成登录核验。");
         return publicState(prepared);
       } catch (error) {
         const failures = [];
@@ -351,8 +401,9 @@ export function createAntigravityAccountManager(options = {}) {
     });
   }
 
-  async function refresh({ id, all = false, acknowledgeRestart = false } = {}) {
+  async function refresh({ id, all = false, acknowledgeRestart = false, onProgress } = {}) {
     return withLock(async () => {
+      reportProgress(onProgress, "正在刷新账号额度。");
       const original = await load();
       if (all && id) throw new Error("Choose either one Antigravity account or all accounts.");
       const targets = all
@@ -367,6 +418,7 @@ export function createAntigravityAccountManager(options = {}) {
         const state = clone(original);
         upsertAccount(state, captured, quota, targets[0].label);
         await save(state);
+        reportProgress(onProgress, "账号额度已刷新。");
         return publicState(state);
       }
       if (acknowledgeRestart !== true) throw new Error("Antigravity restart acknowledgement is required.");
@@ -404,6 +456,7 @@ export function createAntigravityAccountManager(options = {}) {
         stateCommitted = true;
         endAttempted = true;
         await driver.endChange(context);
+        reportProgress(onProgress, "账号额度已刷新。");
         return publicState(working);
       } catch (error) {
         if (stateCommitted && error?.credentialRestoreUnsafe === true) throw startupUnconfirmedError();
@@ -419,23 +472,27 @@ export function createAntigravityAccountManager(options = {}) {
     });
   }
 
-  async function remove({ id } = {}) {
+  async function remove({ id, onProgress } = {}) {
     return withLock(async () => {
+      reportProgress(onProgress, "正在移除受管账号。");
       const state = await load();
       const target = findAccount(state, id);
       state.accounts = state.accounts.filter((account) => account.id !== target.id);
       if (state.activeId === target.id) state.activeId = null;
       await save(state);
+      reportProgress(onProgress, "受管账号已移除。");
       return publicState(state);
     });
   }
 
-  async function renameAccount({ id, label } = {}) {
+  async function renameAccount({ id, label, onProgress } = {}) {
     return withLock(async () => {
+      reportProgress(onProgress, "正在更新账号名称。");
       const state = await load();
       const target = findAccount(state, id);
       target.label = normalizedLabel(label);
       await save(state);
+      reportProgress(onProgress, "账号名称已更新。");
       return publicState(state);
     });
   }

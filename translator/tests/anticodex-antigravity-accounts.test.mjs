@@ -53,6 +53,7 @@ function makeDriver(entries, currentId) {
   const calls = [];
   const driver = {
     currentId,
+    desktopRunning: true,
     calls,
     async quota() {
       calls.push(`quota:${this.currentId}`);
@@ -77,6 +78,18 @@ function makeDriver(entries, currentId) {
     },
     async endChange(context) {
       calls.push(`end:${context?.wasRunning === true}`);
+    },
+    async openDesktop() {
+      calls.push("open");
+      this.desktopRunning = true;
+    },
+    async hasDesktop() {
+      calls.push(`hasDesktop:${this.desktopRunning}`);
+      return this.desktopRunning;
+    },
+    async desktopIdentity() {
+      calls.push(`desktop:${this.currentId}`);
+      return this.currentId;
     },
   };
   return driver;
@@ -170,7 +183,7 @@ test("captureCurrent refuses a missing official credential before quota or captu
   assert.deepEqual(driver.calls, ["hasCredential:false"]);
 });
 
-test("login saves the new account but restores the previously active account", async (t) => {
+test("successful login keeps the new account active and opens Desktop", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota("Previous"), label: "Previous" };
   const added = { capture: account("added@example.com", "added"), quota: rawQuota("Added", 0.6), label: "Added" };
@@ -182,11 +195,12 @@ test("login saves the new account but restores the previously active account", a
   };
   driver.hasCredential = async () => true;
   const manager = createAntigravityAccountManager({ stateRoot, driver });
+  const progress = [];
 
-  const result = await manager.login({ label: "New account", acknowledgeRestart: true });
+  const result = await manager.login({ label: "New account", acknowledgeRestart: true, onProgress: (message) => progress.push(message) });
 
-  assert.equal(result.activeId, previous.capture.id);
-  assert.equal(driver.currentId, previous.capture.id);
+  assert.equal(result.activeId, added.capture.id);
+  assert.equal(driver.currentId, added.capture.id);
   assert.equal(result.accounts.find((value) => value.id === added.capture.id).label, "New account");
   assert.deepEqual(driver.calls, [
     "begin:true",
@@ -195,13 +209,14 @@ test("login saves the new account but restores the previously active account", a
     "login",
     `quota:${added.capture.id}`,
     `capture:${added.capture.id}`,
-    `restore:${previous.capture.id}`,
-    "end:true",
+    "open",
+    `desktop:${added.capture.id}`,
   ]);
+  assert.equal(progress.at(-1), "账号已启用，Antigravity 已打开并完成登录核验。");
   assertNoSecrets(result);
 });
 
-test("same-identity re-login restores and persists the newly authorized sealed credential", async (t) => {
+test("same-identity re-login keeps and persists the newly authorized sealed credential", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("same@example.com", "old-token"), quota: rawQuota("Previous"), label: "Previous" };
   const reauthorized = { ...previous, capture: account("same@example.com", "new-token"), quota: rawQuota("Reauthorized", 0.9) };
@@ -218,7 +233,7 @@ test("same-identity re-login restores and persists the newly authorized sealed c
 
   const result = await manager.login({ label: "Reauthorized", acknowledgeRestart: true });
 
-  assert.equal(restoredSealed, reauthorized.capture.sealed);
+  assert.equal(restoredSealed, "");
   assert.equal(result.activeId, previous.capture.id);
   assert.equal(result.accounts.length, 1);
   const saved = JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8"));
@@ -295,7 +310,7 @@ test("list reads the last committed snapshot while a mutation is pending", async
   await first;
 });
 
-test("login preserves a current credential even when the vault is empty", async (t) => {
+test("login records a prior credential from an empty vault but keeps the new account active", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("outside@example.com", "outside"), quota: rawQuota("Outside"), label: "Outside" };
   const added = { capture: account("added@example.com", "added"), quota: rawQuota("Added"), label: "Added" };
@@ -306,12 +321,12 @@ test("login preserves a current credential even when the vault is empty", async 
 
   const result = await manager.login({ label: "Added", acknowledgeRestart: true });
 
-  assert.equal(driver.currentId, previous.capture.id);
-  assert.equal(result.activeId, previous.capture.id);
+  assert.equal(driver.currentId, added.capture.id);
+  assert.equal(result.activeId, added.capture.id);
   assert.deepEqual(new Set(result.accounts.map((value) => value.id)), new Set([previous.capture.id, added.capture.id]));
 });
 
-test("login saves an unmanaged current identity instead of rejecting an existing vault", async (t) => {
+test("login saves an unmanaged prior identity but keeps the new account active", async (t) => {
   const stateRoot = await fixture(t);
   const managed = { capture: account("managed@example.com", "managed"), quota: rawQuota("Managed"), label: "Managed" };
   const outside = { capture: account("outside@example.com", "outside"), quota: rawQuota("Outside"), label: "Outside" };
@@ -324,9 +339,9 @@ test("login saves an unmanaged current identity instead of rejecting an existing
 
   const result = await manager.login({ label: "Added", acknowledgeRestart: true });
 
-  assert.equal(result.activeId, outside.capture.id);
+  assert.equal(result.activeId, added.capture.id);
   assert.equal(result.accounts.find((value) => value.id === outside.capture.id).label, outside.capture.maskedEmail);
-  assert.equal(driver.currentId, outside.capture.id);
+  assert.equal(driver.currentId, added.capture.id);
 });
 
 test("first login stays active when the fixed credential did not previously exist", async (t) => {
@@ -401,30 +416,41 @@ test("same-account activation confirms the real identity without restarting", as
   const result = await manager.activate({ id: current.capture.id, acknowledgeRestart: false });
 
   assert.equal(result.activeId, current.capture.id);
-  assert.deepEqual(driver.calls, [`quota:${current.capture.id}`, `capture:${current.capture.id}`]);
+  assert.deepEqual(driver.calls, ["hasDesktop:true", "open", `desktop:${current.capture.id}`]);
 });
 
-test("activation refreshes an expired official token before capturing identity", async (t) => {
+test("different-account activation falls back to quota when current credential capture is expired", async (t) => {
   const stateRoot = await fixture(t);
   const current = { capture: account("expired@example.com", "expired"), quota: rawQuota("Current", 0.5), label: "Current" };
-  await seedState(stateRoot, [current], current.capture.id);
+  const target = { capture: account("target@example.com", "target"), quota: rawQuota("Target", 0.4), label: "Target" };
+  await seedState(stateRoot, [current, target], current.capture.id);
   let refreshed = false;
-  const driver = makeDriver([current], current.capture.id);
+  let captureAttempts = 0;
+  const driver = makeDriver([current, target], current.capture.id);
   driver.quota = async () => {
-    driver.calls.push("quota");
-    refreshed = true;
-    return clone(current.quota);
+    driver.calls.push(`quota:${driver.currentId}`);
+    if (driver.currentId === current.capture.id) refreshed = true;
+    return clone(driver.currentId === current.capture.id ? current.quota : target.quota);
   };
   driver.capture = async () => {
-    driver.calls.push("capture");
-    if (!refreshed) throw new Error("expired access token");
-    return clone(current.capture);
+    driver.calls.push(`capture:${driver.currentId}`);
+    captureAttempts += 1;
+    if (driver.currentId === current.capture.id && !refreshed) throw new Error("expired access token");
+    return clone(driver.currentId === current.capture.id ? current.capture : target.capture);
   };
   const manager = createAntigravityAccountManager({ stateRoot, driver });
 
-  await manager.activate({ id: current.capture.id, acknowledgeRestart: false });
+  await manager.activate({ id: target.capture.id, acknowledgeRestart: true });
 
-  assert.deepEqual(driver.calls, ["quota", "capture"]);
+  assert.ok(captureAttempts >= 4);
+  assert.deepEqual(driver.calls.slice(0, 6), [
+    "hasDesktop:true",
+    "open",
+    `desktop:${current.capture.id}`,
+    `capture:${current.capture.id}`,
+    `quota:${current.capture.id}`,
+    `capture:${current.capture.id}`,
+  ]);
 });
 
 test("activation saves the latest previous credential and commits the target identity last", async (t) => {
@@ -440,14 +466,17 @@ test("activation saves the latest previous credential and commits the target ide
 
   assert.equal(result.activeId, target.capture.id);
   assert.deepEqual(driver.calls, [
-    `quota:${previous.capture.id}`,
+    "hasDesktop:true",
+    "open",
+    `desktop:${previous.capture.id}`,
     `capture:${previous.capture.id}`,
     "begin:true",
     `capture:${previous.capture.id}`,
     `restore:${target.capture.id}`,
     `quota:${target.capture.id}`,
     `capture:${target.capture.id}`,
-    "end:true",
+    "open",
+    `desktop:${target.capture.id}`,
   ]);
   const saved = JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8"));
   assert.equal(saved.accounts.find((value) => value.id === previous.capture.id).sealed, latestPrevious.capture.sealed);
@@ -498,10 +527,11 @@ test("activation rolls back credentials when the final state write fails", async
   assert.equal(JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8")).activeId, previous.capture.id);
 });
 
-test("endChange failures are reported and trigger activation rollback", async (t) => {
+test("cleanup failures are reported while rolling back a failed activation", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota(), label: "Previous" };
   const target = { capture: account("target@example.com", "target"), quota: rawQuota(), label: "Target" };
+  target.captureOverride = account("wrong@example.com", "wrong");
   await seedState(stateRoot, [previous, target], previous.capture.id);
   const driver = makeDriver([previous, target], previous.capture.id);
   driver.endChange = async () => {
@@ -515,17 +545,21 @@ test("endChange failures are reported and trigger activation rollback", async (t
   assert.equal(JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8")).activeId, previous.capture.id);
 });
 
-test("unsafe endChange failure keeps a committed target and never restores the previous credential", async (t) => {
+test("unsafe post-open failure keeps a committed target and never restores the previous credential", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota(), label: "Previous" };
   const target = { capture: account("target@example.com", "target"), quota: rawQuota(), label: "Target" };
   await seedState(stateRoot, [previous, target], previous.capture.id);
   const driver = makeDriver([previous, target], previous.capture.id);
-  driver.endChange = async () => {
-    driver.calls.push("end:unsafe");
-    const error = new Error("resume ownership uncertain");
-    error.credentialRestoreUnsafe = true;
-    throw error;
+  let opens = 0;
+  driver.openDesktop = async () => {
+    opens += 1;
+    driver.calls.push("open");
+    if (driver.currentId === target.capture.id) {
+      const error = new Error("resume ownership uncertain");
+      error.credentialRestoreUnsafe = true;
+      throw error;
+    }
   };
   const manager = createAntigravityAccountManager({ stateRoot, driver });
 
@@ -539,7 +573,7 @@ test("unsafe endChange failure keeps a committed target and never restores the p
   assert.equal(JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8")).activeId, target.capture.id);
 });
 
-test("unsafe login resume failure preserves the saved account without a second credential restore", async (t) => {
+test("unsafe login post-open failure preserves the newly active account without restoring the old credential", async (t) => {
   const stateRoot = await fixture(t);
   const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota(), label: "Previous" };
   const added = { capture: account("added@example.com", "added"), quota: rawQuota(), label: "Added" };
@@ -547,7 +581,7 @@ test("unsafe login resume failure preserves the saved account without a second c
   const driver = makeDriver([previous, added], previous.capture.id);
   driver.hasCredential = async () => true;
   driver.login = async () => { driver.currentId = added.capture.id; };
-  driver.endChange = async () => {
+  driver.openDesktop = async () => {
     const error = new Error("resume ownership uncertain");
     error.credentialRestoreUnsafe = true;
     throw error;
@@ -556,11 +590,47 @@ test("unsafe login resume failure preserves the saved account without a second c
 
   await assert.rejects(manager.login({ label: "Added", acknowledgeRestart: true }), /启动未确认|startup was not confirmed/i);
 
-  assert.equal(driver.currentId, previous.capture.id);
-  assert.equal(driver.calls.filter((call) => call === `restore:${previous.capture.id}`).length, 1);
+  assert.equal(driver.currentId, added.capture.id);
+  assert.equal(driver.calls.filter((call) => call.startsWith("restore:")).length, 0);
   const saved = JSON.parse(await readFile(join(stateRoot, "antigravity-accounts.json"), "utf8"));
-  assert.equal(saved.activeId, previous.capture.id);
+  assert.equal(saved.activeId, added.capture.id);
   assert.ok(saved.accounts.some((accountValue) => accountValue.id === added.capture.id));
+});
+
+test("successful activation opens Desktop even when it was originally closed", async (t) => {
+  const stateRoot = await fixture(t);
+  const previous = { capture: account("previous@example.com", "previous"), quota: rawQuota(), label: "Previous" };
+  const target = { capture: account("target@example.com", "target"), quota: rawQuota(), label: "Target" };
+  await seedState(stateRoot, [previous, target], previous.capture.id);
+  const driver = makeDriver([previous, target], previous.capture.id);
+  driver.desktopRunning = false;
+  driver.beginChange = async () => {
+    driver.calls.push("begin:false");
+    return { wasRunning: false };
+  };
+  const manager = createAntigravityAccountManager({ stateRoot, driver });
+
+  await manager.activate({ id: target.capture.id, acknowledgeRestart: true });
+
+  assert.equal(driver.calls[0], "hasDesktop:false");
+  assert.equal(driver.calls.filter((call) => call === "open").length, 1);
+  assert.ok(driver.calls.indexOf("open") > driver.calls.indexOf(`restore:${target.capture.id}`));
+  assert.equal(driver.calls.at(-2), "open");
+  assert.equal(driver.calls.at(-1), `desktop:${target.capture.id}`);
+});
+
+test("activation reports only fixed safe progress messages", async (t) => {
+  const stateRoot = await fixture(t);
+  const current = { capture: account("progress@example.com", "progress"), quota: rawQuota(), label: "Progress" };
+  await seedState(stateRoot, [current], current.capture.id);
+  const driver = makeDriver([current], current.capture.id);
+  const messages = [];
+  const manager = createAntigravityAccountManager({ stateRoot, driver });
+
+  await manager.activate({ id: current.capture.id, onProgress: (message) => messages.push(message) });
+
+  assert.deepEqual(messages, ["正在打开 Antigravity。", "正在核对当前账号。", "账号已启用，Antigravity 已打开并完成登录核验。"]);
+  assert.doesNotMatch(messages.join("\n"), /progress@example|sha256|dpapi/i);
 });
 
 test("refreshing an inactive account uses one restart boundary and restores the latest active credential", async (t) => {
@@ -737,6 +807,64 @@ test("Windows driver validates restart acknowledgement and resume context", asyn
     ["PauseDesktop", { acknowledgeRestart: true }],
     ["ResumeDesktop", { wasRunning: true }],
   ]);
+});
+
+test("Windows driver opens or focuses Desktop through the fixed account-switch script", async () => {
+  const calls = [];
+  const driver = createAntigravityAccountDriver({
+    scriptsRoot: "C:\\fixed-scripts",
+    env: { LOCALAPPDATA: "C:\\local" },
+    runner: async (request) => {
+      calls.push(clone(request));
+      return JSON.stringify({ ok: true, launched: false, reused: true, focused: true });
+    },
+  });
+
+  await driver.openDesktop();
+
+  assert.deepEqual(calls, [{
+    kind: "open",
+    script: "C:\\fixed-scripts\\open-antigravity-account-switch.ps1",
+    input: "",
+  }]);
+});
+
+test("Windows driver checks Desktop state without opening it", async () => {
+  const calls = [];
+  const driver = createAntigravityAccountDriver({
+    scriptsRoot: "C:\\fixed-scripts",
+    env: { LOCALAPPDATA: "C:\\local" },
+    runner: async (request) => {
+      calls.push(clone(request));
+      return JSON.stringify({ running: false });
+    },
+  });
+
+  assert.equal(await driver.hasDesktop(), false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].action, "HasDesktop");
+});
+
+test("Windows driver verifies the opened Desktop account through native GetUserStatus", async () => {
+  const email = "native@example.com";
+  const expected = account(email, "native").id;
+  let requested = false;
+  const driver = createAntigravityAccountDriver({
+    scriptsRoot: "C:\\fixed-scripts",
+    env: { LOCALAPPDATA: "C:\\local" },
+    runner: async () => "{}",
+    findDesktopConnection: () => ({ lsAddress: "127.0.0.1:49152", csrfToken: "synthetic-csrf" }),
+    fetchImpl: async (url, options) => {
+      requested = true;
+      assert.equal(url, "http://127.0.0.1:49152/exa.language_server_pb.LanguageServerService/GetUserStatus");
+      assert.equal(options.headers["x-codeium-csrf-token"], "synthetic-csrf");
+      assert.deepEqual(JSON.parse(options.body), {});
+      return { ok: true, text: async () => JSON.stringify({ userStatus: { email } }) };
+    },
+  });
+
+  assert.equal(await driver.desktopIdentity(), expected);
+  assert.equal(requested, true);
 });
 
 test("Windows driver keeps runner failures free of secret stderr text", async () => {

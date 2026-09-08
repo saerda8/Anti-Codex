@@ -2089,10 +2089,13 @@ export function createAntiCodexManagerService(options = {}) {
         if (["activate", "refresh", "login"].includes(action)) args.acknowledgeRestart = body.acknowledgeRestart === true;
         if (action === "refresh" && body.all === true) args.all = true;
         const job = { id: crypto.randomUUID(), action, status: "running", startedAt: new Date().toISOString(), message: action === "login" ? "请在官方登录页完成登录；完成后将保存账号。" : "正在处理账号操作..." };
+        args.onProgress = (message) => {
+          if (accountJob === job && job.status === "running" && typeof message === "string") job.message = message.slice(0, 240);
+        };
         accountJob = job;
         void Promise.resolve().then(() => accountManager[methods[action]](args)).then(() => {
           job.status = "completed";
-          job.message = "账号操作已完成。";
+          job.message = ["activate", "login"].includes(action) ? "账号已启用，Antigravity 已打开并完成登录核验。" : "账号操作已完成。";
         }, (error) => {
           job.status = "failed";
           job.message = error.message || "账号操作失败，请检查当前官方登录状态。";

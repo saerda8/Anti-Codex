@@ -2,7 +2,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("HasCredential", "Capture", "Restore", "PauseDesktop", "ResumeDesktop")]
+    [ValidateSet("HasCredential", "Capture", "Restore", "HasDesktop", "PauseDesktop", "ResumeDesktop")]
     [string]$Action
 )
 
@@ -303,6 +303,15 @@ function Resolve-OfficialDesktop {
     return [IO.Path]::GetFullPath($path)
 }
 
+function Invoke-HasDesktop {
+    $path = Resolve-OfficialDesktop
+    $existing = Get-AntigravityMainProcess -ExecutablePath $path
+    if (-not $existing -and (Get-Process -Name "Antigravity" -ErrorAction SilentlyContinue)) {
+        throw "A running Antigravity process could not be identified safely."
+    }
+    Write-JsonResult ([pscustomobject]@{ running = [bool]$existing })
+}
+
 function Invoke-PauseDesktop([object]$InputValue) {
     if ($InputValue.acknowledgeRestart -ne $true) { throw "Antigravity restart acknowledgement is required." }
     Assert-NoConflictingAntigravityProcess
@@ -350,7 +359,7 @@ function Invoke-ResumeDesktop([object]$InputValue) {
 }
 
 try {
-    if ($Action -in @("PauseDesktop", "ResumeDesktop")) {
+    if ($Action -in @("HasDesktop", "PauseDesktop", "ResumeDesktop")) {
         . (Join-Path $PSScriptRoot "antigravity-desktop.ps1")
     }
     $inputValue = Read-JsonInput
@@ -358,6 +367,7 @@ try {
         "HasCredential" { Invoke-HasCredential }
         "Capture" { Invoke-Capture }
         "Restore" { Invoke-Restore $inputValue }
+        "HasDesktop" { Invoke-HasDesktop }
         "PauseDesktop" { Invoke-PauseDesktop $inputValue }
         "ResumeDesktop" { Invoke-ResumeDesktop $inputValue }
     }
