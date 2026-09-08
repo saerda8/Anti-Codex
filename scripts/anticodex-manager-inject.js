@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v115";
+  const VERSION = "native-panel-v116";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -144,6 +144,10 @@
     if (window.__ANTICODEX_MANAGER_STATUS_TIMER__) {
       clearInterval(window.__ANTICODEX_MANAGER_STATUS_TIMER__);
       delete window.__ANTICODEX_MANAGER_STATUS_TIMER__;
+    }
+    if (window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__) {
+      clearInterval(window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__);
+      delete window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__;
     }
     document.getElementById(MANAGER_ID)?.remove();
   }
@@ -1840,8 +1844,26 @@
       removeManager();
     };
     close.onclick = closeManagerFromEvent;
-    const promptSettingsButton = el("button", { className: "anticodex-prompt-settings", type: "button", "data-anticodex-prompt-settings": "true", text: "提示词" });
-    const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [promptSettingsButton, close])]);
+    const statusTabButton = el("button", { className: "anticodex-prompt-settings", type: "button", role: "tab", "aria-selected": "true", text: "状态" });
+    const accountSettingsButton = el("button", { className: "anticodex-prompt-settings", type: "button", role: "tab", "aria-selected": "false", "data-anticodex-account-settings": "true", text: "账号管理" });
+    const promptSettingsButton = el("button", { className: "anticodex-prompt-settings", type: "button", role: "tab", "aria-selected": "false", "data-anticodex-prompt-settings": "true", text: "提示词" });
+    const tabs = el("div", { role: "tablist", "aria-label": "管理页面", style: "display:flex;gap:6px;flex-wrap:wrap" }, [statusTabButton, accountSettingsButton, promptSettingsButton]);
+    const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [tabs, close])]);
+    style.textContent += `
+      .anticodex-account-list{grid-column:1/-1;display:grid;gap:12px}
+      .anticodex-account-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .anticodex-account-row{display:grid;grid-template-columns:minmax(140px,.9fr) minmax(180px,1.2fr) minmax(180px,1.2fr) 110px;gap:18px;padding:17px 0;border-top:1px solid var(--ac-line)}
+      .anticodex-account-identity{overflow-wrap:anywhere}.anticodex-account-identity strong{display:block;margin-bottom:6px}
+      .anticodex-account-meta{font-size:12px;color:var(--ac-muted);line-height:1.6;overflow-wrap:anywhere}
+      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:2px 7px;border-radius:5px;margin:6px 0;font-size:12px}
+      .anticodex-account-group{display:grid;gap:9px;align-content:start}.anticodex-account-group h3{font-size:13px;margin:0 0 3px}
+      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+      .anticodex-quota-track{height:6px;border-radius:4px;background:var(--ac-line);overflow:hidden;margin:6px 0}
+      .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
+      .anticodex-account-controls{display:grid;gap:6px;align-content:start}.anticodex-account-controls button{min-height:30px;padding:4px 8px}
+      .anticodex-head [role=tab][aria-selected=true]{border-color:#71c59a;color:#71c59a}
+      @media(max-width:850px){.anticodex-account-row{grid-template-columns:1fr 1fr}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}.anticodex-account-controls{display:flex;flex-wrap:wrap}}
+    `;
     const actions = el("div", { className: "anticodex-actions" });
     const grid = el("div", { className: "anticodex-grid" });
     grid.replaceChildren(card("\u6b63\u5728\u8bfb\u53d6", el("div", { className: "anticodex-result anticodex-loading", text: "\u6b63\u5728\u8bfb\u53d6\u672c\u5730\u72b6\u6001\uff0c\u9762\u677f\u4e0d\u4f1a\u6253\u5f00 ChatGPT \u767b\u5f55\u3002" })));
@@ -1878,6 +1900,12 @@
     let managerOperationGeneration = 0;
     let managerView = "status";
     let managerInitialLoadPromise = null;
+    let accountConfirmation = null;
+    function updateManagerTabs(view) {
+      for (const [name, button] of [["status", statusTabButton], ["accounts", accountSettingsButton], ["prompts", promptSettingsButton]]) {
+        button.setAttribute("aria-selected", name === view ? "true" : "false");
+      }
+    }
 
     function setManagerOperationBusy(busy) {
       managerOperationInFlight = Boolean(busy);
@@ -2106,7 +2134,172 @@
 
     window.__ANTICODEX_REFRESH_MANAGER_PANEL__ = () => load({ updateResult: false });
 
+    function accountResetText(value) {
+      const reset = Date.parse(value || "");
+      if (!Number.isFinite(reset)) return "恢复时间未知";
+      const minutes = Math.ceil((reset - Date.now()) / 60000);
+      if (minutes <= 0) return "已到恢复时间，请刷新确认";
+      const days = Math.floor(minutes / 1440);
+      const hours = Math.floor((minutes % 1440) / 60);
+      return `${new Date(reset).toLocaleString()} 恢复 · 剩余 ${days ? days + "天 " : ""}${hours}小时 ${minutes % 60}分`;
+    }
+
+    function drawAccountSettings(payload) {
+      if (managerView !== "accounts" || !root.isConnected) return;
+      const busy = payload.job?.status === "running";
+      const button = (text, handler) => {
+        const item = el("button", { type: "button", className: "anticodex-prompt-settings", text });
+        item.disabled = busy;
+        item.onclick = handler;
+        return item;
+      };
+      const label = el("input", { type: "text", maxlength: "80", placeholder: "账号备注（可选）", "aria-label": "账号备注", style: "min-width:160px;max-width:240px;padding:10px;border:1px solid var(--ac-line);border-radius:7px;background:var(--ac-raised);color:var(--ac-text)" });
+      const toolbar = el("div", { className: "anticodex-account-toolbar" }, [
+        label,
+        button("添加 / 登录账号", (event) => accountOperation("login", { label: label.value }, true, event.currentTarget)),
+        button("保存当前登录", () => accountOperation("capture", { label: label.value })),
+        button("刷新全部额度", (event) => accountOperation("refresh", { all: true }, true, event.currentTarget)),
+        button("重新读取列表", () => { void runManagerExclusive(showAccountSettings); }),
+      ]);
+      const list = el("div", { className: "anticodex-account-list", "data-anticodex-account-list": "true" }, [
+        el("h2", { text: `账号管理（${payload.accounts?.length || 0}）` }), toolbar,
+        el("div", { className: "anticodex-account-meta", text: "每个账号首次在 Google 官方页面登录一次。登录状态仅加密保存在本机；添加的新账号保存后会恢复原账号。手动启用或查询其他账号额度时，需要暂时重启 Antigravity。" }),
+        el("div", { className: "anticodex-account-meta", text: "以下额度是标注时间读取的快照；到达恢复时间不代表已验证补满。Google 对第三方接入存在账号限制，使用官方登录也不能保证账号不会被停用。" }),
+      ]);
+      for (const account of payload.accounts || []) {
+        const identity = el("div", { className: "anticodex-account-identity" }, [
+          el("strong", { text: account.label || account.maskedEmail || "未命名账号" }),
+          el("div", { className: "anticodex-account-meta", text: account.maskedEmail || "邮箱未提供" }),
+          account.id === payload.activeId ? el("span", { className: "anticodex-account-badge", text: "已启用" }) : null,
+          el("div", { className: "anticodex-account-meta", text: account.quota?.fetchedAt ? `更新于 ${new Date(account.quota.fetchedAt).toLocaleString()}` : "额度尚未读取" }),
+        ]);
+        const groups = account.quota?.groups?.length ? account.quota.groups : [
+          { name: "Gemini", buckets: [{ window: "5h" }, { window: "weekly" }] },
+          { name: "Claude / GPT", buckets: [{ window: "5h" }, { window: "weekly" }] },
+        ];
+        const groupNodes = groups.map((group, index) => {
+          const groupName = group.label || group.display_name || group.displayName || group.name || group.id || `模型组 ${index + 1}`;
+          const node = el("div", { className: "anticodex-account-group" }, [el("h3", { text: String(groupName) })]);
+          for (const bucket of group.buckets || []) {
+            const fraction = bucket.remaining_fraction;
+            const known = typeof fraction === "number" && Number.isFinite(fraction) && fraction >= 0 && fraction <= 1;
+            const percent = known ? Math.round(fraction * 10000) / 100 : null;
+            const windowLabel = bucket.window === "5h" ? "5 小时" : bucket.window === "weekly" ? "7 天" : bucket.window || "未标明周期";
+            const track = el("div", { className: "anticodex-quota-track", role: "progressbar", "aria-label": `${groupName} ${windowLabel}剩余额度`, "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuetext": known ? `${percent}%` : "未知" });
+            if (known) {
+              track.setAttribute("aria-valuenow", String(percent));
+              track.append(el("div", { className: `anticodex-quota-fill${percent <= 10 ? " anticodex-quota-low" : ""}`, style: `width:${percent}%` }));
+            }
+            node.append(el("div", {}, [
+              el("div", { className: "anticodex-quota-title" }, [el("span", { text: windowLabel }), el("span", { text: known ? `${percent}% 剩余` : "未知" })]),
+              track,
+              el("div", { className: "anticodex-account-meta", "data-account-reset": bucket.reset_time || "", text: accountResetText(bucket.reset_time) }),
+            ]));
+          }
+          return node;
+        });
+        let renameField = null;
+        const controls = el("div", { className: "anticodex-account-controls" }, [
+          button(account.id === payload.activeId ? "重新启用" : "启用", (event) => accountOperation("activate", { id: account.id }, true, event.currentTarget)),
+          button("刷新额度", (event) => accountOperation("refresh", { id: account.id }, account.id !== payload.activeId, event.currentTarget)),
+          button("修改备注", (event) => {
+            if (renameField) { accountOperation("rename", { id: account.id, label: renameField.value }); return; }
+            const editButton = event.currentTarget;
+            renameField = el("input", { type: "text", maxlength: "80", value: account.label || "", "aria-label": `修改 ${account.maskedEmail} 的备注`, style: "box-sizing:border-box;width:100%;margin-top:8px;padding:8px;background:var(--ac-raised);color:var(--ac-text);border:1px solid var(--ac-line);border-radius:5px" });
+            identity.append(renameField);
+            editButton.textContent = "保存备注";
+            renameField.onkeydown = (keyEvent) => {
+              if (keyEvent.key === "Enter") { keyEvent.preventDefault(); accountOperation("rename", { id: account.id, label: renameField.value }); }
+              if (keyEvent.key === "Escape") { keyEvent.stopPropagation(); renameField.remove(); renameField = null; editButton.textContent = "修改备注"; }
+            };
+            renameField.focus();
+          }),
+          button("移除", (event) => accountOperation("remove", { id: account.id }, false, event.currentTarget)),
+        ]);
+        list.append(el("div", { className: "anticodex-account-row", "data-account-id": account.id }, [identity, ...groupNodes, controls]));
+      }
+      if (!payload.accounts?.length) list.append(el("div", { className: "anticodex-result", text: "还没有保存的账号。已在 Antigravity 登录的账号可直接点“保存当前登录”，其他账号点“添加 / 登录账号”。" }));
+      grid.replaceChildren(list);
+    }
+
+    async function waitAccountJob(job) {
+      const deadline = Date.now() + 10 * 60 * 1000;
+      while (root.isConnected && managerView === "accounts") {
+        const payload = await managerGetLiveJson("/anticodex/accounts", { timeoutMs: 15000 });
+        drawAccountSettings(payload);
+        if (payload.job?.id !== job.id) throw new Error("账号任务已变化，请重新读取列表确认结果。");
+        result.textContent = payload.job.message || "正在处理账号操作...";
+        result.classList.toggle("anticodex-error", payload.job.status === "failed");
+        if (payload.job.status !== "running") return;
+        if (Date.now() >= deadline) throw new Error("操作仍在后台进行，请稍后重新读取列表；不要重复提交。");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    function accountOperation(action, values = {}, needsRestart = false, button = null) {
+      const signature = JSON.stringify([action, values.id || "", values.all === true]);
+      if (needsRestart || action === "remove") {
+        const confirmed = accountConfirmation?.signature === signature && accountConfirmation.button === button && button?.isConnected && Date.now() < accountConfirmation.until;
+        if (!confirmed) {
+          if (accountConfirmation?.button?.isConnected) accountConfirmation.button.textContent = accountConfirmation.label;
+          accountConfirmation = { signature, button, label: button?.textContent || "确认操作", until: Date.now() + 30000 };
+          if (button) button.textContent = action === "remove" ? "确认移除" : "确认执行";
+          result.classList.remove("anticodex-error");
+          result.textContent = action === "remove"
+            ? "只移除此账号的本机保存记录，不会退出官方当前账号。请再点一次“确认移除”。"
+            : "此操作会暂时停止并重启官方 Antigravity，请先结束其中正在进行的任务；不会关闭官方 Codex。请再点一次“确认执行”。";
+          return;
+        }
+      }
+      if (accountConfirmation?.button?.isConnected) accountConfirmation.button.textContent = accountConfirmation.label;
+      accountConfirmation = null;
+      void runManagerExclusive(async () => {
+        result.classList.remove("anticodex-error");
+        result.textContent = "正在提交账号操作...";
+        try {
+          const accepted = await managerPostJson("/anticodex/accounts/action", { action, ...values, acknowledgeRestart: needsRestart }, { retryCandidates: false, timeoutMs: 15000 });
+          await waitAccountJob(accepted.job);
+        } catch (error) {
+          result.classList.add("anticodex-error");
+          result.textContent = error.message;
+        }
+      });
+    }
+
+    async function showAccountSettings() {
+      managerView = "accounts";
+      updateManagerTabs("accounts");
+      root.setAttribute("data-anticodex-manager-view", "accounts");
+      actions.style.display = "none";
+      setResultCardMode("status");
+      result.textContent = "正在读取本机保存的账号...";
+      try {
+        const payload = await managerGetLiveJson("/anticodex/accounts", { timeoutMs: 15000 });
+        drawAccountSettings(payload);
+        result.textContent = payload.job?.message || "账号登录状态仅保存在本机后台；额度查询不产生模型回合。";
+        result.classList.toggle("anticodex-error", payload.job?.status === "failed");
+        if (!window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__) window.__ANTICODEX_MANAGER_ACCOUNTS_TIMER__ = setInterval(() => {
+          if (!root.isConnected || managerView !== "accounts") return;
+          root.querySelectorAll("[data-account-reset]").forEach((node) => { node.textContent = accountResetText(node.getAttribute("data-account-reset")); });
+        }, 30000);
+        if (payload.job?.status === "running") await waitAccountJob(payload.job);
+      } catch (error) {
+        result.classList.add("anticodex-error");
+        result.textContent = "账号列表读取失败：" + error.message;
+      }
+    }
+
+    accountSettingsButton.onclick = () => { void runManagerExclusive(showAccountSettings); };
+    statusTabButton.onclick = () => { void runManagerExclusive(async () => {
+      managerView = "status";
+      updateManagerTabs("status");
+      root.setAttribute("data-anticodex-manager-view", "status");
+      actions.style.display = "";
+      await load();
+    }); };
+
     async function showPromptSettings() {
+      updateManagerTabs("prompts");
       setResultCardMode("status");
       const promptGeneration = Number(root.getAttribute("data-anticodex-prompt-generation") || 0) + 1;
       root.setAttribute("data-anticodex-prompt-generation", String(promptGeneration));
@@ -2204,6 +2397,7 @@
       });
       backButton.onclick = () => { void runManagerExclusive(async () => {
         managerView = "status";
+        updateManagerTabs("status");
         root.setAttribute("data-anticodex-manager-view", "status");
         actions.style.display = "";
         await load();

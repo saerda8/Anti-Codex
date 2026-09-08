@@ -20,6 +20,8 @@ const ALLOWED_MANAGER_BRIDGE_REQUESTS = new Map([
   ["/models", new Set(["GET"])],
   ["/anticodex/diagnostics", new Set(["GET"])],
   ["/anticodex/account", new Set(["GET"])],
+  ["/anticodex/accounts", new Set(["GET"])],
+  ["/anticodex/accounts/action", new Set(["POST"])],
   ["/anticodex/upstream-profile", new Set(["GET", "POST"])],
   ["/anticodex/prompt-policy", new Set(["GET", "POST"])],
   ["/anticodex/model-routes", new Set(["GET"])],

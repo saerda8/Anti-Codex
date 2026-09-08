@@ -598,8 +598,8 @@ function resolveModel(entries, requestedModel) {
   return model;
 }
 
-export function discoverAntigravityDesktopConnection(env = process.env) {
-  if (env.ANTIGRAVITY_LS_ADDRESS && env.ANTIGRAVITY_CSRF_TOKEN) {
+export function discoverAntigravityDesktopConnection(env = process.env, options = {}) {
+  if (!options.processOnly && env.ANTIGRAVITY_LS_ADDRESS && env.ANTIGRAVITY_CSRF_TOKEN) {
     return {
       lsAddress: normalizeAddress(env.ANTIGRAVITY_LS_ADDRESS),
       agentApiAddress: normalizeAddress(env.ANTIGRAVITY_AGENTAPI_ADDRESS || env.ANTIGRAVITY_LS_ADDRESS),
@@ -609,7 +609,7 @@ export function discoverAntigravityDesktopConnection(env = process.env) {
   if (platform() !== "win32") {
     throw new AntigravityCascadeError("Antigravity Desktop discovery is currently supported on Windows only.", { statusCode: 503 });
   }
-  const loggedConnection = discoverAntigravityDesktopConnectionFromFiles(env);
+  const loggedConnection = options.processOnly ? null : discoverAntigravityDesktopConnectionFromFiles(env);
   if (loggedConnection) return loggedConnection;
   const script = [
     "$filter = \"Name='language_server.exe' OR Name='language_server_windows_x64.exe'\"",

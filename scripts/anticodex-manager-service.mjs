@@ -11,6 +11,9 @@ import {
     testCodexPlusPlusUpstreamConnection,
 } from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
+import { createAntigravityAccountManager } from "./anticodex-antigravity-accounts.mjs";
+import { createAntigravityAccountDriver } from "./anticodex-antigravity-accounts-driver.mjs";
+import { createAntigravityOfficialLogin } from "./anticodex-antigravity-login.mjs";
 import {
     promptPolicyPayload,
     readNativeCustomInstructions,
@@ -1980,6 +1983,14 @@ export function createAntiCodexManagerService(options = {}) {
   const adapterAuthToken = String(options.adapterAuthToken || "");
   const managerActionRuntime = options.managerActionRuntime;
   const refreshModels = options.refreshModels;
+  let accountDriver;
+  const officialLogin = createAntigravityOfficialLogin({
+    scriptsRoot,
+    stopDesktop: () => accountDriver.beginChange({ acknowledgeRestart: true }),
+  });
+  if (!options.accountManager) accountDriver = createAntigravityAccountDriver({ scriptsRoot, ...officialLogin });
+  const accountManager = options.accountManager || createAntigravityAccountManager({ stateRoot, driver: accountDriver });
+  let accountJob = null;
   const refreshStatus = async () => ({
     ok: true,
     diagnostics: await diagnosticsPayload(stateRoot, false, fixedHealthUrl, adapterAuthToken),
@@ -2002,6 +2013,10 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "OPTIONS") {
       return respondToPreflight(req, res);
+    }
+    if (req.method === "POST" && accountJob?.status === "running") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      return jsonResponse(res, 409, { ok: false, message: "账号操作正在运行，请等待完成。" }, req);
     }
 
     if (req.method === "GET" && pathname === "/health") {
@@ -2047,6 +2062,45 @@ export function createAntiCodexManagerService(options = {}) {
       const fixedRoute = await fixedRouteHealthSnapshot(fixedHealthUrl);
       const account = await fixedRouteAccountSnapshot(fixedRoute, { authToken: adapterAuthToken });
       return jsonResponse(res, account.ok ? 200 : 503, account, req);
+    }
+
+    if (req.method === "GET" && pathname === "/anticodex/accounts") {
+      if (!validateManagerSourceRequest(req, res, "account management")) return;
+      try {
+        return jsonResponse(res, 200, { ok: true, ...await accountManager.list(), job: accountJob }, req);
+      } catch (error) {
+        return jsonResponse(res, 500, { ok: false, message: error.message }, req);
+      }
+    }
+
+    if (req.method === "POST" && pathname === "/anticodex/accounts/action") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      try {
+        const body = JSON.parse((await readRequestBody(req)).toString("utf8") || "{}");
+        const methods = { capture: "captureCurrent", activate: "activate", refresh: "refresh", remove: "remove", rename: "rename", login: "login" };
+        const action = String(body.action || "");
+        if (!Object.hasOwn(methods, action)) return jsonResponse(res, 400, { ok: false, message: "不支持的账号操作。" }, req);
+        if (accountJob?.status === "running" || ACTIVE_FOREGROUND_ACTIONS.size || ACTIVE_BACKGROUND_ACTION_LOCKS.size) {
+          return jsonResponse(res, 409, { ok: false, message: "已有管理操作正在运行，请等待完成。" }, req);
+        }
+        const args = {};
+        if (["activate", "refresh", "remove", "rename"].includes(action) && typeof body.id === "string") args.id = body.id;
+        if (["capture", "rename", "login"].includes(action) && typeof body.label === "string") args.label = body.label;
+        if (["activate", "refresh", "login"].includes(action)) args.acknowledgeRestart = body.acknowledgeRestart === true;
+        if (action === "refresh" && body.all === true) args.all = true;
+        const job = { id: crypto.randomUUID(), action, status: "running", startedAt: new Date().toISOString(), message: action === "login" ? "请在官方登录页完成登录；完成后将保存账号。" : "正在处理账号操作..." };
+        accountJob = job;
+        void Promise.resolve().then(() => accountManager[methods[action]](args)).then(() => {
+          job.status = "completed";
+          job.message = "账号操作已完成。";
+        }, (error) => {
+          job.status = "failed";
+          job.message = error.message || "账号操作失败，请检查当前官方登录状态。";
+        }).finally(() => { job.finishedAt = new Date().toISOString(); });
+        return jsonResponse(res, 202, { ok: true, job }, req);
+      } catch (error) {
+        return jsonResponse(res, 400, { ok: false, message: error.message }, req);
+      }
     }
 
     if (req.method === "GET" && pathname === "/anticodex/manager/bootstrap") {
@@ -2123,6 +2177,7 @@ export function createAntiCodexManagerService(options = {}) {
         return jsonResponse(res, 403, { ok: false, error: "Anti-Codex manager action token is missing or invalid." }, req);
       }
       if (!validateManagerSourceRequest(req, res, "manager action")) return;
+      if (accountJob?.status === "running") return jsonResponse(res, 409, { ok: false, message: "账号操作正在运行，请等待完成。" }, req);
       try {
         const action = String(url.searchParams.get("action") || "");
         const payload = await runManagerBridgeAction(action, stateRoot, scriptsRoot, { refreshModels, refreshStatus, managerActionRuntime });

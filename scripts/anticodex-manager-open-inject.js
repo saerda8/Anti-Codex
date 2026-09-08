@@ -5,7 +5,7 @@
     window.__ANTICODEX_REFRESH_MANAGER_PANEL__?.();
     return;
   }
-  if (window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v115" && typeof window.__ANTICODEX_OPEN_MANAGER__ === "function") {
+  if (window.__ANTICODEX_MANAGER_VERSION__ === "native-panel-v116" && typeof window.__ANTICODEX_OPEN_MANAGER__ === "function") {
     window.__ANTICODEX_OPEN_MANAGER__();
   }
 })();
