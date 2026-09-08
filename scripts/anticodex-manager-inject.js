@@ -1865,11 +1865,11 @@
       .anticodex-account-meta{font-size:8px;color:var(--ac-muted);line-height:1.1;overflow-wrap:anywhere}
       .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 4px;border-radius:4px;margin:1px 0 0;font-size:8.2px}
       .anticodex-account-group{display:grid;gap:2px;align-content:start}.anticodex-account-group h3{font-size:11px;margin:0}
-      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:120px}
-      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,48px) auto;column-gap:7px;align-items:center}
+      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;max-width:96px}
+      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,40px) auto;column-gap:7px;align-items:center}
       .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1}
       .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
-      .anticodex-quota-track{height:4px;width:100%;max-width:44px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:2px 0}
+      .anticodex-quota-track{height:4px;width:100%;max-width:34px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:2px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
       .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:2px;align-content:start}.anticodex-account-controls button{min-height:19px;padding:0 2px;font-size:8.1px}
       .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:2px 3px;font-size:8.7px;min-height:19px;line-height:1.1;border-bottom:1px solid var(--ac-line)}
@@ -2184,17 +2184,29 @@
     }
 
     function accountQuotaBuckets(group) {
-      const order = { "5h": 0, weekly: 1, "7d": 2, daily: 3 };
-      return [...(group.buckets || [])].sort((a, b) => {
-        const normalizeWindow = (value) => {
-          const normalized = String(value || "").trim().toLowerCase();
-          if (normalized === "7d" || normalized === "weekly") return normalized;
-          if (normalized === "5h") return "5h";
-          if (normalized === "daily") return "daily";
-          return normalized;
-        };
-        return (order[normalizeWindow(a.window)] ?? 99) - (order[normalizeWindow(b.window)] ?? 99);
+      const order = { "5h": 0, "7d": 1, daily: 2 };
+      const normalizeWindow = (value) => {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (normalized === "weekly" || normalized === "7d") return "7d";
+        if (normalized === "5h") return "5h";
+        if (normalized === "daily") return "daily";
+        return normalized;
+      };
+      const normalizedBuckets = (Array.isArray(group?.buckets) ? group.buckets : []).map((bucket) => {
+        return { ...bucket, window: normalizeWindow(bucket?.window) };
       });
+      const isKnownValue = (bucket) => typeof bucket?.remaining_fraction === "number"
+        && Number.isFinite(bucket.remaining_fraction) && bucket.remaining_fraction >= 0 && bucket.remaining_fraction <= 1;
+      const deduped = [];
+      for (const bucket of normalizedBuckets) {
+        const existingIndex = deduped.findIndex((value) => value.window === bucket.window);
+        if (existingIndex >= 0) {
+          if (!isKnownValue(deduped[existingIndex]) && isKnownValue(bucket)) deduped[existingIndex] = bucket;
+          continue;
+        }
+        deduped.push(bucket);
+      }
+      return deduped.sort((a, b) => (order[a.window] ?? 99) - (order[b.window] ?? 99));
     }
 
     function drawAccountSettings(payload) {
@@ -2228,8 +2240,8 @@
           el("div", { className: "anticodex-account-meta", title: account.quota?.fetchedAt ? new Date(account.quota.fetchedAt).toLocaleString() : "", text: account.quota?.fetchedAt ? `更新 ${new Date(account.quota.fetchedAt).toLocaleTimeString()}` : "额度尚未读取" }),
         ]);
         const groups = account.quota?.groups?.length ? account.quota.groups : [
-          { name: "Gemini", buckets: [{ window: "5h" }, { window: "weekly" }] },
-          { name: "Claude / GPT", buckets: [{ window: "5h" }, { window: "weekly" }] },
+          { name: "Gemini", buckets: [{ window: "5h" }, { window: "7d" }] },
+          { name: "Claude / GPT", buckets: [{ window: "5h" }, { window: "7d" }] },
         ];
         const groupNodes = groups.map((group, index) => {
           const groupName = group.label || group.display_name || group.displayName || group.name || group.id || `模型组 ${index + 1}`;
@@ -2240,7 +2252,7 @@
             const percent = known ? Math.round(fraction * 10000) / 100 : null;
             const windowLabel = bucket.window === "5h"
               ? "5 小时"
-              : bucket.window === "weekly" || bucket.window === "7d"
+              : bucket.window === "7d"
               ? "7 天"
               : bucket.window || "未标明周期";
             const track = el("div", { className: "anticodex-quota-track", role: "progressbar", "aria-label": `${groupName} ${windowLabel}剩余额度`, "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuetext": known ? `${percent}%` : "未知" });
