@@ -6,14 +6,14 @@ import path from "node:path";
 import vm from "node:vm";
 import { createAntiCodexManagerService } from "../../scripts/anticodex-manager-service.mjs";
 
-test("account quota puts five hours before seven days without changing source data", () => {
-  const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
-  assert.ok(ui.includes("function accountQuotaBuckets("), "Quota display must explicitly order provider windows");
-  const source = ui.slice(ui.indexOf("function accountQuotaBuckets("), ui.indexOf("function drawAccountSettings("));
-  const group = { buckets: [{ window: "weekly", remaining_fraction: 0 }, { window: "5h", remaining_fraction: 0.7 }, { window: "daily" }] };
-  const ordered = vm.runInNewContext(`${source}; accountQuotaBuckets(group)`, { group });
-  assert.deepEqual(Array.from(ordered, (bucket) => bucket.window), ["5h", "weekly", "daily"]);
-  assert.deepEqual(group.buckets.map((bucket) => bucket.window), ["weekly", "5h", "daily"]);
+  test("account quota puts five hours before seven days without changing source data", () => {
+    const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+    assert.ok(ui.includes("function accountQuotaBuckets("), "Quota display must explicitly order provider windows");
+    const source = ui.slice(ui.indexOf("function accountQuotaBuckets("), ui.indexOf("function drawAccountSettings("));
+    const group = { buckets: [{ window: "7d", remaining_fraction: 0 }, { window: "5h", remaining_fraction: 0.7 }, { window: "weekly", remaining_fraction: 0.9 }, { window: "daily" }] };
+    const ordered = vm.runInNewContext(`${source}; accountQuotaBuckets(group)`, { group });
+    assert.deepEqual(Array.from(ordered, (bucket) => bucket.window), ["5h", "7d", "weekly", "daily"]);
+    assert.deepEqual(group.buckets.map((bucket) => bucket.window), ["7d", "5h", "weekly", "daily"]);
   assert.equal(ordered[1].remaining_fraction, 0);
   assert.ok(/\.anticodex-quota-track\{[^}]*max-width:140px/.test(ui), "Quota tracks must stay compact, including narrow layouts");
 });

@@ -2184,7 +2184,7 @@
     }
 
     function accountQuotaBuckets(group) {
-      const order = { "5h": 0, weekly: 1 };
+      const order = { "5h": 0, weekly: 1, "7d": 1 };
       return [...(group.buckets || [])].sort((a, b) => (order[a.window] ?? 2) - (order[b.window] ?? 2));
     }
 
@@ -2229,7 +2229,11 @@
             const fraction = bucket.remaining_fraction;
             const known = typeof fraction === "number" && Number.isFinite(fraction) && fraction >= 0 && fraction <= 1;
             const percent = known ? Math.round(fraction * 10000) / 100 : null;
-            const windowLabel = bucket.window === "5h" ? "5 小时" : bucket.window === "weekly" ? "7 天" : bucket.window || "未标明周期";
+            const windowLabel = bucket.window === "5h"
+              ? "5 小时"
+              : bucket.window === "weekly" || bucket.window === "7d"
+              ? "7 天"
+              : bucket.window || "未标明周期";
             const track = el("div", { className: "anticodex-quota-track", role: "progressbar", "aria-label": `${groupName} ${windowLabel}剩余额度`, "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuetext": known ? `${percent}%` : "未知" });
             if (known) {
               track.setAttribute("aria-valuenow", String(percent));
