@@ -1856,14 +1856,14 @@
       [data-anticodex-manager-view=accounts] .anticodex-result-card{display:none}
       .anticodex-account-list{grid-column:1/-1;display:grid;gap:0}
       .anticodex-account-list h2{font-size:14px;margin:0 0 6px}
-      .anticodex-account-toolbar{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
-      .anticodex-account-toolbar button{min-height:30px;padding:3px 10px;font-size:12px}
-      .anticodex-account-row{display:grid;grid-template-columns:minmax(110px,.75fr) minmax(140px,1fr) minmax(140px,1fr) 145px;gap:10px;padding:8px 4px;border-top:1px solid var(--ac-line);align-items:start}
+      .anticodex-account-toolbar{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+      .anticodex-account-toolbar button{min-height:28px;padding:2px 8px;font-size:11px}
+      .anticodex-account-row{display:grid;grid-template-columns:minmax(102px,.72fr) minmax(132px,1fr) minmax(132px,1fr) 130px;gap:8px;padding:6px 4px;border-top:1px solid var(--ac-line);align-items:start}
       .anticodex-account-row[data-active=true]{background:color-mix(in srgb,#71c59a 7%,transparent)}
       .anticodex-account-row[data-pending=true]{background:var(--ac-raised)}
-      .anticodex-account-identity{overflow-wrap:anywhere;font-size:12px}.anticodex-account-identity strong{display:block;margin-bottom:3px}
+      .anticodex-account-identity{overflow-wrap:anywhere;font-size:11px}.anticodex-account-identity strong{display:block;margin-bottom:2px}
       .anticodex-account-meta{font-size:10px;color:var(--ac-muted);line-height:1.35;overflow-wrap:anywhere}
-      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 5px;border-radius:4px;margin:2px 0;font-size:10px}
+      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 5px;border-radius:4px;margin:2px 0 0;font-size:10px}
       .anticodex-account-group{display:grid;gap:4px;align-content:start}.anticodex-account-group h3{font-size:12px;margin:0}
       .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:120px}
       .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,72px) auto;column-gap:10px;align-items:center}
@@ -1872,7 +1872,7 @@
       .anticodex-quota-track{height:4px;width:100%;max-width:72px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
       .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:4px;align-content:start}.anticodex-account-controls button{min-height:26px;padding:2px 5px;font-size:11px}
-      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:7px 4px;font-size:12px;min-height:30px;line-height:1.4;border-bottom:1px solid var(--ac-line)}
+      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:6px 4px;font-size:11px;min-height:28px;line-height:1.35;border-bottom:1px solid var(--ac-line)}
       .anticodex-account-inline-status{grid-column:1/-1;font-size:11px;line-height:1.4;color:var(--ac-muted)}
       .anticodex-account-feedback[aria-busy=true]::before{content:'◌';display:inline-block;margin-right:6px;animation:anticodex-account-spin 1s linear infinite}
       @keyframes anticodex-account-spin{to{transform:rotate(360deg)}}
