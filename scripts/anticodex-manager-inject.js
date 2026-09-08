@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v117";
+  const VERSION = "native-panel-v118";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1865,11 +1865,11 @@
       .anticodex-account-meta{font-size:11px;color:var(--ac-muted);line-height:1.4;overflow-wrap:anywhere}
       .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 5px;border-radius:4px;margin:3px 0;font-size:11px}
       .anticodex-account-group{display:grid;gap:5px;align-content:start}.anticodex-account-group h3{font-size:12px;margin:0}
-      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px}
-      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:center}
-      .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1/-1}
+      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:12px;max-width:180px}
+      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,180px) auto;column-gap:10px;align-items:center}
+      .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1}
       .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
-      .anticodex-quota-track{height:4px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
+      .anticodex-quota-track{height:4px;width:100%;max-width:180px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:3px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
       .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}.anticodex-account-controls button{min-height:28px;padding:3px 5px;font-size:12px}
       .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:7px 4px;font-size:12px;min-height:30px;line-height:1.4;border-bottom:1px solid var(--ac-line)}
@@ -2183,6 +2183,11 @@
       }
     }
 
+    function accountQuotaBuckets(group) {
+      const order = { "5h": 0, weekly: 1 };
+      return [...(group.buckets || [])].sort((a, b) => (order[a.window] ?? 2) - (order[b.window] ?? 2));
+    }
+
     function drawAccountSettings(payload) {
       if (managerView !== "accounts" || !root.isConnected) return;
       const busy = payload.job?.status === "running";
@@ -2220,7 +2225,7 @@
         const groupNodes = groups.map((group, index) => {
           const groupName = group.label || group.display_name || group.displayName || group.name || group.id || `模型组 ${index + 1}`;
           const node = el("div", { className: "anticodex-account-group" }, [el("h3", { text: String(groupName) })]);
-          for (const bucket of group.buckets || []) {
+          for (const bucket of accountQuotaBuckets(group)) {
             const fraction = bucket.remaining_fraction;
             const known = typeof fraction === "number" && Number.isFinite(fraction) && fraction >= 0 && fraction <= 1;
             const percent = known ? Math.round(fraction * 10000) / 100 : null;
