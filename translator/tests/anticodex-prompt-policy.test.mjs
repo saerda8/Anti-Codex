@@ -162,7 +162,7 @@ test("all required local prompt layers stay visible without a second policy inje
       "utf8",
     );
     assert.equal(
-      (commonPolicyPatch.match(/\+\s*let request_json = apply_anticodex_prompt_policy\(relay, request_json\);/g) || []).length,
+      (commonPolicyPatch.match(/\+\s*request_json = apply_anticodex_prompt_policy\(relay, request_json\);/g) || []).length,
       1,
     );
     const cascadeSource = readFileSync(new URL("../provider/antigravity-cascade-client.mjs", import.meta.url), "utf8");
