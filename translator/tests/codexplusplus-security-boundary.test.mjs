@@ -22,7 +22,7 @@ const patch18Path = join(root, "third_party", "codexplusplus", "patches", "0018-
 const patch18 = existsSync(patch18Path) ? readFileSync(patch18Path, "utf8") : "";
 const patch19Path = join(root, "third_party", "codexplusplus", "patches", "0019-bound-upstream-stream-inactivity.patch");
 const patch19 = existsSync(patch19Path) ? readFileSync(patch19Path, "utf8") : "";
-const patch23Path = join(root, "third_party", "codexplusplus", "patches", "0023-fix-proxy-stop-retries-on-payment-errors.patch");
+const patch23Path = join(root, "third_party", "codexplusplus", "patches", "0022-fix-format-v1.2.56-upstream.patch");
 const patch23 = existsSync(patch23Path) ? readFileSync(patch23Path, "utf8") : "";
 const patch1AddedLines = patch1
   .split("\n")
@@ -41,10 +41,10 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
   const metadata = JSON.parse(readFileSync(join(componentRoot, "upstream.json"), "utf8"));
 
-  assert.equal(metadata.patches.length, 22);
+  assert.equal(metadata.patches.length, 25);
   assert.equal(
     metadata.patches.at(-1).file,
-    "patches/0023-fix-proxy-stop-retries-on-payment-errors.patch",
+    "patches/0026-fix-v1.3.0-mutable-request-body.patch",
   );
   for (const patch of metadata.patches) {
     const actualHash = createHash("sha256")
@@ -58,7 +58,7 @@ test("accepted CodexPlusPlus metadata pins the complete patch series", () => {
 });
 
 test("streamed payment failures become one terminal quota event", () => {
-  assert.match(patch23, /^Subject: \[PATCH 23\/23\] fix\(proxy\): stop retries on payment errors$/m);
+  assert.match(patch23, /^Subject: \[PATCH\] port 0023-fix-proxy-stop-retries-on-payment-errors to v1.3.0$/m);
   assert.match(patch23, /status_code != 402/);
   assert.match(patch23, /value\.get\("stream"\)/);
   assert.match(patch23, /Some\(true\)/);
@@ -154,7 +154,7 @@ test("Anti-Codex command safety binds one deterministic container name to the cu
 
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch13, /^From [0-9a-f]{40} /m);
-  assert.match(patch13, /^Subject: \[PATCH 12\/21\] fix: format DreamSkin installer metadata test$/m);
+  assert.match(patch13, /^Subject: \[PATCH\] fix: format DreamSkin installer metadata test$/m);
   assert.deepEqual(
     [...patch13.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
     [[
@@ -170,7 +170,7 @@ test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", ()
     .replaceAll(/\s/g, "");
   const removed = patch13
     .split("\n")
-    .filter((line) => line.startsWith("-") && !line.startsWith("---") && line !== "-- ")
+    .filter((line) => line.startsWith("-") && !line.startsWith("---") && !line.startsWith("--"))
     .map((line) => line.slice(1))
     .join("")
     .replaceAll(/\s/g, "");
@@ -179,7 +179,7 @@ test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", ()
 
 test("v1.2.47 DreamSkin rustfmt compatibility patch changes formatting only", () => {
   assert.match(patch14, /^From [0-9a-f]{40} /m);
-  assert.match(patch14, /^Subject: \[PATCH 13\/21\] fix: format DreamSkin runtime test$/m);
+  assert.match(patch14, /^Subject: \[PATCH\] fix: format DreamSkin runtime test$/m);
   assert.deepEqual(
     [...patch14.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].map((match) => [match[1], match[2]]),
     [[
@@ -195,7 +195,7 @@ test("v1.2.47 DreamSkin rustfmt compatibility patch changes formatting only", ()
     .replaceAll(/\s/g, "");
   const removed = patch14
     .split("\n")
-    .filter((line) => line.startsWith("-") && !line.startsWith("---") && line !== "-- ")
+    .filter((line) => line.startsWith("-") && !line.startsWith("---") && !line.startsWith("--"))
     .map((line) => line.slice(1))
     .join("")
     .replaceAll(/\s/g, "");
