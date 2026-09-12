@@ -1,14 +1,14 @@
-From 2bb215d666bc7597babd72134d93f93e65ea1cac Mon Sep 17 00:00:00 2001
+From eda8959df7b1b73b4580b708ddf5d5a3336c1610 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
 Date: Fri, 14 Aug 2026 16:13:39 +0800
-Subject: [PATCH 17/21] route compaction by current thread model
+Subject: [PATCH] route compaction by current thread model
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 256 ++++++++++++++++++-
  1 file changed, 255 insertions(+), 1 deletion(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 9226fe5..2691afe 100644
+index ce681d8..101ec22 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,6 +4,7 @@
@@ -19,7 +19,7 @@ index 9226fe5..2691afe 100644
  use std::path::{Path, PathBuf};
  use std::sync::Mutex;
  use std::time::Duration;
-@@ -72,6 +73,8 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
+@@ -73,6 +74,8 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
  const ANTICODEX_THIRD_PARTY_MODEL_PREFIX: &str = "anticodex/third-party/";
  pub const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata";
  const CODEX_COMPACTION_REQUEST_KIND: &str = "compaction";
@@ -28,7 +28,7 @@ index 9226fe5..2691afe 100644
  const ANTICODEX_PROMPT_POLICY_PATH_ENV: &str = "ANTICODEX_PROMPT_POLICY_PATH";
  const ANTICODEX_PROMPT_POLICY_SCHEMA: &str = "anticodex-prompt-policy-v1";
  const ANTICODEX_NATIVE_PROMPT_SNAPSHOT_SCHEMA: &str = "anticodex-native-prompt-snapshot-v1";
-@@ -1484,6 +1487,129 @@ fn request_is_codex_compaction(request_json: &Value, turn_metadata: Option<&str>
+@@ -1506,6 +1509,129 @@ fn request_is_codex_compaction(request_json: &Value, turn_metadata: Option<&str>
      }
  }
  
@@ -158,7 +158,7 @@ index 9226fe5..2691afe 100644
  fn anticodex_model_is_routable(settings: &BackendSettings, model: &str) -> bool {
      if model == ANTICODEX_THIRD_PARTY_MODEL_SLOT
          || model.starts_with(ANTICODEX_THIRD_PARTY_MODEL_PREFIX)
-@@ -1531,11 +1657,36 @@ fn align_codex_compaction_model_with_live_selection(
+@@ -1553,11 +1679,36 @@ fn align_codex_compaction_model_with_live_selection(
      settings: &BackendSettings,
      request_json: &mut Value,
      turn_metadata: Option<&str>,
@@ -196,7 +196,7 @@ index 9226fe5..2691afe 100644
      let selected_model = std::fs::read_to_string(config_path)
          .ok()
          .and_then(|contents| crate::relay_config::root_key_string(&contents, "model"));
-@@ -1599,9 +1750,12 @@ fn select_anticodex_relay_for_model(
+@@ -1621,9 +1772,12 @@ fn select_anticodex_relay_for_model(
  
  #[cfg(test)]
  mod anticodex_model_routing_tests {
@@ -209,7 +209,7 @@ index 9226fe5..2691afe 100644
          align_codex_compaction_model_with_selected, select_anticodex_relay_for_model,
      };
      use crate::settings::{BackendSettings, RelayProfile};
-@@ -1789,6 +1943,106 @@ mod anticodex_model_routing_tests {
+@@ -1811,6 +1965,106 @@ mod anticodex_model_routing_tests {
          ));
          assert_eq!(request["model"], "claude-sonnet-4-6");
      }

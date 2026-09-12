@@ -1,7 +1,7 @@
-From 8f5d010e8cd62b03c7593a75ed031f48acef203a Mon Sep 17 00:00:00 2001
-From: Codex <codex@local>
-Date: Sat, 1 Aug 2026 00:59:58 +0800
-Subject: [PATCH 02/21] fix: cancel loopback streams without resets
+From c07e610bb07d3d008686478e24afa3012c0c7e03 Mon Sep 17 00:00:00 2001
+From: Porter <porter@localhost>
+Date: Sat, 12 Sep 2026 12:44:09 +0800
+Subject: [PATCH] port loopback transport patch to v1.3.0
 
 ---
  Cargo.lock                                    |   4 +
@@ -10,14 +10,14 @@ Subject: [PATCH 02/21] fix: cancel loopback streams without resets
  crates/codex-plus-core/src/launcher.rs        | 771 ++++++++++++++++--
  crates/codex-plus-core/src/lib.rs             |   1 +
  crates/codex-plus-core/src/loopback_http.rs   |  91 +++
- crates/codex-plus-core/src/protocol_proxy.rs  | 230 +++++-
+ crates/codex-plus-core/src/protocol_proxy.rs  | 232 +++++-
  crates/codex-plus-core/src/relay_config.rs    |   2 +-
- .../codex-plus-core/tests/protocol_proxy.rs   |  30 +-
- 9 files changed, 1065 insertions(+), 72 deletions(-)
+ .../codex-plus-core/tests/protocol_proxy.rs   |  27 +
+ 9 files changed, 1066 insertions(+), 70 deletions(-)
  create mode 100644 crates/codex-plus-core/src/loopback_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
-index 2a74452..1ed7d9a 100644
+index 0d48c95..0d69c99 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -424,9 +424,13 @@ dependencies = [
@@ -35,7 +35,7 @@ index 2a74452..1ed7d9a 100644
   "reqwest 0.12.28",
   "rusqlite",
 diff --git a/Cargo.toml b/Cargo.toml
-index 77c70eb..c774200 100644
+index eba11d3..33079e0 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -17,9 +17,13 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
@@ -71,7 +71,7 @@ index 5672ba6..797a047 100644
  qrcode = { version = "0.14", default-features = false, features = ["svg"] }
  rusqlite.workspace = true
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 5c5926c..b2aec66 100644
+index d547c57..87ab24a 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -11,10 +11,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
@@ -87,8 +87,8 @@ index 5c5926c..b2aec66 100644
  
  use crate::settings::{BackendSettings, SettingsStore, normalize_codex_extra_args};
  use crate::status::{LaunchStatus, StatusStore};
-@@ -23,6 +24,10 @@ static PET_OVERLAY_SYNC_FAILED: AtomicBool = AtomicBool::new(false);
- static PET_CURSOR_DRIVER_FAILED: AtomicBool = AtomicBool::new(false);
+@@ -24,6 +25,10 @@ static PET_CURSOR_DRIVER_FAILED: AtomicBool = AtomicBool::new(false);
+ const BRIDGE_HEALTH_FAILURE_THRESHOLD: u8 = 2;
  const MACOS_DEBUG_TAKEOVER_WAIT_MS: u64 = 5_000;
  const MACOS_DEBUG_TAKEOVER_INTERVAL_MS: u64 = 100;
 +const LOCAL_HELPER_BIND_HOST: &str = "127.0.0.1";
@@ -98,7 +98,7 @@ index 5c5926c..b2aec66 100644
  
  /// 协议代理的端口写死在 `config.toml` 的 `base_url = "http://127.0.0.1:57321/v1"` 里，
  /// 不能像普通 helper 端口那样临时换一个空闲的，否则 Codex CLI 会连到没人监听的地址。
-@@ -598,12 +603,8 @@ impl DefaultLaunchHooks {
+@@ -611,12 +616,8 @@ impl DefaultLaunchHooks {
      }
  }
  
@@ -113,7 +113,7 @@ index 5c5926c..b2aec66 100644
  }
  
  #[async_trait(?Send)]
-@@ -740,8 +741,8 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -762,8 +763,8 @@ impl LaunchHooks for DefaultLaunchHooks {
      }
  
      async fn start_helper(&self, helper_port: u16) -> anyhow::Result<()> {
@@ -124,7 +124,7 @@ index 5c5926c..b2aec66 100644
              .await
              .with_context(|| {
                  format!("failed to bind helper runtime on {bind_host}:{helper_port}")
-@@ -755,15 +756,33 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -777,15 +778,33 @@ impl LaunchHooks for DefaultLaunchHooks {
              }),
          );
          let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
@@ -162,7 +162,7 @@ index 5c5926c..b2aec66 100644
                          }
                      }
                  }
-@@ -1070,19 +1089,58 @@ impl LaunchHooks for DefaultLaunchHooks {
+@@ -1094,19 +1113,58 @@ impl LaunchHooks for DefaultLaunchHooks {
  }
  
  async fn handle_helper_connection(
@@ -225,7 +225,7 @@ index 5c5926c..b2aec66 100644
                  "application/json; charset=utf-8",
                  &body,
              )
-@@ -1090,17 +1148,16 @@ async fn handle_helper_connection(
+@@ -1114,17 +1172,16 @@ async fn handle_helper_connection(
              stream.shutdown().await?;
              return Ok(());
          }
@@ -251,7 +251,7 @@ index 5c5926c..b2aec66 100644
  
      let _ = crate::diagnostic_log::append_diagnostic_log(
          "helper.request",
-@@ -1312,6 +1369,25 @@ async fn handle_helper_connection(
+@@ -1365,6 +1422,25 @@ async fn handle_helper_connection(
      Ok(())
  }
  
@@ -277,7 +277,7 @@ index 5c5926c..b2aec66 100644
  fn decode_protocol_proxy_request_body(
      body: &[u8],
      content_encoding: Option<&str>,
-@@ -1515,6 +1591,262 @@ async fn handle_models_proxy_connection(
+@@ -1568,6 +1644,262 @@ async fn handle_models_proxy_connection(
      stream.shutdown().await?;
      Ok(())
  }
@@ -540,7 +540,7 @@ index 5c5926c..b2aec66 100644
  async fn handle_protocol_proxy_connection(
      stream: &mut tokio::net::TcpStream,
      request_body: &str,
-@@ -1524,6 +1856,20 @@ async fn handle_protocol_proxy_connection(
+@@ -1577,6 +1909,20 @@ async fn handle_protocol_proxy_connection(
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
      let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
@@ -561,7 +561,7 @@ index 5c5926c..b2aec66 100644
      let upstream = match crate::protocol_proxy::open_responses_proxy_request_for_path(
          request_body,
          request_user_agent,
-@@ -1752,6 +2098,20 @@ async fn handle_chat_completions_proxy_connection(
+@@ -1877,6 +2223,20 @@ async fn handle_chat_completions_proxy_connection(
      path: &str,
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
@@ -582,7 +582,7 @@ index 5c5926c..b2aec66 100644
      let upstream = match crate::protocol_proxy::open_chat_completions_proxy_request(
          request_body,
          request_user_agent,
-@@ -1903,11 +2263,65 @@ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+@@ -2028,11 +2388,65 @@ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
  const MAX_HTTP_BODY_BYTES: usize = 32 * 1024 * 1024;
  const MAX_HTTP_ENCODED_BODY_BYTES: usize = 64 * 1024 * 1024;
  
@@ -648,7 +648,7 @@ index 5c5926c..b2aec66 100644
  #[derive(Debug)]
  struct HttpRequestReadError {
      status: &'static str,
-@@ -1929,6 +2343,13 @@ impl HttpRequestReadError {
+@@ -2054,6 +2468,13 @@ impl HttpRequestReadError {
          }
      }
  
@@ -662,7 +662,7 @@ index 5c5926c..b2aec66 100644
      fn status(&self) -> &'static str {
          self.status
      }
-@@ -2046,65 +2467,97 @@ impl ChunkedScanState {
+@@ -2171,65 +2592,97 @@ impl ChunkedScanState {
      }
  }
  
@@ -726,7 +726,7 @@ index 5c5926c..b2aec66 100644
 +            let buffered_body = buffer[header_end + 4..].to_vec();
 +            if buffered_body.len() > MAX_HTTP_ENCODED_BODY_BYTES {
 +                return Err(HttpRequestReadError::payload_too_large());
-+            }
+             }
 +            return Ok(HttpRequestHead {
 +                headers: buffer[..header_end].to_vec(),
 +                framing,
@@ -764,7 +764,7 @@ index 5c5926c..b2aec66 100644
 +                    chunked_scan.advance(&buffered_body)?,
 +                    ChunkedBodyScan::Complete
 +                )
-             }
++            }
 +        };
 +        if complete {
 +            break;
@@ -798,7 +798,7 @@ index 5c5926c..b2aec66 100644
              ChunkedBody::Complete(body) => body,
              ChunkedBody::Incomplete => {
                  return Err(HttpRequestReadError::bad_request(
-@@ -3100,6 +3553,43 @@ mod tests {
+@@ -3256,6 +3709,43 @@ mod tests {
          })
      }
  
@@ -842,7 +842,7 @@ index 5c5926c..b2aec66 100644
      #[test]
      fn launcher_stays_alive_while_injected_cdp_endpoint_is_available() {
          assert!(launcher_target_alive(false, true));
-@@ -3368,6 +3858,147 @@ mod tests {
+@@ -3642,6 +4132,147 @@ mod tests {
          crate::paths::set_settings_path_for_tests(previous_settings_path);
      }
  
@@ -990,7 +990,7 @@ index 5c5926c..b2aec66 100644
      async fn send_raw_helper_request(request: &[u8]) -> Vec<u8> {
          let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
              .await
-@@ -3461,13 +4092,17 @@ mod tests {
+@@ -3735,13 +4366,17 @@ mod tests {
          let helper_addr = helper_listener.local_addr().unwrap();
          let helper = tokio::spawn(async move {
              let (stream, remote_addr) = helper_listener.accept().await.unwrap();
@@ -1013,7 +1013,7 @@ index 5c5926c..b2aec66 100644
          for fragment in headers.as_bytes().chunks(7) {
              client.write_all(fragment).await.unwrap();
 diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
-index 5d842c5..2ba71a9 100644
+index 0a87817..fac3dc6 100644
 --- a/crates/codex-plus-core/src/lib.rs
 +++ b/crates/codex-plus-core/src/lib.rs
 @@ -21,6 +21,7 @@ pub mod grok_config;
@@ -1021,9 +1021,9 @@ index 5d842c5..2ba71a9 100644
  pub mod install;
  pub mod launcher;
 +mod loopback_http;
+ pub mod manager_navigation;
  pub mod mcp_config;
  pub mod model_catalog;
- pub mod model_suffix;
 diff --git a/crates/codex-plus-core/src/loopback_http.rs b/crates/codex-plus-core/src/loopback_http.rs
 new file mode 100644
 index 0000000..b28cd21
@@ -1122,10 +1122,10 @@ index 0000000..b28cd21
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index adf5e12..e3711d7 100644
+index e851a34..a5b0851 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -35,6 +35,25 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
+@@ -36,6 +36,25 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
      "top_logprobs",
      "user",
  ];
@@ -1151,7 +1151,7 @@ index adf5e12..e3711d7 100644
  const ERROR_BODY_PREVIEW_LIMIT: usize = 1024;
  
  pub fn protocol_proxy_port() -> u16 {
-@@ -330,6 +349,14 @@ pub struct UpstreamProxyResponse {
+@@ -331,6 +350,14 @@ pub struct UpstreamProxyResponse {
      pub response: reqwest::Response,
  }
  
@@ -1166,7 +1166,7 @@ index adf5e12..e3711d7 100644
  #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
  pub enum UpstreamWireApi {
      Responses,
-@@ -355,6 +382,16 @@ impl UpstreamProxyResponse {
+@@ -358,6 +385,16 @@ impl UpstreamProxyResponse {
      }
  }
  
@@ -1183,10 +1183,10 @@ index adf5e12..e3711d7 100644
  pub fn upstream_header_timeout() -> Duration {
      UPSTREAM_HEADER_TIMEOUT
  }
-@@ -797,6 +834,149 @@ fn select_model_route(
-         source_model: model.to_string(),
-         upstream_model,
+@@ -829,6 +866,151 @@ fn select_model_route(
      }))
+ }
+ 
 +pub async fn open_cancel_aware_loopback_responses_proxy_request(
 +    body: &str,
 +    original_user_agent: Option<&str>,
@@ -1330,10 +1330,12 @@ index adf5e12..e3711d7 100644
 +        );
 +    }
 +    anyhow::bail!("no usable loopback provider candidate")
- }
- 
- pub async fn open_models_proxy_request(
-@@ -896,6 +1076,53 @@ fn response_header_timeout(is_stream: bool) -> Duration {
++}
++
+ fn aggregate_upstream_model_override(
+     settings: &crate::settings::BackendSettings,
+     relay: &crate::settings::RelayProfile,
+@@ -1067,6 +1249,53 @@ fn response_header_timeout(is_stream: bool) -> Duration {
      }
  }
  
@@ -1387,7 +1389,7 @@ index adf5e12..e3711d7 100644
  pub async fn open_chat_completions_proxy_request(
      body: &str,
      original_user_agent: Option<&str>,
-@@ -924,7 +1151,8 @@ pub async fn open_chat_completions_proxy_request(
+@@ -1095,7 +1324,8 @@ pub async fn open_chat_completions_proxy_request(
      .post(chat_completions_url(&relay.base_url))
      .header(reqwest::header::CONTENT_TYPE, "application/json")
      .json(&request_json);
@@ -1398,10 +1400,10 @@ index adf5e12..e3711d7 100644
      let content_type = upstream
          .headers()
 diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
-index 604633e..07ffe2a 100644
+index f4183a8..ecdf42b 100644
 --- a/crates/codex-plus-core/src/relay_config.rs
 +++ b/crates/codex-plus-core/src/relay_config.rs
-@@ -2772,7 +2772,7 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
+@@ -3132,7 +3132,7 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
              .unwrap_or(false)
  }
  
@@ -1411,22 +1413,19 @@ index 604633e..07ffe2a 100644
      let active = active_provider_id(&doc);
      if let Some(provider_id) = active.as_deref() {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 646a062..7f2ea8a 100644
+index 9d387ac..8c79aa9 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -4,8 +4,9 @@ use codex_plus_core::protocol_proxy::{
-     chat_sse_to_responses_sse_with_request, is_audio_transcriptions_proxy_path,
-     is_chat_completions_proxy_path, is_models_proxy_path, is_responses_compact_proxy_path,
+@@ -5,6 +5,8 @@ use codex_plus_core::protocol_proxy::{
+     is_audio_transcriptions_proxy_path, is_chat_completions_proxy_path, is_image_edits_proxy_path,
+     is_image_generations_proxy_path, is_models_proxy_path, is_responses_compact_proxy_path,
      is_responses_proxy_path, models_url, open_audio_transcriptions_proxy_request,
--    open_chat_completions_proxy_request, open_models_proxy_request, open_responses_proxy_request,
--    open_responses_proxy_request_with_settings,
 +    open_cancel_aware_loopback_chat_completions_proxy_request,
-+    open_cancel_aware_loopback_responses_proxy_request, open_chat_completions_proxy_request,
-+    open_models_proxy_request, open_responses_proxy_request, open_responses_proxy_request_with_settings,
-     open_responses_proxy_request_with_settings_for_path, responses_compact_url,
-     responses_error_from_upstream, responses_to_chat_completions,
-     send_upstream_request_with_header_timeout, upstream_header_timeout, upstream_http_client,
-@@ -2472,6 +2473,31 @@ async fn no_auth_proxy_endpoints_omit_authorization_header() {
++    open_cancel_aware_loopback_responses_proxy_request,
+     open_chat_completions_proxy_request, open_image_edits_proxy_request,
+     open_image_generations_proxy_request, open_models_proxy_request, open_responses_proxy_request,
+     open_responses_proxy_request_with_settings,
+@@ -3041,6 +3043,31 @@ async fn no_auth_proxy_endpoints_omit_authorization_header() {
          .unwrap();
      assert_eq!(upstream.status_code, 200);
      assert_eq!(server.finish().authorization, None);

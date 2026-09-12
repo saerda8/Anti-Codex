@@ -1,7 +1,7 @@
-From c1a509d7e480857638374fa9ca1ed3b657d721ec Mon Sep 17 00:00:00 2001
+From 4429f139c42bf7ff5c44b81aedfcb4c11923b897 Mon Sep 17 00:00:00 2001
 From: Codex <codex@local>
 Date: Sun, 19 Jul 2026 02:30:42 +0800
-Subject: [PATCH 05/21] fix: preserve image tool outputs for chat relays
+Subject: [PATCH] fix: preserve image tool outputs for chat relays
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 133 +++++++++++++++++-
@@ -9,10 +9,10 @@ Subject: [PATCH 05/21] fix: preserve image tool outputs for chat relays
  2 files changed, 202 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 94cf553..9ebe007 100644
+index 34b91ce..9f00286 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -4697,10 +4697,10 @@ fn guard_inline_image_data_urls(value: &mut Value) -> bool {
+@@ -5058,10 +5058,10 @@ fn guard_inline_image_data_urls(value: &mut Value) -> bool {
  /// 无图时原样返回 `response_output_text` 的结果，保持既有行为不变。
  fn tool_output_content(output: &Value) -> Value {
      let Some(parts) = output.as_array() else {
@@ -25,7 +25,7 @@ index 94cf553..9ebe007 100644
      }
  
      let mut chat_parts = Vec::new();
-@@ -4728,6 +4728,135 @@ fn tool_output_content(output: &Value) -> Value {
+@@ -5089,6 +5089,135 @@ fn tool_output_content(output: &Value) -> Value {
      Value::Array(chat_parts)
  }
  
@@ -162,10 +162,10 @@ index 94cf553..9ebe007 100644
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 510af80..1b1a1be 100644
+index 11ff17c..9eca340 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -1169,6 +1169,77 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+@@ -1534,6 +1534,77 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
      );
  }
  

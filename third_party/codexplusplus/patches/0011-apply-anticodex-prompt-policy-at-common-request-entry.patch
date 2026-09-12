@@ -1,15 +1,14 @@
-From 04687e721264d36c5c72d82e3a12ec20b13de8d3 Mon Sep 17 00:00:00 2001
-From: Anti-Codex <anticodex@local.invalid>
-Date: Sat, 1 Aug 2026 12:05:44 +0800
-Subject: [PATCH 11/21] feat: apply Anti-Codex prompt policy at common request
- entry
+From 59cb666e63f69f2534bcc828b9498add68d0fc0d Mon Sep 17 00:00:00 2001
+From: Porter <porter@localhost>
+Date: Sat, 12 Sep 2026 12:56:58 +0800
+Subject: [PATCH] port Anti-Codex prompt policy to v1.3.0
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs | 658 +++++++++++++++++++
  1 file changed, 658 insertions(+)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e0313d7..5bca841 100644
+index 64562b1..fd778cc 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,10 +4,14 @@
@@ -22,12 +21,12 @@ index e0313d7..5bca841 100644
 +use std::time::{SystemTime, UNIX_EPOCH};
  
  use anyhow::Context;
- use serde_json::{Value, json};
+ use serde_json::{Map, Value, json};
 +use sha2::{Digest, Sha256};
  
  use crate::relay_rotation::{RotationContext, RotationEvent};
  use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, SettingsStore};
-@@ -68,6 +72,659 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
+@@ -69,6 +73,659 @@ const ANTICODEX_THIRD_PARTY_MODEL_SLOT: &str = "anticodex/third-party";
  const ANTICODEX_THIRD_PARTY_MODEL_PREFIX: &str = "anticodex/third-party/";
  const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata";
  const CODEX_COMPACTION_REQUEST_KIND: &str = "compaction";
@@ -687,14 +686,14 @@ index e0313d7..5bca841 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -1627,6 +2284,7 @@ async fn upstream_request_parts(
+@@ -1796,6 +2453,7 @@ async fn upstream_request_parts(
+     model_override: Option<&str>,
+ ) -> anyhow::Result<(String, Value, UpstreamWireApi)> {
+     let compact = is_responses_compact_proxy_path(request_path);
++    request_json = apply_anticodex_prompt_policy(relay, request_json);
      if compact && relay.protocol == RelayProtocol::ChatCompletions {
          anyhow::bail!("Chat Completions 协议暂不支持 Responses compact 请求");
      }
-+    let request_json = apply_anticodex_prompt_policy(relay, request_json);
-     let mut body = match relay.protocol {
-         RelayProtocol::Responses => request_json,
-         RelayProtocol::ChatCompletions => responses_to_chat_completions(request_json)?,
 -- 
 2.55.0.windows.5
 

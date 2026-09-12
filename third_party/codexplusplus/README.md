@@ -1,12 +1,12 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly twenty-two narrow Anti-Codex compatibility patches: seventeen functional compatibility patches covering product isolation, transport, routing, conversion, diagnostics, bounded requests and streams, usage estimation, prompt policy, command-tool enforcement and terminal payment failures; plus retained v1.2.46 DreamSkin-installer, v1.2.47 DreamSkin-runtime, v1.2.48, v1.2.50 and v1.2.56 upstream/merged-isolation rustfmt normalizations. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries exactly twenty-five narrow Anti-Codex compatibility patches for the v1.3.0 upstream layout. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.2.56`
-- Accepted commit: `696d3ef1714b55ec5eb14b0828ae682b55eb9252`
+- Accepted version: `v1.3.0`
+- Accepted commit: `be6a45852f9992a688f33be933f444ee098fc67a`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
@@ -110,11 +110,11 @@ The candidate contains clean patched source, the release launcher, `candidate.js
 
 ## Current Verification Boundary
 
-- All twenty-two patches replayed without automatic conflict resolution on pinned upstream `v1.2.56`; the managed promotion candidate commit is `197d9e52a44106f602dc6962df14f53282d14e2c`, and the source overlay produces tree `28dc6de370214f6ec3ee0c9a35a0f94620690fda`.
-- The candidate-local build and Windows launchability checks passed through the fixed runner image and Docker pre/postflight checks. The launcher has SHA-256 `24f20dc4036226ed605ada82c832856c765a6dd17345b6bebf302538642d513f`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership. The response conversion boundary now enforces those Docker rules and structured source editing, including rejection of stop, restart and forced removal while retaining passive wait on the same container, before an unsafe command can reach the command tool. Canonically marked HTTP compaction now validates the current task identity and follows that task's most recent model-bearing selection in either direction among third-party, Claude and Gemini routes, while ordinary turns remain unchanged. Successful helper streams now terminate after 120 seconds without upstream data instead of hanging indefinitely, and converted Chat streams surface `stream_timeout`; streamed HTTP 402 payment failures now end with one `insufficient_quota` event instead of native reconnects. Explicit no-auth relays omit the Authorization header on both direct and cancel-aware loopback paths. The focused payment-failure unit test, two focused timeout unit tests, protocol proxy suite 101/101 and watcher suite 12/12 passed with Rust test threads capped at two.
+- All twenty-five patches replayed after manual v1.3.0 context adaptation; the managed promotion candidate commit is `a095b85016806e66802a4d9ce8811814f701108b`.
+- The candidate-local build and Windows launchability checks passed through the fixed runner image and Docker pre/postflight checks. The launcher has SHA-256 `19ae4b18e64ac0e4de34273ad5c8cdbb5a7e38f06fc24ce6289f33efd349a16c`; its immutable guidance treats a command timeout as an unknown process/container lifetime, preserves a still-running timed-out instance until its result can be collected, requires an explicit name and current-task ownership label on every created container, and forbids global Docker cleanup without exact current-task ownership. The response conversion boundary now enforces those Docker rules and structured source editing, including rejection of stop, restart and forced removal while retaining passive wait on the same container, before an unsafe command can reach the command tool. Canonically marked HTTP compaction now validates the current task identity and follows that task's most recent model-bearing selection in either direction among third-party, Claude and Gemini routes, while ordinary turns remain unchanged. Successful helper streams now terminate after 120 seconds without upstream data instead of hanging indefinitely, and converted Chat streams surface `stream_timeout`; streamed HTTP 402 payment failures now end with one `insufficient_quota` event instead of native reconnects. Explicit no-auth relays omit the Authorization header on both direct and cancel-aware loopback paths. The focused payment-failure unit test, two focused timeout unit tests, protocol proxy suite 115/115 and watcher suite 13/13 passed with Rust test threads capped at two.
 - Complete project regression and promotion preflight remain required before activation.
 - A real 417 KB contact sheet sent as a standard Chat tool image returned `LARGE_IMAGE_OK`; the same image serialized as ordinary tool text reproduced the provider context-window failure.
 - The prior v1.2.45 launcher SHA-256 `da45c0cfe2a07e9a9016793371ff484cb5a79ccc69c7e35e3dd492ab1fa49922` is historical evidence only and is not accepted for the current source.
-- The project metadata is `v1.2.56` with twenty-two accepted patches; the managed launcher hash above is the promotion candidate pending guarded activation.
+- The project metadata is `v1.3.0` with twenty-five accepted patches; the managed launcher hash above is the promotion candidate pending guarded activation.
 
 The isolated launcher must always receive explicit copied-client paths and child-only state environment variables. Provider and long-task readiness remain separate later gates.

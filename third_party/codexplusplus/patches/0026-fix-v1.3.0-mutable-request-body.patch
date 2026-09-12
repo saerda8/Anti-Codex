@@ -1,0 +1,25 @@
+From 4e32febef1fac9e7b28ca683f5377e58607aec27 Mon Sep 17 00:00:00 2001
+From: Anti-Codex <anticodex@local>
+Date: Sat, 12 Sep 2026 15:04:08 +0800
+Subject: [PATCH] fix v1.3.0 mutable request body
+
+---
+ crates/codex-plus-core/src/protocol_proxy.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index f32e0c8..7e7a1f6 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -2319,7 +2319,7 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+     request_path: &str,
+     turn_metadata: Option<&str>,
+ ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
+-    let request_json: Value = serde_json::from_str(body)?;
++    let mut request_json: Value = serde_json::from_str(body)?;
+     let is_stream = request_json
+         .get("stream")
+         .and_then(Value::as_bool)
+-- 
+2.55.0.windows.5
+

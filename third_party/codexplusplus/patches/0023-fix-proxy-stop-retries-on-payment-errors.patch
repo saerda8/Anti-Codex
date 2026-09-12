@@ -1,265 +1,794 @@
-From 197d9e52a44106f602dc6962df14f53282d14e2c Mon Sep 17 00:00:00 2001
-From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
-Date: Mon, 31 Aug 2026 09:35:27 +0800
-Subject: [PATCH 23/23] fix(proxy): stop retries on payment errors
+From b1ddf458d0f8b91b5499054c31731014959dd260 Mon Sep 17 00:00:00 2001
+From: Anti-Codex <anticodex@local>
+Date: Sat, 12 Sep 2026 13:27:28 +0800
+Subject: [PATCH] format v1.3.0 port
 
 ---
- crates/codex-plus-core/src/launcher.rs       | 135 ++++++++++++++++++-
- crates/codex-plus-core/src/protocol_proxy.rs |  52 ++++++-
- 2 files changed, 183 insertions(+), 4 deletions(-)
+ apps/codex-plus-launcher/src/main.rs          |  4 +-
+ crates/codex-plus-core/src/model_suffix.rs    |  2 +-
+ crates/codex-plus-core/src/relay_config.rs    | 31 +++++---
+ crates/codex-plus-core/src/vision.rs          | 45 ++++++++---
+ .../tests/floating_panel_outline.rs           | 11 ++-
+ crates/codex-plus-core/tests/model_suffix.rs  | 46 ++++++++---
+ .../codex-plus-core/tests/protocol_proxy.rs   |  6 +-
+ crates/codex-plus-core/tests/relay_config.rs  | 20 ++---
+ .../codex-plus-core/tests/relay_rotation.rs   | 78 ++++++++++++++-----
+ crates/codex-plus-data/src/lib.rs             |  9 +--
+ crates/codex-plus-data/src/provider_sync.rs   | 46 ++++++-----
+ crates/codex-plus-data/src/storage.rs         |  4 +-
+ crates/codex-plus-data/tests/provider_sync.rs |  5 +-
+ .../codex-plus-data/tests/storage_adapter.rs  | 73 +++++++++++------
+ 14 files changed, 259 insertions(+), 121 deletions(-)
 
-diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index c508ab6..6585976 100644
---- a/crates/codex-plus-core/src/launcher.rs
-+++ b/crates/codex-plus-core/src/launcher.rs
-@@ -1683,6 +1683,24 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
-         let status_code = upstream.status_code;
-         let content_type = upstream.content_type.clone();
-         let upstream_body = collect_loopback_body(upstream.response).await?;
-+        if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
-+            request_json,
-+            status_code,
-+            &content_type,
-+            &upstream_body,
-+        ) {
-+            write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
-+            stream.write_all(&body).await?;
-+            log_helper_response(
-+                "helper.protocol_proxy_upstream_error",
-+                method,
-+                path,
-+                &status,
-+                remote_addr_text,
-+            );
-+            stream.shutdown().await?;
-+            return Ok(true);
-+        }
-         let error = crate::protocol_proxy::responses_error_from_upstream(
-             status_code,
-             &content_type,
-@@ -1966,10 +1984,29 @@ async fn handle_protocol_proxy_connection(
-     };
-     if !upstream.is_success() {
-         let status = upstream.status();
-+        let status_code = upstream.status_code;
-         let upstream_content_type = upstream.content_type.clone();
-         let upstream_body = upstream.response.bytes().await?.to_vec();
-+        if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
-+            request_json.as_ref(),
-+            status_code,
-+            &upstream_content_type,
-+            &upstream_body,
-+        ) {
-+            write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
-+            stream.write_all(&body).await?;
-+            log_helper_response(
-+                "helper.protocol_proxy_upstream_error",
-+                method,
-+                path,
-+                &status,
-+                remote_addr_text,
-+            );
-+            stream.shutdown().await?;
-+            return Ok(());
-+        }
-         let error = crate::protocol_proxy::responses_error_from_upstream(
--            upstream.status_code,
-+            status_code,
-             &upstream_content_type,
-             &upstream_body,
-         );
-@@ -4020,6 +4057,102 @@ mod tests {
-         crate::paths::set_settings_path_for_tests(previous_settings_path);
-     }
+diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
+index f7a55ad..ce9b1ed 100644
+--- a/apps/codex-plus-launcher/src/main.rs
++++ b/apps/codex-plus-launcher/src/main.rs
+@@ -154,8 +154,8 @@ fn acquire_single_instance_guard_with_retry(
+             ) =>
+         {
+             log_launcher_already_running(debug_port);
+-            let stale = allow_stale_recovery
+-                && should_recover_stale_launcher(debug_port, target_app_path);
++            let stale =
++                allow_stale_recovery && should_recover_stale_launcher(debug_port, target_app_path);
+             if should_retry_stale_launcher_guard(error.kind(), allow_stale_recovery, stale) {
+                 codex_plus_core::watcher::stop_launcher_processes();
+                 std::thread::sleep(std::time::Duration::from_millis(250));
+diff --git a/crates/codex-plus-core/src/model_suffix.rs b/crates/codex-plus-core/src/model_suffix.rs
+index 7121329..432eb18 100644
+--- a/crates/codex-plus-core/src/model_suffix.rs
++++ b/crates/codex-plus-core/src/model_suffix.rs
+@@ -3,7 +3,7 @@
+ //! 后缀语法：`deepseek-v4-pro[1M]` 表示 slug=deepseek-v4-pro、context_window=1000000。
+ //! 单位 K/k=1000、M/m=1000000；纯数字也接受。后缀在生成 catalog 时剥离。
  
-+    #[tokio::test]
-+    async fn streamed_payment_required_becomes_terminal_quota_event() {
-+        let _settings_guard = crate::paths::settings_path_test_guard();
-+        let temp = tempfile::tempdir().unwrap();
-+        let settings_path = temp.path().join("settings.json");
-+        let previous_settings_path =
-+            crate::paths::set_settings_path_for_tests(Some(settings_path.clone()));
-+        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-+            .await
-+            .unwrap();
-+        let upstream_addr = upstream_listener.local_addr().unwrap();
-+        let settings = serde_json::json!({
-+            "relayProfilesEnabled": true,
-+            "relayProfiles": [{
-+                "id": "payment-fixture",
-+                "name": "Payment Fixture",
-+                "baseUrl": format!("http://{upstream_addr}/v1"),
-+                "upstreamBaseUrl": format!("http://{upstream_addr}/v1"),
-+                "apiKey": "fixture-key",
-+                "protocol": "chatCompletions",
-+                "relayMode": "pureApi"
-+            }],
-+            "activeRelayId": "payment-fixture"
-+        });
-+        std::fs::write(settings_path, serde_json::to_vec_pretty(&settings).unwrap()).unwrap();
-+
-+        let upstream = tokio::spawn(async move {
-+            let (mut stream, _) = upstream_listener.accept().await.unwrap();
-+            let mut request = Vec::new();
-+            let mut buffer = [0_u8; 4096];
-+            let mut expected_len = None;
-+            loop {
-+                let read = stream.read(&mut buffer).await.unwrap();
-+                assert!(read > 0, "upstream request ended before body completed");
-+                request.extend_from_slice(&buffer[..read]);
-+                if expected_len.is_none()
-+                    && let Some(header_end) = find_header_end(&request)
-+                {
-+                    let headers = String::from_utf8_lossy(&request[..header_end]);
-+                    let content_length = header_value_from_headers(&headers, "content-length")
-+                        .unwrap()
-+                        .parse::<usize>()
-+                        .unwrap();
-+                    expected_len = Some(header_end + 4 + content_length);
-+                }
-+                if expected_len.is_some_and(|length| request.len() >= length) {
-+                    break;
-+                }
-+            }
-+
-+            let response_body = br#"{"error":{"message":"Insufficient account balance","type":"payment_required","code":"insufficient_quota"}}"#;
-+            let response = format!(
-+                "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-+                response_body.len()
-+            );
-+            stream.write_all(response.as_bytes()).await.unwrap();
-+            stream.write_all(response_body).await.unwrap();
-+        });
-+
-+        let request_body = br#"{"model":"fixture-model","input":"probe","stream":true}"#;
-+        let helper_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-+            .await
-+            .unwrap();
-+        let helper_addr = helper_listener.local_addr().unwrap();
-+        let helper = tokio::spawn(async move {
-+            let (stream, remote_addr) = helper_listener.accept().await.unwrap();
-+            handle_helper_connection(stream, Some(remote_addr))
-+                .await
-+                .unwrap();
-+        });
-+        let mut client = tokio::net::TcpStream::connect(helper_addr).await.unwrap();
-+        let headers = format!(
-+            "POST /v1/responses HTTP/1.1\r\nHost: {helper_addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-+            request_body.len()
-+        );
-+        client.write_all(headers.as_bytes()).await.unwrap();
-+        client.write_all(request_body).await.unwrap();
-+        let mut response = Vec::new();
-+        client.read_to_end(&mut response).await.unwrap();
-+
-+        helper.await.unwrap();
-+        upstream.await.unwrap();
-+        crate::paths::set_settings_path_for_tests(previous_settings_path);
-+
-+        let response = String::from_utf8_lossy(&response);
-+        assert!(response.starts_with("HTTP/1.1 200 OK"));
-+        assert!(
-+            response
-+                .to_ascii_lowercase()
-+                .contains("content-type: text/event-stream")
-+        );
-+        assert!(response.contains("event: response.failed"));
-+        assert!(response.contains("\"code\":\"insufficient_quota\""));
-+        assert!(response.contains("Insufficient account balance"));
-+    }
-+
-     #[tokio::test]
-     async fn unauthorized_proxy_request_never_reaches_upstream() {
-         let _settings_guard = crate::paths::settings_path_test_guard();
-diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 2691afe..242a2f1 100644
---- a/crates/codex-plus-core/src/protocol_proxy.rs
-+++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -1276,7 +1276,16 @@ impl ChatSseToResponsesConverter {
+-use serde_json::{json, Value};
++use serde_json::{Value, json};
+ use std::collections::{HashMap, HashSet};
  
-     pub fn fail(&mut self, message: String, error_type: Option<String>) -> Vec<u8> {
-         let mut output = String::new();
--        self.state.failed_into(&mut output, message, error_type);
-+        self.state
-+            .failed_into(&mut output, message, error_type, None);
-+        self.failed = true;
-+        output.into_bytes()
-+    }
-+
-+    pub fn fail_with_code(&mut self, message: String, error_code: String) -> Vec<u8> {
-+        let mut output = String::new();
-+        self.state
-+            .failed_into(&mut output, message, None, Some(error_code));
-         self.failed = true;
-         output.into_bytes()
-     }
-@@ -1307,7 +1316,7 @@ impl ChatSseToResponsesConverter {
+ #[derive(Debug, Clone, PartialEq, Eq)]
+diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
+index ecdf42b..dd7b3ab 100644
+--- a/crates/codex-plus-core/src/relay_config.rs
++++ b/crates/codex-plus-core/src/relay_config.rs
+@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ use toml_edit::{DocumentMut, Item, Table, TableLike};
+ 
+-use crate::settings::{
+-    BackendSettings, RelayProfile, RelayProtocol, RelaySessionProvider,
+-};
++use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, RelaySessionProvider};
+ 
+ const RELAY_PROVIDER: &str = "custom";
+ const LEGACY_RELAY_PROVIDERS: &[&str] = &["CodexPlusPlus", "CodexPP"];
+@@ -2086,7 +2084,10 @@ fn apply_model_metadata_overrides(
+             continue;
          };
-         if event_name.as_deref() == Some("error") || chunk.get("error").is_some() {
-             let (message, error_type) = extract_chat_sse_error(&chunk);
--            self.state.failed_into(output, message, error_type);
-+            self.state.failed_into(output, message, error_type, None);
-             self.failed = true;
-             return;
-         }
-@@ -3613,12 +3622,21 @@ impl ChatSseState {
+         for (key, value) in user_override {
+-            if matches!(key.as_str(), "slug" | "context_window" | "auto_compact_token_limit") {
++            if matches!(
++                key.as_str(),
++                "slug" | "context_window" | "auto_compact_token_limit"
++            ) {
+                 continue;
+             }
+             model_object.insert(key.clone(), value.clone());
+@@ -3468,7 +3469,9 @@ CODEX_HOME = \"/home/user/.codex\"
+ ";
+ 
+         let normalized = normalize_duplicate_toml_text(contents);
+-        let doc = normalized.parse::<DocumentMut>().expect("must stay valid TOML");
++        let doc = normalized
++            .parse::<DocumentMut>()
++            .expect("must stay valid TOML");
+ 
+         assert_eq!(
+             doc["mcp_servers"]["node_repl"]["command"].as_str(),
+@@ -3493,10 +3496,18 @@ cwd = \"/tmp\"
+ ";
+ 
+         let normalized = normalize_duplicate_toml_text(contents);
+-        let doc = normalized.parse::<DocumentMut>().expect("must stay valid TOML");
++        let doc = normalized
++            .parse::<DocumentMut>()
++            .expect("must stay valid TOML");
+ 
+-        assert_eq!(doc["mcp_servers"]["node_repl"]["command"].as_str(), Some("node"));
+-        assert_eq!(doc["mcp_servers"]["node_repl"]["cwd"].as_str(), Some("/tmp"));
++        assert_eq!(
++            doc["mcp_servers"]["node_repl"]["command"].as_str(),
++            Some("node")
++        );
++        assert_eq!(
++            doc["mcp_servers"]["node_repl"]["cwd"].as_str(),
++            Some("/tmp")
++        );
+     }
+ 
+     /// 重复根键：后写覆盖前写，与 TOML 对同名键重复赋值时的直觉一致。
+@@ -3504,7 +3515,9 @@ cwd = \"/tmp\"
+     fn normalize_duplicate_toml_text_later_root_key_wins() {
+         let contents = "model = \"a\"\nmodel = \"b\"\n";
+         let normalized = normalize_duplicate_toml_text(contents);
+-        let doc = normalized.parse::<DocumentMut>().expect("must stay valid TOML");
++        let doc = normalized
++            .parse::<DocumentMut>()
++            .expect("must stay valid TOML");
+         assert_eq!(doc["model"].as_str(), Some("b"));
+     }
+ 
+diff --git a/crates/codex-plus-core/src/vision.rs b/crates/codex-plus-core/src/vision.rs
+index 765a6ce..d2500ff 100644
+--- a/crates/codex-plus-core/src/vision.rs
++++ b/crates/codex-plus-core/src/vision.rs
+@@ -460,8 +460,8 @@ fn mask_bearer_tokens(text: &str) -> String {
+         let at = i + rel;
+         let after = at + WORD.len();
+         // 前一字符是字母数字或 `_` 视为词内（如 token_bearer），不算独立词
+-        let prev_in_word = at > 0
+-            && ((bytes[at - 1] as char).is_ascii_alphanumeric() || bytes[at - 1] == b'_');
++        let prev_in_word =
++            at > 0 && ((bytes[at - 1] as char).is_ascii_alphanumeric() || bytes[at - 1] == b'_');
+         let next_is_ws = after < bytes.len() && matches!(bytes[after], b' ' | b'\t');
+         result.push_str(&text[i..after]);
+         if prev_in_word || !next_is_ws {
+@@ -2507,12 +2507,19 @@ mod tests {
+         let cases = [
+             ("Authorization: Bearer sk-abc", "Authorization: ***"),
+             ("authorization: Basic dXNlcjpwYXNz", "authorization: ***"),
+-            ("\"Authorization\": \"Bearer xyz\"", "\"Authorization\": \"***\""),
++            (
++                "\"Authorization\": \"Bearer xyz\"",
++                "\"Authorization\": \"***\"",
++            ),
+             // 空值不掩成占位符
+             ("\"Authorization\": \"\"", "\"Authorization\": \"\""),
+         ];
+         for (input, expected) in cases {
+-            assert_eq!(redact_secrets(input, "unused-key"), expected, "input: {input}");
++            assert_eq!(
++                redact_secrets(input, "unused-key"),
++                expected,
++                "input: {input}"
++            );
          }
      }
  
--    fn failed_into(&mut self, output: &mut String, message: String, error_type: Option<String>) {
-+    fn failed_into(
-+        &mut self,
-+        output: &mut String,
-+        message: String,
-+        error_type: Option<String>,
-+        error_code: Option<String>,
-+    ) {
-         self.completed = true;
-         let mut error = json!({ "message": message });
-         if let Some(error_type) = error_type.filter(|value| !value.is_empty()) {
-             error["type"] = json!(error_type);
-         }
-+        if let Some(error_code) = error_code.filter(|value| !value.is_empty()) {
-+            error["code"] = json!(error_code);
-+        }
-         let mut response = self.base_response("failed", self.completed_output_items());
-         response["error"] = error;
-         push_sse(
-@@ -3822,6 +3840,34 @@ pub fn responses_error_from_upstream(status_code: u16, content_type: &str, body:
-     json!({ "error": error })
+@@ -2523,17 +2530,29 @@ mod tests {
+             "header was bearer ***, then more"
+         );
+         // 非独立词 / 后面不是空白：不误伤
+-        assert_eq!(redact_secrets("unbearer something", "unused"), "unbearer something");
++        assert_eq!(
++            redact_secrets("unbearer something", "unused"),
++            "unbearer something"
++        );
+         assert_eq!(redact_secrets("bearerxyz", "unused"), "bearerxyz");
+         // 下划线词内（token_bearer）不算独立词
+-        assert_eq!(redact_secrets("token_bearer abc", "unused"), "token_bearer abc");
++        assert_eq!(
++            redact_secrets("token_bearer abc", "unused"),
++            "token_bearer abc"
++        );
+     }
+ 
+     #[test]
+     fn redact_secrets_keeps_normal_text_intact() {
+-        assert_eq!(redact_secrets("HTTP 401 未授权", "sk-test"), "HTTP 401 未授权");
++        assert_eq!(
++            redact_secrets("HTTP 401 未授权", "sk-test"),
++            "HTTP 401 未授权"
++        );
+         // authorization 作为普通单词（无冒号）不触发
+-        assert_eq!(redact_secrets("authorization failed", "sk-test"), "authorization failed");
++        assert_eq!(
++            redact_secrets("authorization failed", "sk-test"),
++            "authorization failed"
++        );
+     }
+ 
+     // ── validate_image_data_url（加固 spec §4.1 第二道门）────────────
+@@ -2674,8 +2693,14 @@ mod tests {
+         assert_eq!(outcome.status, "ok");
+         // description 逐字可见：命中精确匹配的那串不被掩
+         let desc = outcome.text.as_deref().unwrap();
+-        assert!(desc.contains("sk-test"), "description must stay verbatim: {desc}");
+-        assert!(!desc.contains("***"), "description must stay verbatim: {desc}");
++        assert!(
++            desc.contains("sk-test"),
++            "description must stay verbatim: {desc}"
++        );
++        assert!(
++            !desc.contains("***"),
++            "description must stay verbatim: {desc}"
++        );
+         // raw_response 仍整段脱敏
+         let raw_resp = outcome.raw_response.as_deref().unwrap();
+         assert!(!raw_resp.contains("sk-test"));
+diff --git a/crates/codex-plus-core/tests/floating_panel_outline.rs b/crates/codex-plus-core/tests/floating_panel_outline.rs
+index 0050fe8..72354c1 100644
+--- a/crates/codex-plus-core/tests/floating_panel_outline.rs
++++ b/crates/codex-plus-core/tests/floating_panel_outline.rs
+@@ -6,8 +6,8 @@ fn outline_fragments_expose_the_expected_contract() {
+         .replace("\r\n", "\n");
+     let feature = include_str!("../../../assets/inject/floating-panel/outline/feature.js")
+         .replace("\r\n", "\n");
+-    let view = include_str!("../../../assets/inject/floating-panel/outline/view.js")
+-        .replace("\r\n", "\n");
++    let view =
++        include_str!("../../../assets/inject/floating-panel/outline/view.js").replace("\r\n", "\n");
+ 
+     assert!(parser.starts_with("/* Answer Outline parser:"));
+     assert!(parser.contains("function outlineCollectHeadingElements"));
+@@ -24,7 +24,12 @@ fn outline_fragments_expose_the_expected_contract() {
+     assert!(view.contains("function outlineHtml"));
+     assert!(view.contains("function attachOutlineEvents"));
+ 
+-    for source in [parser.as_str(), navigation.as_str(), feature.as_str(), view.as_str()] {
++    for source in [
++        parser.as_str(),
++        navigation.as_str(),
++        feature.as_str(),
++        view.as_str(),
++    ] {
+         assert!(!source.contains("import "));
+         assert!(!source.contains("export "));
+         assert!(!source.contains("fetch("));
+diff --git a/crates/codex-plus-core/tests/model_suffix.rs b/crates/codex-plus-core/tests/model_suffix.rs
+index 2d53f47..cbacf4b 100644
+--- a/crates/codex-plus-core/tests/model_suffix.rs
++++ b/crates/codex-plus-core/tests/model_suffix.rs
+@@ -56,8 +56,12 @@ fn parse_suffix_rejects_zero_and_negative() {
+ fn collect_entries_includes_current_model_and_strips_suffix() {
+     let mut windows = HashMap::new();
+     windows.insert("deepseek-v4-pro".to_string(), "1M".to_string());
+-    let entries =
+-        collect_catalog_entries("deepseek-v4-pro\nqwen3-coder", &windows, &HashMap::new(), "deepseek-v4-pro");
++    let entries = collect_catalog_entries(
++        "deepseek-v4-pro\nqwen3-coder",
++        &windows,
++        &HashMap::new(),
++        "deepseek-v4-pro",
++    );
+     // 当前 model 与列表去重后共 2 条
+     assert_eq!(entries.len(), 2);
+     assert_eq!(entries[0].slug, "deepseek-v4-pro");
+@@ -68,8 +72,12 @@ fn collect_entries_includes_current_model_and_strips_suffix() {
+ 
+ #[test]
+ fn collect_entries_deduplicates() {
+-    let entries =
+-        collect_catalog_entries("qwen3-coder\nqwen3-coder", &HashMap::new(), &HashMap::new(), "qwen3-coder");
++    let entries = collect_catalog_entries(
++        "qwen3-coder\nqwen3-coder",
++        &HashMap::new(),
++        &HashMap::new(),
++        "qwen3-coder",
++    );
+     assert_eq!(entries.len(), 1);
  }
  
-+pub fn responses_terminal_failure_sse_from_upstream(
-+    request: Option<&Value>,
-+    status_code: u16,
-+    content_type: &str,
-+    body: &[u8],
-+) -> Option<Vec<u8>> {
-+    if status_code != 402
-+        || request
-+            .and_then(|value| value.get("stream"))
-+            .and_then(Value::as_bool)
-+            != Some(true)
+@@ -78,7 +86,12 @@ fn build_catalog_json_writes_context_window_and_strips_suffix() {
+     let mut windows = HashMap::new();
+     windows.insert("deepseek-v4-pro".to_string(), "1M".to_string());
+     windows.insert("claude-sonnet-4".to_string(), "200K".to_string());
+-    let entries = collect_catalog_entries("deepseek-v4-pro\nclaude-sonnet-4", &windows, &HashMap::new(), "");
++    let entries = collect_catalog_entries(
++        "deepseek-v4-pro\nclaude-sonnet-4",
++        &windows,
++        &HashMap::new(),
++        "",
++    );
+     let catalog = build_model_catalog_json(&entries, None);
+     assert!(catalog.contains(r#""slug": "deepseek-v4-pro""#));
+     assert!(catalog.contains(r#""context_window": 1000000"#));
+@@ -150,7 +163,12 @@ fn build_catalog_json_uses_runtime_compatible_gpt56_metadata() {
+ 
+ #[test]
+ fn build_catalog_json_preserves_template_responses_lite_behavior() {
+-    let entries = collect_catalog_entries("official-model", &HashMap::new(), &HashMap::new(), "official-model");
++    let entries = collect_catalog_entries(
++        "official-model",
++        &HashMap::new(),
++        &HashMap::new(),
++        "official-model",
++    );
+     let template = serde_json::json!({
+         "slug": "official-template",
+         "supports_search_tool": true,
+@@ -174,8 +192,7 @@ fn astra_metadata_exposes_max_ultra_in_catalog_and_ui() {
+     assert!(requires_bundled_metadata_catalog("gpt-6-astra"));
+     assert!(!requires_bundled_metadata_catalog("gpt-6-astra-custom"));
+     assert!(model_ui_metadata("gpt-6-astra-custom").is_none());
+-    let entries =
+-        collect_catalog_entries("gpt-6-astra", &HashMap::new(), &HashMap::new(), "");
++    let entries = collect_catalog_entries("gpt-6-astra", &HashMap::new(), &HashMap::new(), "");
+     let catalog: serde_json::Value =
+         serde_json::from_str(&build_model_catalog_json(&entries, None)).unwrap();
+     let model = &catalog["models"][0];
+@@ -203,7 +220,10 @@ fn astra_metadata_exposes_max_ultra_in_catalog_and_ui() {
+     assert_eq!(model["supports_image_detail_original"], true);
+     assert_eq!(model["use_responses_lite"], false);
+     assert_eq!(model["additional_speed_tiers"], serde_json::json!(["fast"]));
+-    assert_eq!(metadata["additionalSpeedTiers"], model["additional_speed_tiers"]);
++    assert_eq!(
++        metadata["additionalSpeedTiers"],
++        model["additional_speed_tiers"]
++    );
+     assert_eq!(model["service_tiers"][0]["id"], "priority");
+     assert_eq!(model["service_tiers"][0]["name"], "Fast");
+     assert_eq!(metadata["serviceTiers"], model["service_tiers"]);
+@@ -229,8 +249,12 @@ fn collect_entries_adopts_suffix_for_current_model_from_list() {
+     // 当前 model 本身无后缀，但 model_list 中靠后位置有同名带后缀条目。
+     let mut windows = HashMap::new();
+     windows.insert("deepseek-v4-pro".to_string(), "1M".to_string());
+-    let entries =
+-        collect_catalog_entries("qwen3-coder\ndeepseek-v4-pro", &windows, &HashMap::new(), "deepseek-v4-pro");
++    let entries = collect_catalog_entries(
++        "qwen3-coder\ndeepseek-v4-pro",
++        &windows,
++        &HashMap::new(),
++        "deepseek-v4-pro",
++    );
+     assert_eq!(entries.len(), 2);
+     assert_eq!(entries[0].slug, "deepseek-v4-pro");
+     assert_eq!(entries[0].suffix_window, Some(1_000_000));
+diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
+index 095d5d1..65ffdad 100644
+--- a/crates/codex-plus-core/tests/protocol_proxy.rs
++++ b/crates/codex-plus-core/tests/protocol_proxy.rs
+@@ -6,9 +6,9 @@ use codex_plus_core::protocol_proxy::{
+     is_image_generations_proxy_path, is_models_proxy_path, is_responses_compact_proxy_path,
+     is_responses_proxy_path, models_url, open_audio_transcriptions_proxy_request,
+     open_cancel_aware_loopback_chat_completions_proxy_request,
+-    open_cancel_aware_loopback_responses_proxy_request,
+-    open_chat_completions_proxy_request, open_image_edits_proxy_request,
+-    open_image_generations_proxy_request, open_models_proxy_request, open_responses_proxy_request,
++    open_cancel_aware_loopback_responses_proxy_request, open_chat_completions_proxy_request,
++    open_image_edits_proxy_request, open_image_generations_proxy_request,
++    open_models_proxy_request, open_responses_proxy_request,
+     open_responses_proxy_request_with_settings,
+     open_responses_proxy_request_with_settings_for_path, responses_compact_url,
+     responses_error_from_upstream, responses_to_chat_completions,
+diff --git a/crates/codex-plus-core/tests/relay_config.rs b/crates/codex-plus-core/tests/relay_config.rs
+index bcb7c7b..e4c8167 100644
+--- a/crates/codex-plus-core/tests/relay_config.rs
++++ b/crates/codex-plus-core/tests/relay_config.rs
+@@ -4330,7 +4330,10 @@ base_url = "https://relay.example/v1"
+         .iter()
+         .map(|level| level["effort"].as_str().unwrap())
+         .collect();
+-    assert_eq!(efforts, vec!["low", "medium", "high", "xhigh", "max", "ultra"]);
++    assert_eq!(
++        efforts,
++        vec!["low", "medium", "high", "xhigh", "max", "ultra"]
++    );
+ }
+ 
+ #[test]
+@@ -4886,7 +4889,10 @@ experimental_bearer_token = "sk-new"
+     assert_eq!(copied["models"][0]["max_context_window"], 1_000_000);
+ 
+     let config_value: toml::Value = toml::from_str(&config).unwrap();
+-    assert_eq!(config_value["model_context_window"].as_integer(), Some(1_000_000));
++    assert_eq!(
++        config_value["model_context_window"].as_integer(),
++        Some(1_000_000)
++    );
+     assert_eq!(
+         config_value["model_auto_compact_token_limit"].as_integer(),
+         Some(900_000)
+@@ -5112,15 +5118,11 @@ experimental_bearer_token = "sk-new"
+     apply_relay_profile_to_home_with_switch_rules(temp.path(), &profile, "").unwrap();
+ 
+     let config = std::fs::read_to_string(temp.path().join("config.toml")).unwrap();
+-    assert!(config.contains(
+-        r#"model_catalog_json = "model-catalogs/relay-fusheng.json""#
+-    ));
++    assert!(config.contains(r#"model_catalog_json = "model-catalogs/relay-fusheng.json""#));
+     assert!(!config.contains("model-catalogs/relay-a6.json"));
+ 
+-    let catalog = std::fs::read_to_string(
+-        temp.path().join("model-catalogs/relay-fusheng.json"),
+-    )
+-    .unwrap();
++    let catalog =
++        std::fs::read_to_string(temp.path().join("model-catalogs/relay-fusheng.json")).unwrap();
+     assert!(catalog.contains(r#""slug": "gpt-5.6-sol""#));
+     assert!(catalog.contains(r#""slug": "gpt-5.6-terra""#));
+     assert!(catalog.contains(r#""slug": "gpt-6-astra""#));
+diff --git a/crates/codex-plus-core/tests/relay_rotation.rs b/crates/codex-plus-core/tests/relay_rotation.rs
+index 3289cdd..63acbf2 100644
+--- a/crates/codex-plus-core/tests/relay_rotation.rs
++++ b/crates/codex-plus-core/tests/relay_rotation.rs
+@@ -716,8 +716,7 @@ fn route_target_outside_aggregate_members_is_skipped_even_if_relay_exists() {
+     assert_eq!(selected.id, "relay-b");
+ 
+     // 全部规则指向非成员 → 走原 strategy
+-    settings.aggregate_relay_profiles[0].routes =
+-        vec![route("deepseek-*", "relay-standalone", 10)];
++    settings.aggregate_relay_profiles[0].routes = vec![route("deepseek-*", "relay-standalone", 10)];
+     let mut selector = RelayRotationSelector::from_settings(&settings).unwrap();
+     let selected = selector
+         .select(&settings, context(Some("deepseek-chat")))
+@@ -860,14 +859,53 @@ fn route_wildcard_matches_standard_glob_semantics() {
+         rec(&p, &m)
+     }
+     let patterns = [
+-        "a", "b", "c", "a*", "*a", "a*b", "*a*", "a*b*c", "a*a", "*ab*",
+-        "ab*cd*ef", "*a*b*a", "**", "*", "a**b", "ab*ab", "*ab*ab*", "a*b*a*c",
+-        "**a**", "*a*a*a*", "deepseek-*", "*-v3", "gpt-*",
++        "a",
++        "b",
++        "c",
++        "a*",
++        "*a",
++        "a*b",
++        "*a*",
++        "a*b*c",
++        "a*a",
++        "*ab*",
++        "ab*cd*ef",
++        "*a*b*a",
++        "**",
++        "*",
++        "a**b",
++        "ab*ab",
++        "*ab*ab*",
++        "a*b*a*c",
++        "**a**",
++        "*a*a*a*",
++        "deepseek-*",
++        "*-v3",
++        "gpt-*",
+     ];
+     let models = [
+-        "", "a", "b", "ab", "ba", "aa", "aab", "aba", "abb", "abc", "aabb",
+-        "abab", "abxa", "aabxa", "abcabc", "abcc", "cba", "baab", "ababa",
+-        "deepseek-chat", "gpt-5.4", "glm-4-v3",
++        "",
++        "a",
++        "b",
++        "ab",
++        "ba",
++        "aa",
++        "aab",
++        "aba",
++        "abb",
++        "abc",
++        "aabb",
++        "abab",
++        "abxa",
++        "aabxa",
++        "abcabc",
++        "abcc",
++        "cba",
++        "baab",
++        "ababa",
++        "deepseek-chat",
++        "gpt-5.4",
++        "glm-4-v3",
+     ];
+     let mismatches = patterns
+         .iter()
+@@ -904,10 +942,12 @@ fn route_skips_highest_priority_target_missing_key_and_hits_next_valid_route() {
+         api_key: String::new(),
+         ..RelayProfile::default()
+     });
+-    settings.aggregate_relay_profiles[0].members.push(AggregateRelayMember {
+-        relay_id: "relay-empty-key".to_string(),
+-        weight: 1,
+-    });
++    settings.aggregate_relay_profiles[0]
++        .members
++        .push(AggregateRelayMember {
++            relay_id: "relay-empty-key".to_string(),
++            weight: 1,
++        });
+     settings.aggregate_relay_profiles[0].routes = vec![
+         route("deepseek-*", "relay-empty-key", 100),
+         route("deepseek-chat", "relay-b", 50),
+@@ -945,10 +985,12 @@ fn route_all_targets_invalid_falls_back_to_aggregate_strategy() {
+         api_key: String::new(),
+         ..RelayProfile::default()
+     });
+-    settings.aggregate_relay_profiles[0].members.push(AggregateRelayMember {
+-        relay_id: "relay-empty-key".to_string(),
+-        weight: 1,
+-    });
++    settings.aggregate_relay_profiles[0]
++        .members
++        .push(AggregateRelayMember {
++            relay_id: "relay-empty-key".to_string(),
++            weight: 1,
++        });
+     settings.aggregate_relay_profiles[0].routes = vec![
+         route("deepseek-*", "relay-empty-key", 100),
+         route("deepseek-chat", "relay-empty-key", 50),
+@@ -1037,9 +1079,7 @@ fn route_hit_does_not_advance_failover_rotation_index() {
+     assert_eq!(second.id, "relay-b");
+ 
+     // 切换到未命中路由的模型，仍应回到 failover 当前指向的 relay-a（索引未被路由推进）
+-    let fallback = selector
+-        .select(&settings, context(Some("glm-4")))
+-        .unwrap();
++    let fallback = selector.select(&settings, context(Some("glm-4"))).unwrap();
+     assert_eq!(fallback.id, "relay-a");
+ }
+ 
+diff --git a/crates/codex-plus-data/src/lib.rs b/crates/codex-plus-data/src/lib.rs
+index 0aba6c7..2aef424 100644
+--- a/crates/codex-plus-data/src/lib.rs
++++ b/crates/codex-plus-data/src/lib.rs
+@@ -9,11 +9,10 @@ pub use provider_sync::{
+     ProviderSyncAudit, ProviderSyncLifecycleGuard, ProviderSyncLockState, ProviderSyncResult,
+     ProviderSyncStatus, ProviderSyncTargetList, ProviderSyncTargetOption, ProviderSyncTargetSource,
+     SessionIndexCleanupApplyError, SessionIndexCleanupCandidate, SessionIndexCleanupPreview,
+-    SessionIndexCleanupResult, apply_session_index_cleanup, inspect_provider_sync_lock,
+-    load_provider_sync_targets, preview_session_index_cleanup,
+-    remove_thread_sidebar_references, ThreadSidebarCleanupResult,
+-    remote_control_session_recovery_candidate_exists, run_provider_sync,
+-    run_provider_sync_with_target,
++    SessionIndexCleanupResult, ThreadSidebarCleanupResult, apply_session_index_cleanup,
++    inspect_provider_sync_lock, load_provider_sync_targets, preview_session_index_cleanup,
++    remote_control_session_recovery_candidate_exists, remove_thread_sidebar_references,
++    run_provider_sync, run_provider_sync_with_target,
+     run_remote_control_session_catalog_recovery_for_thread_with_target,
+     run_remote_control_session_finalization_for_thread_with_target,
+     try_acquire_provider_sync_lifecycle_guard, validate_provider_sync_target,
+diff --git a/crates/codex-plus-data/src/provider_sync.rs b/crates/codex-plus-data/src/provider_sync.rs
+index 1b480dc..7170c0e 100644
+--- a/crates/codex-plus-data/src/provider_sync.rs
++++ b/crates/codex-plus-data/src/provider_sync.rs
+@@ -1,5 +1,5 @@
+-use fs2::FileExt;
+ use crate::storage::{has_table, json_to_sql_value, select_dicts};
++use fs2::FileExt;
+ use rusqlite::{Connection, OptionalExtension, ToSql, params_from_iter, types::Value as SqlValue};
+ use serde::{Deserialize, Serialize};
+ use serde_json::{Map, Value, json};
+@@ -2476,10 +2476,7 @@ pub fn restore_thread_sidebar_references(
+     Ok(restored)
+ }
+ 
+-pub fn validate_thread_sidebar_snapshot(
+-    codex_home: &Path,
+-    snapshot: &Value,
+-) -> anyhow::Result<()> {
++pub fn validate_thread_sidebar_snapshot(codex_home: &Path, snapshot: &Value) -> anyhow::Result<()> {
+     let thread_id = snapshot
+         .get("thread_id")
+         .and_then(Value::as_str)
+@@ -2531,10 +2528,7 @@ const SIDEBAR_CATALOG_TABLES: [&str; 3] = [
+     "local_thread_catalog_scan_entries",
+ ];
+ 
+-fn snapshot_thread_from_global_state(
+-    codex_home: &Path,
+-    thread_id: &str,
+-) -> anyhow::Result<Value> {
++fn snapshot_thread_from_global_state(codex_home: &Path, thread_id: &str) -> anyhow::Result<Value> {
+     let path = codex_home.join(".codex-global-state.json");
+     if !path.exists() {
+         return Ok(json!({}));
+@@ -2590,10 +2584,7 @@ fn snapshot_thread_from_global_state(
+     Ok(Value::Object(snapshot))
+ }
+ 
+-fn snapshot_thread_from_catalog_dbs(
+-    codex_home: &Path,
+-    thread_id: &str,
+-) -> anyhow::Result<Value> {
++fn snapshot_thread_from_catalog_dbs(codex_home: &Path, thread_id: &str) -> anyhow::Result<Value> {
+     let mut entries = Vec::new();
+     for path in codex_plus_core::codex_sqlite::codex_thread_reference_db_paths_from_home(codex_home)
+     {
+@@ -2685,7 +2676,10 @@ fn restore_thread_to_global_state(
+     if path.exists() && fs::read(&path)? != original_bytes {
+         anyhow::bail!(".codex-global-state.json changed while restoring sidebar state");
+     }
+-    codex_plus_core::settings::atomic_write(&path, serde_json::to_string_pretty(&state)?.as_bytes())?;
++    codex_plus_core::settings::atomic_write(
++        &path,
++        serde_json::to_string_pretty(&state)?.as_bytes(),
++    )?;
+     Ok(restored)
+ }
+ 
+@@ -2752,7 +2746,11 @@ fn restore_thread_to_catalog_dbs(
+     Ok(restored_total)
+ }
+ 
+-fn insert_row_ignore(db: &Connection, table: &str, row: &Map<String, Value>) -> anyhow::Result<usize> {
++fn insert_row_ignore(
++    db: &Connection,
++    table: &str,
++    row: &Map<String, Value>,
++) -> anyhow::Result<usize> {
+     let columns: Vec<&String> = row.keys().collect();
+     if columns.is_empty() {
+         return Ok(0);
+@@ -2781,10 +2779,12 @@ fn insert_row_ignore(db: &Connection, table: &str, row: &Map<String, Value>) ->
+ }
+ 
+ fn sidebar_catalog_db_paths(codex_home: &Path) -> anyhow::Result<HashSet<PathBuf>> {
+-    Ok(codex_plus_core::codex_sqlite::codex_thread_reference_db_paths_from_home(codex_home)
+-        .into_iter()
+-        .filter_map(|path| fs::canonicalize(path).ok())
+-        .collect())
++    Ok(
++        codex_plus_core::codex_sqlite::codex_thread_reference_db_paths_from_home(codex_home)
++            .into_iter()
++            .filter_map(|path| fs::canonicalize(path).ok())
++            .collect(),
++    )
+ }
+ 
+ fn thread_value_matches(value: &Value, thread_id: &str) -> bool {
+@@ -2898,13 +2898,17 @@ fn remove_thread_from_global_state(codex_home: &Path, thread_id: &str) -> anyhow
+     if fs::read(&path)? != original_bytes {
+         anyhow::bail!(".codex-global-state.json changed while deleting thread {thread_id}");
+     }
+-    codex_plus_core::settings::atomic_write(&path, serde_json::to_string_pretty(&state)?.as_bytes())?;
++    codex_plus_core::settings::atomic_write(
++        &path,
++        serde_json::to_string_pretty(&state)?.as_bytes(),
++    )?;
+     Ok(removed)
+ }
+ 
+ fn remove_thread_from_catalog_dbs(codex_home: &Path, thread_id: &str) -> anyhow::Result<usize> {
+     let mut removed_total = 0usize;
+-    for path in codex_plus_core::codex_sqlite::codex_thread_reference_db_paths_from_home(codex_home) {
++    for path in codex_plus_core::codex_sqlite::codex_thread_reference_db_paths_from_home(codex_home)
 +    {
-+        return None;
-+    }
-+
-+    let envelope = responses_error_from_upstream(status_code, content_type, body);
-+    let message = envelope
-+        .pointer("/error/message")
-+        .and_then(Value::as_str)
-+        .filter(|value| !value.trim().is_empty())
-+        .unwrap_or("Payment required")
-+        .to_string();
-+    let mut converter = request
-+        .map(ChatSseToResponsesConverter::with_request)
-+        .unwrap_or_default();
-+    Some(converter.fail_with_code(message, "insufficient_quota".to_string()))
-+}
-+
- fn upstream_error_parts(
-     status_code: u16,
-     content_type: &str,
+         if !path.exists() {
+             continue;
+         }
+diff --git a/crates/codex-plus-data/src/storage.rs b/crates/codex-plus-data/src/storage.rs
+index edf167c..819ea02 100644
+--- a/crates/codex-plus-data/src/storage.rs
++++ b/crates/codex-plus-data/src/storage.rs
+@@ -68,8 +68,8 @@ pub fn delete_local_from_paths(
+             }
+         }
+         match crate::provider_sync::remove_thread_sidebar_references(home, &thread_id) {
+-            Ok(cleanup) if cleanup.global_state_entries_removed > 0
+-                || cleanup.catalog_rows_removed > 0 =>
++            Ok(cleanup)
++                if cleanup.global_state_entries_removed > 0 || cleanup.catalog_rows_removed > 0 =>
+             {
+                 if matches!(result.status, DeleteStatus::Failed) {
+                     result.status = DeleteStatus::LocalDeleted;
+diff --git a/crates/codex-plus-data/tests/provider_sync.rs b/crates/codex-plus-data/tests/provider_sync.rs
+index 23ff124..38c825c 100644
+--- a/crates/codex-plus-data/tests/provider_sync.rs
++++ b/crates/codex-plus-data/tests/provider_sync.rs
+@@ -647,7 +647,10 @@ fn provider_sync_rejects_missing_or_malformed_config_without_writes_or_secret_er
+             .all(|target| !target.is_resolvable)
+     );
+     assert_eq!(fs::read(&rollout).unwrap(), original);
+-    assert_eq!(fs::read_to_string(home.join("config.toml")).unwrap(), config);
++    assert_eq!(
++        fs::read_to_string(home.join("config.toml")).unwrap(),
++        config
++    );
+     assert!(!home.join("backups_state/provider-sync").exists());
+     assert!(!home.join("tmp/provider-sync.lock").exists());
+ }
+diff --git a/crates/codex-plus-data/tests/storage_adapter.rs b/crates/codex-plus-data/tests/storage_adapter.rs
+index 77037d2..fa2c61e 100644
+--- a/crates/codex-plus-data/tests/storage_adapter.rs
++++ b/crates/codex-plus-data/tests/storage_adapter.rs
+@@ -533,45 +533,70 @@ fn delete_codex_thread_clears_sidebar_global_state_and_catalog_cache() {
+     .unwrap();
+     let catalog_db = Connection::open(sqlite_dir.join("codex-dev.db")).unwrap();
+     catalog_db
+-        .execute("CREATE TABLE local_thread_catalog (thread_id TEXT PRIMARY KEY)", [])
++        .execute(
++            "CREATE TABLE local_thread_catalog (thread_id TEXT PRIMARY KEY)",
++            [],
++        )
+         .unwrap();
+     catalog_db
+         .execute("CREATE TABLE thread_timeline_ledger (thread_id TEXT)", [])
+         .unwrap();
+     catalog_db
+-        .execute("CREATE TABLE local_thread_catalog_scan_entries (thread_id TEXT)", [])
++        .execute(
++            "CREATE TABLE local_thread_catalog_scan_entries (thread_id TEXT)",
++            [],
++        )
+         .unwrap();
+     catalog_db
+-        .execute("INSERT INTO local_thread_catalog VALUES ('t1'), ('keep')", [])
++        .execute(
++            "INSERT INTO local_thread_catalog VALUES ('t1'), ('keep')",
++            [],
++        )
+         .unwrap();
+     catalog_db
+-        .execute("INSERT INTO thread_timeline_ledger VALUES ('t1'), ('keep')", [])
++        .execute(
++            "INSERT INTO thread_timeline_ledger VALUES ('t1'), ('keep')",
++            [],
++        )
+         .unwrap();
+     catalog_db
+-        .execute("INSERT INTO local_thread_catalog_scan_entries VALUES ('t1'), ('keep')", [])
++        .execute(
++            "INSERT INTO local_thread_catalog_scan_entries VALUES ('t1'), ('keep')",
++            [],
++        )
+         .unwrap();
+     drop(catalog_db);
+ 
+-    let deleted = SQLiteStorageAdapter::new(
+-        &state_db,
+-        BackupStore::new(tmp.path().join("backups")),
+-    )
+-    .with_codex_home(&home)
+-    .delete_local(&session("local:t1", "Codex Thread"));
++    let deleted =
++        SQLiteStorageAdapter::new(&state_db, BackupStore::new(tmp.path().join("backups")))
++            .with_codex_home(&home)
++            .delete_local(&session("local:t1", "Codex Thread"));
+     assert_eq!(deleted.status, DeleteStatus::LocalDeleted);
+     let state: serde_json::Value =
+         serde_json::from_str(&fs::read_to_string(home.join(".codex-global-state.json")).unwrap())
+             .unwrap();
+     assert_eq!(state["projectless-thread-ids"], json!([keep_id]));
+-    assert!(state["thread-projectless-output-directories"].get("t1").is_none());
+-    assert!(state["thread-workspace-root-hints"].get("local:t1").is_none());
++    assert!(
++        state["thread-projectless-output-directories"]
++            .get("t1")
++            .is_none()
++    );
++    assert!(
++        state["thread-workspace-root-hints"]
++            .get("local:t1")
++            .is_none()
++    );
+     assert!(state["thread-writable-roots"].get("t1").is_none());
+-    assert!(state["electron-persisted-atom-state"]
+-        .get("thread-client-id-v1:t1")
+-        .is_none());
+-    assert!(state["electron-persisted-atom-state"]
+-        .get("thread-client-id-v1:keep")
+-        .is_some());
++    assert!(
++        state["electron-persisted-atom-state"]
++            .get("thread-client-id-v1:t1")
++            .is_none()
++    );
++    assert!(
++        state["electron-persisted-atom-state"]
++            .get("thread-client-id-v1:keep")
++            .is_some()
++    );
+     let catalog_db = Connection::open(sqlite_dir.join("codex-dev.db")).unwrap();
+     for table in [
+         "local_thread_catalog",
+@@ -588,12 +613,10 @@ fn delete_codex_thread_clears_sidebar_global_state_and_catalog_cache() {
+         assert_eq!(count, 0, "{table}");
+     }
+ 
+-    let restored = SQLiteStorageAdapter::new(
+-        &state_db,
+-        BackupStore::new(tmp.path().join("backups")),
+-    )
+-    .with_codex_home(&home)
+-    .undo(deleted.undo_token.as_deref().unwrap());
++    let restored =
++        SQLiteStorageAdapter::new(&state_db, BackupStore::new(tmp.path().join("backups")))
++            .with_codex_home(&home)
++            .undo(deleted.undo_token.as_deref().unwrap());
+     assert_eq!(restored.status, DeleteStatus::Undone);
+     let state: serde_json::Value =
+         serde_json::from_str(&fs::read_to_string(home.join(".codex-global-state.json")).unwrap())
 -- 
 2.55.0.windows.5
 

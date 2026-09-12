@@ -1,402 +1,265 @@
-From 6477cdfde83118b30566bd522b0fac96f8b7f675 Mon Sep 17 00:00:00 2001
-From: Anti-Codex Rebase <anticodex@local>
-Date: Mon, 31 Aug 2026 06:39:15 +0800
-Subject: [PATCH 21/21] fix: format v1.2.56 upstream
+From ae9b26762c5dfae9344c810d1831c502802c7dd5 Mon Sep 17 00:00:00 2001
+From: Anti-Codex <anticodex@local>
+Date: Sat, 12 Sep 2026 13:19:17 +0800
+Subject: [PATCH] port 0023-fix-proxy-stop-retries-on-payment-errors to v1.3.0
 
 ---
- crates/codex-plus-core/src/lib.rs             |  2 +-
- crates/codex-plus-core/src/routes.rs          |  9 +--
- crates/codex-plus-core/src/session_share.rs   | 29 +++++----
- crates/codex-plus-core/src/stepwise.rs        |  1 -
- .../codex-plus-core/tests/protocol_proxy.rs   |  3 +-
- crates/codex-plus-data/src/provider_sync.rs   | 45 +++++---------
- crates/codex-plus-data/src/storage.rs         | 23 ++++----
- crates/codex-plus-data/tests/provider_sync.rs | 59 +++++++------------
- 8 files changed, 68 insertions(+), 103 deletions(-)
+ crates/codex-plus-core/src/launcher.rs       | 135 ++++++++++++++++++-
+ crates/codex-plus-core/src/protocol_proxy.rs |  52 ++++++-
+ 2 files changed, 183 insertions(+), 4 deletions(-)
 
-diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
-index 2ba71a9..050fe3e 100644
---- a/crates/codex-plus-core/src/lib.rs
-+++ b/crates/codex-plus-core/src/lib.rs
-@@ -40,9 +40,9 @@ pub mod relay_switch;
- pub mod remote_control_recovery;
- pub mod routes;
- pub mod script_market;
--pub mod share;
- pub mod session_share;
- pub mod settings;
-+pub mod share;
- pub mod skills;
- pub mod status;
- pub mod stepwise;
-diff --git a/crates/codex-plus-core/src/routes.rs b/crates/codex-plus-core/src/routes.rs
-index b958011..dc5fcdd 100644
---- a/crates/codex-plus-core/src/routes.rs
-+++ b/crates/codex-plus-core/src/routes.rs
-@@ -263,10 +263,11 @@ pub async fn handle_bridge_request(
-                 .to_string();
-             ctx.data.recover_remote_control_session(thread_id).await
-         }
--        "/session/export" => ctx
--            .data
--            .export_session_file(session_from_payload(&payload))
--            .await,
-+        "/session/export" => {
-+            ctx.data
-+                .export_session_file(session_from_payload(&payload))
-+                .await
-+        }
-         "/session/import" => ctx.data.import_session_file(payload.clone()).await,
-         _ => {
-             let _ = crate::diagnostic_log::append_diagnostic_log(
-diff --git a/crates/codex-plus-core/src/session_share.rs b/crates/codex-plus-core/src/session_share.rs
-index 69cad53..91b4772 100644
---- a/crates/codex-plus-core/src/session_share.rs
-+++ b/crates/codex-plus-core/src/session_share.rs
-@@ -51,8 +51,9 @@ pub fn clear_pending_session_share() -> anyhow::Result<()> {
-     match fs::remove_file(&path) {
-         Ok(()) => Ok(()),
-         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
--        Err(error) => Err(error)
--            .with_context(|| format!("清理待导入会话链接失败：{}", path.display())),
-+        Err(error) => {
-+            Err(error).with_context(|| format!("清理待导入会话链接失败：{}", path.display()))
-+        }
-     }
- }
- 
-@@ -63,12 +64,12 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
-         .find(|(key, _)| key == "s")
-         .map(|(_, value)| value.into_owned())
-         .or_else(|| {
--            parsed
--                .path_segments()
--                .and_then(|mut segments| match (segments.next(), segments.next()) {
-+            parsed.path_segments().and_then(|mut segments| {
-+                match (segments.next(), segments.next()) {
-                     (Some("s"), Some(id)) => Some(id.to_string()),
-                     _ => None,
--                })
-+                }
-+            })
-         })
-         .filter(|id| (20..=32).contains(&id.len()))
-         .context("分享链接缺少有效的会话 ID")?;
-@@ -85,16 +86,10 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
-         .json::<Value>()
-         .await
-         .context("分享会话响应格式无效")?;
--    let encrypted = record
--        .get("encrypted")
--        .context("分享会话缺少加密内容")?;
-+    let encrypted = record.get("encrypted").context("分享会话缺少加密内容")?;
-     let key_value = parsed
-         .fragment()
--        .and_then(|fragment| {
--            fragment
--                .split('&')
--                .find_map(|pair| pair.strip_prefix("k="))
--        })
-+        .and_then(|fragment| fragment.split('&').find_map(|pair| pair.strip_prefix("k=")))
-         .context("分享链接缺少解密密钥")?;
-     let plaintext = decrypt_shared_payload(encrypted, key_value)?;
-     let payload: Value = serde_json::from_slice(&plaintext).context("分享会话内容格式无效")?;
-@@ -106,7 +101,11 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
- 
- fn validate_share_url(url: &str) -> anyhow::Result<reqwest::Url> {
-     let parsed = reqwest::Url::parse(url.trim()).context("分享 URL 格式无效")?;
--    if parsed.scheme() != "https" || !parsed.host_str().is_some_and(|host| SHARE_HOSTS.contains(&host)) {
-+    if parsed.scheme() != "https"
-+        || !parsed
-+            .host_str()
-+            .is_some_and(|host| SHARE_HOSTS.contains(&host))
-+    {
-         bail!("仅支持 Codex++ 分享站点链接");
-     }
-     if parsed.fragment().is_none() {
-diff --git a/crates/codex-plus-core/src/stepwise.rs b/crates/codex-plus-core/src/stepwise.rs
-index 7f4a876..b763143 100644
---- a/crates/codex-plus-core/src/stepwise.rs
-+++ b/crates/codex-plus-core/src/stepwise.rs
-@@ -713,7 +713,6 @@ fn normalize_spaces(value: &str) -> String {
-     value.split_whitespace().collect::<Vec<_>>().join(" ")
- }
- 
--
- #[cfg(test)]
- mod tests {
-     use super::*;
-diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 098b2b1..c183915 100644
---- a/crates/codex-plus-core/tests/protocol_proxy.rs
-+++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -6,7 +6,8 @@ use codex_plus_core::protocol_proxy::{
-     is_responses_proxy_path, models_url, open_audio_transcriptions_proxy_request,
-     open_cancel_aware_loopback_chat_completions_proxy_request,
-     open_cancel_aware_loopback_responses_proxy_request, open_chat_completions_proxy_request,
--    open_models_proxy_request, open_responses_proxy_request, open_responses_proxy_request_with_settings,
-+    open_models_proxy_request, open_responses_proxy_request,
-+    open_responses_proxy_request_with_settings,
-     open_responses_proxy_request_with_settings_for_path, responses_compact_url,
-     responses_error_from_upstream, responses_to_chat_completions,
-     send_upstream_request_with_header_timeout, upstream_header_timeout, upstream_http_client,
-diff --git a/crates/codex-plus-data/src/provider_sync.rs b/crates/codex-plus-data/src/provider_sync.rs
-index 552b935..a232209 100644
---- a/crates/codex-plus-data/src/provider_sync.rs
-+++ b/crates/codex-plus-data/src/provider_sync.rs
-@@ -2024,10 +2024,7 @@ pub fn session_index_lines_for_thread(
- ///
- /// Best-effort: returns `Ok(0)` without writing when the file is missing or
- /// changed since it was read, so a delete flow never clobbers fresh entries.
--pub fn remove_session_index_entry(
--    codex_home: &Path,
--    thread_id: &str,
--) -> anyhow::Result<usize> {
-+pub fn remove_session_index_entry(codex_home: &Path, thread_id: &str) -> anyhow::Result<usize> {
-     let path = codex_home.join("session_index.jsonl");
-     if !path.exists() {
-         return Ok(0);
-@@ -2057,10 +2054,7 @@ pub fn remove_session_index_entry(
- /// Lines whose `id` already exists are skipped. Returns the number of
- /// appended lines. Best-effort: returns `Ok(0)` without writing when the
- /// file changed since it was read.
--pub fn restore_session_index_entries(
--    codex_home: &Path,
--    lines: &[String],
--) -> anyhow::Result<usize> {
-+pub fn restore_session_index_entries(codex_home: &Path, lines: &[String]) -> anyhow::Result<usize> {
-     if lines.is_empty() {
-         return Ok(0);
-     }
-@@ -2464,9 +2458,7 @@ fn sqlite_provider_ids(path: &Path) -> anyhow::Result<Vec<String>> {
-     Ok(sorted_provider_ids(ids))
- }
- 
--fn sqlite_provider_sync_thread_kinds(
--    paths: &[PathBuf],
--) -> anyhow::Result<ProviderSyncThreadKinds> {
-+fn sqlite_provider_sync_thread_kinds(paths: &[PathBuf]) -> anyhow::Result<ProviderSyncThreadKinds> {
-     let mut kinds = ProviderSyncThreadKinds::default();
-     for path in paths {
-         if !path.exists() {
-@@ -2697,14 +2689,9 @@ fn count_sqlite_updates(
-     let catalog_columns = table_columns(&db, "local_thread_catalog")?;
-     let mut total = 0;
-     if columns.contains("id") && columns.contains("model_provider") {
--        total += provider_update_thread_ids(
--            &db,
--            "threads",
--            "id",
--            target_provider,
--            excluded_thread_ids,
--        )?
--        .len();
-+        total +=
-+            provider_update_thread_ids(&db, "threads", "id", target_provider, excluded_thread_ids)?
-+                .len();
-     }
-     if catalog_columns.contains("thread_id") && catalog_columns.contains("model_provider") {
-         total += provider_update_thread_ids(
-@@ -2782,13 +2769,9 @@ fn apply_sqlite_update(
-     let tx = db.transaction()?;
-     let mut counts = SqliteUpdateCounts::default();
-     if columns.contains("id") && columns.contains("model_provider") {
--        for thread_id in provider_update_thread_ids(
--            &tx,
--            "threads",
--            "id",
--            target_provider,
--            excluded_thread_ids,
--        )? {
-+        for thread_id in
-+            provider_update_thread_ids(&tx, "threads", "id", target_provider, excluded_thread_ids)?
-+        {
-             counts.provider_rows += tx.execute(
-                 "UPDATE threads SET model_provider = ?1 WHERE id = ?2 AND COALESCE(model_provider, '') <> ?1",
-                 (target_provider, thread_id),
-@@ -3337,8 +3320,7 @@ fn collect_catalog_marked_non_root_thread_ids(
-             if thread_source_is_user(thread_source.as_deref()) {
-                 continue;
-             }
--            if source_marks_non_root_agent(&source_kind) || spawned_child_ids.contains(&thread_id)
--            {
-+            if source_marks_non_root_agent(&source_kind) || spawned_child_ids.contains(&thread_id) {
-                 thread_ids_by_path
-                     .entry(path.clone())
-                     .or_default()
-@@ -3362,8 +3344,7 @@ fn is_catalog_non_root_agent(
-     if thread_source_is_user(thread.thread_source.as_deref()) {
-         return false;
-     }
--    source_marks_non_root_agent(&thread.source_kind)
--        || spawned_child_ids.contains(&thread.id)
-+    source_marks_non_root_agent(&thread.source_kind) || spawned_child_ids.contains(&thread.id)
- }
- 
- fn thread_source_is_user(thread_source: Option<&str>) -> bool {
-@@ -3885,7 +3866,9 @@ mod non_root_agent_tests {
- 
-     #[test]
-     fn structured_subagent_markers_still_identify_child_threads() {
--        assert!(marks_non_root(r#"{"subagent":{"thread_spawn":{"depth":1}}}"#));
-+        assert!(marks_non_root(
-+            r#"{"subagent":{"thread_spawn":{"depth":1}}}"#
-+        ));
-         assert!(marks_non_root(r#"{"sub_agent":{"other":"review"}}"#));
-         assert!(marks_non_root(r#"{"internal":true}"#));
-     }
-diff --git a/crates/codex-plus-data/src/storage.rs b/crates/codex-plus-data/src/storage.rs
-index c46e5d5..08e7c57 100644
---- a/crates/codex-plus-data/src/storage.rs
-+++ b/crates/codex-plus-data/src/storage.rs
-@@ -24,8 +24,9 @@ pub fn delete_local_from_paths(
-     let mut backup_tokens = Vec::new();
-     for db_path in db_paths {
-         let adapter = match codex_home {
--            Some(home) => SQLiteStorageAdapter::new(db_path, backup_store.clone())
--                .with_codex_home(home),
-+            Some(home) => {
-+                SQLiteStorageAdapter::new(db_path, backup_store.clone()).with_codex_home(home)
-+            }
-             None => SQLiteStorageAdapter::new(db_path, backup_store.clone()),
-         };
-         let candidate_result = adapter.delete_local(session);
-@@ -608,16 +609,16 @@ impl SQLiteStorageAdapter {
-                 }
-             }
-         }
--        let session_index_note = self
--            .codex_home
--            .as_deref()
--            .and_then(|home| {
--                crate::provider_sync::remove_session_index_entry(home, &thread_id)
--                    .err()
--                    .map(|error| format!("session_index.jsonl 清理失败：{error}"))
--            });
-+        let session_index_note = self.codex_home.as_deref().and_then(|home| {
-+            crate::provider_sync::remove_session_index_entry(home, &thread_id)
-+                .err()
-+                .map(|error| format!("session_index.jsonl 清理失败：{error}"))
-+        });
-         if !file_errors.is_empty() {
--            let mut message = format!("本地数据库已删除，但文件删除失败：{}", file_errors.join("; "));
-+            let mut message = format!(
-+                "本地数据库已删除，但文件删除失败：{}",
-+                file_errors.join("; ")
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index aa4ad26..76dc9ed 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -1736,6 +1736,24 @@ async fn try_handle_cancel_aware_protocol_proxy_stream(
+         let status_code = upstream.status_code;
+         let content_type = upstream.content_type.clone();
+         let upstream_body = collect_loopback_body(upstream.response).await?;
++        if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
++            request_json,
++            status_code,
++            &content_type,
++            &upstream_body,
++        ) {
++            write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
++            stream.write_all(&body).await?;
++            log_helper_response(
++                "helper.protocol_proxy_upstream_error",
++                method,
++                path,
++                &status,
++                remote_addr_text,
 +            );
-             if let Some(note) = session_index_note.as_deref() {
-                 message = format!("{message}；{note}");
-             }
-diff --git a/crates/codex-plus-data/tests/provider_sync.rs b/crates/codex-plus-data/tests/provider_sync.rs
-index 151edb4..55b1bdc 100644
---- a/crates/codex-plus-data/tests/provider_sync.rs
-+++ b/crates/codex-plus-data/tests/provider_sync.rs
-@@ -110,14 +110,14 @@ fn rollout_files_snapshot(path: &Path) -> Vec<(String, Vec<u8>, SystemTime)> {
++            stream.shutdown().await?;
++            return Ok(true);
++        }
+         let error = crate::protocol_proxy::responses_error_from_upstream(
+             status_code,
+             &content_type,
+@@ -2019,10 +2037,29 @@ async fn handle_protocol_proxy_connection(
+     };
+     if !upstream.is_success() {
+         let status = upstream.status();
++        let status_code = upstream.status_code;
+         let upstream_content_type = upstream.content_type.clone();
+         let upstream_body = upstream.response.bytes().await?.to_vec();
++        if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
++            request_json.as_ref(),
++            status_code,
++            &upstream_content_type,
++            &upstream_body,
++        ) {
++            write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
++            stream.write_all(&body).await?;
++            log_helper_response(
++                "helper.protocol_proxy_upstream_error",
++                method,
++                path,
++                &status,
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(());
++        }
+         let error = crate::protocol_proxy::responses_error_from_upstream(
+-            upstream.status_code,
++            status_code,
+             &upstream_content_type,
+             &upstream_body,
+         );
+@@ -4294,6 +4331,102 @@ mod tests {
+         crate::paths::set_settings_path_for_tests(previous_settings_path);
+     }
  
- fn catalog_rows_snapshot(path: &Path) -> Vec<(String, String)> {
-     let db = Connection::open(path).unwrap();
--    db.prepare(
--        "SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id",
--    )
--    .unwrap()
--    .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
--    .unwrap()
--    .collect::<rusqlite::Result<Vec<_>>>()
--    .unwrap()
-+    db.prepare("SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id")
-+        .unwrap()
-+        .query_map([], |row| {
-+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-+        })
-+        .unwrap()
-+        .collect::<rusqlite::Result<Vec<_>>>()
-+        .unwrap()
- }
- 
- fn write_subagent_rollout(path: &Path, provider: &str, thread_id: &str, cwd: &str) {
-@@ -568,10 +568,7 @@ fn provider_sync_ignores_spawned_subagent_threads() {
-             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-         )
-         .unwrap();
--    assert_eq!(
--        child,
--        ("openai".to_string(), 0, "C:/child-old".to_string())
--    );
-+    assert_eq!(child, ("openai".to_string(), 0, "C:/child-old".to_string()));
- }
- 
- #[test]
-@@ -592,18 +589,8 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
-         "structured-child",
-         "C:/structured-new",
-     );
--    write_subagent_rollout(
--        &rollout_child,
--        "openai",
--        "rollout-child",
--        "C:/rollout-new",
--    );
--    write_rollout(
--        &marked_rollout,
--        "openai",
--        "marked-child",
--        "C:/marked-new",
--    );
-+    write_subagent_rollout(&rollout_child, "openai", "rollout-child", "C:/rollout-new");
-+    write_rollout(&marked_rollout, "openai", "marked-child", "C:/marked-new");
-     write_rollout(
-         &explicit_user_rollout,
-         "openai",
-@@ -679,19 +666,15 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
-         (&explicit_user_rollout, "apigather"),
-         (&guardian_user_rollout, "openai"),
-     ] {
--        let first: serde_json::Value = serde_json::from_str(
--            fs::read_to_string(path).unwrap().lines().next().unwrap(),
--        )
--        .unwrap();
-+        let first: serde_json::Value =
-+            serde_json::from_str(fs::read_to_string(path).unwrap().lines().next().unwrap())
++    #[tokio::test]
++    async fn streamed_payment_required_becomes_terminal_quota_event() {
++        let _settings_guard = crate::paths::settings_path_test_guard();
++        let temp = tempfile::tempdir().unwrap();
++        let settings_path = temp.path().join("settings.json");
++        let previous_settings_path =
++            crate::paths::set_settings_path_for_tests(Some(settings_path.clone()));
++        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let upstream_addr = upstream_listener.local_addr().unwrap();
++        let settings = serde_json::json!({
++            "relayProfilesEnabled": true,
++            "relayProfiles": [{
++                "id": "payment-fixture",
++                "name": "Payment Fixture",
++                "baseUrl": format!("http://{upstream_addr}/v1"),
++                "upstreamBaseUrl": format!("http://{upstream_addr}/v1"),
++                "apiKey": "fixture-key",
++                "protocol": "chatCompletions",
++                "relayMode": "pureApi"
++            }],
++            "activeRelayId": "payment-fixture"
++        });
++        std::fs::write(settings_path, serde_json::to_vec_pretty(&settings).unwrap()).unwrap();
++
++        let upstream = tokio::spawn(async move {
++            let (mut stream, _) = upstream_listener.accept().await.unwrap();
++            let mut request = Vec::new();
++            let mut buffer = [0_u8; 4096];
++            let mut expected_len = None;
++            loop {
++                let read = stream.read(&mut buffer).await.unwrap();
++                assert!(read > 0, "upstream request ended before body completed");
++                request.extend_from_slice(&buffer[..read]);
++                if expected_len.is_none()
++                    && let Some(header_end) = find_header_end(&request)
++                {
++                    let headers = String::from_utf8_lossy(&request[..header_end]);
++                    let content_length = header_value_from_headers(&headers, "content-length")
++                        .unwrap()
++                        .parse::<usize>()
++                        .unwrap();
++                    expected_len = Some(header_end + 4 + content_length);
++                }
++                if expected_len.is_some_and(|length| request.len() >= length) {
++                    break;
++                }
++            }
++
++            let response_body = br#"{"error":{"message":"Insufficient account balance","type":"payment_required","code":"insufficient_quota"}}"#;
++            let response = format!(
++                "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++                response_body.len()
++            );
++            stream.write_all(response.as_bytes()).await.unwrap();
++            stream.write_all(response_body).await.unwrap();
++        });
++
++        let request_body = br#"{"model":"fixture-model","input":"probe","stream":true}"#;
++        let helper_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let helper_addr = helper_listener.local_addr().unwrap();
++        let helper = tokio::spawn(async move {
++            let (stream, remote_addr) = helper_listener.accept().await.unwrap();
++            handle_helper_connection(stream, Some(remote_addr))
++                .await
 +                .unwrap();
-         assert_eq!(first["payload"]["model_provider"], provider);
++        });
++        let mut client = tokio::net::TcpStream::connect(helper_addr).await.unwrap();
++        let headers = format!(
++            "POST /v1/responses HTTP/1.1\r\nHost: {helper_addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++            request_body.len()
++        );
++        client.write_all(headers.as_bytes()).await.unwrap();
++        client.write_all(request_body).await.unwrap();
++        let mut response = Vec::new();
++        client.read_to_end(&mut response).await.unwrap();
++
++        helper.await.unwrap();
++        upstream.await.unwrap();
++        crate::paths::set_settings_path_for_tests(previous_settings_path);
++
++        let response = String::from_utf8_lossy(&response);
++        assert!(response.starts_with("HTTP/1.1 200 OK"));
++        assert!(
++            response
++                .to_ascii_lowercase()
++                .contains("content-type: text/event-stream")
++        );
++        assert!(response.contains("event: response.failed"));
++        assert!(response.contains("\"code\":\"insufficient_quota\""));
++        assert!(response.contains("Insufficient account balance"));
++    }
++
+     #[tokio::test]
+     async fn unauthorized_proxy_request_never_reaches_upstream() {
+         let _settings_guard = crate::paths::settings_path_test_guard();
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 101ec22..c586f18 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -1279,7 +1279,16 @@ impl ChatSseToResponsesConverter {
+ 
+     pub fn fail(&mut self, message: String, error_type: Option<String>) -> Vec<u8> {
+         let mut output = String::new();
+-        self.state.failed_into(&mut output, message, error_type);
++        self.state
++            .failed_into(&mut output, message, error_type, None);
++        self.failed = true;
++        output.into_bytes()
++    }
++
++    pub fn fail_with_code(&mut self, message: String, error_code: String) -> Vec<u8> {
++        let mut output = String::new();
++        self.state
++            .failed_into(&mut output, message, None, Some(error_code));
+         self.failed = true;
+         output.into_bytes()
+     }
+@@ -1310,7 +1319,7 @@ impl ChatSseToResponsesConverter {
+         };
+         if event_name.as_deref() == Some("error") || chunk.get("error").is_some() {
+             let (message, error_type) = extract_chat_sse_error(&chunk);
+-            self.state.failed_into(output, message, error_type);
++            self.state.failed_into(output, message, error_type, None);
+             self.failed = true;
+             return;
+         }
+@@ -3870,12 +3879,21 @@ impl ChatSseState {
+         }
      }
  
-     let db = Connection::open(state).unwrap();
-     for (id, expected) in [
--        (
--            "structured-child",
--            ("openai", 0_i64, "C:/structured-old"),
--        ),
-+        ("structured-child", ("openai", 0_i64, "C:/structured-old")),
-         ("rollout-child", ("openai", 0_i64, "C:/rollout-old")),
-         ("marked-child", ("openai", 0_i64, "C:/marked-old")),
-         ("explicit-user", ("apigather", 1_i64, "C:/user-new")),
-@@ -704,7 +687,10 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
-                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-             )
-             .unwrap();
--        assert_eq!(actual, (expected.0.to_string(), expected.1, expected.2.to_string()));
-+        assert_eq!(
-+            actual,
-+            (expected.0.to_string(), expected.1, expected.2.to_string())
-+        );
-     }
+-    fn failed_into(&mut self, output: &mut String, message: String, error_type: Option<String>) {
++    fn failed_into(
++        &mut self,
++        output: &mut String,
++        message: String,
++        error_type: Option<String>,
++        error_code: Option<String>,
++    ) {
+         self.completed = true;
+         let mut error = json!({ "message": message });
+         if let Some(error_type) = error_type.filter(|value| !value.is_empty()) {
+             error["type"] = json!(error_type);
+         }
++        if let Some(error_code) = error_code.filter(|value| !value.is_empty()) {
++            error["code"] = json!(error_code);
++        }
+         let mut response = self.base_response("failed", self.completed_output_items());
+         response["error"] = error;
+         push_sse(
+@@ -4079,6 +4097,34 @@ pub fn responses_error_from_upstream(status_code: u16, content_type: &str, body:
+     json!({ "error": error })
  }
  
-@@ -1081,12 +1067,7 @@ fn provider_sync_catalogs_user_threads_but_skips_subagents() {
-     let rollout_dir = home.join("sessions/catalog-eligibility");
-     for (id, source, thread_source, updated_at) in [
-         ("user-one", "vscode", "user", 200000_i64),
--        (
--            "explicit-user",
--            "subagent_review",
--            "user",
--            205000_i64,
--        ),
-+        ("explicit-user", "subagent_review", "user", 205000_i64),
-         (
-             "guardian-user",
-             r#"{"subagent":{"other":"guardian"}}"#,
++pub fn responses_terminal_failure_sse_from_upstream(
++    request: Option<&Value>,
++    status_code: u16,
++    content_type: &str,
++    body: &[u8],
++) -> Option<Vec<u8>> {
++    if status_code != 402
++        || request
++            .and_then(|value| value.get("stream"))
++            .and_then(Value::as_bool)
++            != Some(true)
++    {
++        return None;
++    }
++
++    let envelope = responses_error_from_upstream(status_code, content_type, body);
++    let message = envelope
++        .pointer("/error/message")
++        .and_then(Value::as_str)
++        .filter(|value| !value.trim().is_empty())
++        .unwrap_or("Payment required")
++        .to_string();
++    let mut converter = request
++        .map(ChatSseToResponsesConverter::with_request)
++        .unwrap_or_default();
++    Some(converter.fail_with_code(message, "insufficient_quota".to_string()))
++}
++
+ fn upstream_error_parts(
+     status_code: u16,
+     content_type: &str,
 -- 
 2.55.0.windows.5
 

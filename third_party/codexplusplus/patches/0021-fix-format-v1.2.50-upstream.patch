@@ -1,107 +1,374 @@
-From a1d1d47a5a4ec868bf855d41acd4e519014dbb03 Mon Sep 17 00:00:00 2001
-From: Anti-Codex Candidate <anticodex-candidate@example.invalid>
-Date: Thu, 20 Aug 2026 08:13:55 +0800
-Subject: [PATCH 20/21] fix: format v1.2.50 upstream
+From b836e4264160e171fee3b56309aad2b457c5a729 Mon Sep 17 00:00:00 2001
+From: Anti-Codex <anticodex@local>
+Date: Sat, 12 Sep 2026 13:19:17 +0800
+Subject: [PATCH] port 0022-fix-format-v1.2.56-upstream to v1.3.0
 
 ---
- crates/codex-plus-core/src/install/macos.rs   |  4 ++--
- crates/codex-plus-data/src/provider_sync.rs   |  7 ++-----
- crates/codex-plus-data/src/storage.rs         |  2 +-
- crates/codex-plus-data/tests/provider_sync.rs | 14 +++++++++-----
- 4 files changed, 14 insertions(+), 13 deletions(-)
+ crates/codex-plus-core/src/lib.rs             |  2 +-
+ crates/codex-plus-core/src/routes.rs          |  9 +--
+ crates/codex-plus-core/src/session_share.rs   | 29 +++++----
+ crates/codex-plus-data/src/provider_sync.rs   | 45 +++++---------
+ crates/codex-plus-data/src/storage.rs         | 23 ++++----
+ crates/codex-plus-data/tests/provider_sync.rs | 59 +++++++------------
+ 6 files changed, 66 insertions(+), 101 deletions(-)
 
-diff --git a/crates/codex-plus-core/src/install/macos.rs b/crates/codex-plus-core/src/install/macos.rs
-index 91c9358..d710bfb 100644
---- a/crates/codex-plus-core/src/install/macos.rs
-+++ b/crates/codex-plus-core/src/install/macos.rs
-@@ -5,8 +5,8 @@ use std::os::unix::fs::PermissionsExt;
- use std::path::Path;
- 
- use super::{
--    install_root_or_default, option_or_current_exe, InstallOptions, MacosAppBundle, MANAGER_BINARY,
--    MANAGER_NAME, SILENT_BINARY, SILENT_NAME,
-+    InstallOptions, MANAGER_BINARY, MANAGER_NAME, MacosAppBundle, SILENT_BINARY, SILENT_NAME,
-+    install_root_or_default, option_or_current_exe,
- };
- 
- pub fn build_app_bundle(options: &InstallOptions, manager: bool) -> MacosAppBundle {
-diff --git a/crates/codex-plus-data/src/provider_sync.rs b/crates/codex-plus-data/src/provider_sync.rs
-index a2f1aa7..552b935 100644
---- a/crates/codex-plus-data/src/provider_sync.rs
-+++ b/crates/codex-plus-data/src/provider_sync.rs
-@@ -3037,9 +3037,7 @@ fn repair_missing_local_thread_catalog_rows_filtered(
-     update_full_sync_state: bool,
- ) -> anyhow::Result<CatalogRepairCounts> {
-     let plan = collect_catalog_repair_plan(home, paths, target_provider, thread_ids)?;
--    if plan.threads.is_empty()
--        && (!update_full_sync_state || !plan.has_cleanup_candidates())
--    {
-+    if plan.threads.is_empty() && (!update_full_sync_state || !plan.has_cleanup_candidates()) {
-         return Ok(CatalogRepairCounts::default());
+diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
+index fac3dc6..25c32c8 100644
+--- a/crates/codex-plus-core/src/lib.rs
++++ b/crates/codex-plus-core/src/lib.rs
+@@ -41,9 +41,9 @@ pub mod relay_switch;
+ pub mod remote_control_recovery;
+ pub mod routes;
+ pub mod script_market;
+-pub mod share;
+ pub mod session_share;
+ pub mod settings;
++pub mod share;
+ pub mod skills;
+ pub mod status;
+ pub mod stepwise;
+diff --git a/crates/codex-plus-core/src/routes.rs b/crates/codex-plus-core/src/routes.rs
+index f0a615e..91720e9 100644
+--- a/crates/codex-plus-core/src/routes.rs
++++ b/crates/codex-plus-core/src/routes.rs
+@@ -263,10 +263,11 @@ pub async fn handle_bridge_request(
+                 .to_string();
+             ctx.data.recover_remote_control_session(thread_id).await
+         }
+-        "/session/export" => ctx
+-            .data
+-            .export_session_file(session_from_payload(&payload))
+-            .await,
++        "/session/export" => {
++            ctx.data
++                .export_session_file(session_from_payload(&payload))
++                .await
++        }
+         "/session/import" => ctx.data.import_session_file(payload.clone()).await,
+         _ => {
+             let _ = crate::diagnostic_log::append_diagnostic_log(
+diff --git a/crates/codex-plus-core/src/session_share.rs b/crates/codex-plus-core/src/session_share.rs
+index 69cad53..91b4772 100644
+--- a/crates/codex-plus-core/src/session_share.rs
++++ b/crates/codex-plus-core/src/session_share.rs
+@@ -51,8 +51,9 @@ pub fn clear_pending_session_share() -> anyhow::Result<()> {
+     match fs::remove_file(&path) {
+         Ok(()) => Ok(()),
+         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+-        Err(error) => Err(error)
+-            .with_context(|| format!("清理待导入会话链接失败：{}", path.display())),
++        Err(error) => {
++            Err(error).with_context(|| format!("清理待导入会话链接失败：{}", path.display()))
++        }
      }
-     let mut total = CatalogRepairCounts::default();
-@@ -3376,8 +3374,7 @@ fn thread_source_is_user(thread_source: Option<&str>) -> bool {
- 
- fn thread_source_marks_non_root(thread_source: Option<&str>) -> bool {
-     thread_source.map(str::trim).is_some_and(|value| {
--        value.eq_ignore_ascii_case("subagent")
--            || value.eq_ignore_ascii_case("memory_consolidation")
-+        value.eq_ignore_ascii_case("subagent") || value.eq_ignore_ascii_case("memory_consolidation")
-     })
  }
  
+@@ -63,12 +64,12 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
+         .find(|(key, _)| key == "s")
+         .map(|(_, value)| value.into_owned())
+         .or_else(|| {
+-            parsed
+-                .path_segments()
+-                .and_then(|mut segments| match (segments.next(), segments.next()) {
++            parsed.path_segments().and_then(|mut segments| {
++                match (segments.next(), segments.next()) {
+                     (Some("s"), Some(id)) => Some(id.to_string()),
+                     _ => None,
+-                })
++                }
++            })
+         })
+         .filter(|id| (20..=32).contains(&id.len()))
+         .context("分享链接缺少有效的会话 ID")?;
+@@ -85,16 +86,10 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
+         .json::<Value>()
+         .await
+         .context("分享会话响应格式无效")?;
+-    let encrypted = record
+-        .get("encrypted")
+-        .context("分享会话缺少加密内容")?;
++    let encrypted = record.get("encrypted").context("分享会话缺少加密内容")?;
+     let key_value = parsed
+         .fragment()
+-        .and_then(|fragment| {
+-            fragment
+-                .split('&')
+-                .find_map(|pair| pair.strip_prefix("k="))
+-        })
++        .and_then(|fragment| fragment.split('&').find_map(|pair| pair.strip_prefix("k=")))
+         .context("分享链接缺少解密密钥")?;
+     let plaintext = decrypt_shared_payload(encrypted, key_value)?;
+     let payload: Value = serde_json::from_slice(&plaintext).context("分享会话内容格式无效")?;
+@@ -106,7 +101,11 @@ pub async fn import_shared_session_url(home: &Path, url: &str) -> anyhow::Result
+ 
+ fn validate_share_url(url: &str) -> anyhow::Result<reqwest::Url> {
+     let parsed = reqwest::Url::parse(url.trim()).context("分享 URL 格式无效")?;
+-    if parsed.scheme() != "https" || !parsed.host_str().is_some_and(|host| SHARE_HOSTS.contains(&host)) {
++    if parsed.scheme() != "https"
++        || !parsed
++            .host_str()
++            .is_some_and(|host| SHARE_HOSTS.contains(&host))
++    {
+         bail!("仅支持 Codex++ 分享站点链接");
+     }
+     if parsed.fragment().is_none() {
+diff --git a/crates/codex-plus-data/src/provider_sync.rs b/crates/codex-plus-data/src/provider_sync.rs
+index 57182d8..1b480dc 100644
+--- a/crates/codex-plus-data/src/provider_sync.rs
++++ b/crates/codex-plus-data/src/provider_sync.rs
+@@ -2405,10 +2405,7 @@ pub fn session_index_lines_for_thread(
+ ///
+ /// Best-effort: returns `Ok(0)` without writing when the file is missing or
+ /// changed since it was read, so a delete flow never clobbers fresh entries.
+-pub fn remove_session_index_entry(
+-    codex_home: &Path,
+-    thread_id: &str,
+-) -> anyhow::Result<usize> {
++pub fn remove_session_index_entry(codex_home: &Path, thread_id: &str) -> anyhow::Result<usize> {
+     let path = codex_home.join("session_index.jsonl");
+     if !path.exists() {
+         return Ok(0);
+@@ -2948,10 +2945,7 @@ fn remove_thread_from_catalog_dbs(codex_home: &Path, thread_id: &str) -> anyhow:
+ /// Lines whose `id` already exists are skipped. Returns the number of
+ /// appended lines. Best-effort: returns `Ok(0)` without writing when the
+ /// file changed since it was read.
+-pub fn restore_session_index_entries(
+-    codex_home: &Path,
+-    lines: &[String],
+-) -> anyhow::Result<usize> {
++pub fn restore_session_index_entries(codex_home: &Path, lines: &[String]) -> anyhow::Result<usize> {
+     if lines.is_empty() {
+         return Ok(0);
+     }
+@@ -3355,9 +3349,7 @@ fn sqlite_provider_ids(path: &Path) -> anyhow::Result<Vec<String>> {
+     Ok(sorted_provider_ids(ids))
+ }
+ 
+-fn sqlite_provider_sync_thread_kinds(
+-    paths: &[PathBuf],
+-) -> anyhow::Result<ProviderSyncThreadKinds> {
++fn sqlite_provider_sync_thread_kinds(paths: &[PathBuf]) -> anyhow::Result<ProviderSyncThreadKinds> {
+     let mut kinds = ProviderSyncThreadKinds::default();
+     for path in paths {
+         if !path.exists() {
+@@ -3588,14 +3580,9 @@ fn count_sqlite_updates(
+     let catalog_columns = table_columns(&db, "local_thread_catalog")?;
+     let mut total = 0;
+     if columns.contains("id") && columns.contains("model_provider") {
+-        total += provider_update_thread_ids(
+-            &db,
+-            "threads",
+-            "id",
+-            target_provider,
+-            excluded_thread_ids,
+-        )?
+-        .len();
++        total +=
++            provider_update_thread_ids(&db, "threads", "id", target_provider, excluded_thread_ids)?
++                .len();
+     }
+     if catalog_columns.contains("thread_id") && catalog_columns.contains("model_provider") {
+         total += provider_update_thread_ids(
+@@ -3673,13 +3660,9 @@ fn apply_sqlite_update(
+     let tx = db.transaction()?;
+     let mut counts = SqliteUpdateCounts::default();
+     if columns.contains("id") && columns.contains("model_provider") {
+-        for thread_id in provider_update_thread_ids(
+-            &tx,
+-            "threads",
+-            "id",
+-            target_provider,
+-            excluded_thread_ids,
+-        )? {
++        for thread_id in
++            provider_update_thread_ids(&tx, "threads", "id", target_provider, excluded_thread_ids)?
++        {
+             counts.provider_rows += tx.execute(
+                 "UPDATE threads SET model_provider = ?1 WHERE id = ?2 AND COALESCE(model_provider, '') <> ?1",
+                 (target_provider, thread_id),
+@@ -4228,8 +4211,7 @@ fn collect_catalog_marked_non_root_thread_ids(
+             if thread_source_is_user(thread_source.as_deref()) {
+                 continue;
+             }
+-            if source_marks_non_root_agent(&source_kind) || spawned_child_ids.contains(&thread_id)
+-            {
++            if source_marks_non_root_agent(&source_kind) || spawned_child_ids.contains(&thread_id) {
+                 thread_ids_by_path
+                     .entry(path.clone())
+                     .or_default()
+@@ -4253,8 +4235,7 @@ fn is_catalog_non_root_agent(
+     if thread_source_is_user(thread.thread_source.as_deref()) {
+         return false;
+     }
+-    source_marks_non_root_agent(&thread.source_kind)
+-        || spawned_child_ids.contains(&thread.id)
++    source_marks_non_root_agent(&thread.source_kind) || spawned_child_ids.contains(&thread.id)
+ }
+ 
+ fn thread_source_is_user(thread_source: Option<&str>) -> bool {
+@@ -4840,7 +4821,9 @@ mod non_root_agent_tests {
+ 
+     #[test]
+     fn structured_subagent_markers_still_identify_child_threads() {
+-        assert!(marks_non_root(r#"{"subagent":{"thread_spawn":{"depth":1}}}"#));
++        assert!(marks_non_root(
++            r#"{"subagent":{"thread_spawn":{"depth":1}}}"#
++        ));
+         assert!(marks_non_root(r#"{"sub_agent":{"other":"review"}}"#));
+         assert!(marks_non_root(r#"{"internal":true}"#));
+     }
 diff --git a/crates/codex-plus-data/src/storage.rs b/crates/codex-plus-data/src/storage.rs
-index be3b814..c46e5d5 100644
+index f8b6762..edf167c 100644
 --- a/crates/codex-plus-data/src/storage.rs
 +++ b/crates/codex-plus-data/src/storage.rs
-@@ -3,7 +3,7 @@ use codex_plus_core::models::{DeleteResult, DeleteStatus, SessionRef};
- use rusqlite::types::{ToSqlOutput, Value as SqlValue, ValueRef};
- use rusqlite::{Connection, OpenFlags, OptionalExtension, ToSql};
- use serde::{Deserialize, Serialize};
--use serde_json::{json, Map, Value};
-+use serde_json::{Map, Value, json};
- use std::collections::HashSet;
- use std::fs;
- use std::fs::File;
+@@ -24,8 +24,9 @@ pub fn delete_local_from_paths(
+     let mut backup_tokens = Vec::new();
+     for db_path in db_paths {
+         let adapter = match codex_home {
+-            Some(home) => SQLiteStorageAdapter::new(db_path, backup_store.clone())
+-                .with_codex_home(home),
++            Some(home) => {
++                SQLiteStorageAdapter::new(db_path, backup_store.clone()).with_codex_home(home)
++            }
+             None => SQLiteStorageAdapter::new(db_path, backup_store.clone()),
+         };
+         let candidate_result = adapter.delete_local(session);
+@@ -614,16 +615,16 @@ impl SQLiteStorageAdapter {
+                 }
+             }
+         }
+-        let session_index_note = self
+-            .codex_home
+-            .as_deref()
+-            .and_then(|home| {
+-                crate::provider_sync::remove_session_index_entry(home, &thread_id)
+-                    .err()
+-                    .map(|error| format!("session_index.jsonl 清理失败：{error}"))
+-            });
++        let session_index_note = self.codex_home.as_deref().and_then(|home| {
++            crate::provider_sync::remove_session_index_entry(home, &thread_id)
++                .err()
++                .map(|error| format!("session_index.jsonl 清理失败：{error}"))
++        });
+         if !file_errors.is_empty() {
+-            let mut message = format!("本地数据库已删除，但文件删除失败：{}", file_errors.join("; "));
++            let mut message = format!(
++                "本地数据库已删除，但文件删除失败：{}",
++                file_errors.join("; ")
++            );
+             if let Some(note) = session_index_note.as_deref() {
+                 message = format!("{message}；{note}");
+             }
 diff --git a/crates/codex-plus-data/tests/provider_sync.rs b/crates/codex-plus-data/tests/provider_sync.rs
-index b61f9e5..151edb4 100644
+index 841207b..23ff124 100644
 --- a/crates/codex-plus-data/tests/provider_sync.rs
 +++ b/crates/codex-plus-data/tests/provider_sync.rs
-@@ -1156,7 +1156,11 @@ fn provider_sync_catalogs_user_threads_but_skips_subagents() {
-             r#"{"sub_agent":{"other":"review"}}"#,
-             235000_i64,
-         ),
--        ("internal-child", "internal_memory_consolidation", 237000_i64),
-+        (
-+            "internal-child",
-+            "internal_memory_consolidation",
-+            237000_i64,
-+        ),
-         ("edge-child", "cli", 240000_i64),
-     ] {
-         let rollout_path = rollout_dir.join(format!("{id}.jsonl"));
-@@ -1202,7 +1206,9 @@ fn provider_sync_catalogs_user_threads_but_skips_subagents() {
-     assert_eq!(result.sqlite_rows_updated, 5);
-     let db = Connection::open(&catalog_db).unwrap();
-     let mut stmt = db
--        .prepare("SELECT thread_id FROM local_thread_catalog WHERE host_id = 'local' ORDER BY thread_id")
-+        .prepare(
-+            "SELECT thread_id FROM local_thread_catalog WHERE host_id = 'local' ORDER BY thread_id",
-+        )
-         .unwrap();
-     let ids = stmt
-         .query_map([], |row| row.get::<_, String>(0))
-@@ -1316,9 +1322,7 @@ fn provider_sync_prunes_existing_local_subagent_catalog_rows() {
+@@ -133,14 +133,14 @@ fn rollout_files_snapshot(path: &Path) -> Vec<(String, Vec<u8>, SystemTime)> {
  
-     let db = Connection::open(&catalog_db).unwrap();
-     let mut stmt = db
--        .prepare(
--            "SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id",
--        )
-+        .prepare("SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id")
+ fn catalog_rows_snapshot(path: &Path) -> Vec<(String, String)> {
+     let db = Connection::open(path).unwrap();
+-    db.prepare(
+-        "SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id",
+-    )
+-    .unwrap()
+-    .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+-    .unwrap()
+-    .collect::<rusqlite::Result<Vec<_>>>()
+-    .unwrap()
++    db.prepare("SELECT host_id, thread_id FROM local_thread_catalog ORDER BY host_id, thread_id")
++        .unwrap()
++        .query_map([], |row| {
++            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
++        })
++        .unwrap()
++        .collect::<rusqlite::Result<Vec<_>>>()
++        .unwrap()
+ }
+ 
+ fn write_subagent_rollout(path: &Path, provider: &str, thread_id: &str, cwd: &str) {
+@@ -796,10 +796,7 @@ fn provider_sync_ignores_spawned_subagent_threads() {
+             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+         )
          .unwrap();
-     let rows = stmt
-         .query_map([], |row| {
+-    assert_eq!(
+-        child,
+-        ("openai".to_string(), 0, "C:/child-old".to_string())
+-    );
++    assert_eq!(child, ("openai".to_string(), 0, "C:/child-old".to_string()));
+ }
+ 
+ #[test]
+@@ -820,18 +817,8 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
+         "structured-child",
+         "C:/structured-new",
+     );
+-    write_subagent_rollout(
+-        &rollout_child,
+-        "openai",
+-        "rollout-child",
+-        "C:/rollout-new",
+-    );
+-    write_rollout(
+-        &marked_rollout,
+-        "openai",
+-        "marked-child",
+-        "C:/marked-new",
+-    );
++    write_subagent_rollout(&rollout_child, "openai", "rollout-child", "C:/rollout-new");
++    write_rollout(&marked_rollout, "openai", "marked-child", "C:/marked-new");
+     write_rollout(
+         &explicit_user_rollout,
+         "openai",
+@@ -907,19 +894,15 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
+         (&explicit_user_rollout, "apigather"),
+         (&guardian_user_rollout, "openai"),
+     ] {
+-        let first: serde_json::Value = serde_json::from_str(
+-            fs::read_to_string(path).unwrap().lines().next().unwrap(),
+-        )
+-        .unwrap();
++        let first: serde_json::Value =
++            serde_json::from_str(fs::read_to_string(path).unwrap().lines().next().unwrap())
++                .unwrap();
+         assert_eq!(first["payload"]["model_provider"], provider);
+     }
+ 
+     let db = Connection::open(state).unwrap();
+     for (id, expected) in [
+-        (
+-            "structured-child",
+-            ("openai", 0_i64, "C:/structured-old"),
+-        ),
++        ("structured-child", ("openai", 0_i64, "C:/structured-old")),
+         ("rollout-child", ("openai", 0_i64, "C:/rollout-old")),
+         ("marked-child", ("openai", 0_i64, "C:/marked-old")),
+         ("explicit-user", ("apigather", 1_i64, "C:/user-new")),
+@@ -932,7 +915,10 @@ fn provider_sync_preserves_marked_subagents_and_explicit_user_priority() {
+                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+             )
+             .unwrap();
+-        assert_eq!(actual, (expected.0.to_string(), expected.1, expected.2.to_string()));
++        assert_eq!(
++            actual,
++            (expected.0.to_string(), expected.1, expected.2.to_string())
++        );
+     }
+ }
+ 
+@@ -1309,12 +1295,7 @@ fn provider_sync_catalogs_user_threads_but_skips_subagents() {
+     let rollout_dir = home.join("sessions/catalog-eligibility");
+     for (id, source, thread_source, updated_at) in [
+         ("user-one", "vscode", "user", 200000_i64),
+-        (
+-            "explicit-user",
+-            "subagent_review",
+-            "user",
+-            205000_i64,
+-        ),
++        ("explicit-user", "subagent_review", "user", 205000_i64),
+         (
+             "guardian-user",
+             r#"{"subagent":{"other":"guardian"}}"#,
 -- 
 2.55.0.windows.5
 

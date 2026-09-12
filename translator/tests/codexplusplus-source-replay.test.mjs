@@ -11,24 +11,24 @@ const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
 
-test("v1.2.56 promotion targets the reviewed upstream tag", () => {
+test("v1.3.0 promotion targets the reviewed upstream tag", () => {
   const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
 
-  assert.equal(accepted.version, "1.2.56");
-  assert.equal(accepted.tag, "v1.2.56");
-  assert.equal(accepted.upstreamCommit, "696d3ef1714b55ec5eb14b0828ae682b55eb9252");
-  assert.equal(accepted.patchCommit, "197d9e52a44106f602dc6962df14f53282d14e2c");
-  assert.equal(accepted.patches.length, 22);
+  assert.equal(accepted.version, "1.3.0");
+  assert.equal(accepted.tag, "v1.3.0");
+  assert.equal(accepted.upstreamCommit, "be6a45852f9992a688f33be933f444ee098fc67a");
+  assert.equal(accepted.patchCommit, "a095b85016806e66802a4d9ce8811814f701108b");
+  assert.equal(accepted.patches.length, 25);
   assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0023-fix-proxy-stop-retries-on-payment-errors.patch");
+  assert.equal(accepted.patches.at(-1).file, "patches/0026-fix-v1.3.0-mutable-request-body.patch");
   assert.equal(
     accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
     false,
   );
-  assert.match(accepted.verification.patchReplay, /tree 28dc6de370214f6ec3ee0c9a35a0f94620690fda$/);
+  assert.match(accepted.verification.patchReplay, /head a095b85016806e66802a4d9ce8811814f701108b; tree a9e1ebc096e7b8334b44425b1e5429d255aeb59c$/);
   assert.equal(
     accepted.verification.launcherReleaseBuild,
-    "sha256:24f20dc4036226ed605ada82c832856c765a6dd17345b6bebf302538642d513f",
+    "sha256:19ae4b18e64ac0e4de34273ad5c8cdbb5a7e38f06fc24ce6289f33efd349a16c",
   );
 });
 
@@ -173,13 +173,13 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation records the accepted v1.2.56 promotion", () => {
+test("component documentation records the accepted v1.3.0 promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.2\.56`/);
-  assert.match(readme, /checkout 696d3ef1714b55ec5eb14b0828ae682b55eb9252/);
-  assert.match(readme, /carries exactly twenty-two narrow Anti-Codex compatibility patches/);
-  assert.match(readme, /All twenty-two patches replayed without automatic conflict resolution/);
+  assert.match(readme, /Accepted version: `v1\.3\.0`/);
+  assert.match(readme, /be6a45852f9992a688f33be933f444ee098fc67a/);
+  assert.match(readme, /carries exactly twenty-five narrow Anti-Codex compatibility patches/);
+  assert.match(readme, /All twenty-five patches replayed after manual v1\.3\.0 context adaptation/);
   assert.match(readme, /120 seconds without upstream data/);
   assert.match(readme, /one `insufficient_quota` event instead of native reconnects/);
   assert.match(readme, /historical source-replay record/);

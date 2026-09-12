@@ -1,7 +1,7 @@
-From 810a5d5df3e78963c33b2500a451b1bb8910df0a Mon Sep 17 00:00:00 2001
-From: Codex <codex@local>
-Date: Fri, 17 Jul 2026 13:35:15 +0800
-Subject: [PATCH 03/21] fix: keep native helper requests text-only
+From 7043ebfcb073dfad37527045be364d99a6eb35f4 Mon Sep 17 00:00:00 2001
+From: Porter <porter@localhost>
+Date: Sat, 12 Sep 2026 12:46:42 +0800
+Subject: [PATCH] port helper request policy to v1.3.0
 
 ---
  crates/codex-plus-core/src/protocol_proxy.rs  | 105 ++++++++++++++---
@@ -9,10 +9,10 @@ Subject: [PATCH 03/21] fix: keep native helper requests text-only
  2 files changed, 197 insertions(+), 17 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index e3711d7..09891b3 100644
+index a5b0851..901b9c1 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -242,25 +242,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -243,25 +243,32 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
  
      apply_chat_reasoning_options(&mut result, &body, model);
  
@@ -62,7 +62,7 @@ index e3711d7..09891b3 100644
          }
      }
  
-@@ -4713,6 +4720,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
+@@ -5076,6 +5083,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
      }
  }
  
@@ -134,10 +134,10 @@ index e3711d7..09891b3 100644
      match value {
          Value::String(text) => normalize_chat_tool_arguments_string(text),
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index 7f2ea8a..510af80 100644
+index 8c79aa9..11ff17c 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
-@@ -743,6 +743,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
+@@ -780,6 +780,115 @@ fn responses_request_drops_tool_controls_when_no_chat_tools_survive() {
      assert!(converted.get("parallel_tool_calls").is_none());
  }
  
@@ -251,7 +251,7 @@ index 7f2ea8a..510af80 100644
 +}
 +
  #[test]
- fn responses_request_normalizes_function_tool_parameters() {
+ fn responses_request_to_chat_inlines_ref_siblings_in_tool_defs() {
      let converted = responses_to_chat_completions(json!({
 -- 
 2.55.0.windows.5

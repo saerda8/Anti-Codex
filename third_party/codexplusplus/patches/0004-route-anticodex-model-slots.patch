@@ -1,18 +1,18 @@
-From ac64beac492f41ef56337614441b599cf1b3c5d4 Mon Sep 17 00:00:00 2001
-From: Codex <codex@local>
-Date: Mon, 20 Jul 2026 03:05:24 +0800
-Subject: [PATCH 04/21] fix: route Anti-Codex model slots
+From a473c0267eaffa00ce846f71961651fb4e78c67f Mon Sep 17 00:00:00 2001
+From: Porter <porter@localhost>
+Date: Sat, 12 Sep 2026 12:49:51 +0800
+Subject: [PATCH] port Anti-Codex model routing to v1.3.0
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs | 386 ++++++++++++++++++-
- 1 file changed, 376 insertions(+), 10 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs | 382 ++++++++++++++++++-
+ 1 file changed, 373 insertions(+), 9 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 09891b3..94cf553 100644
+index 901b9c1..34b91ce 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -10,7 +10,7 @@ use anyhow::Context;
- use serde_json::{Value, json};
+ use serde_json::{Map, Value, json};
  
  use crate::relay_rotation::{RotationContext, RotationEvent};
 -use crate::settings::{RelayProtocol, SettingsStore};
@@ -20,7 +20,7 @@ index 09891b3..94cf553 100644
  
  pub const DEFAULT_PROTOCOL_PROXY_PORT: u16 = 57321;
  pub const NO_AUTH_PROXY_BEARER_TOKEN: &str = "codex-plus-no-auth";
-@@ -55,6 +55,13 @@ mod direct_chat_timeout_contract_tests {
+@@ -56,6 +56,13 @@ mod direct_chat_timeout_contract_tests {
      }
  }
  const ERROR_BODY_PREVIEW_LIMIT: usize = 1024;
@@ -34,7 +34,7 @@ index 09891b3..94cf553 100644
  
  pub fn protocol_proxy_port() -> u16 {
      protocol_proxy_port_from_value(std::env::var(PROTOCOL_PROXY_PORT_ENV).ok().as_deref())
-@@ -630,6 +637,316 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+@@ -652,6 +659,316 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
          .await
  }
  
@@ -351,7 +351,7 @@ index 09891b3..94cf553 100644
  async fn open_responses_proxy_request_with_settings_and_user_agent(
      body: &str,
      settings: crate::settings::BackendSettings,
-@@ -637,6 +954,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -659,6 +976,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      request_path: &str,
  ) -> anyhow::Result<UpstreamProxyResponse> {
      let mut request_json: Value = serde_json::from_str(body)?;
@@ -361,7 +361,7 @@ index 09891b3..94cf553 100644
      let is_stream = request_json
          .get("stream")
          .and_then(Value::as_bool)
-@@ -647,7 +967,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -669,7 +989,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
          .map(str::trim)
          .unwrap_or("")
          .to_string();
@@ -374,9 +374,9 @@ index 09891b3..94cf553 100644
      if let Some(route) = &model_route
          && route.upstream_model != source_model
      {
-@@ -656,7 +980,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
-     let context = RotationContext {
+@@ -680,7 +1004,9 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
          conversation_id: conversation_id_from_responses_request(&request_json),
+         model,
      };
 -    let (relay, relays) = if let Some(route) = &model_route {
 +    let (relay, relays) = if let Some(relay) = directed_relay.as_ref() {
@@ -385,7 +385,7 @@ index 09891b3..94cf553 100644
          (route.relay.clone(), vec![route.relay.clone()])
      } else {
          let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
-@@ -687,6 +1013,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -717,6 +1043,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "stream": is_stream,
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
@@ -393,23 +393,7 @@ index 09891b3..94cf553 100644
                  "headerTimeoutSeconds": header_timeout.as_secs(),
                  "modelRoute": model_route.as_ref().map(|route| json!({
                      "sourceRelayId": route.source_relay_id,
-@@ -841,12 +1168,14 @@ fn select_model_route(
-         source_model: model.to_string(),
-         upstream_model,
-     }))
-+}
-+
- pub async fn open_cancel_aware_loopback_responses_proxy_request(
-     body: &str,
-     original_user_agent: Option<&str>,
-     request_path: &str,
- ) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
--    let request_json: Value = serde_json::from_str(body)?;
-+    let mut request_json: Value = serde_json::from_str(body)?;
-     let is_stream = request_json
-         .get("stream")
-         .and_then(Value::as_bool)
-@@ -856,14 +1185,44 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -888,14 +1215,44 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
      }
  
      let settings = SettingsStore::default().load().unwrap_or_default();
@@ -459,7 +443,7 @@ index 09891b3..94cf553 100644
      let candidate_count = relays.len();
      for (attempt, relay) in relays.into_iter().enumerate() {
          validate_upstream(&relay)?;
-@@ -885,7 +1244,14 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -917,7 +1274,14 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "transport": "cancel_aware_loopback",
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,

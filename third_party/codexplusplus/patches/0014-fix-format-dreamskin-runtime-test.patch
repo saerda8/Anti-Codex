@@ -1,17 +1,17 @@
-From 8978049d93a3f3eeb262494d31bce038027c222f Mon Sep 17 00:00:00 2001
+From c7d9d4cfbe85dbf536f1c1e574c9d259ba7f1b87 Mon Sep 17 00:00:00 2001
 From: Anti-Codex Candidate <noreply@local.invalid>
 Date: Thu, 13 Aug 2026 21:50:55 +0800
-Subject: [PATCH 13/21] fix: format DreamSkin runtime test
+Subject: [PATCH] fix: format DreamSkin runtime test
 
 ---
  crates/codex-plus-core/tests/dream_skin_runtime.rs | 3 +--
  1 file changed, 1 insertion(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/tests/dream_skin_runtime.rs b/crates/codex-plus-core/tests/dream_skin_runtime.rs
-index 433d362..f68a00a 100644
+index e1c8c23..20f7dc4 100644
 --- a/crates/codex-plus-core/tests/dream_skin_runtime.rs
 +++ b/crates/codex-plus-core/tests/dream_skin_runtime.rs
-@@ -158,8 +158,7 @@ fn bundled_skin_runtimes_gate_structural_home_layout_on_classic_chrome() {
+@@ -286,8 +286,7 @@ fn other_bundled_skin_runtimes_keep_their_existing_layout_contract() {
          assert!(
              source.contains("data-dream-home-layout=\"soft\"")
                  || (source.contains("data-dream-home-layout=\"structured\"")

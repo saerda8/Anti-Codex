@@ -1,26 +1,17 @@
-From 045d528a4ee347ac86efb2e03c4eeb95e356b9c8 Mon Sep 17 00:00:00 2001
-From: Codex <codex@local>
-Date: Mon, 20 Jul 2026 07:13:50 +0800
-Subject: [PATCH 08/21] chore: audit Codex tool conversion
+From 604c3c53e1cb45eb310806fec31d08ab80b31267 Mon Sep 17 00:00:00 2001
+From: Porter <porter@localhost>
+Date: Sat, 12 Sep 2026 12:53:17 +0800
+Subject: [PATCH] port tool conversion audit to v1.3.0
 
 ---
- crates/codex-plus-core/src/protocol_proxy.rs | 70 +++++++++++++++++++-
- 1 file changed, 67 insertions(+), 3 deletions(-)
+ crates/codex-plus-core/src/protocol_proxy.rs | 68 +++++++++++++++++++-
+ 1 file changed, 66 insertions(+), 2 deletions(-)
 
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 2232fb3..cf09a41 100644
+index 3ddf85d..8fa8651 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
- use std::time::Duration;
- 
- use anyhow::Context;
--use serde_json::{json, Value};
-+use serde_json::{Value, json};
- 
- use crate::relay_rotation::{RotationContext, RotationEvent};
- use crate::settings::{BackendSettings, RelayProfile, RelayProtocol, SettingsStore};
-@@ -82,7 +82,8 @@ fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
+@@ -83,7 +83,8 @@ fn protocol_proxy_port_from_value(value: Option<&str>) -> u16 {
  
  #[cfg(test)]
  mod isolation_port_tests {
@@ -30,7 +21,7 @@ index 2232fb3..cf09a41 100644
  
      #[test]
      fn protocol_proxy_port_accepts_only_nonzero_u16_values() {
-@@ -100,6 +101,34 @@ mod isolation_port_tests {
+@@ -101,6 +102,34 @@ mod isolation_port_tests {
              DEFAULT_PROTOCOL_PROXY_PORT
          );
      }
@@ -65,7 +56,7 @@ index 2232fb3..cf09a41 100644
  }
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-@@ -301,6 +330,37 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+@@ -302,6 +331,37 @@ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
      Ok(result)
  }
  
@@ -103,7 +94,7 @@ index 2232fb3..cf09a41 100644
  pub fn chat_completion_to_response(body: Value) -> anyhow::Result<Value> {
      chat_completion_to_response_with_context(body, &CodexToolContext::default(), None)
  }
-@@ -799,9 +859,9 @@ fn select_anticodex_relay_for_model(
+@@ -821,9 +881,9 @@ fn select_anticodex_relay_for_model(
  #[cfg(test)]
  mod anticodex_model_routing_tests {
      use super::{
@@ -114,7 +105,7 @@ index 2232fb3..cf09a41 100644
      };
      use crate::settings::{BackendSettings, RelayProfile};
      use serde_json::json;
-@@ -1025,6 +1085,8 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1055,6 +1115,8 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "attempt": attempt + 1,
                  "candidateCount": relay_count,
                  "compactionModelAligned": compaction_model_aligned,
@@ -123,7 +114,7 @@ index 2232fb3..cf09a41 100644
                  "headerTimeoutSeconds": header_timeout.as_secs(),
                  "modelRoute": model_route.as_ref().map(|route| json!({
                      "sourceRelayId": route.source_relay_id,
-@@ -1256,6 +1318,8 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
+@@ -1286,6 +1348,8 @@ pub async fn open_cancel_aware_loopback_responses_proxy_request(
                  "attempt": attempt + 1,
                  "candidateCount": candidate_count,
                  "compactionModelAligned": compaction_model_aligned,
