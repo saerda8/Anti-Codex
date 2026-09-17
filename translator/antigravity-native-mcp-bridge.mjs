@@ -169,7 +169,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
         customizationServerUrl: url,
         toolNames: tools.map((tool) => tool.name),
       },
-      customTools: tools.map((tool) => tool.name),
+      customTools: canonicalTools.map((tool) => tool.name),
     }, systemPromptSections),
     waitForCall,
     takeCalls,
