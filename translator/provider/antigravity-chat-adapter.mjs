@@ -880,7 +880,7 @@ function normalizeCascadeCalls(calls) {
   const ids = new Set();
   return calls.map((call) => {
     const callId = String(call?.callId ?? "").trim();
-    const name = String(call?.name ?? "").trim();
+    const name = normalizeReturnedToolName(call?.name);
     if (!callId || !name || ids.has(callId)) {
       throw new ChatAdapterError("Antigravity tool calls require stable unique IDs and names.", {
         statusCode: 502,
@@ -907,6 +907,14 @@ function normalizeCascadeCalls(calls) {
     ids.add(callId);
     return { callId, name, arguments: argumentsValue, argumentsJson };
   });
+}
+
+function normalizeReturnedToolName(value) {
+  const name = String(value ?? "").trim();
+  return {
+    "functions.exec": "exec_command",
+    "functions.apply_patch": "apply_patch",
+  }[name] ?? name;
 }
 
 function createSessionStore({ client, maxSessions, ttlMs, setTimer, clearTimer }) {
