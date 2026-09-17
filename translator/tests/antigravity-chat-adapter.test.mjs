@@ -128,6 +128,26 @@ test("maps OpenAI input_image parts to Cascade userItems images", async () => {
   await adapter.close();
 });
 
+test("normalizes host-qualified tool definitions before Cascade starts", async () => {
+  const client = fakeClient({ startEvents: [{ type: "done" }] });
+  const adapter = createAdapter(client);
+
+  await adapter.complete({
+    model: "gemini-pro-agent",
+    messages: [{ role: "user", content: "run the command" }],
+    tools: [
+      { type: "function", function: { name: "functions.exec", parameters: { type: "object" } } },
+      { type: "function", function: { name: "functions.apply_patch", parameters: { type: "object" } } },
+    ],
+  });
+
+  assert.deepEqual(client.starts[0].tools.map((tool) => tool.function.name), [
+    "exec_command",
+    "apply_patch",
+  ]);
+  await adapter.close();
+});
+
 test("normalizes host-qualified tool calls before returning them to Codex", async () => {
   const client = fakeClient({
     startEvents: [{

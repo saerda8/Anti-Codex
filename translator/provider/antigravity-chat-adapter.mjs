@@ -835,7 +835,7 @@ function normalizeChatTools(tools, toolChoice) {
     if (tool?.type !== "function" || !tool.function || typeof tool.function !== "object") {
       throw invalidRequest("Only function tools are supported.", "unsupported_tool_type");
     }
-    const name = String(tool.function.name ?? "").trim();
+    const name = normalizeReturnedToolName(tool.function.name);
     if (!name || names.has(name)) throw invalidRequest("Tool names must be non-empty and unique.", "invalid_tools");
     names.add(name);
     return {
