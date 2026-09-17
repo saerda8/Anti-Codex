@@ -233,6 +233,7 @@ command = "node"
   // 1. Must retain [features], [mcp_servers.*]
   assert.ok(merged.includes("[features]"), "Should retain [features] section");
   assert.ok(merged.includes("enable_telemetry = false"), "Should retain settings inside [features]");
+  assert.ok(merged.includes("unified_exec = true"), "Should enable the native shell tool surface");
   assert.ok(merged.includes("[mcp_servers.foo]"), "Should retain [mcp_servers.foo] section");
   assert.ok(merged.includes('command = "node"'), "Should retain settings inside [mcp_servers.foo]");
 

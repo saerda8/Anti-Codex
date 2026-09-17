@@ -261,7 +261,7 @@ export function mergeCodexRouteConfig(existingConfig, route) {
   const providerSectionIndex = routeLines.findIndex((line) => /^\[model_providers\./.test(line));
   const managedRoot = routeLines.slice(0, providerSectionIndex).filter(Boolean);
   const managedSection = trimBoundaryBlankLines(routeLines.slice(providerSectionIndex));
-  return [
+  return ensureUnifiedExecFeature([
     ...managedRoot,
     ...trimBoundaryBlankLines(preservedRoot),
     "",
@@ -269,7 +269,7 @@ export function mergeCodexRouteConfig(existingConfig, route) {
     "",
     ...managedSection,
     "",
-  ].join("\n").replace(/\n{3,}/g, "\n\n");
+  ].join("\n").replace(/\n{3,}/g, "\n\n"));
 }
 
 export function isPathInsideRoot(candidate, root) {
@@ -299,6 +299,21 @@ function trimBoundaryBlankLines(lines) {
   while (start < end && !String(lines[start]).trim()) start += 1;
   while (end > start && !String(lines[end - 1]).trim()) end -= 1;
   return lines.slice(start, end);
+}
+
+function ensureUnifiedExecFeature(config) {
+  const lines = String(config).split("\n");
+  let start = lines.findIndex((line) => /^\s*\[features\]\s*$/.test(line));
+  if (start < 0) {
+    const suffix = lines.join("\n").replace(/\s+$/, "");
+    return `${suffix}\n\n[features]\nunified_exec = true\n`;
+  }
+  let end = lines.findIndex((line, index) => index > start && /^\s*\[[^\]]+\]\s*$/.test(line));
+  if (end < 0) end = lines.length;
+  const filtered = lines.filter((line, index) => !(index > start && index < end && /^\s*unified_exec\s*=/.test(line)));
+  start = filtered.findIndex((line) => /^\s*\[features\]\s*$/.test(line));
+  filtered.splice(start + 1, 0, "unified_exec = true");
+  return filtered.join("\n");
 }
 
 function normalizeThirdPartyProtocol(value) {
