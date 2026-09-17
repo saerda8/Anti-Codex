@@ -167,7 +167,7 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     customAgentSpec: withAntigravitySystemPromptSections({
       customizationConfig: {
         customizationServerUrl: url,
-        toolNames: tools.map((tool) => tool.name),
+        toolNames: canonicalTools.map((tool) => tool.name),
       },
       customTools: canonicalTools.map((tool) => tool.name),
     }, systemPromptSections),

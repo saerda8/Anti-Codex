@@ -165,6 +165,7 @@ test("native MCP bridge maps Antigravity command alias back to Codex shell_comma
     const listed = await rpc(bridge.url, 20, "tools/list", {});
     assert.deepEqual(listed.result.tools.map((tool) => tool.name), ["shell_command", "command"]);
     assert.deepEqual(bridge.customAgentSpec.customTools, ["shell_command"]);
+    assert.deepEqual(bridge.customAgentSpec.customizationConfig.toolNames, ["shell_command"]);
 
     const callResponse = rpc(bridge.url, 21, "tools/call", {
       name: "command",
@@ -190,6 +191,7 @@ test("native MCP bridge accepts host-qualified function aliases", async () => {
   });
   try {
     assert.deepEqual(bridge.customAgentSpec.customTools, ["exec_command", "apply_patch"]);
+    assert.deepEqual(bridge.customAgentSpec.customizationConfig.toolNames, ["exec_command", "apply_patch"]);
     const listed = await rpc(bridge.url, 30, "tools/list", {});
     assert.deepEqual(listed.result.tools.map((tool) => tool.name), [
       "exec_command", "apply_patch", "functions.exec", "functions.apply_patch",
