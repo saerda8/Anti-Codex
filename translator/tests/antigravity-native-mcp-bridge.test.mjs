@@ -181,6 +181,33 @@ test("native MCP bridge maps Antigravity command alias back to Codex shell_comma
   }
 });
 
+test("native MCP bridge accepts host-qualified function aliases", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    tools: [
+      { name: "exec_command", description: "Run a command", parameters: { type: "object" } },
+      { name: "apply_patch", description: "Apply a patch", parameters: { type: "object" } },
+    ],
+  });
+  try {
+    const listed = await rpc(bridge.url, 30, "tools/list", {});
+    assert.deepEqual(listed.result.tools.map((tool) => tool.name), [
+      "exec_command", "apply_patch", "functions.exec", "functions.apply_patch",
+    ]);
+    const callResponse = rpc(bridge.url, 31, "tools/call", {
+      name: "functions.exec",
+      arguments: { cmd: "Get-Location" },
+    });
+    const call = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(call.name, "exec_command");
+    assert.equal(call.nativeName, "functions.exec");
+    assert.deepEqual(call.arguments, { cmd: "Get-Location" });
+    assert.equal(bridge.completeCall(call.callId, "ok"), true);
+    assert.equal((await callResponse).result.content[0].text, "ok");
+  } finally {
+    await bridge.close();
+  }
+});
+
 test("native MCP bridge rejects unknown tools and waitForCall supports abort", async () => {
   const bridge = await createAntigravityNativeMcpBridge({ tools: [] });
   try {

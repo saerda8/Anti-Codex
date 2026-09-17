@@ -240,6 +240,17 @@ function withAntigravityToolAliases(tools) {
     });
     canonicalNameByNativeName.set("command", "shell_command");
   }
+  for (const [name, alias] of [["exec_command", "functions.exec"], ["apply_patch", "functions.apply_patch"]]) {
+    const tool = tools.find((candidate) => candidate.name === name);
+    if (!tool || names.has(alias)) continue;
+    aliases.push({
+      ...tool,
+      name: alias,
+      description: `${tool.description || name} (host compatibility alias for ${name}.)`,
+    });
+    names.add(alias);
+    canonicalNameByNativeName.set(alias, name);
+  }
   return { tools: aliases, canonicalNameByNativeName };
 }
 
