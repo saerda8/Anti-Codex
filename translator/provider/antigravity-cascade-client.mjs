@@ -152,9 +152,16 @@ export function createAntigravityCascadeClient(options = {}) {
         seenToolEvents: new Set(),
         retained: false,
       };
+      const userItems = normalizeUserItems(request);
       await serviceCall(activeConnection, "SendUserCascadeMessage", {
         cascadeId,
-        items: [{ text: requiredText(request.userText, "current user text") }],
+        items: userItems.filter((item) => item?.text !== undefined),
+        ...(userItems.some((item) => item?.image)
+          ? { images: userItems.filter((item) => item?.image).map((item) => ({
+            base64Data: item.image.data,
+            mimeType: item.image.mimeType,
+          })) }
+          : {}),
         blocking: false,
         cascadeConfig: {
           conversationHistoryConfig: { enabled: false, maxConversations: 0 },
@@ -301,10 +308,7 @@ async function* observeCascade(continuation, options) {
           throw new AntigravityCascadeError("Cascade requested a tool without a native MCP bridge.", { statusCode: 502 });
         }
         const text = extractNewAssistantText(trajectory, continuation);
-        if (text) {
-          continuation.lastAssistantText = text;
-          yield { type: "text_delta", delta: text };
-        }
+        if (text) yield { type: "text_delta", delta: text };
         const calls = await captureNativeCalls({
           connection,
           cascadeId,
@@ -349,10 +353,7 @@ async function* observeCascade(continuation, options) {
         ).filter((call) => !continuation.seenToolEvents?.has(call.trajectoryKey));
         if (finalPending.length > 0) continue;
         const text = extractNewAssistantText(finalTrajectory, continuation);
-        if (text) {
-          continuation.lastAssistantText = text;
-          yield { type: "text_delta", delta: text };
-        }
+        if (text) yield { type: "text_delta", delta: text };
         if (!text
           && continuation.resumeAfterStepIndex >= 0
           && transientIdleRetries < MAX_TRANSIENT_IDLE_RETRIES) {
@@ -366,6 +367,8 @@ async function* observeCascade(continuation, options) {
         yield { type: "done", result: { cascadeId, model: model.id } };
         return false;
       }
+      const text = extractNewAssistantText(trajectory, continuation);
+      if (text) yield { type: "text_delta", delta: text };
       await sleep(Math.min(options.pollIntervalMs, Math.max(1, options.timeoutMs - (Date.now() - startedAt))), options.signal);
     }
   } finally {
@@ -495,12 +498,12 @@ function extractPendingMcpCalls(payload, allowedNames = []) {
   });
 }
 
-function extractAssistantTextAfter(payload, minimumStepIndex = -1) {
+export function extractAssistantTextAfter(payload, minimumStepIndex = -1) {
   const steps = payload?.trajectory?.steps ?? payload?.steps ?? [];
   for (let index = steps.length - 1; index > minimumStepIndex; index -= 1) {
     const step = steps[index];
     if (step?.type !== "CORTEX_STEP_TYPE_PLANNER_RESPONSE") continue;
-    if (step?.status && step.status !== "CORTEX_STEP_STATUS_DONE") continue;
+    if (step?.status === "CORTEX_STEP_STATUS_FAILED" || step?.status === "CORTEX_STEP_STATUS_ERROR") continue;
     const text = step?.plannerResponse?.modifiedResponse ?? step?.plannerResponse?.response;
     if (typeof text === "string" && text) return text;
   }
@@ -509,9 +512,21 @@ function extractAssistantTextAfter(payload, minimumStepIndex = -1) {
 
 function extractNewAssistantText(payload, continuation) {
   const afterBoundary = extractAssistantTextAfter(payload, continuation.resumeAfterStepIndex);
-  if (afterBoundary) return afterBoundary;
+  if (afterBoundary) return updateAssistantText(continuation, afterBoundary);
   const latest = extractAssistantTextAfter(payload, -1);
-  return latest && latest !== continuation.lastAssistantText ? latest : "";
+  return latest ? updateAssistantText(continuation, latest) : "";
+}
+
+function updateAssistantText(continuation, latest) {
+  const previous = String(continuation.lastAssistantText ?? "");
+  if (!latest || latest === previous) return "";
+  continuation.lastAssistantText = latest;
+  return latest.startsWith(previous) ? latest.slice(previous.length) : latest;
+}
+
+function normalizeUserItems(request) {
+  const items = Array.isArray(request.userItems) ? request.userItems : [];
+  return items.length ? items : [{ text: requiredText(request.userText, "current user text") }];
 }
 
 function extractTrajectoryError(payload) {

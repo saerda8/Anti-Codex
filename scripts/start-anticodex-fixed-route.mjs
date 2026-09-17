@@ -1614,8 +1614,9 @@ export function buildUnifiedModelCatalog(bundled, options = {}) {
     const slug = String(entry?.slug ?? "").trim();
     if (!slug || seenSlugs.has(slug)) return;
     seenSlugs.add(slug);
+    const nativeEntry = normalizeNativeToolCapabilities(entry);
     visibleModels.push({
-      ...entry,
+      ...nativeEntry,
       slug,
       visibility,
       supported_in_api: true,
@@ -1773,9 +1774,17 @@ function selectNativeToolCatalogTemplate(bundled) {
       && entry?.apply_patch_tool_type === "freeform")
     ?? models.find((entry) => entry?.visibility === "list" && entry?.supported_in_api !== false)
     ?? models[0];
-  if (!template || template.tool_mode !== "code_mode_only") return template;
-  const { tool_mode: _codeModeOnly, ...unrestrictedTemplate } = template;
-  return unrestrictedTemplate;
+  return template ? normalizeNativeToolCapabilities(template) : template;
+}
+
+function normalizeNativeToolCapabilities(entry) {
+  if (!entry) return entry;
+  const { tool_mode: _codeOnlyMode, ...withoutCodeOnlyMode } = entry;
+  return {
+    ...withoutCodeOnlyMode,
+    shell_type: "shell_command",
+    apply_patch_tool_type: "freeform",
+  };
 }
 
 function managerSupportEnvironment(childEnvironment) {

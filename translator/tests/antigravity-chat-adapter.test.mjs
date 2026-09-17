@@ -88,6 +88,46 @@ test("maps Chat messages into structured Cascade input without task semantics", 
   await adapter.close();
 });
 
+test("forwards user image parts to Cascade instead of rejecting the message", async () => {
+  const client = fakeClient({ startEvents: [{ type: "done" }] });
+  const adapter = createAdapter(client);
+
+  await adapter.complete({
+    model: "gemini-pro-agent",
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: "看这张图" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AA==" } },
+      ],
+    }],
+  });
+
+  assert.deepEqual(client.starts[0].userItems, [
+    { text: "看这张图" },
+    { image: { data: "AA==", mimeType: "image/png" } },
+  ]);
+  await adapter.close();
+});
+
+test("maps OpenAI input_image parts to Cascade userItems images", async () => {
+  const client = fakeClient({ startEvents: [{ type: "done" }] });
+  const adapter = createAdapter(client);
+
+  await adapter.complete({
+    model: "gemini-pro-agent",
+    messages: [{
+      role: "user",
+      content: [{ type: "input_image", image_url: "data:image/png;base64,AA==" }],
+    }],
+  });
+
+  assert.deepEqual(client.starts[0].userItems, [
+    { image: { data: "AA==", mimeType: "image/png" } },
+  ]);
+  await adapter.close();
+});
+
 test("isolated native custom instructions keep trusted authority without duplicate transcript text", async () => {
   const client = fakeClient({
     startEvents: [{ type: "done" }],

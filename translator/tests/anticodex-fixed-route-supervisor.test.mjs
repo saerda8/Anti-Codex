@@ -903,6 +903,22 @@ test("external model catalogs keep Codex tools available outside the new code-on
   assert.equal(fallback.models[0].tool_mode, undefined);
 });
 
+test("normalizes the new unified_exec catalog enum to native Codex tool capabilities", async () => {
+  const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
+  const catalog = supervisor.buildThirdPartyModelCatalog({
+    models: [{
+      slug: "gpt-6-astra",
+      visibility: "list",
+      supported_in_api: true,
+      shell_type: "unified_exec",
+      apply_patch_tool_type: "freeform",
+    }],
+  }, "external-model");
+
+  assert.equal(catalog.models[0].shell_type, "shell_command");
+  assert.equal(catalog.models[0].apply_patch_tool_type, "freeform");
+});
+
 test("third-party compatibility catalog retains hidden historical model aliases", async () => {
   const supervisor = await import("../../scripts/start-anticodex-fixed-route.mjs");
   const catalog = supervisor.buildThirdPartyModelCatalog({

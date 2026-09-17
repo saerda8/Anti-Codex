@@ -25,6 +25,19 @@ test("extracts only loopback listening ports owned by the Antigravity process", 
   assert.deepEqual(cascadeClientModule.extractListeningPortsForProcess(netstat, 33752), [57882, 57883, 57884]);
 });
 
+test("extracts in-progress planner text for incremental streaming", () => {
+  assert.equal(typeof cascadeClientModule.extractAssistantTextAfter, "function");
+  assert.equal(cascadeClientModule.extractAssistantTextAfter({
+    trajectory: {
+      steps: [{
+        type: "CORTEX_STEP_TYPE_PLANNER_RESPONSE",
+        status: "CORTEX_STEP_STATUS_IN_PROGRESS",
+        plannerResponse: { response: "partial" },
+      }],
+    },
+  }), "partial");
+});
+
 test("accepts only canonical loopback address forms with a valid port", () => {
   const cases = [
     ["127.0.0.1:43210", "127.0.0.1:43210"],
@@ -311,6 +324,49 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.equal(send.body.cascadeConfig.plannerConfig.maxMessageTokens, 272_000);
   assert.equal(send.body.cascadeConfig.plannerConfig.toolConfig.runCommand.forceDisable, true);
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
+});
+
+test("sends image inputs through the Cascade request image field", async () => {
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_image" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: () => jsonResponse({}),
+    GetCascadeTrajectory: () => jsonResponse(completedTrajectory("ok")),
+  });
+  const client = clientFor(service.fetch);
+  await collect(client.start({
+    model: "gemini-pro-agent",
+    userText: "看图",
+    userItems: [
+      { text: "看图" },
+      { image: { data: "AA==", mimeType: "image/png" } },
+    ],
+    tools: [],
+  }));
+  const send = service.calls.find((call) => call.method === "SendUserCascadeMessage");
+  assert.deepEqual(send.body.items, [{ text: "看图" }]);
+  assert.deepEqual(send.body.images, [{ base64Data: "AA==", mimeType: "image/png" }]);
+});
+
+test("emits planner text deltas while a Cascade is still running", async () => {
+  let trajectoryCalls = 0;
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_incremental" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return jsonResponse({});
+    },
+    GetCascadeTrajectory: () => {
+      trajectoryCalls += 1;
+      return jsonResponse(completedTrajectory(["A", "AB", "ABC"][Math.min(trajectoryCalls - 1, 2)], "CORTEX_STEP_STATUS_IN_PROGRESS"));
+    },
+  });
+  const client = clientFor(service.fetch, { pollIntervalMs: 1, timeoutMs: 1000 });
+  const events = await collect(client.start({ model: "gemini-pro-agent", userText: "hello", tools: [] }));
+  assert.deepEqual(events.filter((event) => event.type === "text_delta").map((event) => event.delta), ["A", "B", "C"]);
 });
 
 test("native custom instructions reach final Cascade once while joined environment context stays untrusted", async () => {
@@ -889,7 +945,7 @@ function modelPayload() {
   };
 }
 
-function completedTrajectory(text) {
+function completedTrajectory(text, status = "CORTEX_STEP_STATUS_DONE") {
   return {
     trajectory: {
       trajectoryId: "trajectory_1",
@@ -897,7 +953,7 @@ function completedTrajectory(text) {
         { type: "CORTEX_STEP_TYPE_USER_INPUT", status: "CORTEX_STEP_STATUS_DONE" },
         {
           type: "CORTEX_STEP_TYPE_PLANNER_RESPONSE",
-          status: "CORTEX_STEP_STATUS_DONE",
+          status,
           plannerResponse: { response: text },
         },
       ],

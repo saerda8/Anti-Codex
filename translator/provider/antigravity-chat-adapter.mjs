@@ -109,6 +109,7 @@ export function createAntigravityChatAdapter(options = {}) {
         events = client.start({
           model,
           userText: prepared.userText,
+          userItems: prepared.userItems,
           systemSections: prepared.systemSections,
           tools: prepared.tools,
           toolChoice: prepared.toolChoice,
@@ -325,7 +326,8 @@ function prepareChatRequest(body, sessions, nativeCustomInstructions) {
     }
   }
   if (currentUserIndex < 0) throw invalidRequest("A current user message is required.");
-  const userText = messageText(messages[currentUserIndex]?.content, { allowEmpty: false });
+  const userContent = normalizeUserContent(messages[currentUserIndex]?.content);
+  const userText = userContent.text;
   const systemSections = [];
   const suppliedStructuredOutput = normalizeStructuredOutput(body.response_format);
   const nativeTitleHelper = isNativeCodexTitleRequest(userText, suppliedStructuredOutput);
@@ -377,6 +379,7 @@ function prepareChatRequest(body, sessions, nativeCustomInstructions) {
     kind: "start",
     model,
     userText,
+    userItems: userContent.items,
     systemSections,
     tools,
     toolChoice: nativeTextOnlyHelper ? "none" : normalizeToolChoice(body.tool_choice),
@@ -691,11 +694,12 @@ function trailingToolContinuation(messages) {
 function normalizeHistoryMessage(message) {
   const role = String(message?.role ?? "").toLowerCase();
   if (!role) throw invalidRequest("Every message requires a role.");
+  const historyContent = role === "tool"
+    ? { value: normalizeToolResultContent(message?.content), hasImage: false }
+    : normalizeUserContent(message?.content, { allowEmpty: true });
   const normalized = {
     role,
-    content: role === "tool"
-      ? normalizeToolResultContent(message?.content)
-      : messageText(message?.content, { allowEmpty: true }),
+    content: historyContent.hasImage ? historyContent.parts : historyContent.value ?? historyContent.text,
   };
   if (role === "assistant" && Array.isArray(message?.tool_calls)) {
     normalized.tool_calls = message.tool_calls.map((call) => ({
@@ -764,6 +768,62 @@ function messageText(content, options = {}) {
   }).join("");
   if (text || options.allowEmpty) return text;
   throw invalidRequest("Message content must contain text.", "unsupported_message_content");
+}
+
+function normalizeUserContent(content, options = {}) {
+  if (typeof content === "string") {
+    if (content || options.allowEmpty) return {
+      text: content,
+      parts: content ? [{ type: "text", text: content }] : [],
+      items: content ? [{ text: content }] : [],
+      hasImage: false,
+      value: content,
+    };
+    throw invalidRequest("Message content must contain text.", "unsupported_message_content");
+  }
+  if (content === null || content === undefined) {
+    if (options.allowEmpty) return { text: "", parts: [], items: [], hasImage: false, value: "" };
+    throw invalidRequest("Message content must contain text or an image.", "unsupported_message_content");
+  }
+  if (!Array.isArray(content)) throw invalidRequest("Only textual or image Chat message content is supported.", "unsupported_message_content");
+  const parts = [];
+  const items = [];
+  let text = "";
+  for (const part of content) {
+    const type = String(part?.type ?? "text");
+    if (type === "text" || type === "input_text") {
+      const value = String(part?.text ?? "");
+      text += value;
+      if (value) {
+        parts.push({ type: "text", text: value });
+        items.push({ text: value });
+      }
+      continue;
+    }
+    if (type === "image_url" || type === "input_image") {
+      const image = normalizeImagePart(part);
+      parts.push(image.chatPart);
+      items.push(image.cascadeItem);
+      continue;
+    }
+    throw invalidRequest(`Unsupported Chat content part: ${type}`, "unsupported_message_content");
+  }
+  if (!parts.length && !options.allowEmpty) throw invalidRequest("Message content must contain text or an image.", "unsupported_message_content");
+  return { text, parts, items, hasImage: parts.some((part) => part.type === "image_url"), value: text };
+}
+
+function normalizeImagePart(part) {
+  const source = typeof part?.image_url === "string"
+    ? part.image_url
+    : part?.image_url?.url ?? part?.url;
+  const match = String(source ?? "").match(/^data:(image\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,([a-z0-9+/=\r\n]+)$/i);
+  if (!match) throw invalidRequest("Image content must be a base64 data image.", "unsupported_message_image");
+  const data = match[2].replace(/\s+/g, "");
+  const mimeType = match[1].toLowerCase();
+  return {
+    chatPart: { type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } },
+    cascadeItem: { image: { data, mimeType } },
+  };
 }
 
 function normalizeChatTools(tools, toolChoice) {
