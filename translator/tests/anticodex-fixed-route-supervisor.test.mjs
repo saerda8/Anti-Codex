@@ -917,6 +917,7 @@ test("normalizes the new unified_exec catalog enum to native Codex tool capabili
 
   assert.equal(catalog.models[0].shell_type, "shell_command");
   assert.equal(catalog.models[0].apply_patch_tool_type, "freeform");
+  assert.equal(catalog.models[0].use_responses_lite, false);
 });
 
 test("third-party compatibility catalog retains hidden historical model aliases", async () => {

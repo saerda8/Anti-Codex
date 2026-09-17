@@ -1784,6 +1784,7 @@ function normalizeNativeToolCapabilities(entry) {
     ...withoutCodeOnlyMode,
     shell_type: "shell_command",
     apply_patch_tool_type: "freeform",
+    use_responses_lite: false,
   };
 }
 
