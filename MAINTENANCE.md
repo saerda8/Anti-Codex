@@ -79,3 +79,4 @@
 | 2026-09-18 | 真实工具注入复验 | 最新 CodexPlusPlus 日志记录一次文件编辑任务的 `requestTools.count=17`、`upstreamTools.count=46`，包含 `exec_command`、`apply_patch` 和完整本地桥接工具；此前同类请求为 0/0 | 工具注入链路已被真实请求观测到；该测试任务的流未正常收尾，未把它记为完整任务通过，夹具已恢复 |
 | 2026-09-18 | 兼容宿主专用工具名 | 桥接层新增 `functions.exec`/`functions.apply_patch` 到原生工具名的兼容别名，并补充 JSON-RPC 回归；未知工具仍拒绝 | 真实任务上下文曾报 `recipient functions.exec not found`，别名回归已通过；待下一次用户文件任务确认完整收尾 |
 | 2026-09-18 | 本轮修复最终激活 | 事务 `20260917T223134311Z-759cb960064d45218f4ff9aa58233351` 激活 138 个运行文件；定向回归 123/123、安装快检全绿，运行态 `ready`、Claude Sonnet 4.6；真实工具请求已观测到 17/46 | 图片输入、流式增量、原生终端/补丁注入和宿主工具别名均已落到安装版；完整源码门因可用内存不足暂缓，未把定向回归冒充全量 |
+| 2026-09-18 | 修复宿主工具名污染 | Cascade 工具兼容提示明确要求使用 `exec_command`/`apply_patch`，禁止把 `functions.exec`/`functions.apply_patch` 当作可调用名；回归覆盖工具请求上下文 | 之前真实任务因 `recipient functions.exec not found` 中止；本次已确认提示契约先红后绿，待安装版下一次真实文件任务确认完整收尾 |

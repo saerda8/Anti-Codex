@@ -541,6 +541,8 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
   const firstEvents = [firstItem.value];
   assert.equal(firstEvents.length, 1);
   assert.equal(firstEvents[0].type, "tool_calls");
+  const toolCompatibility = bridgeOptions.systemPromptSections.find((section) => section.title === "Anti-Codex Antigravity tool compatibility");
+  assert.match(toolCompatibility.content, /Never call functions\.exec or functions\.apply_patch/);
   assert.deepEqual(firstEvents[0].calls, [{
     callId: "bridge_call_1",
     name: "read_file",
