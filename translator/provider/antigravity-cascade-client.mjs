@@ -330,6 +330,19 @@ async function* observeCascade(continuation, options) {
         return true;
       }
 
+      const genericStepIndex = extractPendingGenericToolStepIndex(trajectory);
+      const queued = genericStepIndex >= 0 ? takeQueuedNativeCalls(bridge) : [];
+      if (queued.length > 0) {
+        const text = extractNewAssistantText(trajectory, continuation);
+        if (text) yield { type: "text_delta", delta: text };
+        continuation.pendingCalls = queued;
+        continuation.resumeAfterStepIndex = genericStepIndex;
+        continuation.retained = true;
+        if (!idleController.signal.aborted) idleController.abort();
+        yield { type: "tool_calls", calls: queued, continuation };
+        return true;
+      }
+
       if (idle) {
         if (idleError
           && isTransientEmptyTrajectoryIdleError(idleError)
@@ -496,6 +509,31 @@ function extractPendingMcpCalls(payload, allowedNames = []) {
         : null,
       requestedInteraction: step?.requestedInteraction ?? step?.requested_interaction,
     }];
+  });
+}
+
+function extractPendingGenericToolStepIndex(payload) {
+  const steps = payload?.trajectory?.steps ?? payload?.steps ?? [];
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (step?.type !== "CORTEX_STEP_TYPE_GENERIC") continue;
+    if (step?.status === "CORTEX_STEP_STATUS_DONE") continue;
+    const toolCall = step?.metadata?.toolCall ?? step?.metadata?.tool_call;
+    if (toolCall?.name) return index;
+  }
+  return -1;
+}
+
+function takeQueuedNativeCalls(bridge) {
+  const queued = bridge?.takeCalls?.() ?? [];
+  return queued.flatMap((call) => {
+    const callId = String(call?.callId ?? "").trim();
+    const name = String(call?.name ?? call?.nativeName ?? "").trim();
+    const argumentsValue = call?.arguments ?? {};
+    if (!callId || !name || !argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) {
+      throw new AntigravityCascadeError("Native MCP queue returned an invalid tool call.", { statusCode: 502 });
+    }
+    return [{ callId, name, arguments: argumentsValue }];
   });
 }
 

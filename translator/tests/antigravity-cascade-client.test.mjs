@@ -634,6 +634,48 @@ test("returns the canonical Codex name for an Antigravity native tool alias", as
   }]);
 });
 
+test("captures queued MCP calls when Antigravity renders them as generic steps", async () => {
+  const bridge = {
+    ...fakeBridge(),
+    tools: [{ name: "exec_command", description: "Run", inputSchema: { type: "object" } }],
+    takeCalls() {
+      return [{ callId: "bridge_generic_1", name: "exec_command", arguments: { cmd: "Get-Location" } }];
+    },
+  };
+  const service = fakeService({
+    GetAvailableModels: () => jsonResponse(modelPayload()),
+    StartCascade: () => jsonResponse({ cascadeId: "cascade_generic" }),
+    SendUserCascadeMessage: () => jsonResponse({}),
+    WaitForConversationFullyIdle: ({ signal }) => abortableResponse(signal),
+    GetCascadeTrajectory: () => jsonResponse({
+      trajectory: {
+        trajectoryId: "trajectory_generic",
+        steps: [
+          { type: "CORTEX_STEP_TYPE_USER_INPUT", status: "CORTEX_STEP_STATUS_DONE" },
+          { type: "CORTEX_STEP_TYPE_GENERIC", status: "CORTEX_STEP_STATUS_RUNNING", metadata: {
+            toolCall: { id: "generic_1", name: "exec_command", argumentsJson: "{\"cmd\":\"Get-Location\"}" },
+          } },
+        ],
+      },
+    }),
+    CancelCascadeInvocation: () => jsonResponse({}),
+  });
+  const client = clientFor(service.fetch, { createToolBridge: async () => bridge });
+  const iterator = client.start({
+    model: "gemini-pro-agent",
+    userText: "run the command",
+    systemSections: [],
+    tools: [{ type: "function", function: { name: "exec_command", parameters: { type: "object" } } }],
+  })[Symbol.asyncIterator]();
+  const first = await nextAfterReady(iterator);
+  assert.deepEqual(first.value.calls, [{
+    callId: "bridge_generic_1",
+    name: "exec_command",
+    arguments: { cmd: "Get-Location" },
+  }]);
+  await iterator.return();
+});
+
 test("pairs parallel native calls by call identity instead of arrival order", async () => {
   let approvals = 0;
   const queued = [
