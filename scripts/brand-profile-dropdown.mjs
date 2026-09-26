@@ -1,15 +1,10 @@
 export function patchCompiledProfileDropdownSettings(text) {
   if (!text.includes("id:`codex.profileDropdown.settingsPage`")) return text;
 
-  text = text.replace(
-    "defaultMessage:`Settings`,description:`Menu item to open Codex settings page`",
-    "defaultMessage:`Manager `,description:`Menu item to open Codex settings page`",
-  );
-
   const modern = /let A;t\[27\]!==p\|\|t\[28\]!==v\?\(A=\(0,J\.jsx\)\(M,\{leftIcon:te,keyboardShortcut:v,onClick:p,children:ne\}\),t\[27\]=p,t\[28\]=v,t\[29\]=A\):A=t\[29\];let j;/;
   const modernMatch = modern.exec(text);
   if (modernMatch) {
-    const replacement = "let A=(0,J.jsx)(M,{onClick:window.__ANTICODEX_OPEN_MANAGER__,children:ne});let j;";
+    const replacement = "let A=(0,J.jsx)(M,{onClick:window.__ANTICODEX_OPEN_MANAGER__,children:`\\u7ba1\\u7406`});let j;";
     if (replacement.length > modernMatch[0].length) {
       throw new Error(`Profile dropdown modern replacement grew: ${replacement.length} > ${modernMatch[0].length}`);
     }

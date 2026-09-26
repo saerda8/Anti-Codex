@@ -720,8 +720,9 @@ function findCrashRecoveryPagePatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (hasCrashRecoveryPageSignature(text) &&
-        (!text.includes("id:`appServerCrash.recoveryTitle`") || rel.startsWith("webview/assets/app-initial-"))) {
+    if (text.includes("id:`appServerCrash.recoveryTitle`") &&
+        !rel.startsWith("webview/assets/app-initial-")) continue;
+    if (hasCrashRecoveryPageSignature(text)) {
       bundles.push({ rel, text });
     }
   }

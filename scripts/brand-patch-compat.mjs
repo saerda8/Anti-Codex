@@ -101,6 +101,12 @@ const MODERN_CRASH_TITLE_PATTERN =
 const MODERN_CRASH_TITLE_PATCHED_PATTERN =
   /id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`/;
 
+function isModernCrashRecoveryPage(text) {
+  const source = String(text ?? "");
+  return source.includes("Try again or update ChatGPT if this keeps happening") &&
+    source.includes("id:`appServerCrash.feedbackGuidance`");
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -697,7 +703,8 @@ export function hasCrashRecoveryPagePatch(text) {
 
 export function hasCrashRecoveryPageSignature(text) {
   const source = String(text ?? "");
-  return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) || MODERN_CRASH_TITLE_PATTERN.test(source) || [
+  return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) ||
+    (isModernCrashRecoveryPage(source) && MODERN_CRASH_TITLE_PATTERN.test(source)) || [
     "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
     "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
     "id:`appServerCrash.restart`,defaultMessage:`Restart`",
@@ -716,7 +723,7 @@ export function selectCrashRecoveryBundleCandidate(candidates) {
 }
 
 export function patchCrashRecoveryPage(text) {
-  if (MODERN_CRASH_TITLE_PATTERN.test(String(text ?? ""))) {
+  if (isModernCrashRecoveryPage(text) && MODERN_CRASH_TITLE_PATTERN.test(String(text ?? ""))) {
     const source = String(text ?? "");
     if (MODERN_CRASH_TITLE_PATCHED_PATTERN.test(source)) return source;
     return source.replace(MODERN_CRASH_TITLE_PATTERN, (match) => {
@@ -922,7 +929,7 @@ export function patchConfigWriteHandler(text) {
   const end = start < 0 ? -1 : source.indexOf('"apply-patch":', start);
   if (start < 0 || end < 0) throw new Error("Current desktop config handler table not found");
   const original = source.slice(start, end);
-  if (!original.includes('"batch-write-config-value"')) {
+  if (!original.includes('"batch-write-config-value"') && !original.includes("definitions:")) {
     const compact = '"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e),"set-configuration":e=>(this.setConfigurationValue(e.key,e.value),{success:!0}),"get-setting":async e=>({value:await this.getSettingValue(e.key)}),"get-settings":async()=>({configuredValues:this.getConfiguredSettingValues(),values:await this.getSettingValues()}),"set-setting":async e=>(await this.setSettingValue(e.key,e.value),{success:!0}),"settings-read":()=>this.settings.readForAgent(),"settings-write":async e=>this.settings.writeForAgent(e),';
     if (compact.length <= original.length) {
       return source.slice(0, start) + compact + " ".repeat(original.length - compact.length) + source.slice(end);

@@ -118,6 +118,13 @@ function Test-AntiCodexCrashRecoveryPage {
     $v2DescriptionPatched = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})'
     $v2RestartPatched = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})'
     $v3MarkerPattern = "/\*anticodex-crash-recovery-actions-v3\*/children:\[(?<restart>$identifier),(?<feedback>$identifier),(?<config>$identifier)\]"
+    $modernTitleOriginal = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`'
+    $modernTitlePatched = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`'
+    if ([regex]::Matches($Text, $modernTitlePatched).Count -eq 1 -and
+        [regex]::Matches($Text, $modernTitleOriginal).Count -eq 0 -and
+        [regex]::Matches($Text, 'id:`appServerCrash\.feedbackGuidance`').Count -eq 1) {
+        return $true
+    }
     if ([regex]::Matches($Text, $v3MarkerPattern).Count -gt 0) {
         $v3TitlePatched = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\s*\})'
         $v3ConfigPatched = 'id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn''t load your configuration\. Review it, then restart to try again\.`(?=\s*\})'
