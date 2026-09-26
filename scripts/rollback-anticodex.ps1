@@ -403,7 +403,7 @@ function Test-AntiCodexAsarPatches {
 
     $text = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($Path))
     $requiredMarkers = @(
-        "AntiCodex",
+        "Anti-Codex",
         'icon:`icon.ico`',
         "__ANTICODEX_OPEN_MANAGER__",
         "\u7ba1\u7406"

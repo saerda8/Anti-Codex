@@ -29,6 +29,12 @@ function readRuntimeScript(name) {
   return readFileSync(resolve(root, "scripts", name), "utf8");
 }
 
+test("rollback host validation recognizes the branded product marker", () => {
+  const script = readRollbackScript();
+  assert.match(script, /\$requiredMarkers = @\([\s\S]*?"Anti-Codex"/);
+  assert.doesNotMatch(script, /\$requiredMarkers = @\([\s\S]*?"AntiCodex"/);
+});
+
 function extractFunction(text, name) {
   const marker = `function ${name}`;
   const start = text.indexOf(marker);
