@@ -135,7 +135,13 @@ function patchBootstrapAppName(text) {
   if (!m) throw new Error("Electron app.setName bootstrap pattern not found");
   const replacement = `${m[1]}.app.name=\`Anti-Codex\``;
   if (replacement.length > m[0].length) throw new Error("Electron app.name replacement longer than match");
-  return text.slice(0, m.index) + replacement + " ".repeat(m[0].length - replacement.length) + text.slice(m.index + m[0].length);
+  let next = text.slice(0, m.index) + replacement + " ".repeat(m[0].length - replacement.length) + text.slice(m.index + m[0].length);
+  const updater = /enableUpdater:j\.shouldIncludeUpdater\([\w$]+,process\.platform,process\.env\)/;
+  const updaterMatch = updater.exec(next);
+  if (updaterMatch) {
+    next = next.slice(0, updaterMatch.index) + "enableUpdater:!1" + " ".repeat(updaterMatch[0].length - "enableUpdater:!1".length) + next.slice(updaterMatch.index + updaterMatch[0].length);
+  }
+  return next;
 }
 
 function patchMainSession(text) {
