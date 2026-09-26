@@ -96,6 +96,10 @@ const GENERIC_ERROR_RETRY_ORIGINAL_PATTERN =
   /id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`,description:`Button label to navigate to the home page after an error`/g;
 const GENERIC_ERROR_RETRY_PATCHED_PATTERN =
   /id:`codex\.errorBoundary\.goHome`,defaultMessage:`Try again`(?=\})/g;
+const MODERN_CRASH_TITLE_PATTERN =
+  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`/;
+const MODERN_CRASH_TITLE_PATCHED_PATTERN =
+  /id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`/;
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -114,6 +118,18 @@ export function patchAppRouteGate(text) {
   const source = String(text ?? "");
   if (source.includes("/*anticodex-app-route*/")) return source;
 
+  const modernStart = source.indexOf("function dui({auth:e,codexFeatureAccess:t,backendOnboardingCompleted:n,");
+  if (modernStart >= 0) {
+    const modernHeaderEnd = source.indexOf("}){return", modernStart);
+    const modernEnd = source.indexOf("}function fui(", modernHeaderEnd);
+    if (modernHeaderEnd > modernStart && modernEnd > modernHeaderEnd) {
+      const old = source.slice(modernStart, modernEnd + 1);
+      const params = source.slice(modernStart + "function dui({".length, modernHeaderEnd);
+      const replacement = `/*anticodex-app-route*/function dui({${params}}){return\`app\`}`;
+      return source.slice(0, modernStart) + padReplacement(old, replacement) + source.slice(modernEnd + 1);
+    }
+  }
+
   const loginMarker = "to:`/login`,replace:!0";
   const markerIndex = source.indexOf(loginMarker);
   if (markerIndex >= 0) {
@@ -128,8 +144,7 @@ export function patchAppRouteGate(text) {
     }
   }
 
-  if ((source.includes("function XS(){") && source.includes("function ZS(")) ||
-      (source.includes("function dE(){") && source.includes("function fE(e){"))) {
+  if ((source.includes("function XS(){") && source.includes("function ZS("))) {
     return source;
   }
 
@@ -682,7 +697,7 @@ export function hasCrashRecoveryPagePatch(text) {
 
 export function hasCrashRecoveryPageSignature(text) {
   const source = String(text ?? "");
-  return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) || [
+  return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) || MODERN_CRASH_TITLE_PATTERN.test(source) || [
     "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
     "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
     "id:`appServerCrash.restart`,defaultMessage:`Restart`",
@@ -701,6 +716,14 @@ export function selectCrashRecoveryBundleCandidate(candidates) {
 }
 
 export function patchCrashRecoveryPage(text) {
+  if (MODERN_CRASH_TITLE_PATTERN.test(String(text ?? ""))) {
+    const source = String(text ?? "");
+    if (MODERN_CRASH_TITLE_PATCHED_PATTERN.test(source)) return source;
+    return source.replace(MODERN_CRASH_TITLE_PATTERN, (match) => {
+      const replacement = match.replace("ChatGPT hit a snag", "Anti-Codex hit a snag").replace(/,description:`[^`]+`/, "");
+      return padReplacement(match, replacement);
+    });
+  }
   if (hasCurrentCrashRecoveryPageSignature(text)) {
     return patchCurrentCrashRecoveryPage(text);
   }
@@ -899,6 +922,12 @@ export function patchConfigWriteHandler(text) {
   const end = start < 0 ? -1 : source.indexOf('"apply-patch":', start);
   if (start < 0 || end < 0) throw new Error("Current desktop config handler table not found");
   const original = source.slice(start, end);
+  if (!original.includes('"batch-write-config-value"')) {
+    const compact = '"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e),"set-configuration":e=>(this.setConfigurationValue(e.key,e.value),{success:!0}),"get-setting":async e=>({value:await this.getSettingValue(e.key)}),"get-settings":async()=>({configuredValues:this.getConfiguredSettingValues(),values:await this.getSettingValues()}),"set-setting":async e=>(await this.setSettingValue(e.key,e.value),{success:!0}),"settings-read":()=>this.settings.readForAgent(),"settings-write":async e=>this.settings.writeForAgent(e),';
+    if (compact.length <= original.length) {
+      return source.slice(0, start) + compact + " ".repeat(original.length - compact.length) + source.slice(end);
+    }
+  }
   const settingsContract = /definitions:([\w$]+)\.([\w$]+)/.exec(original);
   const settingsModule = settingsContract?.[1];
   const definitionsMember = settingsContract?.[2];
@@ -1029,7 +1058,8 @@ export function hasProductNameDrivenSessionTitle(text) {
   if (!windowMatch) return false;
 
   const primaryMatch = /createPrimaryWindow\(\{title:([\w$]+)\.app\.getName\(\),/.exec(source);
-  return Boolean(primaryMatch && primaryMatch[1] === windowMatch[1]);
+  return Boolean(primaryMatch && primaryMatch[1] === windowMatch[1]) ||
+    /title:[\w$]+\?\?[\w$]+\.app\.getName\(\)/.test(source);
 }
 
 export function patchProductNameDrivenSessionTitle(text) {
@@ -1046,7 +1076,7 @@ export function patchProductNameDrivenSessionTitle(text) {
   const primaryPattern = new RegExp(
     `createPrimaryWindow\\(\\{title:${escapeRegExp(electronAlias)}\\.app\\.getName\\(\\),`,
   );
-  if (!primaryPattern.test(source)) {
+  if (!primaryPattern.test(source) && !/title:[\w$]+\?\?[\w$]+\.app\.getName\(\)/.test(source)) {
     throw new Error("Product-name-driven primary window title not found");
   }
 

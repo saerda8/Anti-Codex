@@ -117,13 +117,13 @@ function patchPackageJson(text) {
 }
 
 function patchBootstrapAppUserModelId(text) {
-  if (text.includes("setAppUserModelId(`AntiCodex`)")) return text;
+  if (text.includes("setAppUserModelId(`AC`)")) return text;
   // Anchor on the stable structure; minified variable names (n/r) and the arg
   // expression (t.b(x), n.E(S), ...) change between Codex builds, so capture them.
-  const re = /process\.platform===`win32`&&([\w$]+)\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/;
+  const re = /(?:process\.platform===`win32`&&)?([\w$]+)\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/;
   const m = re.exec(text);
   if (!m) throw new Error("AppUserModelID bootstrap pattern not found");
-  const replacement = `${m[1]}.app.setAppUserModelId(\`AntiCodex\`)`;
+  const replacement = `${m[1]}.app.setAppUserModelId(\`AC\`)`;
   if (replacement.length > m[0].length) throw new Error("AppUserModelID replacement longer than match");
   return text.slice(0, m.index) + replacement + " ".repeat(m[0].length - replacement.length) + text.slice(m.index + m[0].length);
 }
@@ -145,7 +145,13 @@ function patchMainSession(text) {
   if (/var\s+[\w$]+=`Anti-Codex`;function\s+[\w$]+\([^)]*\)\{return null\}function\s+[\w$]+\([^)]*\)\{return [\w$]+\}/.test(text)) return text;
   const re = /var\s+([\w$]+)=`Codex`;function\s+([\w$]+)\(([\w$]+)\)\{switch\(\3\)\{[\s\S]{0,900}?case\s+[\w$.]+\.Prod:return null\}\}function\s+([\w$]+)\(([\w$]+)\)\{let\s+([\w$]+)=\2\(\5\);return \6==null\?\1:`\$\{\1\} \(\$\{\6\}\)`\}/;
   const match = re.exec(text);
-  if (!match) throw new Error("main session title pattern not found");
+  if (!match) {
+    const modern = /title:([\w$]+)\?\?([\w$]+)\.app\.getName\(\)/.exec(text);
+    if (!modern) throw new Error("main session title pattern not found");
+    const replacement = `title:${modern[1]}??\`Anti-Codex\``;
+    if (replacement.length > modern[0].length) throw new Error("modern session title replacement longer than match");
+    return text.slice(0, modern.index) + replacement + " ".repeat(modern[0].length - replacement.length) + text.slice(modern.index + modern[0].length);
+  }
   const replacement = `var ${match[1]}=\`Anti-Codex\`;function ${match[2]}(${match[3]}){return null}function ${match[4]}(${match[5]}){return ${match[1]}}`;
   if (replacement.length > match[0].length) throw new Error("main session title replacement longer than match");
   return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
@@ -168,6 +174,9 @@ function patchLocaleInfo(text) {
 }
 
 function patchConfigWriteHandler(text) {
+  try {
+    return patchCurrentConfigWriteHandler(text);
+  } catch {}
   const currentConfigWriteMarker = '"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)';
   if (text.includes(currentConfigWriteMarker)) return patchCurrentConfigWriteHandler(text);
   if (/"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.test(text)) {
@@ -392,8 +401,8 @@ function findBootstrapAppUserModelIdPatch(fd, header, dataOffset) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (/process\.platform===`win32`&&[\w$]+\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/.test(text) ||
-        text.includes("setAppUserModelId(`AntiCodex`)")) {
+    if (/[\w$]+\.app\.setAppUserModelId\((?:[^()]|\([^()]*\))*\)/.test(text) ||
+        text.includes("setAppUserModelId(`AC`)")) {
       return [rel, patchBootstrapAppUserModelId];
     }
   }
@@ -439,6 +448,7 @@ function findMainSessionPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/var\s+[\w$]+=`(?:Codex|DeepCodex|Anti-Codex)`;function\s+[\w$]+\(/.test(text) ||
+        /title:[\w$]+\?\?[\w$]+\.app\.getName\(\)/.test(text) ||
         hasProductNameDrivenSessionTitle(text)) {
       return [rel, patchMainSession];
     }
@@ -710,7 +720,8 @@ function findCrashRecoveryPagePatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (hasCrashRecoveryPageSignature(text)) {
+    if (hasCrashRecoveryPageSignature(text) &&
+        (!text.includes("id:`appServerCrash.recoveryTitle`") || rel.startsWith("webview/assets/app-initial-"))) {
       bundles.push({ rel, text });
     }
   }
