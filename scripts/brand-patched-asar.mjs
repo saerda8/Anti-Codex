@@ -141,6 +141,12 @@ function patchBootstrapAppName(text) {
   if (updaterMatch) {
     next = next.slice(0, updaterMatch.index) + "enableUpdater:!1" + " ".repeat(updaterMatch[0].length - "enableUpdater:!1".length) + next.slice(updaterMatch.index + updaterMatch[0].length);
   }
+  const updaterInit = /await [\w$]+\.initialize\(\),r&&o&&xO\(\)/;
+  const updaterInitMatch = updaterInit.exec(next);
+  if (updaterInitMatch) {
+    const replacementInit = "await 0,r&&o&&xO()";
+    next = next.slice(0, updaterInitMatch.index) + replacementInit + " ".repeat(updaterInitMatch[0].length - replacementInit.length) + next.slice(updaterInitMatch.index + updaterInitMatch[0].length);
+  }
   return next;
 }
 
