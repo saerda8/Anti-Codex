@@ -35,6 +35,13 @@ test("rollback host validation recognizes the branded product marker", () => {
   assert.doesNotMatch(script, /\$requiredMarkers = @\([\s\S]*?"AntiCodex"/);
 });
 
+test("rollback host validation accepts the modern crash recovery page shape", () => {
+  const script = readRollbackScript();
+  assert.match(script, /function Test-AntiCodexModernCrashRecovery/);
+  assert.match(script, /\$modernCrashPatchValid = \[regex\]::Matches\(\$text, 'id:`appServerCrash\\.recoveryTitle`/);
+  assert.match(script, /-not \$modernCrashPatchValid/);
+});
+
 function extractFunction(text, name) {
   const marker = `function ${name}`;
   const start = text.indexOf(marker);
