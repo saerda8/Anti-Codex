@@ -101,6 +101,7 @@ function patchPackageJson(text) {
   let next = text
     .replace('"productName": "DeepCodex"', '"productName": "Anti-Codex"')
     .replace('"productName": "Codex"', '"productName": "Anti-Codex"');
+  next = next.replace('"codexWindowsAppContainedCore": "1"', '"codexWindowsAppContainedCore": "0"');
   if (next === text) throw new Error("package.json productName pattern not found");
   let extra = next.length - text.length;
   if (extra > 0) {
