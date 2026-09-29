@@ -12,16 +12,23 @@ export function patchCompiledProfileDropdownSettings(text) {
     return text.slice(0, modernMatch.index) + replacement + " ".repeat(modernMatch[0].length - replacement.length) + text.slice(modernMatch.index + modernMatch[0].length);
   }
 
-  const codex2738 = /let (?<label>[\w$]+);t\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\((?<label2>\k<label>)=\(0,(?<jsx>[\w$]+)\.jsx\)\((?<message>[\w$]+),\{id:`codex\.profileDropdown\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\}\),t\[\d+\]=\k<label>\):\k<label>=t\[\d+\];let (?<item>[\w$]+);t\[\d+\]!==(?<open>[\w$]+)\|\|t\[\d+\]!==(?<shortcut>[\w$]+)\?\((?<item2>\k<item>)=\(0,\k<jsx>\.jsx\)\((?<component>[\w$]+),\{leftIcon:(?<icon>[\w$]+),keyboardShortcut:\k<shortcut>,onClick:\k<open>,children:\k<label>\}\),t\[\d+\]=\k<open>,t\[\d+\]=\k<shortcut>,t\[\d+\]=\k<item>\):\k<item>=t\[\d+\];/;
+  const codex2738 = /let (?<label>[\w$]+);t\[\d+\]===Symbol\.for\(`react\.memo_cache_sentinel`\)\?\((?<label2>\k<label>)=\(0,(?<jsx>[\w$]+)\.jsx\)\((?<message>[\w$]+),\{id:`codex\.profileDropdown\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\}\),t\[\d+\]=\k<label>\):\k<label>=t\[\d+\];let (?<item>[\w$]+);t\[\d+\]!==(?<open>[\w$]+)\|\|t\[\d+\]!==(?<shortcut>[\w$]+)\?\((?<item2>\k<item>)=\(0,(?<itemJsx>[\w$]+)\.jsx\)\((?<component>[\w$]+),\{leftIcon:(?<icon>[\w$]+),keyboardShortcut:\k<shortcut>,onClick:\k<open>,children:\k<label>\}\),t\[\d+\]=\k<open>,t\[\d+\]=\k<shortcut>,t\[\d+\]=\k<item>\):\k<item>=t\[\d+\];/;
   const codex2738Match = codex2738.exec(text);
   if (codex2738Match?.groups) {
-    const { item, open, shortcut, jsx, component, icon, label, message } = codex2738Match.groups;
-    const manager = `(0,${jsx}.jsx)(${component},{leftIcon:${icon},onClick:globalThis.__ANTICODEX_OPEN_MANAGER__,children:\`\\u7ba1\\u7406\`},\`anticodex-manager\`)`;
+    const { item, open, shortcut, jsx, itemJsx, component, icon, label, message } = codex2738Match.groups;
+    const manager = `(0,${itemJsx}.jsx)(${component},{leftIcon:${icon},onClick:globalThis.__ANTICODEX_OPEN_MANAGER__,children:\`\\u7ba1\\u7406\`},\`anticodex-manager\`)`;
     const managerName = `${item}m`;
-    const childrenMarker = `${item},null`;
-    const childrenIndex = text.indexOf(childrenMarker, codex2738Match.index);
+    const childrenListIndex = text.indexOf("children:[", codex2738Match.index);
+    const childItemIndex = childrenListIndex >= 0 ? text.indexOf(`${item},`, childrenListIndex) : -1;
+    const childTail = childItemIndex >= 0
+      ? /^([A-Za-z_$][\w$]*|null)/.exec(text.slice(childItemIndex + item.length + 1))?.[1]
+      : null;
+    const childrenMarker = childTail ? `${item},${childTail}` : "";
+    const childrenIndex = childItemIndex >= 0 && childrenMarker
+      ? childItemIndex
+      : -1;
     if (childrenIndex < 0) throw new Error("Profile dropdown Codex 26.924.2738 children group not found");
-    const replacement = `let ${label}=(0,${jsx}.jsx)(${message},{id:\`codex.profileDropdown.settingsPage\`,defaultMessage:\`Settings\`,description:\`Menu item to open Codex settings page\`}),${item}=(0,${jsx}.jsx)(${component},{leftIcon:${icon},keyboardShortcut:${shortcut},onClick:${open},children:${label}}),${managerName}=${manager};`;
+    const replacement = `let ${label}=(0,${jsx}.jsx)(${message},{id:\`codex.profileDropdown.settingsPage\`,defaultMessage:\`Settings\`,description:\`Menu item to open Codex settings page\`}),${item}=(0,${itemJsx}.jsx)(${component},{leftIcon:${icon},keyboardShortcut:${shortcut},onClick:${open},children:${label}}),${managerName}=${manager};`;
     const tail = text.slice(codex2738Match.index + codex2738Match[0].length, childrenIndex);
     const childrenReplacement = `${item},${managerName}`;
     const originalLength = childrenIndex + childrenMarker.length - codex2738Match.index;
