@@ -663,8 +663,6 @@ export function discoverAntigravityDesktopConnection(env = process.env, options 
   if (platform() !== "win32") {
     throw new AntigravityCascadeError("Antigravity Desktop discovery is currently supported on Windows only.", { statusCode: 503 });
   }
-  const loggedConnection = options.processOnly ? null : discoverAntigravityDesktopConnectionFromFiles(env);
-  if (loggedConnection) return loggedConnection;
   const script = [
     "$filter = \"Name='language_server.exe' OR Name='language_server_windows_x64.exe'\"",
     "$rows = Get-CimInstance Win32_Process -Filter $filter | ForEach-Object {",
@@ -707,6 +705,10 @@ export function discoverAntigravityDesktopConnection(env = process.env, options 
         csrfToken,
       };
     }
+  }
+  if (!options.processOnly) {
+    const loggedConnection = discoverAntigravityDesktopConnectionFromFiles(env);
+    if (loggedConnection) return loggedConnection;
   }
   throw new AntigravityCascadeError("Antigravity Desktop is not ready or signed in.", { statusCode: 503 });
 }
