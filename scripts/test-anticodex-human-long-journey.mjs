@@ -88,6 +88,8 @@ const unknownJourneyIds = journeyIds.filter((id) => !allJourneyIds.includes(id))
 if (unknownJourneyIds.length > 0) throw new Error(`unknown journey id(s): ${unknownJourneyIds.join(", ")}`);
 const terminalProviderGate = createTerminalProviderStopGate();
 const observedTurnsByJourney = new Map();
+let trustedProjectRoot = sourceRoot;
+let trustedProjectLabel = "Anti-Codex";
 let noTrafficStop = null;
 
 function compactText(value, max = 1800) {
@@ -394,8 +396,7 @@ function runUiTurn({
     "--artifact-dir", artifactDir,
     "--require-native-single-task",
   ];
-  const projectLabel = `G8-${String(journeyId).replace(/[^a-z0-9]+/gi, "-").slice(0, 36)}-${String(runId).slice(-8)}`;
-  childArgs.push("--project-root", artifactDir, "--project-label", projectLabel);
+  childArgs.push("--project-root", trustedProjectRoot, "--project-label", trustedProjectLabel);
   if (sameChatTitleContains) {
     childArgs.push("--same-chat-title-contains", sameChatTitleContains);
     if (navigateAwayBeforeHistoryReopen) childArgs.push("--navigate-away-before-history-reopen");
@@ -415,7 +416,7 @@ function runUiTurn({
   const payload = parseJsonOutput(child.stdout);
   const history = settleMarkerHistoryEvidence(marker, artifactDir, 5_000, { allowDuplicateCommand });
   const modelProof = buildTurnModelProof(payload || {}, model);
-  const workspaceCwdMatches = workspacePathsEqual(history.sessionCwd, artifactDir);
+  const workspaceCwdMatches = workspacePathsEqual(history.sessionCwd, trustedProjectRoot);
   const turn = {
     journeyId,
     turnId,
@@ -442,7 +443,7 @@ function runUiTurn({
     reconnectOutcome: payload?.reconnectOutcome || null,
     sameChatEvidence: payload?.sameChatEvidence || null,
     projectRootEvidence: payload?.projectRootEvidence || null,
-    expectedWorkspaceCwd: artifactDir,
+    expectedWorkspaceCwd: trustedProjectRoot,
     workspaceCwdMatches,
     history,
   };
@@ -2087,6 +2088,7 @@ async function runHumanLongJourney() {
   }
   mkdirSync(matrixRoot, { recursive: true });
   const workspaceStateSnapshot = captureWorkspaceState();
+  trustedProjectLabel = String(workspaceStateSnapshot.labels?.[trustedProjectRoot] || basename(trustedProjectRoot)).trim();
   workspaceStateSnapshotPath = resolve(matrixRoot, "workspace-state-before.json");
   writeFileSync(workspaceStateSnapshotPath, `${JSON.stringify(workspaceStateSnapshot, null, 2)}\n`, "utf8");
 

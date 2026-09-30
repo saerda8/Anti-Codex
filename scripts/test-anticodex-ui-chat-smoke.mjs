@@ -68,6 +68,7 @@ Options:
   --marker <text>          Expected final marker.
   --project-label <text>   Expected project label (default: Anti-Codex).
   --project-root <path>    Activate this existing directory as the native Codex project before a new task.
+  --allow-workspace-root-mutation  Explicitly allow adding a new project root for a workspace-selection test.
   --artifact-dir <path>    Directory for task artifacts.
   --prompt-file <path>     UTF-8 prompt file.
   --followup-prompt-file <path>  UTF-8 second-turn prompt file for multi-turn-project.
@@ -126,6 +127,46 @@ const anticodexConfigPath = resolve(anticodexCodexHome, "config.toml");
 const anticodexModelCatalogPath = resolve(anticodexCodexHome, "deepseek-model-catalog.json");
 const codexRolloutRoot = resolve(anticodexCodexHome, "sessions");
 const codexPlusPlusLogPath = resolve(anticodexStateRoot, "codexplusplus", "codex-plus.log");
+const workspaceStatePath = resolve(anticodexStateRoot, ".codex-global-state.json");
+
+function readSavedWorkspaceState() {
+  let raw = "";
+  try {
+    raw = readFileSync(workspaceStatePath, "utf8").replace(/^\uFEFF/, "");
+    return JSON.parse(raw);
+  } catch {
+    if (!raw) return null;
+    const firstRoot = (key) => {
+      const match = raw.match(new RegExp(`"${key}"\\s*:\\s*\\[\\s*"([^"]+)"`, "m"));
+      return match?.[1] || "";
+    };
+    const roots = firstRoot("electron-saved-workspace-roots");
+    const active = firstRoot("active-workspace-roots");
+    const label = raw.match(/"electron-workspace-root-labels"\s*:\s*\{\s*"[^"]+"\s*:\s*"([^"]*)"/m)?.[1] || "";
+    return {
+      "electron-saved-workspace-roots": roots ? [roots] : [],
+      "active-workspace-roots": active ? [active] : [],
+      "electron-workspace-root-labels": roots ? { [roots]: label } : {},
+    };
+  }
+}
+
+function savedWorkspaceRootInfo(root) {
+  const state = readSavedWorkspaceState();
+  const roots = Array.isArray(state?.["electron-saved-workspace-roots"])
+    ? state["electron-saved-workspace-roots"].map(String)
+    : [];
+  const normalize = (value) => String(value || "").replace(/[\\/]+$/g, "").toLowerCase();
+  const savedRoot = roots.find((value) => normalize(value) === normalize(root)) || "";
+  const activeRoots = Array.isArray(state?.["active-workspace-roots"])
+    ? state["active-workspace-roots"].map(String)
+    : [];
+  const activeRoot = activeRoots.find((value) => normalize(value) === normalize(root)) || "";
+  const labels = state?.["electron-workspace-root-labels"] && typeof state["electron-workspace-root-labels"] === "object"
+    ? state["electron-workspace-root-labels"]
+    : {};
+  return { roots, savedRoot, activeRoot, labels, label: savedRoot ? String(labels[savedRoot] || "").trim() : "" };
+}
 if (!requiredModelLabel && requiredModel && existsSync(anticodexModelCatalogPath)) {
   try {
     const catalog = JSON.parse(readFileSync(anticodexModelCatalogPath, "utf8").replace(/^\uFEFF/, ""));
@@ -200,6 +241,7 @@ const projectTaskModes = new Set([
 const requiresProjectChat = projectTaskModes.has(taskMode);
 const projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
 const projectChatRoot = args.get("--project-root") ? resolve(String(args.get("--project-root"))) : "";
+const allowWorkspaceRootMutation = args.has("--allow-workspace-root-mutation");
 const workspaceCommand = String(args.get("--workspace-command") || "").trim().toLowerCase();
 const workspaceStateFile = args.get("--workspace-state-file")
   ? resolve(String(args.get("--workspace-state-file")))
@@ -4529,14 +4571,55 @@ async function activateNativeProjectRoot(ws, root, label) {
   if (!root || !existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`native project root is not an existing directory: ${root || "<empty>"}`);
   }
+  const savedInfo = savedWorkspaceRootInfo(root);
+  if (!savedInfo.savedRoot && !allowWorkspaceRootMutation) {
+    throw new Error(`workspace_root_not_saved: ${root}`);
+  }
+  if (savedInfo.activeRoot) {
+    return {
+      root,
+      label: savedInfo.label || label,
+      bridge: { ok: true, mode: "already-active" },
+      trustEvidence: { handled: false, reason: "workspace_root_already_active" },
+      renameBridge: { ok: true, mode: "already-active" },
+      selector: { matched: true, source: "saved-active-workspace-root" },
+    };
+  }
   const rootJson = JSON.stringify(root);
   const labelJson = JSON.stringify(label);
+  const savedRootJson = JSON.stringify(savedInfo.savedRoot || root);
   const result = await ws.send("Runtime.evaluate", {
     expression: `(async () => {
       const bridge = window.electronBridge?.sendMessageFromView;
       if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
-      try { void bridge({ type: 'electron-add-new-workspace-root-option', root: ${rootJson} }); } catch {}
-      return { ok: true };
+      if (${savedInfo.savedRoot ? "true" : "false"}) {
+        try { void bridge({ type: 'electron-pick-workspace-root-option', root: ${savedRootJson} }); } catch {}
+        return { ok: true, mode: 'existing-root', root: ${savedRootJson}, roots: ${JSON.stringify(savedInfo.roots)}, labels: ${JSON.stringify(savedInfo.labels)} };
+      }
+      const bootstrap = typeof window.electronBridge?.getInitialSidebarBootstrap === 'function'
+        ? await window.electronBridge.getInitialSidebarBootstrap()
+        : null;
+      const options = bootstrap?.workspaceRootOptions || {};
+      const savedRoots = Array.isArray(options.roots) ? options.roots.map(String) : [];
+      const normalize = (value) => String(value || '').replace(/[\\\\/]+$/g, '').toLowerCase();
+      const savedRoot = savedRoots.find((value) => normalize(value) === normalize(${rootJson})) || '';
+      if (!savedRoot && !${allowWorkspaceRootMutation ? "true" : "false"}) {
+        return { ok: false, reason: 'workspace_root_not_saved', roots: savedRoots };
+      }
+      const roots = savedRoot
+        ? savedRoots
+        : Array.from(new Set([...savedRoots, ${rootJson}]));
+      const labels = savedRoot
+        ? (options.labels && typeof options.labels === 'object' ? options.labels : {})
+        : { ...(options.labels && typeof options.labels === 'object' ? options.labels : {}), [${rootJson}]: ${labelJson} };
+      if (savedRoot) {
+        await bridge({ type: 'electron-pick-workspace-root-option', root: savedRoot });
+        return { ok: true, mode: 'existing-root', root: savedRoot, roots, labels };
+      }
+      await bridge({ type: 'electron-update-workspace-root-options', roots });
+      await bridge({ type: 'electron-workspace-root-labels', labels });
+      try { void bridge({ type: 'electron-pick-workspace-root-option', root: ${rootJson} }); } catch {}
+      return { ok: true, roots, labels };
     })()`,
     returnByValue: true,
     awaitPromise: true,
@@ -4544,20 +4627,7 @@ async function activateNativeProjectRoot(ws, root, label) {
   const bridge = result.result?.result?.value || null;
   if (bridge?.ok !== true) throw new Error(`native project activation failed: ${bridge?.reason || "unknown"}`);
   const trustEvidence = await acceptNativeTrustFolderDialog(ws, root);
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-  const renameResult = await ws.send("Runtime.evaluate", {
-    expression: `(async () => {
-      const bridge = window.electronBridge?.sendMessageFromView;
-      if (!bridge) return { ok: false, reason: 'electron_bridge_missing_after_trust' };
-      await bridge({ type: 'electron-rename-workspace-root-option', root: ${rootJson}, label: ${labelJson} });
-      await bridge({ type: 'electron-set-active-workspace-root', root: ${rootJson} });
-      return { ok: true };
-    })()`,
-    returnByValue: true,
-    awaitPromise: true,
-  });
-  const renameBridge = renameResult.result?.result?.value || null;
-  if (renameBridge?.ok !== true) throw new Error(`native project rename failed: ${renameBridge?.reason || "unknown"}`);
+  const renameBridge = { ok: true, mode: "workspace-root-options" };
   const selector = await waitForVisibleProjectLabel(ws, label);
   if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
   return { root, label, bridge, trustEvidence, renameBridge, selector };
@@ -4571,12 +4641,10 @@ async function restoreNativeWorkspaceState(ws, snapshot) {
   if (activeRoots.length > 1) throw new Error("workspace snapshot has more than one active root");
   const messages = [
     { type: "electron-update-workspace-root-options", roots },
-    ...roots.flatMap((root) => String(labels[root] || "").trim()
-      ? [{ type: "electron-rename-workspace-root-option", root, label: String(labels[root]).trim() }]
-      : []),
+    { type: "electron-workspace-root-labels", labels },
     ...(activeRoots[0]
-      ? [{ type: "electron-set-active-workspace-root", root: activeRoots[0] }]
-      : [{ type: "electron-clear-active-workspace-root" }]),
+      ? [{ type: "electron-pick-workspace-root-option", root: activeRoots[0] }]
+      : []),
   ];
   const result = await ws.send("Runtime.evaluate", {
     expression: `(async () => {

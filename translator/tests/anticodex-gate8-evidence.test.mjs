@@ -318,18 +318,35 @@ test("the visible long journey opens each fixture as the actual native Codex pro
   const journeySource = await readFile(new URL("../../scripts/test-anticodex-human-long-journey.mjs", import.meta.url), "utf8");
 
   assert.match(uiSource, /--project-root <path>/);
-  assert.match(uiSource, /electron-add-new-workspace-root-option/);
-  assert.match(uiSource, /electron-rename-workspace-root-option/);
-  assert.match(journeySource, /"--project-root", artifactDir/);
+  assert.match(uiSource, /electron-update-workspace-root-options/);
+  assert.match(uiSource, /electron-workspace-root-labels/);
+  assert.match(uiSource, /electron-pick-workspace-root-option/);
+  assert.match(journeySource, /"--project-root", trustedProjectRoot/);
   assert.match(journeySource, /sessionCwd/);
   assert.match(journeySource, /workspaceCwdMatches/);
   assert.match(journeySource, /workspace-state-restore/);
+});
+
+test("native UI smoke refuses to add an untrusted workspace root by default", async () => {
+  const source = await readFile(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url), "utf8");
+  assert.match(source, /allowWorkspaceRootMutation/);
+  assert.match(source, /workspace_root_not_saved/);
+  assert.match(source, /--allow-workspace-root-mutation/);
+});
+
+test("the human long journey uses an existing trusted project root", async () => {
+  const source = await readFile(new URL("../../scripts/test-anticodex-human-long-journey.mjs", import.meta.url), "utf8");
+  assert.match(source, /let trustedProjectRoot = sourceRoot/);
+  assert.match(source, /\"--project-root\", trustedProjectRoot/);
+  assert.match(source, /workspacePathsEqual\(history\.sessionCwd, trustedProjectRoot\)/);
 });
 
 test("the native project task selector recognizes the current Chinese new-task label", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url), "utf8");
   assert.ok(source.includes("text.includes('\\\\u65b0\\\\u5efa\\\\u4efb\\\\u52a1')"));
   assert.ok(source.includes("projectText.includes('\\\\u65b0\\\\u5efa\\\\u4efb\\\\u52a1')"));
+  assert.ok(source.includes("text.includes('\\\\u65b0\\\\u804a\\\\u5929')"));
+  assert.ok(source.includes("projectText.includes('\\\\u5f00\\\\u59cb\\\\u65b0\\\\u804a\\\\u5929')"));
 });
 
 test("the visible long journey settles native rollout evidence after the UI child exits", async () => {
