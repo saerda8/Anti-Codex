@@ -701,6 +701,7 @@ function Test-AntiCodexHost {
     }
     $hostPatchRevision = [int]$hostPatchRevisionText
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
+    $revision7LegacyCriticalPatches = @($fixedShellCriticalPatches | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") })
     $revision6CriticalPatches = @($fixedShellCriticalPatches | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") }) + "primary-window-restore-repaint"
     $revision4CriticalPatches = @(
         "package-json",
@@ -780,6 +781,9 @@ function Test-AntiCodexHost {
     $currentManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $expectedCriticalPatches) -and $hostPatchRevision -eq $currentHostPatchRevision
+    $revision7LegacyManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
+        -Recorded $recordedCriticalPatches `
+        -Expected $revision7LegacyCriticalPatches) -and $hostPatchRevision -eq 7
     $revision6ManifestCompatible = -not $legacyHostPatchRevision -and (Test-AntiCodexCriticalPatchSet `
         -Recorded $recordedCriticalPatches `
         -Expected $revision6CriticalPatches) -and $hostPatchRevision -eq 6
@@ -796,6 +800,7 @@ function Test-AntiCodexHost {
         -Recorded $recordedCriticalPatches `
         -Expected $legacyWithoutConfigWriteCriticalPatches)
     if (-not $currentManifestCompatible -and
+        -not $revision7LegacyManifestCompatible -and
         -not $revision6ManifestCompatible -and
         -not $revision5ManifestCompatible -and
         -not $revision2To4ManifestCompatible -and
@@ -842,6 +847,15 @@ function Test-AntiCodexHost {
         throw "Anti-Codex host unpacked file inventory is incomplete."
     }
     if ($currentManifestCompatible) {
+        Test-AntiCodexAsarPatches `
+            -Path $required.appAsar `
+            -PatchProfile $patchProfile `
+            -ExpectedConfigWriteBridgeCount 1 `
+            -ExpectedPrimaryWindowDeferredRestoreRepaintCount 0 `
+            -ExpectedPrimaryWindowFocusRestoreRepaintCount 0 `
+            -ExpectedLegacyPrimaryWindowRestoreRepaintCount 0 `
+            -ExpectedHostPatchRevision $hostPatchRevision
+    } elseif ($revision7LegacyManifestCompatible) {
         Test-AntiCodexAsarPatches `
             -Path $required.appAsar `
             -PatchProfile $patchProfile `

@@ -203,8 +203,9 @@ function runRollbackHostPatchMatrix() {
     "local-model-availability",
   ];
   const revision6 = [...revision4, "crash-recovery-page"];
+  const legacyRevision7 = revision6.filter((name) => name !== "primary-window-restore-repaint");
   const current = [
-    ...revision6.filter((name) => name !== "primary-window-restore-repaint"),
+    ...legacyRevision7,
     "model-switch-warning",
     "model-upgrade-banner",
   ];
@@ -215,6 +216,7 @@ function runRollbackHostPatchMatrix() {
   const legacy = previous.filter((name) => name !== "config-write");
   const cases = [
     ["current", current, true, 7],
+    ["legacyRevision7", legacyRevision7, true, 7],
     ["revisionSix", revision6, true, 6],
     ["revisionFive", revision6, true, 5],
     ["revision2Current", revision4, true, 2],
@@ -837,6 +839,7 @@ function Get-AsarError([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedD
     }
 }
 $current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","model-switch-warning","model-upgrade-banner","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
+$legacyRevision7 = @($current | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") })
 $revision6 = @($current | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") }) + "primary-window-restore-repaint"
 $revision4 = @($revision6 | Where-Object { $_ -ne "crash-recovery-page" })
 $previous = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
@@ -979,6 +982,7 @@ test("complete rollback host validation maps immutable predecessor matrices to t
     assert.equal(fixture.result.status, 0, fixture.result.stderr || fixture.result.stdout);
     assert.deepEqual(JSON.parse(fixture.result.stdout.trim()), {
       current: true,
+      legacyRevision7: true,
       revisionSix: true,
       revisionFive: true,
       revision2Current: true,
