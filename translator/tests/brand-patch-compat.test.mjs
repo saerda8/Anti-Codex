@@ -438,6 +438,7 @@ test("preserves the Codex 26.901 app-server working directory while injecting ma
 });
 
 const currentAppRouteFixture = "function lwo(){let e=(0,uwo.c)(15),t=hb(Q),n=rT(),r=UR(),i=Wjn(),x=nwo({auth:r,codexFeatureAccess:i,backendOnboardingCompleted:!0,isFinalStepLoading:!1,shouldShowFinalStep:!1,forcedOverride:null,isOnboardingContextFetched:!0,isOnboardingContextLoading:!1,projectlessOnboardingCompleted:!0,workspaceRootsData:null,workspaceRootsIsLoading:!1});(0,dwo.useEffect)(()=>{if(!x)return;let e=x===`app`?`app`:`onboarding`;U.dispatchMessage(`electron-set-window-mode`,{mode:e})},[x]);let w=n.pathname,T=!1;{let t=XCo({target:x,path:w,isOnboardingPath:T});if(t!=null)return(0,fwo.jsx)(oT,{to:t,replace:!0})}return(0,fwo.jsx)(sT,{})}";
+const currentCodexRouteFixture = "function app(){let D=data,O=forced?null:state,k=oMa({auth:e,codexFeatureAccess:t});(0,sX.useEffect)(()=>{if(!k)return;let e=k===`app`?`app`:`onboarding`},[k]);return k}";
 
 test("forces the Codex 26.901 app route target to the local app", () => {
   const patched = brandPatchCompat.patchAppRouteGate(currentAppRouteFixture);
@@ -445,6 +446,13 @@ test("forces the Codex 26.901 app route target to the local app", () => {
   assert.equal(patched.length, currentAppRouteFixture.length);
   assert.match(patched, /anticodex-app-route/);
   assert.match(patched, /x=`app`/);
+  assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
+});
+
+test("forces the 26.928 route state without corrupting the surrounding let declaration", () => {
+  const patched = brandPatchCompat.patchAppRouteGate(currentCodexRouteFixture);
+  assert.equal(patched.length, currentCodexRouteFixture.length);
+  assert.match(patched, /O=forced\?null:state;\/\*anticodex-app-route\*\/let k=`app`;/);
   assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
 });
 
