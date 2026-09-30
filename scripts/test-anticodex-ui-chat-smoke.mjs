@@ -4491,6 +4491,40 @@ async function waitForVisibleProjectLabel(ws, projectLabel, waitMs = 10_000) {
   return evidence;
 }
 
+async function acceptNativeTrustFolderDialog(ws, root, waitMs = 6_000) {
+  const rootJson = JSON.stringify(String(root || ""));
+  const deadline = Date.now() + waitMs;
+  const evidence = [];
+  do {
+    const result = await ws.send("Runtime.evaluate", {
+      expression: `(() => {
+        const root = ${rootJson};
+        const dialogs = Array.from(document.querySelectorAll('[role="dialog"],.codex-dialog-overlay'));
+        const dialog = dialogs.find((item) => {
+          const text = String(item.innerText || '');
+          return text.includes(root) || /\\\\Temp\\\\anticodex-(?:human-long|ui)/i.test(text);
+        });
+        if (!dialog) return { handled: false, reason: 'trust_dialog_not_present' };
+        const button = Array.from(dialog.querySelectorAll('button,[role="button"]')).find((item) => {
+          const label = String(item.innerText || item.getAttribute('aria-label') || item.title || '').trim();
+          return /^(?:信任文件夹|Trust folder|Trust Folder)$/i.test(label);
+        });
+        if (!button) return { handled: false, reason: 'trust_button_not_found' };
+        const text = String(dialog.innerText || '');
+        button.click();
+        return { handled: true, root, text: text.slice(0, 500) };
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    const value = result.result?.result?.value || { handled: false, reason: "trust_dialog_probe_failed" };
+    evidence.push(value);
+    if (value.handled !== true) break;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  } while (Date.now() < deadline);
+  return { handled: evidence.some((item) => item.handled === true), attempts: evidence };
+}
+
 async function activateNativeProjectRoot(ws, root, label) {
   if (!root || !existsSync(root) || !statSync(root).isDirectory()) {
     throw new Error(`native project root is not an existing directory: ${root || "<empty>"}`);
@@ -4501,8 +4535,7 @@ async function activateNativeProjectRoot(ws, root, label) {
     expression: `(async () => {
       const bridge = window.electronBridge?.sendMessageFromView;
       if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
-      await bridge({ type: 'electron-add-new-workspace-root-option', root: ${rootJson} });
-      await bridge({ type: 'electron-rename-workspace-root-option', root: ${rootJson}, label: ${labelJson} });
+      try { void bridge({ type: 'electron-add-new-workspace-root-option', root: ${rootJson} }); } catch {}
       return { ok: true };
     })()`,
     returnByValue: true,
@@ -4510,9 +4543,24 @@ async function activateNativeProjectRoot(ws, root, label) {
   });
   const bridge = result.result?.result?.value || null;
   if (bridge?.ok !== true) throw new Error(`native project activation failed: ${bridge?.reason || "unknown"}`);
+  const trustEvidence = await acceptNativeTrustFolderDialog(ws, root);
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+  const renameResult = await ws.send("Runtime.evaluate", {
+    expression: `(async () => {
+      const bridge = window.electronBridge?.sendMessageFromView;
+      if (!bridge) return { ok: false, reason: 'electron_bridge_missing_after_trust' };
+      await bridge({ type: 'electron-rename-workspace-root-option', root: ${rootJson}, label: ${labelJson} });
+      await bridge({ type: 'electron-set-active-workspace-root', root: ${rootJson} });
+      return { ok: true };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true,
+  });
+  const renameBridge = renameResult.result?.result?.value || null;
+  if (renameBridge?.ok !== true) throw new Error(`native project rename failed: ${renameBridge?.reason || "unknown"}`);
   const selector = await waitForVisibleProjectLabel(ws, label);
   if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
-  return { root, label, bridge, selector };
+  return { root, label, bridge, trustEvidence, renameBridge, selector };
 }
 
 async function restoreNativeWorkspaceState(ws, snapshot) {
