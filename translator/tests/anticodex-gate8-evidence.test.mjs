@@ -331,6 +331,7 @@ test("native UI smoke refuses to add an untrusted workspace root by default", as
   const source = await readFile(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url), "utf8");
   assert.match(source, /allowWorkspaceRootMutation/);
   assert.match(source, /workspace_root_not_saved/);
+  assert.match(source, /workspace_root_not_active/);
   assert.match(source, /--allow-workspace-root-mutation/);
 });
 

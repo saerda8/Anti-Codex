@@ -4575,6 +4575,9 @@ async function activateNativeProjectRoot(ws, root, label) {
   if (!savedInfo.savedRoot && !allowWorkspaceRootMutation) {
     throw new Error(`workspace_root_not_saved: ${root}`);
   }
+  if (savedInfo.savedRoot && !savedInfo.activeRoot && !allowWorkspaceRootMutation) {
+    throw new Error(`workspace_root_not_active: ${root}`);
+  }
   if (savedInfo.activeRoot) {
     return {
       root,
