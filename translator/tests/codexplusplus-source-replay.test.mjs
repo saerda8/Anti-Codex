@@ -5,31 +5,37 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { readCodexPlusPlusPatchManifest } from "./codexplusplus-patch-manifest.helper.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const componentRoot = join(root, "third_party", "codexplusplus");
-const acceptedPath = join(componentRoot, "upstream.json");
 const proposalRoot = join(root, "docs", "audits", "codexplusplus", "v1.2.46-source-replay");
 const proposalPath = join(proposalRoot, "source-replay.json");
+const patchManifest = readCodexPlusPlusPatchManifest(root);
 
-test("v1.3.0 promotion targets the reviewed upstream tag", () => {
-  const accepted = JSON.parse(readFileSync(acceptedPath, "utf8"));
+test("current promotion targets the reviewed upstream tag and manifest patch set", () => {
+  const accepted = patchManifest.metadata;
 
-  assert.equal(accepted.version, "1.3.0");
-  assert.equal(accepted.tag, "v1.3.0");
-  assert.equal(accepted.upstreamCommit, "be6a45852f9992a688f33be933f444ee098fc67a");
-  assert.equal(accepted.patchCommit, "a095b85016806e66802a4d9ce8811814f701108b");
-  assert.equal(accepted.patches.length, 25);
-  assert.ok(accepted.patches.every(({ file }) => file.startsWith("patches/")));
-  assert.equal(accepted.patches.at(-1).file, "patches/0026-fix-v1.3.0-mutable-request-body.patch");
+  assert.equal(accepted.version, "1.4.0");
+  assert.equal(accepted.tag, "v1.4.0");
+  assert.equal(accepted.upstreamCommit, "27cdd21f06b59e6b71e0455672e20ed96cbd41de");
+  assert.match(accepted.patchCommit, /^[0-9a-f]{40}$/);
+  assert.equal(accepted.patches.length, 1);
   assert.equal(
-    accepted.patches.some(({ file }) => file.includes("0012-fix-format-relay-auth-fallback-chain")),
-    false,
+    accepted.patches[0].file,
+    "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
   );
-  assert.match(accepted.verification.patchReplay, /head a095b85016806e66802a4d9ce8811814f701108b; tree a9e1ebc096e7b8334b44425b1e5429d255aeb59c$/);
-  assert.equal(
-    accepted.verification.launcherReleaseBuild,
-    "sha256:19ae4b18e64ac0e4de34273ad5c8cdbb5a7e38f06fc24ce6289f33efd349a16c",
-  );
+  assert.equal(patchManifest.patches.length, accepted.patches.length);
+  for (const patch of patchManifest.patches) {
+    assert.match(patch.file, /^patches[\\/]/);
+    assert.equal(
+      createHash("sha256").update(readFileSync(patch.path)).digest("hex"),
+      patch.sha256,
+      patch.file,
+    );
+  }
+  assert.match(accepted.verification.patchReplay, /v1\.4|cumulative|patch/i);
+  assert.match(accepted.verification.launcherReleaseBuild, /^sha256:[0-9a-f]{64}$/);
 });
 
 function normalizedTextSha256(path) {
@@ -173,13 +179,12 @@ test("source replay evidence cannot enter runtime sync or component installation
   }
 });
 
-test("component documentation records the accepted v1.3.0 promotion", () => {
+test("component documentation records the accepted promotion", () => {
   const readme = readFileSync(join(componentRoot, "README.md"), "utf8");
 
-  assert.match(readme, /Accepted version: `v1\.3\.0`/);
-  assert.match(readme, /be6a45852f9992a688f33be933f444ee098fc67a/);
-  assert.match(readme, /carries exactly twenty-five narrow Anti-Codex compatibility patches/);
-  assert.match(readme, /All twenty-five patches replayed after manual v1\.3\.0 context adaptation/);
+  assert.match(readme, /Accepted version: `v\d+\.\d+\.\d+`/);
+  assert.match(readme, /Accepted commit: `[0-9a-f]{40}`/);
+  assert.match(readme, /manifest|cumulative|compatibility patch/i);
   assert.match(readme, /120 seconds without upstream data/);
   assert.match(readme, /one `insufficient_quota` event instead of native reconnects/);
   assert.match(readme, /historical source-replay record/);

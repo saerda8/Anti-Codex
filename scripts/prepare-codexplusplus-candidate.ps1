@@ -516,7 +516,7 @@ try {
     foreach ($patch in $patches) {
         [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
             "-C", $worktree, "-c", "core.hooksPath=NUL", "am",
-            "--no-3way", "--committer-date-is-author-date", $patch.path
+            "--empty=keep", "--no-3way", "--committer-date-is-author-date", $patch.path
         ) -WorkingDirectory $stagingRoot -Name "Patch replay $($patch.file)")
         $currentCommit = Invoke-Checked -FilePath "git.exe" -Arguments @(
             "-C", $worktree, "rev-parse", "HEAD"

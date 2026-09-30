@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
+
+import { readCodexPlusPlusPatchManifest } from "./codexplusplus-patch-manifest.helper.mjs";
 
 import {
   defaultPromptPolicy,
@@ -12,6 +14,15 @@ import {
   saveNativeCustomInstructions,
   savePromptPolicy,
 } from "../provider/anticodex-prompt-policy.mjs";
+
+const projectRoot = resolve(import.meta.dirname, "..", "..");
+const codexPlusPlusPatches = readCodexPlusPlusPatchManifest(projectRoot);
+
+function cumulativePatchGuidance() {
+  return codexPlusPlusPatches.text.match(
+    /\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/,
+  )?.[1] || "";
+}
 
 test("native custom instructions use only the isolated AGENTS file and empty content restores the default", () => {
   const root = mkdtempSync(join(tmpdir(), "anticodex-native-custom-instructions-"));
@@ -149,18 +160,11 @@ test("all required local prompt layers stay visible without a second policy inje
     assert.equal(patchToolLayer?.editable, false);
     assert.equal(patchToolLayer?.required, true);
 
-    const patchSource = readFileSync(
-      new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-      "utf8",
-    );
-    const patchGuidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1];
+    const patchGuidance = cumulativePatchGuidance();
     assert.ok(patchGuidance, "the pinned CodexPlusPlus patch must expose its compatibility guidance");
     assert.equal(patchToolLayer.content, patchGuidance);
 
-    const commonPolicyPatch = readFileSync(
-      new URL("../../third_party/codexplusplus/patches/0011-apply-anticodex-prompt-policy-at-common-request-entry.patch", import.meta.url),
-      "utf8",
-    );
+    const commonPolicyPatch = codexPlusPlusPatches.text;
     assert.equal(
       (commonPolicyPatch.match(/\+\s*request_json = apply_anticodex_prompt_policy\(relay, request_json\);/g) || []).length,
       1,
@@ -177,11 +181,7 @@ test("all required local prompt layers stay visible without a second policy inje
 });
 
 test("required command guidance blocks cross-shell destructive retries and global toolchain changes", () => {
-  const patchSource = readFileSync(
-    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-    "utf8",
-  );
-  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+  const guidance = cumulativePatchGuidance();
 
   assert.match(guidance, /blocked recursive delete or move/i);
   assert.match(guidance, /one shell end-to-end/i);
@@ -193,11 +193,7 @@ test("required command guidance blocks cross-shell destructive retries and globa
 });
 
 test("required command guidance treats timeout as unknown before retrying a process", () => {
-  const patchSource = readFileSync(
-    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-    "utf8",
-  );
-  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+  const guidance = cumulativePatchGuidance();
 
   assert.match(guidance, /timeout[^.]+does not mean[^.]+exited/i);
   assert.match(guidance, /verify[^.]+process or container[^.]+exited/i);
@@ -205,11 +201,7 @@ test("required command guidance treats timeout as unknown before retrying a proc
 });
 
 test("required command guidance preserves a still-running timed-out instance", () => {
-  const patchSource = readFileSync(
-    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-    "utf8",
-  );
-  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+  const guidance = cumulativePatchGuidance();
 
   assert.match(guidance, /still running[^.]+wait for the same instance[^.]+collect its result/i);
   assert.match(guidance, /never stop, kill, or remove[^.]+merely to retry/i);
@@ -218,11 +210,7 @@ test("required command guidance preserves a still-running timed-out instance", (
 });
 
 test("required command guidance forbids global Docker cleanup and requires task ownership", () => {
-  const patchSource = readFileSync(
-    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-    "utf8",
-  );
-  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+  const guidance = cumulativePatchGuidance();
 
   assert.match(guidance, /never stop, kill, remove, or prune all Docker containers/i);
   assert.match(guidance, /unfiltered docker ps -q/i);
@@ -234,11 +222,7 @@ test("required command guidance forbids global Docker cleanup and requires task 
 });
 
 test("required command guidance labels every Docker container at creation", () => {
-  const patchSource = readFileSync(
-    new URL("../../third_party/codexplusplus/patches/0006-guide-models-to-structured-patch-tools.patch", import.meta.url),
-    "utf8",
-  );
-  const guidance = patchSource.match(/\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/)?.[1] || "";
+  const guidance = cumulativePatchGuidance();
 
   assert.match(guidance, /every docker run or docker create[^.]+--name[^.]+--label com\.anticodex\.task-id=<current task id>/i);
   assert.match(guidance, /never use a Docker-generated container name/i);

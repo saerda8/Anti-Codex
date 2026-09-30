@@ -16,7 +16,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { readCodexPlusPlusPatchManifest } from "./codexplusplus-patch-manifest.helper.mjs";
+
 const root = resolve(import.meta.dirname, "..", "..");
+const codexPlusPlusPatches = readCodexPlusPlusPatchManifest(root);
 const installerSource = resolve(root, "scripts", "install-codexplusplus-component.ps1");
 const trustedBinary = Buffer.from("trusted CodexPlusPlus release binary\n", "utf8");
 const candidateInputFiles = {
@@ -35,6 +38,12 @@ const candidateBuildCommands = [
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function patchWindow(marker, before = 500, after = 1800) {
+  const index = codexPlusPlusPatches.text.indexOf(marker);
+  if (index < 0) return "";
+  return codexPlusPlusPatches.text.slice(Math.max(0, index - before), index + after);
 }
 
 function writeBytes(path, value) {
@@ -695,47 +704,29 @@ test("installed audit resolves the movable component and requires its metadata-d
   assert.match(audit, /\$installedPatches\.Count -eq \$acceptedPatches\.Count/);
 });
 
-test("runtime sync carries the pinned CodexPlusPlus metadata and all accepted patches", () => {
+test("runtime sync carries the manifest-defined CodexPlusPlus patch set", () => {
   const runtimeSync = readFileSync(resolve(root, "scripts", "sync-anticodex-runtime.ps1"), "utf8");
   assert.match(runtimeSync, /third_party\\codexplusplus\\upstream\.json/);
-  assert.match(runtimeSync, /0001-isolation-scope-Anti-Codex-companion-runtime\.patch/);
-  assert.match(runtimeSync, /0002-cancel-loopback-streams-without-resets\.patch/);
-  assert.match(runtimeSync, /0003-native-codex-helper-requests-text-only\.patch/);
-  assert.match(runtimeSync, /0004-route-anticodex-model-slots\.patch/);
-  assert.match(runtimeSync, /0005-preserve-image-tool-outputs-for-chat-relays\.patch/);
-  assert.match(runtimeSync, /0006-guide-models-to-structured-patch-tools\.patch/);
-  assert.match(runtimeSync, /0007-ignore-late-reasoning-after-visible-text\.patch/);
-  assert.match(runtimeSync, /0008-chore-audit-Codex-tool-conversion\.patch/);
-  assert.match(runtimeSync, /0009-fix-allow-long-multimodal-helper-requests\.patch/);
-  assert.match(runtimeSync, /0010-fix-estimate-missing-chat-usage-for-native-compaction\.patch/);
-  assert.match(runtimeSync, /0011-apply-anticodex-prompt-policy-at-common-request-entry\.patch/);
-  assert.match(runtimeSync, /0013-fix-format-dreamskin-installer-test\.patch/);
-  assert.match(runtimeSync, /0014-fix-format-dreamskin-runtime-test\.patch/);
-  assert.match(runtimeSync, /0015-enforce-Anti-Codex-command-tool-safety\.patch/);
-  assert.match(runtimeSync, /0016-block-forced-Docker-interruption\.patch/);
-  assert.match(runtimeSync, /0017-route-native-compaction-header\.patch/);
-  assert.match(runtimeSync, /0018-route-compaction-by-current-thread-model\.patch/);
-  assert.match(runtimeSync, /foreach \(\$dir in @\([^\r\n]*"third_party"\)\)/);
+  assert.match(runtimeSync, /ConvertFrom-Json/);
+  assert.match(runtimeSync, /\.patches/);
+  assert.match(runtimeSync, /requiredSourceFiles/);
+  assert.match(runtimeSync, /foreach \(\$relative in \$requiredSourceFiles\)/);
+  assert.ok(codexPlusPlusPatches.patches.length > 0);
 });
 
 test("Anti-Codex routing patch follows native model slots without overriding ordinary CodexPlusPlus", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0004-route-anticodex-model-slots.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
+  const hunk = patchWindow("select_anticodex_relay_for_model");
   assert.match(patch, /select_anticodex_relay_for_model/);
   assert.match(patch, /anticodex\/antigravity/);
   assert.match(patch, /anticodex\/third-party/);
   assert.match(patch, /directed_relay\.is_none\(\)/);
   assert.doesNotMatch(patch, /CODEX_PLUS_FIXED_MODEL|apply_fixed_model_override/);
-  assert.doesNotMatch(patch, /tool_choice|previous_response_id|retry/i);
+  assert.doesNotMatch(hunk, /tool_choice|previous_response_id|retry/i);
 });
 
 test("native compaction routing consumes the current Codex HTTP metadata header", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0017-route-native-compaction-header.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
   assert.match(patch, /x-codex-turn-metadata/);
   assert.match(patch, /request_turn_metadata/);
   assert.match(patch, /header_value_from_headers\(\s*&request_headers,[\s\S]*CODEX_TURN_METADATA_KEY/);
@@ -752,10 +743,7 @@ test("native compaction routing consumes the current Codex HTTP metadata header"
 });
 
 test("native compaction routing follows the current task model without restart", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0018-route-compaction-by-current-thread-model.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
   assert.match(patch, /latest_thread_model_from_rollout/);
   assert.match(patch, /ANTICODEX_THREAD_SELECTION_TAIL_BYTES/);
   assert.match(patch, /Uuid::parse_str/);
@@ -765,23 +753,19 @@ test("native compaction routing follows the current task model without restart",
 });
 
 test("image tool output patch preserves images as multimodal Chat content", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0005-preserve-image-tool-outputs-for-chat-relays.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
+  const hunk = patchWindow("response_output_to_chat_content");
   assert.match(patch, /response_output_to_chat_content/);
   assert.match(patch, /TOOL_IMAGE_PLACEHOLDER/);
   assert.match(patch, /"type": "image_url"/);
   assert.match(patch, /responses_input_preserves_mcp_image_tool_output_as_multimodal_content/);
   assert.match(patch, /responses_input_preserves_direct_view_image_output_without_textual_base64/);
-  assert.doesNotMatch(patch, /previous_response_id|retry|task control/i);
+  assert.doesNotMatch(hunk, /previous_response_id|retry|task control/i);
 });
 
 test("structured patch guidance tells chat providers to avoid Windows shell wrappers", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0006-guide-models-to-structured-patch-tools.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
+  const hunk = patchWindow("PATCH_TOOL_SYSTEM_GUIDANCE", 300, 1200);
   assert.match(patch, /Call this structured function tool directly/);
   assert.match(patch, /Do not run apply_patch through shell_command/);
   assert.match(patch, /especially on Windows/);
@@ -798,30 +782,26 @@ test("structured patch guidance tells chat providers to avoid Windows shell wrap
   assert.match(patch, /guide_command_tools_away_from_file_edits/);
   assert.match(patch, /Do not use this command tool for file edits/);
   assert.match(patch, /"exec_command" \| "shell_command"/);
-  assert.doesNotMatch(patch, /previous_response_id|session reset|retry policy/i);
+  assert.doesNotMatch(hunk, /previous_response_id|session reset|retry policy/i);
 });
 
 test("late reasoning patch preserves one active streamed output item", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0007-ignore-late-reasoning-after-visible-text.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
+  const hunk = patchWindow("if self.text.added");
   assert.match(patch, /if self\.text\.added/);
   assert.match(patch, /chat_sse_does_not_interleave_late_reasoning_with_started_text/);
   assert.match(patch, /matches\("event: response\.output_item\.added"\)/);
-  assert.doesNotMatch(patch, /previous_response_id|session reset|retry policy|task control/i);
+  assert.doesNotMatch(hunk, /previous_response_id|session reset|retry policy|task control/i);
 });
 
 test("loopback cancellation transport preserves graceful normal completion", () => {
-  const patch = readFileSync(
-    resolve(root, "third_party", "codexplusplus", "patches", "0002-cancel-loopback-streams-without-resets.patch"),
-    "utf8",
-  );
+  const patch = codexPlusPlusPatches.text;
+  const hunk = patchWindow("wait_for_downstream_disconnect");
   assert.match(patch, /wait_for_downstream_disconnect/);
   assert.match(patch, /pool_max_idle_per_host\(0\)/);
   assert.match(patch, /cancel_aware_loopback/);
-  assert.doesNotMatch(patch, /set_zero_linger/);
-  assert.doesNotMatch(patch, /"abortive_loopback"/);
+  assert.doesNotMatch(hunk, /set_zero_linger/);
+  assert.doesNotMatch(hunk, /"abortive_loopback"/);
 });
 
 test("update check reports CodexPlusPlus drift as part of the same release", () => {

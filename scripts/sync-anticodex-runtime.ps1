@@ -287,24 +287,6 @@ $requiredSourceFiles = @(
     "scripts\install-anticodex-shared-mcp.ps1",
     "scripts\anticodex_shared_mcp_proxy.py",
     "third_party\codexplusplus\upstream.json",
-    "third_party\codexplusplus\patches\0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-    "third_party\codexplusplus\patches\0002-cancel-loopback-streams-without-resets.patch",
-    "third_party\codexplusplus\patches\0003-native-codex-helper-requests-text-only.patch",
-    "third_party\codexplusplus\patches\0004-route-anticodex-model-slots.patch",
-    "third_party\codexplusplus\patches\0005-preserve-image-tool-outputs-for-chat-relays.patch",
-    "third_party\codexplusplus\patches\0006-guide-models-to-structured-patch-tools.patch",
-    "third_party\codexplusplus\patches\0007-ignore-late-reasoning-after-visible-text.patch",
-    "third_party\codexplusplus\patches\0008-chore-audit-Codex-tool-conversion.patch",
-    "third_party\codexplusplus\patches\0009-fix-allow-long-multimodal-helper-requests.patch",
-    "third_party\codexplusplus\patches\0010-fix-estimate-missing-chat-usage-for-native-compaction.patch",
-    "third_party\codexplusplus\patches\0011-apply-anticodex-prompt-policy-at-common-request-entry.patch",
-    "third_party\codexplusplus\patches\0013-fix-format-dreamskin-installer-test.patch",
-    "third_party\codexplusplus\patches\0014-fix-format-dreamskin-runtime-test.patch",
-    "third_party\codexplusplus\patches\0015-enforce-Anti-Codex-command-tool-safety.patch",
-    "third_party\codexplusplus\patches\0016-block-forced-Docker-interruption.patch",
-    "third_party\codexplusplus\patches\0017-route-native-compaction-header.patch",
-    "third_party\codexplusplus\patches\0018-route-compaction-by-current-thread-model.patch",
-    "third_party\codexplusplus\patches\0019-bound-upstream-stream-inactivity.patch",
     "scripts\lib\anticodex-fixed-route.mjs",
     "scripts\lib\anticodex-owner-process.mjs",
     "scripts\lib\anticodex-release-binding.mjs",
@@ -405,6 +387,24 @@ $requiredSourceFiles = @(
     "translator\sync-antigravity-model-catalog.mjs",
     "codex-home-deepseek-app\config.adaptive-oneapi.toml"
 )
+$codexPlusPlusMetadataRelative = "third_party\codexplusplus\upstream.json"
+$codexPlusPlusMetadataPath = Join-Path $sourceRootFull $codexPlusPlusMetadataRelative
+$codexPlusPlusMetadata = Get-Content -LiteralPath $codexPlusPlusMetadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$manifestPatchFiles = @(
+    foreach ($patch in @($codexPlusPlusMetadata.patches)) {
+        if ($null -eq $patch -or [string]::IsNullOrWhiteSpace([string]$patch.file)) {
+            continue
+        }
+        $relativePatch = ([string]$patch.file).Replace("/", "\")
+        if ([string]::IsNullOrWhiteSpace($relativePatch) -or
+            [IO.Path]::IsPathRooted($relativePatch) -or
+            -not $relativePatch.StartsWith("patches\", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "CodexPlusPlus manifest contains an invalid patch path: $relativePatch"
+        }
+        "third_party\codexplusplus\$relativePatch"
+    }
+)
+$requiredSourceFiles += $manifestPatchFiles
 foreach ($relative in $requiredSourceFiles) {
     $path = Join-Path $sourceRootFull $relative
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
