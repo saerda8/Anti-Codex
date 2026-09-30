@@ -126,6 +126,7 @@ test("shared config sync localizes node_repl and removes the native Codex pipe",
   const codexHome = path.join(dir, "state", "codex-home");
   const target = path.join(codexHome, "config.toml");
   const installRoot = path.join(dir, "Anti-Codex");
+  fs.mkdirSync(path.join(installRoot, "runtime"), { recursive: true });
   fs.mkdirSync(codexHome, { recursive: true });
 
   fs.writeFileSync(source, [
@@ -175,6 +176,7 @@ test("shared config sync registers the Anti-Codex web stdio MCP server", () => {
   const target = path.join(dir, "state", "config.toml");
   const installRoot = path.join(dir, "Anti-Codex");
   fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.mkdirSync(path.join(installRoot, "runtime"), { recursive: true });
   fs.writeFileSync(source, 'model = "gpt"\n');
 
   execFileSync(process.execPath, [
@@ -188,7 +190,7 @@ test("shared config sync registers the Anti-Codex web stdio MCP server", () => {
   const python = process.platform === "win32"
     ? path.join(installRoot, "shared-mcp", ".venv", "Scripts", "python.exe")
     : path.join(installRoot, "shared-mcp", ".venv", "bin", "python");
-  const server = path.join(installRoot, "translator", "tools", "web_mcp_stdio.py");
+  const server = path.join(installRoot, "runtime", "translator", "tools", "web_mcp_stdio.py");
   assert.match(next, /\[mcp_servers\.anticodex-web\]/);
   assert.match(next, new RegExp(`command = ${escapeRegExp(JSON.stringify(python))}`));
   assert.match(next, new RegExp(`args = \\[${escapeRegExp(JSON.stringify(server))}\\]`));

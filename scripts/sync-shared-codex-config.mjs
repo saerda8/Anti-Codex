@@ -227,10 +227,13 @@ function isLocalWebMcpBlock(block) {
 
 function localWebMcpBlocks() {
   if (!installRoot) return [];
+  const runtimeRoot = fs.existsSync(path.join(installRoot, "runtime"))
+    ? path.join(installRoot, "runtime")
+    : installRoot;
   const python = process.platform === "win32"
     ? path.join(installRoot, "shared-mcp", ".venv", "Scripts", "python.exe")
     : path.join(installRoot, "shared-mcp", ".venv", "bin", "python");
-  const server = path.join(installRoot, "translator", "tools", "web_mcp_stdio.py");
+  const server = path.join(runtimeRoot, "translator", "tools", "web_mcp_stdio.py");
   return [{
     header: `[mcp_servers.${localWebMcpName}]`,
     lines: [
