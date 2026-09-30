@@ -694,16 +694,26 @@ function Get-AntiCodexRuntimeProcessSnapshot {
         $usesActiveRuntime = $commandLine.IndexOf($targetRuntimeFull, [StringComparison]::OrdinalIgnoreCase) -ge 0
         if (-not $underInstallRoot -and -not $usesActiveRuntime) { return }
 
-        [pscustomobject]@{
-            ProcessId = $processId
-            CreationDate = [string]$_.CreationDate
-            Name = [string]$_.Name
-            ExecutablePath = $executablePath
-            CommandLine = $commandLine
-            IsHostOrComponent = [bool](
-                ($executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $hostRoot)) -or
-                ($executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $componentRoot))
-            )
+        $processHandle = $null
+        try {
+            $processHandle = [AntiCodex.Native.VerifiedProcessHandle]::Open($processId)
+            if ($processHandle.HasExited) { return }
+            [pscustomobject]@{
+                ProcessId = $processId
+                CreationDate = [string]$_.CreationDate
+                CreationFileTimeUtcTicks = [long]$processHandle.CreationFileTimeUtcTicks
+                Name = [string]$_.Name
+                ExecutablePath = $executablePath
+                CommandLine = $commandLine
+                IsHostOrComponent = [bool](
+                    ($executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $hostRoot)) -or
+                    ($executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $componentRoot))
+                )
+            }
+        } catch {
+            return
+        } finally {
+            if ($processHandle) { $processHandle.Dispose() }
         }
     })
 }
@@ -1287,6 +1297,63 @@ function Stop-AntiCodexFixedRouteSupervisor {
     return $stopped
 }
 
+function Stop-AntiCodexRuntimeReleaseProcesses {
+    $stopped = 0
+    $service = $null
+    try {
+        $service = New-Object -ComObject "Schedule.Service"
+        $service.Connect()
+        $task = $service.GetFolder("\").GetTask("\Anti-Codex Launcher")
+        if ([int]$task.State -in @(2, 4)) {
+            $null = Invoke-AntiCodexFixedRouteShutdown
+            $task.Stop(0)
+        }
+    } catch {
+        # The process identity checks below remain authoritative when the task is already gone.
+    }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $processes = @(Get-AntiCodexRuntimeProcessSnapshot)
+        if ($processes.Count -eq 0) { return $stopped }
+        foreach ($process in $processes) {
+            $processId = [int]$process.ProcessId
+            $expectedCreationFileTimeUtcTicks = [long]$process.CreationFileTimeUtcTicks
+            $expectedExecutablePath = [IO.Path]::GetFullPath([string]$process.ExecutablePath)
+            if ($processId -le 0 -or $processId -eq $PID -or
+                [string]::IsNullOrWhiteSpace($expectedExecutablePath) -or
+                (Test-AntiCodexNativeCodexPath -Path $expectedExecutablePath)) {
+                throw "Refusing to stop an unverified Anti-Codex runtime process PID $processId."
+            }
+            $handle = $null
+            try {
+                $handle = [AntiCodex.Native.VerifiedProcessHandle]::Open($processId)
+                $liveExecutablePath = [IO.Path]::GetFullPath([string]$handle.ExecutablePath)
+                if ([long]$handle.CreationFileTimeUtcTicks -ne $expectedCreationFileTimeUtcTicks -or
+                    -not $liveExecutablePath.Equals($expectedExecutablePath, [StringComparison]::OrdinalIgnoreCase) -or
+                    (Test-AntiCodexNativeCodexPath -Path $liveExecutablePath)) {
+                    throw "Refusing to stop PID $processId because its handle-bound creation time or executable path changed."
+                }
+                if (-not $handle.HasExited) {
+                    $handle.TerminateAndWait(5000)
+                    $stopped += 1
+                }
+            } catch {
+                throw "Verified Anti-Codex runtime process PID $processId could not be stopped through its bound handle; no broader target was attempted. $($_.Exception.Message)"
+            } finally {
+                if ($handle) { $handle.Dispose() }
+            }
+        }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    $remaining = @(Get-AntiCodexRuntimeProcessSnapshot)
+    if ($remaining.Count -gt 0) {
+        throw "Anti-Codex release processes did not exit before runtime activation."
+    }
+    return $stopped
+}
+
 function Remove-AntiCodexLegacyRuntimeFiles {
     param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
     $runtimeRootFull = [IO.Path]::GetFullPath($RuntimeRoot)
@@ -1611,16 +1678,12 @@ try {
     }
 
     $stoppedFixedRouteSupervisorCount = 0
+    $stoppedRuntimeProcessCount = 0
     $launchExitCode = $null
     if (-not $NoRestart) {
         New-Item -ItemType Directory -Path $antiCodexStateRoot -Force | Out-Null
         $stoppedFixedRouteSupervisorCount = Stop-AntiCodexFixedRouteSupervisor
-        $stopDeadline = [DateTime]::UtcNow.AddSeconds(15)
-        do {
-            $runningProcesses = @(Get-AntiCodexRuntimeProcessSnapshot)
-            if ($runningProcesses.Count -eq 0) { break }
-            Start-Sleep -Milliseconds 250
-        } while ([DateTime]::UtcNow -lt $stopDeadline)
+        $stoppedRuntimeProcessCount = Stop-AntiCodexRuntimeReleaseProcesses
     }
 
     $runningProcesses = @(Get-AntiCodexRuntimeProcessSnapshot)
@@ -1902,6 +1965,7 @@ try {
         baseUrl = $BaseUrl
         restarted = -not [bool]$NoRestart
         stoppedFixedRouteSupervisorCount = $stoppedFixedRouteSupervisorCount
+        stoppedRuntimeProcessCount = $stoppedRuntimeProcessCount
         launchExitCode = $launchExitCode
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
         health = [pscustomobject]@{

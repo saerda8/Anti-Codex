@@ -546,7 +546,7 @@ test("install and runtime sync require every fixed-route production module", () 
   assert.doesNotMatch(runtimeSync, /Wait-AntiCodexSessionLock|antigravitySessionLockPresent/);
 });
 
-test("runtime sync restarts only the fixed three-layer supervisor", () => {
+test("runtime sync stops the complete isolated release before activation", () => {
   const requiredList = runtimeSync.match(/\$requiredSourceFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   const syntaxList = runtimeSync.match(/\$syntaxCheckedJavaScriptFiles\s*=\s*@\(([\s\S]*?)\n\)/)?.[1] ?? "";
   assert.match(requiredList, /scripts\\start-anticodex-update-task\.mjs/);
@@ -568,6 +568,9 @@ test("runtime sync restarts only the fixed three-layer supervisor", () => {
     assert.ok(!syntaxList.includes(legacy), `runtime sync still syntax-checks ${legacy}`);
   }
   assert.match(runtimeSync, /Stop-AntiCodexFixedRouteSupervisor/);
+  assert.match(runtimeSync, /Stop-AntiCodexRuntimeReleaseProcesses/);
+  assert.match(runtimeSync, /VerifiedProcessHandle\]::Open\(\$processId\)/);
+  assert.match(runtimeSync, /TerminateAndWait\(5000\)/);
   assert.match(runtimeSync, /Invoke-AntiCodexFixedRouteLauncher/);
   assert.match(runtimeSync, /start-anticodex\.ps1/);
   assert.doesNotMatch(runtimeSync, /Start-AntiCodexTranslatorDirect|Set-AntiCodexTranslatorRestartEnvironment|Get-AntiCodexTranslatorProcesses|ANTICODEX_TRANSLATOR_RESTART/);
