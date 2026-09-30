@@ -343,6 +343,16 @@ test("the human long journey uses an existing trusted project root", async () =>
   assert.match(source, /workspacePathsEqual\(history\.sessionCwd, trustedProjectRoot\)/);
 });
 
+test("the real-work verifier targets the current fixed-route response endpoint", async () => {
+  const source = await readFile(new URL("../../scripts/test-anticodex-real-work.ps1", import.meta.url), "utf8");
+  assert.match(source, /ANTICODEX_FIXED_ROUTE_HEALTH_URL/);
+  assert.match(source, /codexBaseUrl/);
+  assert.match(source, /auth\.json/);
+  assert.match(source, /Authorization/);
+  assert.doesNotMatch(source, /tool_choice = \"required\"/);
+  assert.doesNotMatch(source, /-Uri \"\$BaseUrl\/v1\/responses\"/);
+});
+
 test("the native project task selector recognizes the current Chinese new-task label", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-ui-chat-smoke.mjs", import.meta.url), "utf8");
   assert.ok(source.includes("text.includes('\\\\u65b0\\\\u5efa\\\\u4efb\\\\u52a1')"));

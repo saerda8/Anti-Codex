@@ -14,6 +14,29 @@ Import-Module (Join-Path $PSScriptRoot "anticodex-real-traffic-lock.psm1") -Forc
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+$fixedRouteHealthUrl = if ($env:ANTICODEX_FIXED_ROUTE_HEALTH_URL) {
+    [string]$env:ANTICODEX_FIXED_ROUTE_HEALTH_URL
+} else {
+    "http://127.0.0.1:18487/anticodex/fixed-route/health"
+}
+$responseUrl = "$BaseUrl/v1/responses"
+$localProxyKey = ""
+try {
+    $authPath = Join-Path $StateRoot "codex-home-deepseek-app\auth.json"
+    if (Test-Path -LiteralPath $authPath) {
+        $auth = Get-Content -Raw -LiteralPath $authPath | ConvertFrom-Json
+        $localProxyKey = [string]$auth.OPENAI_API_KEY
+    }
+} catch {}
+try {
+    $fixedRouteHealth = Invoke-RestMethod -Uri $fixedRouteHealthUrl -TimeoutSec 5 -Proxy $null
+    $codexBaseUrl = [string]$fixedRouteHealth.route.codexBaseUrl
+    if ($fixedRouteHealth.ok -eq $true -and $fixedRouteHealth.state -eq "ready" -and $codexBaseUrl) {
+        $responseUrl = "$($codexBaseUrl.TrimEnd('/'))/responses"
+    }
+} catch {
+    # Keep the manager URL fallback for older installations without fixed-route health.
+}
 
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
@@ -52,13 +75,31 @@ function Invoke-AntiCodexResponse {
     param([hashtable]$Body)
 
     $json = $Body | ConvertTo-Json -Depth 24 -Compress
-    return Invoke-RestMethod `
-        -Uri "$BaseUrl/v1/responses" `
-        -Method Post `
-        -ContentType "application/json; charset=utf-8" `
-        -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
-        -TimeoutSec $TimeoutSec `
-        -Proxy $null
+    $request = @{
+        Uri = $responseUrl
+        Method = "Post"
+        ContentType = "application/json; charset=utf-8"
+        Body = [Text.Encoding]::UTF8.GetBytes($json)
+        TimeoutSec = $TimeoutSec
+        Proxy = $null
+    }
+    if ($localProxyKey) { $request.Headers = @{ Authorization = "Bearer $localProxyKey" } }
+    try {
+        return Invoke-RestMethod @request
+    } catch {
+        $status = 0
+        $detail = $_.Exception.Message
+        try {
+            $status = [int]$_.Exception.Response.StatusCode
+            $stream = $_.Exception.Response.GetResponseStream()
+            if ($stream) {
+                $reader = [IO.StreamReader]::new($stream)
+                try { $body = $reader.ReadToEnd() } finally { $reader.Dispose() }
+                if ($body) { $detail = "$detail; body=$body" }
+            }
+        } catch {}
+        throw "HTTP ${status}: $detail"
+    }
 }
 
 function Get-ResponseItems {
@@ -176,7 +217,7 @@ try {
         model = $model
         stream = $false
         store = $true
-        tool_choice = "required"
+        tool_choice = "auto"
         tools = @($fileTool)
         input = @(@{
             type = "message"

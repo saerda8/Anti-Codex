@@ -169,6 +169,32 @@ test("shared config sync localizes node_repl and removes the native Codex pipe",
   assert.doesNotMatch(next, /C:\\\\Users\\\\XD\\\\\.codex|Coexconfig|OpenAI\\\\Codex\\\\runtimes/);
 });
 
+test("shared config sync registers the Anti-Codex web stdio MCP server", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const target = path.join(dir, "state", "config.toml");
+  const installRoot = path.join(dir, "Anti-Codex");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(source, 'model = "gpt"\n');
+
+  execFileSync(process.execPath, [
+    syncSharedConfig,
+    source,
+    target,
+    "--install-root",
+    installRoot,
+  ]);
+  const next = fs.readFileSync(target, "utf8");
+  const python = process.platform === "win32"
+    ? path.join(installRoot, "shared-mcp", ".venv", "Scripts", "python.exe")
+    : path.join(installRoot, "shared-mcp", ".venv", "bin", "python");
+  const server = path.join(installRoot, "translator", "tools", "web_mcp_stdio.py");
+  assert.match(next, /\[mcp_servers\.anticodex-web\]/);
+  assert.match(next, new RegExp(`command = ${escapeRegExp(JSON.stringify(python))}`));
+  assert.match(next, new RegExp(`args = \\[${escapeRegExp(JSON.stringify(server))}\\]`));
+  assert.match(next, /startup_timeout_sec = 30/);
+});
+
 test("MCP verification accepts only a live Anti-Codex pipe distinct from the shared Codex pipe", () => {
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
 

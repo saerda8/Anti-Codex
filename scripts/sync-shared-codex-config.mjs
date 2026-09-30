@@ -20,6 +20,7 @@ const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)
 const workerToolSuffix = "_start_implementation";
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
+const localWebMcpName = "anticodex-web";
 
 function splitTomlBlocks(text) {
   const blocks = [];
@@ -220,6 +221,27 @@ function localizeNodeRepl(block) {
   return next;
 }
 
+function isLocalWebMcpBlock(block) {
+  return isMcpBlock(block) && mcpServerName(block) === localWebMcpName;
+}
+
+function localWebMcpBlocks() {
+  if (!installRoot) return [];
+  const python = process.platform === "win32"
+    ? path.join(installRoot, "shared-mcp", ".venv", "Scripts", "python.exe")
+    : path.join(installRoot, "shared-mcp", ".venv", "bin", "python");
+  const server = path.join(installRoot, "translator", "tools", "web_mcp_stdio.py");
+  return [{
+    header: `[mcp_servers.${localWebMcpName}]`,
+    lines: [
+      `[mcp_servers.${localWebMcpName}]`,
+      `command = ${JSON.stringify(python)}`,
+      `args = [${JSON.stringify(server)}]`,
+      "startup_timeout_sec = 30",
+    ],
+  }];
+}
+
 function render(blocks) {
   return blocks
     .map((block) => block.lines.join("\n").replace(/\n+$/g, ""))
@@ -245,7 +267,11 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
     (block) => isWorkerBlock(block, targetWorkerNames)
       || (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
   );
-  return [...keptTargetBlocks, ...sourceShared];
+  const generatedWebMcp = localWebMcpBlocks();
+  const merged = generatedWebMcp.length > 0
+    ? [...keptTargetBlocks, ...sourceShared].filter((block) => !isLocalWebMcpBlock(block))
+    : [...keptTargetBlocks, ...sourceShared];
+  return [...merged, ...generatedWebMcp];
 }
 
 if (!fs.existsSync(sourcePath)) {

@@ -30,25 +30,28 @@ def html_to_text(raw):
         text = text[:20000] + f"\n\n[truncated {len(text)-20000} chars]"
     return text
 
-def main():
-    if len(sys.argv) < 2:
-        print(json.dumps({"ok": False, "error": "URL required"}))
-        sys.exit(1)
-
-    url = sys.argv[1]
+def run(url):
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        return {"ok": False, "url": url, "error": "invalid URL"}
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "Codex-Translator-WebFetch/0.1 (+local adapter)",
             "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
         })
-        resp = urllib.request.urlopen(req, timeout=15)
-        raw = resp.read()
-        text = html_to_text(raw)
-        print(json.dumps({"ok": True, "url": url, "status": resp.status, "text": text}))
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read(1_000_000)
+            return {"ok": True, "url": url, "status": resp.status, "text": html_to_text(raw)}
     except urllib.error.HTTPError as e:
-        print(json.dumps({"ok": False, "url": url, "status": e.code, "error": str(e)}))
+        return {"ok": False, "url": url, "status": e.code, "error": str(e)}
     except Exception as e:
-        print(json.dumps({"ok": False, "url": url, "error": str(e)}))
+        return {"ok": False, "url": url, "error": str(e)}
+
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({"ok": False, "error": "URL required"}))
+        sys.exit(1)
+
+    print(json.dumps(run(sys.argv[1]), ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
