@@ -4642,6 +4642,32 @@ async function restoreNativeWorkspaceState(ws, snapshot) {
   const labels = snapshot?.labels && typeof snapshot.labels === "object" ? snapshot.labels : {};
   if (roots.length === 0) throw new Error("workspace snapshot has no saved roots");
   if (activeRoots.length > 1) throw new Error("workspace snapshot has more than one active root");
+  const current = readSavedWorkspaceState();
+  const currentRoots = Array.isArray(current?.["electron-saved-workspace-roots"])
+    ? current["electron-saved-workspace-roots"].map(String)
+    : [];
+  const currentActiveRoots = Array.isArray(current?.["active-workspace-roots"])
+    ? current["active-workspace-roots"].map(String)
+    : [];
+  const normalize = (value) => String(value || "").replace(/[\\/]+$/g, "").toLowerCase();
+  const sameRoots = JSON.stringify(currentRoots.map(normalize)) === JSON.stringify(roots.map(normalize));
+  const sameActiveRoots = JSON.stringify(currentActiveRoots.map(normalize)) === JSON.stringify(activeRoots.map(normalize));
+  const currentLabels = current?.["electron-workspace-root-labels"] && typeof current["electron-workspace-root-labels"] === "object"
+    ? current["electron-workspace-root-labels"]
+    : {};
+  const sameLabels = roots.every((root) => String(currentLabels[root] || "") === String(labels[root] || ""));
+  if (sameRoots && sameActiveRoots && sameLabels) {
+    return {
+      roots,
+      activeRoots,
+      labels,
+      bridge: { ok: true, mode: "already-restored" },
+      selector: { matched: true, source: "saved-workspace-state" },
+    };
+  }
+  if (!allowWorkspaceRootMutation) {
+    throw new Error("workspace_restore_requires_explicit_mutation");
+  }
   const messages = [
     { type: "electron-update-workspace-root-options", roots },
     { type: "electron-workspace-root-labels", labels },

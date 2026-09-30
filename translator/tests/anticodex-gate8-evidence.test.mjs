@@ -332,6 +332,7 @@ test("native UI smoke refuses to add an untrusted workspace root by default", as
   assert.match(source, /allowWorkspaceRootMutation/);
   assert.match(source, /workspace_root_not_saved/);
   assert.match(source, /workspace_root_not_active/);
+  assert.match(source, /workspace_restore_requires_explicit_mutation/);
   assert.match(source, /--allow-workspace-root-mutation/);
 });
 
