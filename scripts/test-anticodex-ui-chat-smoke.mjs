@@ -4623,12 +4623,14 @@ function newChatClickExpression(projectName = "") {
       const aria = String(el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
       const rect = el.getBoundingClientRect();
       const isNewChat = text.includes('\\u65b0\\u5bf9\\u8bdd')
+        || text.includes('\\u65b0\\u804a\\u5929')
         || text.includes('\\u65b0\\u5efa\\u4efb\\u52a1')
         || /Ctrl\\+N|New chat/i.test(text);
       const projectText = text + ' ' + aria;
       const isProjectNewChat = expectedProject
         && projectText.includes(expectedProject)
         && (projectText.includes('\\u5f00\\u59cb\\u65b0\\u5bf9\\u8bdd')
+          || projectText.includes('\\u5f00\\u59cb\\u65b0\\u804a\\u5929')
           || projectText.includes('\\u65b0\\u5efa\\u4efb\\u52a1')
           || /new chat|new conversation|start/i.test(projectText));
       return { el, index, text, aria, rect, isNewChat, isProjectNewChat };
