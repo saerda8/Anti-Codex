@@ -1667,9 +1667,6 @@ try {
 
     $runningProcesses = @(Get-AntiCodexRuntimeProcessSnapshot)
     $mustDefer = $NoRestart -and $runningProcesses.Count -gt 0
-    if (-not $NoRestart -and @($runningProcesses | Where-Object { $_.IsHostOrComponent }).Count -gt 0) {
-        $mustDefer = $true
-    }
     if ($mustDefer) {
         Write-AntiCodexDeferredRuntimeSyncResult `
             -Message "The runtime is staged, but activation is deferred until all Anti-Codex release processes exit." `
