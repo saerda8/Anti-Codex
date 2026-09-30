@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Codex-owned stdio MCP server for local web search and fetch."""
 
+from __future__ import annotations
+
 import json
 import sys
 from typing import Any
