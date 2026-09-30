@@ -673,7 +673,8 @@ function findGeneralAppearanceSettingsPatch(fd, header, dataOffset) {
 
 function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if ((!rel.startsWith("webview/assets/profile-dropdown-") &&
+     if ((!rel.startsWith("webview/assets/profile-dropdown-") &&
+          !rel.startsWith("webview/assets/profile-dropdown-items-") &&
          !rel.startsWith("webview/assets/app-initial-") &&
          !rel.startsWith("webview/assets/app-primary-")) ||
         !rel.endsWith(".js")) continue;

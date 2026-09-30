@@ -2,6 +2,20 @@ export function patchCompiledProfileDropdownSettings(text) {
   if (!text.includes("id:`codex.profileDropdown.settingsPage`")) return text;
   if (text.includes("anticodex-manager") && text.includes("__ANTICODEX_OPEN_MANAGER__")) return text;
 
+  const codex2636 = /let (?<item>[A-Za-z_$][\w$]*);[\s\S]{0,420}?\k<item>=\(0,(?<jsx>[A-Za-z_$][\w$]*)\.jsx\)\((?<component>[A-Za-z_$][\w$]*),\{leftIcon:(?<icon>[A-Za-z_$][\w$]*),keyboardShortcut:(?<shortcut>[A-Za-z_$][\w$]*),onClick:(?<open>[A-Za-z_$][\w$]*),children:(?<label>[A-Za-z_$][\w$]*)\}\)[\s\S]{0,360}?let (?<separator>[A-Za-z_$][\w$]*);[\s\S]{0,420}?let (?<account>[A-Za-z_$][\w$]*);[\s\S]{0,260}?let (?<logout>[A-Za-z_$][\w$]*);/;
+  const codex2636Match = codex2636.exec(text);
+  if (codex2636Match?.groups) {
+    const { item, jsx, component, icon, shortcut, open, label, account, logout } = codex2636Match.groups;
+    const replacement = `let ${item}=(0,${jsx}.jsx)(${component},{leftIcon:${icon},keyboardShortcut:${shortcut},onClick:${open},children:${label}});${item}=[${item},(0,${jsx}.jsx)(${component},{leftIcon:${icon},onClick:window.__ANTICODEX_OPEN_MANAGER__,children:\`\\u7ba1\\u7406\`},\`anticodex-manager\`)];let ${account}=null;let ${logout};`;
+    if (replacement.length > codex2636Match[0].length) {
+      throw new Error(`Profile dropdown Codex 26.928 replacement grew: ${replacement.length} > ${codex2636Match[0].length}`);
+    }
+    return text.slice(0, codex2636Match.index)
+      + replacement
+      + " ".repeat(codex2636Match[0].length - replacement.length)
+      + text.slice(codex2636Match.index + codex2636Match[0].length);
+  }
+
   const modern = /let A;t\[27\]!==p\|\|t\[28\]!==v\?\(A=\(0,J\.jsx\)\(M,\{leftIcon:te,keyboardShortcut:v,onClick:p,children:ne\}\),t\[27\]=p,t\[28\]=v,t\[29\]=A\):A=t\[29\];let j;/;
   const modernMatch = modern.exec(text);
   if (modernMatch) {

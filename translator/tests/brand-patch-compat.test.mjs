@@ -200,11 +200,17 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
 
   assert.match(profileFinder, /webview\/assets\/app-initial-/);
   assert.match(profileFinder, /webview\/assets\/app-primary-/);
+  assert.match(profileFinder, /webview\/assets\/profile-dropdown-items-/);
+  assert.match(brandPatchCompatSource(), /oMa/);
   assert.match(modelFinder, /webview\/assets\/app-initial-/);
   assert.match(modelFinder, /const candidates = \[\]/);
   assert.match(modelFinder, /candidates\.length !== 1/);
   assert.match(modelFinder, /return candidates\[0\]/);
 });
+
+function brandPatchCompatSource() {
+  return readFileSync(new URL("../../scripts/brand-patch-compat.mjs", import.meta.url), "utf8");
+}
 
 test("fixed shell leaves native locale detection and language-source selection untouched", () => {
   const selectedBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";

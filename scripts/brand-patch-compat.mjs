@@ -124,6 +124,15 @@ export function patchAppRouteGate(text) {
   const source = String(text ?? "");
   if (source.includes("/*anticodex-app-route*/")) return source;
 
+  const currentRouteState = /(?:let|,)(?<target>[A-Za-z_$][\w$]*)=oMa\([\s\S]{0,8000}?\);(?<effect>\(0,[A-Za-z_$][\w$]*\.useEffect\)\(\(\)=>\{if\(!\k<target>\)return;)/;
+  const currentRouteMatch = currentRouteState.exec(source);
+  if (currentRouteMatch?.groups) {
+    const replacement = `/*anticodex-app-route*/let ${currentRouteMatch.groups.target}=\`app\`;${currentRouteMatch.groups.effect}`;
+    return source.slice(0, currentRouteMatch.index)
+      + padReplacement(currentRouteMatch[0], replacement)
+      + source.slice(currentRouteMatch.index + currentRouteMatch[0].length);
+  }
+
   const modernStart = source.indexOf("function dui({auth:e,codexFeatureAccess:t,backendOnboardingCompleted:n,");
   if (modernStart >= 0) {
     const modernHeaderEnd = source.indexOf("}){return", modernStart);
