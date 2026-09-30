@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -281,10 +281,12 @@ test("Manager saves provider settings and leaves native model selection to the c
 });
 
 test("CodexPlusPlus patch routes Anti-Codex model slots without a fixed-model environment override", () => {
-  const patch = readFileSync(
+  const patchPath = [
     join(root, "third_party", "codexplusplus", "patches", "0004-route-anticodex-model-slots.patch"),
-    "utf8",
-  );
+    join(root, "third_party", "codexplusplus", "patches", "0001-isolation-scope-Anti-Codex-companion-runtime.patch"),
+  ].find((candidate) => existsSync(candidate));
+  assert.ok(patchPath, "the active CodexPlusPlus patch inventory must contain the Anti-Codex relay selector");
+  const patch = readFileSync(patchPath, "utf8");
   assert.match(patch, /select_anticodex_relay_for_model/);
   assert.match(patch, /anticodex\/antigravity/);
   assert.match(patch, /anticodex\/third-party/);
