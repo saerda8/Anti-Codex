@@ -170,6 +170,113 @@ function patchMainSession(text) {
   return text.slice(0, match.index) + replacement + " ".repeat(match[0].length - replacement.length) + text.slice(match.index + match[0].length);
 }
 
+function findBalancedCallEnd(text, openParenIndex) {
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = openParenIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (char === "`" || char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (char === "(") depth += 1;
+    if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return -1;
+}
+
+function patchModelSwitchWarning(text) {
+  const marker = "/*anticodex-hide-model-switch-warning*/";
+  if (text.includes(marker)) return text;
+  const warningIndex = text.indexOf("composer.modelChangeDuringConversationWarning.toast");
+  if (warningIndex < 0) throw new Error("Model switch warning message was not found");
+  const infoPattern = /[A-Za-z_$][\w$]*\.get\([A-Za-z_$][\w$]*\)\.info\(/g;
+  let match = null;
+  for (const candidate of text.slice(0, warningIndex).matchAll(infoPattern)) {
+    match = candidate;
+  }
+  if (!match) throw new Error("Model switch warning toast call was not found");
+  const start = match.index;
+  const openParen = start + match[0].length - 1;
+  const end = findBalancedCallEnd(text, openParen);
+  if (end < 0) throw new Error("Model switch warning toast call was not balanced");
+  const original = text.slice(start, end);
+  const replacement = `${marker}void 0`;
+  if (replacement.length > original.length) throw new Error("Model switch warning replacement grew");
+  return text.slice(0, start) + replacement + " ".repeat(original.length - replacement.length) + text.slice(end);
+}
+
+function patchModelUpgradeBanner(text) {
+  const marker = "/*anticodex-model-upgrade-banner-hidden*/";
+  if (text.includes(marker)) return text;
+  const anchor = "composer.modelUpgradeBanner.introductionTitle";
+  const anchorIndex = text.indexOf(anchor);
+  if (anchorIndex < 0) {
+    throw new Error("Model upgrade banner messages were not found");
+  }
+  const functionPattern = /function ([A-Za-z_$][\w$]*)\([^)]*\)\{/g;
+  const starts = [...text.slice(0, anchorIndex).matchAll(functionPattern)];
+  let selected = null;
+  for (let index = starts.length - 1; index >= 0; index -= 1) {
+    const match = starts[index];
+    const start = match.index;
+    const openBrace = start + match[0].length - 1;
+    let depth = 0;
+    let quote = "";
+    let escaped = false;
+    let end = -1;
+    for (let cursor = openBrace; cursor < text.length; cursor += 1) {
+      const char = text[cursor];
+      if (quote) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === quote) quote = "";
+        continue;
+      }
+      if (char === "`" || char === "'" || char === '"') {
+        quote = char;
+        continue;
+      }
+      if (char === "{") depth += 1;
+      else if (char === "}" && --depth === 0) {
+        end = cursor + 1;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    const candidate = text.slice(start, end);
+    if (candidate.includes(anchor) &&
+        candidate.includes("composer.modelUpgradeBanner.switchNow") &&
+        candidate.includes("composer.modelUpgradeBanner.dismiss")) {
+      selected = { match, start, end, candidate };
+      break;
+    }
+  }
+  if (!selected) throw new Error("Model upgrade banner function boundary was not found");
+  const functionName = selected.match[1];
+  const original = selected.candidate;
+  const replacement = `${marker}function ${functionName}(){return null}`;
+  if (replacement.length > original.length) throw new Error("Model upgrade banner replacement grew");
+  return text.slice(0, selected.start)
+    + replacement
+    + " ".repeat(original.length - replacement.length)
+    + text.slice(selected.end);
+}
+
 function patchWindowsCloseBehavior(text) {
   const search = "if(process.platform===`win32`&&f===`local`&&!this.isAppQuitting&&this.options.canHideLastLocalWindowToTray?.()===!0&&!t){e.preventDefault(),j.hide();return}";
   const replacement = "if(process.platform===`win32`&&f===`local`&&!this.isAppQuitting&&this.options.canHideLastLocalWindowToTray?.()===!0&&!t){n.app.quit();return}";
@@ -467,6 +574,30 @@ function findMainSessionPatch(fd, header, dataOffset) {
     }
   }
   throw new Error("Could not find Codex session title bundle under .vite/build/*.js");
+}
+
+function findModelSwitchWarningPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/app-primary-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (text.includes("composer.modelChangeDuringConversationWarning.toast")) {
+      return [rel, patchModelSwitchWarning];
+    }
+  }
+  throw new Error("Could not find model switch warning bundle");
+}
+
+function findModelUpgradeBannerPatch(fd, header, dataOffset) {
+  for (const [rel, entry] of walkFiles(header)) {
+    if (!rel.startsWith("webview/assets/app-primary-") || !rel.endsWith(".js")) continue;
+    const { buf } = readFileFromAsar(fd, entry, dataOffset);
+    const text = buf.toString("utf8");
+    if (text.includes("composer.modelUpgradeBanner.introductionTitle")) {
+      return [rel, patchModelUpgradeBanner];
+    }
+  }
+  throw new Error("Could not find model upgrade banner bundle");
 }
 
 function findWindowsClosePatch(fd, header, dataOffset) {
@@ -884,6 +1015,8 @@ const patchSpecs = [
   ["app-name", () => findBootstrapAppNamePatch(fd, header, dataOffset)],
   ["app-user-model-id", () => findBootstrapAppUserModelIdPatch(fd, header, dataOffset)],
   ["session-title", () => findMainSessionPatch(fd, header, dataOffset)],
+  ["model-switch-warning", () => findModelSwitchWarningPatch(fd, header, dataOffset)],
+  ["model-upgrade-banner", () => findModelUpgradeBannerPatch(fd, header, dataOffset)],
   ["windows-close", () => findWindowsClosePatch(fd, header, dataOffset)],
   ["locale-info", () => findLocaleInfoPatch(fd, header, dataOffset)],
   ["startup-mcp-config-reload", () => findStartupMcpConfigReloadPatch(fd, header, dataOffset)],
@@ -917,6 +1050,8 @@ const fixedShellCriticalPatchNames = new Set([
   "app-name",
   "app-user-model-id",
   "session-title",
+  "model-switch-warning",
+  "model-upgrade-banner",
   "startup-mcp-config-reload",
   "app-server-managed-session-flags",
   "config-write",

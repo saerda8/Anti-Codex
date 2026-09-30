@@ -208,6 +208,21 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
   assert.match(modelFinder, /return candidates\[0\]/);
 });
 
+test("hides both model-switch notices without replacing the model-selection path", () => {
+  const switchPatch = brandPatcherSource.match(/function patchModelSwitchWarning[\s\S]*?(?=function patchWindowsCloseBehavior)/)?.[0] ?? "";
+  const upgradePatch = brandPatcherSource.match(/function patchModelUpgradeBanner[\s\S]*?(?=function patchWindowsCloseBehavior)/)?.[0] ?? "";
+  assert.match(switchPatch, /composer\.modelChangeDuringConversationWarning\.toast/);
+  assert.match(switchPatch, /anticodex-hide-model-switch-warning/);
+  assert.match(switchPatch, /findBalancedCallEnd/);
+  assert.match(upgradePatch, /composer\.modelUpgradeBanner\.introductionTitle/);
+  assert.match(upgradePatch, /composer\.modelUpgradeBanner\.switchNow/);
+  assert.match(upgradePatch, /composer\.modelUpgradeBanner\.dismiss/);
+  assert.match(upgradePatch, /anticodex-model-upgrade-banner-hidden/);
+  const criticalBlock = brandPatcherSource.match(/const fixedShellCriticalPatchNames = new Set\(\[[\s\S]*?\]\);/)?.[0] ?? "";
+  assert.match(criticalBlock, /"model-switch-warning"/);
+  assert.match(criticalBlock, /"model-upgrade-banner"/);
+});
+
 function brandPatchCompatSource() {
   return readFileSync(new URL("../../scripts/brand-patch-compat.mjs", import.meta.url), "utf8");
 }
