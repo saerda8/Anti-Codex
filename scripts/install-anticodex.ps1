@@ -39,6 +39,8 @@ $fixedShellCriticalPatches = @(
     "app-name",
     "app-user-model-id",
     "session-title",
+    "model-switch-warning",
+    "model-upgrade-banner",
     "startup-mcp-config-reload",
     "app-server-managed-session-flags",
     "config-write",

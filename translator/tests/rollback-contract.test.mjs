@@ -203,7 +203,11 @@ function runRollbackHostPatchMatrix() {
     "local-model-availability",
   ];
   const revision6 = [...revision4, "crash-recovery-page"];
-  const current = revision6.filter((name) => name !== "primary-window-restore-repaint");
+  const current = [
+    ...revision6.filter((name) => name !== "primary-window-restore-repaint"),
+    "model-switch-warning",
+    "model-upgrade-banner",
+  ];
   const previous = revision4.filter((name) => ![
     "app-server-managed-session-flags",
     "settings-external-links",
@@ -615,6 +619,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
     "app-name",
     "app-user-model-id",
     "session-title",
+    "model-switch-warning",
+    "model-upgrade-banner",
     "startup-mcp-config-reload",
     "app-server-managed-session-flags",
     "config-write",
@@ -830,8 +836,8 @@ function Get-AsarError([string]$Path, [int]$ExpectedConfigWrite, [int]$ExpectedD
         return [string]$_.Exception.Message
     }
 }
-$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
-$revision6 = @($current + "primary-window-restore-repaint")
+$current = @("package-json","webview-html-title","app-name","app-user-model-id","session-title","model-switch-warning","model-upgrade-banner","startup-mcp-config-reload","app-server-managed-session-flags","config-write","auth-requirement","app-route-gate","profile-dropdown-settings","settings-external-links","crash-recovery-page","browser-window-icon","windows-tray-icon","local-model-availability")
+$revision6 = @($current | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") }) + "primary-window-restore-repaint"
 $revision4 = @($revision6 | Where-Object { $_ -ne "crash-recovery-page" })
 $previous = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "settings-external-links") })
 $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-server-managed-session-flags", "config-write", "settings-external-links") })

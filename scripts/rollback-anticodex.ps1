@@ -668,6 +668,8 @@ function Test-AntiCodexHost {
         "app-name",
         "app-user-model-id",
         "session-title",
+        "model-switch-warning",
+        "model-upgrade-banner",
         "startup-mcp-config-reload",
         "app-server-managed-session-flags",
         "config-write",
@@ -699,7 +701,7 @@ function Test-AntiCodexHost {
     }
     $hostPatchRevision = [int]$hostPatchRevisionText
     $expectedCriticalPatches = @($fixedShellCriticalPatches)
-    $revision6CriticalPatches = @($fixedShellCriticalPatches + "primary-window-restore-repaint")
+    $revision6CriticalPatches = @($fixedShellCriticalPatches | Where-Object { $_ -notin @("model-switch-warning", "model-upgrade-banner") }) + "primary-window-restore-repaint"
     $revision4CriticalPatches = @(
         "package-json",
         "webview-html-title",
