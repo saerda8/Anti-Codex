@@ -1193,6 +1193,7 @@ test("copied client environment removes original Codex pointers and provider sec
   );
   const child = buildCopiedClientEnvironment(plan, supervisorChild);
   assert.equal(child.CODEX_HOME, plan.paths.codexHome);
+  assert.equal(child.CODEX_ELECTRON_USER_DATA_PATH, plan.paths.electronUserData);
   assert.equal(child.CODEX_PLUS_FIXED_MODEL, undefined);
   assert.equal(child.RUST_LOG, "info");
   assert.equal(child.CODEX_INTERNAL_APP_SERVER_REMOTE_CONTROL_DISABLED, "1");

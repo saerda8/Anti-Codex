@@ -1435,6 +1435,7 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
 
 export function buildCopiedClientEnvironment(plan, baseEnvironment = process.env) {
   const environment = buildSupervisorChildEnvironment(plan, baseEnvironment);
+  environment.CODEX_ELECTRON_USER_DATA_PATH = plan.paths.electronUserData;
   for (const name of [
     "CODEX_PLUS_STATE_DIR",
     "CODEX_PLUS_APP_EXECUTABLE",
