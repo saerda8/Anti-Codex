@@ -221,10 +221,23 @@ export function normalizeTools(tools = []) {
       name,
       description: String(value?.description ?? ""),
       inputSchema: value?.parameters && typeof value.parameters === "object"
-        ? value.parameters
+        ? normalizeToolSchema(value.parameters)
         : { type: "object", properties: {}, additionalProperties: true },
     }];
   });
+}
+
+function normalizeToolSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(normalizeToolSchema);
+  if (!schema || typeof schema !== "object") return schema;
+  const normalized = Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => [key, normalizeToolSchema(value)]),
+  );
+  if (Array.isArray(normalized.enum)) {
+    normalized.enum = normalized.enum.filter((value) => value !== "");
+    if (normalized.enum.length === 0) delete normalized.enum;
+  }
+  return normalized;
 }
 
 function withAntigravityToolAliases(tools) {

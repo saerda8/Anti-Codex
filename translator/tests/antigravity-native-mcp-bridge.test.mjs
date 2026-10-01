@@ -6,14 +6,27 @@ import {
   normalizeTools,
 } from "../antigravity-native-mcp-bridge.mjs";
 
-test("normalizeTools maps Chat function schemas and deduplicates names", () => {
+test("normalizeTools maps Chat function schemas, removes empty enum values, and deduplicates names", () => {
   assert.deepEqual(normalizeTools([
-    { type: "function", function: { name: "read_file", description: "Read", parameters: { type: "object" } } },
+    {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "Read",
+        parameters: {
+          type: "object",
+          properties: { allowAsync: { type: "string", enum: ["", "async"] } },
+        },
+      },
+    },
     { type: "function", function: { name: "read_file", parameters: { type: "object" } } },
   ]), [{
     name: "read_file",
     description: "Read",
-    inputSchema: { type: "object" },
+    inputSchema: {
+      type: "object",
+      properties: { allowAsync: { type: "string", enum: ["async"] } },
+    },
   }]);
 });
 
