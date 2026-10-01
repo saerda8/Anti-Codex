@@ -239,7 +239,7 @@ const projectTaskModes = new Set([
   "agentic-step-flow",
 ]);
 const requiresProjectChat = projectTaskModes.has(taskMode);
-const projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
+let projectChatLabel = String(args.get("--project-label") || "Anti-Codex");
 const projectChatRoot = args.get("--project-root") ? resolve(String(args.get("--project-root"))) : "";
 const allowWorkspaceRootMutation = args.has("--allow-workspace-root-mutation");
 const workspaceCommand = String(args.get("--workspace-command") || "").trim().toLowerCase();
@@ -4581,6 +4581,19 @@ async function activateNativeProjectRoot(ws, root, label) {
   if (savedInfo.activeRoot) {
     const visible = await waitForVisibleProjectLabel(ws, label, 2_000);
     if (visible.matched !== true) {
+      const folderLabel = String(root).split(/[\\/]+/).filter(Boolean).pop() || label;
+      const folderVisible = await waitForVisibleProjectLabel(ws, folderLabel, 1_000);
+      if (folderVisible.matched === true) {
+        projectChatLabel = folderLabel;
+        return {
+          root,
+          label: folderLabel,
+          bridge: { ok: true, mode: "already-active-folder-label" },
+          trustEvidence: { handled: false, reason: "workspace_root_already_active" },
+          renameBridge: { ok: true, mode: "already-active-folder-label" },
+          selector: folderVisible,
+        };
+      }
       const savedRootJson = JSON.stringify(savedInfo.savedRoot || root);
       const rootsJson = JSON.stringify([savedInfo.savedRoot || root]);
       const labelsJson = JSON.stringify({ [savedInfo.savedRoot || root]: label });
@@ -4601,7 +4614,12 @@ async function activateNativeProjectRoot(ws, root, label) {
       const bridge = result.result?.result?.value || null;
       if (bridge?.ok !== true) throw new Error(`native project re-selection failed: ${bridge?.reason || "unknown"}`);
       const trustEvidence = await acceptNativeTrustFolderDialog(ws, root);
-      const selector = await waitForVisibleProjectLabel(ws, label);
+      let selector = await waitForVisibleProjectLabel(ws, label);
+      if (selector.matched !== true) {
+        const folderLabel = String(root).split(/[\\/]+/).filter(Boolean).pop() || label;
+        selector = await waitForVisibleProjectLabel(ws, folderLabel);
+        if (selector.matched === true) projectChatLabel = folderLabel;
+      }
       if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
       return {
         root,
@@ -4664,7 +4682,12 @@ async function activateNativeProjectRoot(ws, root, label) {
   if (bridge?.ok !== true) throw new Error(`native project activation failed: ${bridge?.reason || "unknown"}`);
   const trustEvidence = await acceptNativeTrustFolderDialog(ws, root);
   const renameBridge = { ok: true, mode: "workspace-root-options" };
-  const selector = await waitForVisibleProjectLabel(ws, label);
+  let selector = await waitForVisibleProjectLabel(ws, label);
+  if (selector.matched !== true) {
+    const folderLabel = String(root).split(/[\\/]+/).filter(Boolean).pop() || label;
+    selector = await waitForVisibleProjectLabel(ws, folderLabel);
+    if (selector.matched === true) projectChatLabel = folderLabel;
+  }
   if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
   return { root, label, bridge, trustEvidence, renameBridge, selector };
 }
