@@ -166,6 +166,50 @@ test("streams standard Chat chunks followed by exactly one DONE marker", async (
   }
 });
 
+test("maps unsupported location only after an SSE response has started", async () => {
+  const locationError = Object.assign(new Error("User location is not supported in this region."), { statusCode: 400 });
+  const client = fakeClient([
+    { type: "ready" },
+    { type: "error", error: locationError },
+  ]);
+  const server = await createAntigravityChatServer({ adapter: adapterFor(client) });
+  try {
+    const streamResponse = await authorizedFetch(server, "/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body({ stream: true })),
+    });
+    assert.equal(streamResponse.status, 200);
+    const lines = (await streamResponse.text()).split(/\r?\n/).filter((line) => line.startsWith("data: "));
+    assert.equal(lines.filter((line) => line === "data: [DONE]").length, 1);
+    const events = lines.filter((line) => line !== "data: [DONE]").map((line) => JSON.parse(line.slice(6)));
+    assert.equal(events[0].choices[0].delta.role, "assistant");
+    assert.equal(events[0].choices[0].finish_reason, null);
+    assert.deepEqual(events.at(-1).error, {
+      message: "User location is not supported in this region.",
+      type: "invalid_request_error",
+      code: "invalid_prompt",
+    });
+    assert.equal(events.some((event) => event.choices?.some((choice) => choice.finish_reason !== null)), false);
+
+    const jsonResponse = await authorizedFetch(server, "/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body()),
+    });
+    assert.equal(jsonResponse.status, 400);
+    assert.deepEqual(await jsonResponse.json(), {
+      error: {
+        message: "User location is not supported in this region.",
+        type: "invalid_request_error",
+        code: "unsupported_location",
+      },
+    });
+  } finally {
+    await server.close();
+  }
+});
+
 test("commits streaming headers after Cascade acceptance without waiting for the first model token", async () => {
   let releaseFirstToken;
   const firstToken = new Promise((resolve) => { releaseFirstToken = resolve; });

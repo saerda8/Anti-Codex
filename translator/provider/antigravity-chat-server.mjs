@@ -111,7 +111,10 @@ export async function createAntigravityChatServer(options = {}) {
     } catch (error) {
       if (controller.signal.aborted || response.destroyed) return;
       const mapped = error instanceof ChatAdapterError ? error : mapAntigravityError(error);
-      const payload = openAiError(mapped.message, mapped.code, mapped.type);
+      const code = response.headersSent && mapped.code === "unsupported_location"
+        ? "invalid_prompt"
+        : mapped.code;
+      const payload = openAiError(mapped.message, code, mapped.type);
       if (!response.headersSent) {
         finished = true;
         sendJson(response, mapped.statusCode, payload);

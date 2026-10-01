@@ -62,6 +62,13 @@ test("streamed payment failures become one terminal quota event", () => {
   );
 });
 
+test("streamed provider errors preserve their non-retryable error code", () => {
+  assert.match(patch23, /extract_chat_sse_error\(&chunk\)/);
+  assert.match(patch23, /let \(message, error_type, error_code\) = extract_chat_sse_error\(&chunk\)/);
+  assert.match(patch23, /failed_into\(output, message, error_type, error_code\)/);
+  assert.match(patch23, /error\.get\("code"\)/);
+});
+
 test("upstream stream inactivity terminates every helper streaming path without a false success", () => {
   assert.match(patch19, /UPSTREAM_STREAM_IDLE_TIMEOUT/);
   assert.match(patch19, /Duration::from_secs\(120\)/);

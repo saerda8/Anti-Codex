@@ -10805,7 +10805,7 @@ diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-co
 index f6ab1c8..2d54a3d 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
-@@ -1,5831 +1,8346 @@
+@@ -1,5831 +1,8350 @@
 -//! Codex Responses API 与 OpenAI Chat Completions 的本地协议转换。
 -//!
 -//! Codex Chat 与 Responses 协议之间的转换实现。
@@ -18259,8 +18259,9 @@ index f6ab1c8..2d54a3d 100644
 +            return;
 +        };
 +        if event_name.as_deref() == Some("error") || chunk.get("error").is_some() {
-+            let (message, error_type) = extract_chat_sse_error(&chunk);
-+            self.state.failed_into(output, message, error_type, None);
++            let (message, error_type, error_code) = extract_chat_sse_error(&chunk);
++            self.state
++                .failed_into(output, message, error_type, error_code);
 +            self.failed = true;
 +            return;
 +        }
@@ -21066,7 +21067,7 @@ index f6ab1c8..2d54a3d 100644
 +    ThinkPrefixDecision::Text
 +}
 +
-+fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
++fn extract_chat_sse_error(value: &Value) -> (String, Option<String>, Option<String>) {
 +    let error = value.get("error").unwrap_or(value);
 +    let message = error
 +        .as_str()
@@ -21081,10 +21082,13 @@ index f6ab1c8..2d54a3d 100644
 +        .unwrap_or_else(|| error.to_string());
 +    let error_type = error
 +        .get("type")
-+        .or_else(|| error.get("code"))
 +        .and_then(Value::as_str)
 +        .map(ToString::to_string);
-+    (message, error_type)
++    let error_code = error
++        .get("code")
++        .and_then(Value::as_str)
++        .map(ToString::to_string);
++    (message, error_type, error_code)
 +}
 +
 +fn http_status_line(status: u16) -> String {

@@ -5,23 +5,23 @@
     "version":  "1.4.0",
     "tag":  "v1.4.0",
     "upstreamCommit":  "27cdd21f06b59e6b71e0455672e20ed96cbd41de",
-    "isolationPatchCommit":  "8b57d28e68ad2476a596c96e0427cfc3df7167f9",
-    "patchCommit":  "8b57d28e68ad2476a596c96e0427cfc3df7167f9",
+    "isolationPatchCommit":  "83e54c40cef104556425ddebe3ccd1b2d89e11c4",
+    "patchCommit":  "83e54c40cef104556425ddebe3ccd1b2d89e11c4",
     "patches":  [
                     {
                         "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-                        "sha256":  "9bbe85eb87dcd017d45d32e0cc2eb71ab403b551e79f2f982358f27549633d5f",
+                        "sha256":  "d41d7ab739a6848fd67d6c231eae7e877b38c68cdfdb77a8db1b30086123ce77",
                         "scope":  "complete Anti-Codex v1.4 compatibility adapter: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy and stream safeguards; historical patches are folded into this cumulative patch because v1.4 changed their contexts"
                     }
                 ],
     "verification":  {
-                         "patchReplay":  "1 project patches replayed without automatic conflict resolution; head 8b57d28e68ad2476a596c96e0427cfc3df7167f9; tree 8c67815c84dac2a8931651d770c4e5adf0dca93b",
+                         "patchReplay":  "1 project patches replayed without automatic conflict resolution; head 83e54c40cef104556425ddebe3ccd1b2d89e11c4; tree 2adeb3ea0dcee1e29dd79b7fc5af7cd52588589f",
                          "sourceIsolationAudit":  "passed",
                          "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
                          "cargoFmt":  "passed",
                          "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
                          "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:7053a56acf9f86a7301878bd94e112117257c056f404786de5e7cec24e28ef18",
+                         "launcherReleaseBuild":  "sha256:6d1b2662280e3fed96c78ae3b8f10d1a263f34b93d6e1cbcfb378faab7704ffd",
                          "runtimeIsolation":  "candidate only; not activated"
                      }
 }
