@@ -416,7 +416,10 @@ function runUiTurn({
   const payload = parseJsonOutput(child.stdout);
   const history = settleMarkerHistoryEvidence(marker, artifactDir, 5_000, { allowDuplicateCommand });
   const modelProof = buildTurnModelProof(payload || {}, model);
-  const workspaceCwdMatches = workspacePathsEqual(history.sessionCwd, trustedProjectRoot);
+  const expectedWorkspaceCwd = artifactDir && existsSync(artifactDir)
+    ? resolve(artifactDir)
+    : trustedProjectRoot;
+  const workspaceCwdMatches = workspacePathsEqual(history.sessionCwd, expectedWorkspaceCwd);
   const turn = {
     journeyId,
     turnId,
@@ -443,7 +446,7 @@ function runUiTurn({
     reconnectOutcome: payload?.reconnectOutcome || null,
     sameChatEvidence: payload?.sameChatEvidence || null,
     projectRootEvidence: payload?.projectRootEvidence || null,
-    expectedWorkspaceCwd: trustedProjectRoot,
+    expectedWorkspaceCwd,
     workspaceCwdMatches,
     history,
   };
