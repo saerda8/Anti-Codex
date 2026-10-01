@@ -4579,6 +4579,33 @@ async function activateNativeProjectRoot(ws, root, label) {
     throw new Error(`workspace_root_not_active: ${root}`);
   }
   if (savedInfo.activeRoot) {
+    const visible = await waitForVisibleProjectLabel(ws, label, 2_000);
+    if (visible.matched !== true) {
+      const savedRootJson = JSON.stringify(savedInfo.savedRoot || root);
+      const result = await ws.send("Runtime.evaluate", {
+        expression: `(async () => {
+          const bridge = window.electronBridge?.sendMessageFromView;
+          if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
+          await bridge({ type: 'electron-pick-workspace-root-option', root: ${savedRootJson} });
+          return { ok: true, mode: 'reselect-active-root', root: ${savedRootJson} };
+        })()`,
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      const bridge = result.result?.result?.value || null;
+      if (bridge?.ok !== true) throw new Error(`native project re-selection failed: ${bridge?.reason || "unknown"}`);
+      const trustEvidence = await acceptNativeTrustFolderDialog(ws, root);
+      const selector = await waitForVisibleProjectLabel(ws, label);
+      if (selector.matched !== true) throw new Error(`native project label did not become visible: ${label}`);
+      return {
+        root,
+        label,
+        bridge,
+        trustEvidence,
+        renameBridge: { ok: true, mode: "reselect-active-root" },
+        selector,
+      };
+    }
     return {
       root,
       label: savedInfo.label || label,
