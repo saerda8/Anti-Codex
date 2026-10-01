@@ -39,6 +39,20 @@ function Get-AntigravityMainProcess {
     }
 }
 
+function Set-AntigravityProxyEnvironment {
+    $settings = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
+    if (-not $settings -or [int]$settings.ProxyEnable -ne 1) { return }
+    $raw = [string]$settings.ProxyServer
+    if ([string]::IsNullOrWhiteSpace($raw)) { return }
+    $proxy = $raw
+    if ($raw -match '(?i)(?:^|;)https?=([^;]+)') { $proxy = $Matches[1] }
+    $proxy = $proxy.Trim()
+    if ($proxy -notmatch '^https?://') { $proxy = "http://$proxy" }
+    $env:HTTP_PROXY = $proxy
+    $env:HTTPS_PROXY = $proxy
+    $env:ALL_PROXY = $proxy
+}
+
 function Start-AntigravityDesktop {
     param(
         [Parameter(Mandatory = $true)][string]$ExecutablePath,
@@ -56,6 +70,7 @@ function Start-AntigravityDesktop {
     $stdoutPath = Join-Path $resolvedStateRoot "antigravity-desktop.out.log"
     $stderrPath = Join-Path $resolvedStateRoot "antigravity-desktop.err.log"
     Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    Set-AntigravityProxyEnvironment
     return Start-Process -FilePath $ExecutablePath `
         -RedirectStandardOutput $stdoutPath `
         -RedirectStandardError $stderrPath `

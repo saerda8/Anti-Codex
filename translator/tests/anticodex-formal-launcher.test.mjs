@@ -414,6 +414,10 @@ test("host sync accepts only a stable visible Anti-Codex while native Codex is u
 
 test("launcher gives an auto-started Antigravity desktop durable output handles", () => {
   assert.match(antigravityDesktop, /function Start-AntigravityDesktop/);
+  assert.match(antigravityDesktop, /function Set-AntigravityProxyEnvironment/);
+  assert.match(antigravityDesktop, /HTTP_PROXY/);
+  assert.match(antigravityDesktop, /HTTPS_PROXY/);
+  assert.match(antigravityDesktop, /Set-AntigravityProxyEnvironment/);
   assert.match(antigravityDesktop, /antigravity-desktop\.out\.log/);
   assert.match(antigravityDesktop, /antigravity-desktop\.err\.log/);
   assert.match(antigravityDesktop, /Start-Process -FilePath \$ExecutablePath[\s\S]*?-RedirectStandardOutput \$stdoutPath[\s\S]*?-RedirectStandardError \$stderrPath/);

@@ -352,7 +352,8 @@ function Invoke-ResumeDesktop([object]$InputValue) {
     if (Get-AntigravityMainProcess -ExecutablePath $path) {
         throw "Antigravity Desktop is already running; resume was refused."
     }
-    Start-Process -FilePath $path -WindowStyle Hidden -PassThru | Out-Null
+    $started = Start-AntigravityDesktop -ExecutablePath $path
+    if (-not $started) { throw "Antigravity Desktop could not be started." }
     $stable = Wait-AntigravityDesktopStable -ExecutablePath $path -TimeoutSeconds 50 -StableSeconds 3
     if (-not $stable.Stable) { throw "Antigravity Desktop did not become stable." }
     Write-JsonResult ([pscustomobject]@{ ok = $true; launched = $true })

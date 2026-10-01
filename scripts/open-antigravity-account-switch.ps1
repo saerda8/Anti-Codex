@@ -50,7 +50,7 @@ if ($existing) {
     exit 0
 }
 
-$process = Start-Process -FilePath $desktopPath -WindowStyle Normal -PassThru
+$process = Start-AntigravityDesktop -ExecutablePath $desktopPath
 $stable = Wait-AntigravityDesktopStable `
     -ExecutablePath $desktopPath `
     -TimeoutSeconds 50 `
