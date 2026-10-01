@@ -21,6 +21,7 @@ const workerToolSuffix = "_start_implementation";
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
 const localWebMcpName = "anticodex-web";
+const antiCodexExcludedMcpNames = new Set(["cua_repl"]);
 
 function splitTomlBlocks(text) {
   const blocks = [];
@@ -259,6 +260,7 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
   const targetWorkerNames = workerServerNames(targetBlocks, { allowGeneratedHttp: true });
   const sourceShared = sourceBlocks
     .filter(isShared)
+    .filter((block) => !antiCodexExcludedMcpNames.has(mcpServerName(block)))
     .filter((block) => !isWorkerBlock(block, sourceWorkerNames))
     .filter((block) => !isWorkerBlock(block, targetWorkerNames))
     .map(normalizeWindowsMcpShim)

@@ -304,6 +304,28 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   assert.match(synchronizer, /start_implementation/);
 });
 
+test("shared config sync excludes the native CUA server from Anti-Codex", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const target = path.join(dir, "anticodex.toml");
+  fs.writeFileSync(source, [
+    "[mcp_servers.cua_repl]",
+    'command = "cua_repl.exe"',
+    "args = []",
+    "",
+    "[mcp_servers.node_repl]",
+    'command = "node_repl.exe"',
+    "args = []",
+    "",
+  ].join("\n"));
+  fs.writeFileSync(target, "model = \"anticodex\"\n");
+
+  execFileSync(process.execPath, [syncSharedConfig, source, target]);
+  const next = fs.readFileSync(target, "utf8");
+  assert.doesNotMatch(next, /\[mcp_servers\.cua_repl\]/);
+  assert.match(next, /\[mcp_servers\.node_repl\]/);
+});
+
 test("MCP verifier rejects development workers inside the Anti-Codex product config", () => {
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
   assert.doesNotMatch(verifier, /deepseek-external/);
