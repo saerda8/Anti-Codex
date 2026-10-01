@@ -12,12 +12,26 @@ $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "anticodex-real-traffic-lock.psm1") -Force
 
 if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+    $fixedRouteStatusPath = Join-Path $StateRoot "fixed-route-status.json"
+    try {
+        $fixedRouteStatus = Get-Content -Raw -LiteralPath $fixedRouteStatusPath | ConvertFrom-Json
+        $proxyPort = [int]$fixedRouteStatus.ports.proxy
+        if ($proxyPort -gt 0) { $BaseUrl = "http://127.0.0.1:$proxyPort" }
+    } catch {}
+    if (-not $BaseUrl) { $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1") }
 }
 
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
 $model = if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }
+$authPath = Join-Path $StateRoot "codex-home-deepseek-app\auth.json"
+$authToken = ""
+if (Test-Path -LiteralPath $authPath -PathType Leaf) {
+    try { $authToken = [string]((Get-Content -Raw -LiteralPath $authPath | ConvertFrom-Json).OPENAI_API_KEY) } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($authToken)) {
+    throw "Anti-Codex local proxy auth token is unavailable."
+}
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "anticodex-mini-tool-$stamp"
@@ -59,6 +73,7 @@ function Invoke-AntiCodexResponse {
     return Invoke-RestMethod `
         -Uri "$BaseUrl/v1/responses" `
         -Method Post `
+        -Headers @{ Authorization = "Bearer $authToken" } `
         -ContentType "application/json; charset=utf-8" `
         -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
         -TimeoutSec $TimeoutSec `
@@ -155,7 +170,7 @@ console.log(JSON.stringify({ lines, words, chars: input.length, marker: "$marker
         model = $model
         stream = $false
         store = $true
-        tool_choice = "required"
+        tool_choice = "auto"
         tools = @($miniToolDef)
         input = @(@{
             type = "message"
