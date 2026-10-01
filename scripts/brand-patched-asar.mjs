@@ -152,6 +152,9 @@ function patchBootstrapAppName(text) {
 }
 
 function patchMainSession(text) {
+  // Newer Codex bundles derive the window title directly from Electron's
+  // product name. The app-name patch already changes that value to Anti-Codex.
+  if (/title:[\w$.]+\.app\.getName\(\)/.test(text)) return text;
   if (hasProductNameDrivenSessionTitle(text)) {
     return patchProductNameDrivenSessionTitle(text);
   }
@@ -569,6 +572,7 @@ function findMainSessionPatch(fd, header, dataOffset) {
     const text = buf.toString("utf8");
     if (/var\s+[\w$]+=`(?:Codex|DeepCodex|Anti-Codex)`;function\s+[\w$]+\(/.test(text) ||
         /title:[\w$]+\?\?[\w$]+\.app\.getName\(\)/.test(text) ||
+        /title:[\w$.]+\.app\.getName\(\)/.test(text) ||
         hasProductNameDrivenSessionTitle(text)) {
       return [rel, patchMainSession];
     }

@@ -454,6 +454,7 @@ test("preserves the Codex 26.901 app-server working directory while injecting ma
 
 const currentAppRouteFixture = "function lwo(){let e=(0,uwo.c)(15),t=hb(Q),n=rT(),r=UR(),i=Wjn(),x=nwo({auth:r,codexFeatureAccess:i,backendOnboardingCompleted:!0,isFinalStepLoading:!1,shouldShowFinalStep:!1,forcedOverride:null,isOnboardingContextFetched:!0,isOnboardingContextLoading:!1,projectlessOnboardingCompleted:!0,workspaceRootsData:null,workspaceRootsIsLoading:!1});(0,dwo.useEffect)(()=>{if(!x)return;let e=x===`app`?`app`:`onboarding`;U.dispatchMessage(`electron-set-window-mode`,{mode:e})},[x]);let w=n.pathname,T=!1;{let t=XCo({target:x,path:w,isOnboardingPath:T});if(t!=null)return(0,fwo.jsx)(oT,{to:t,replace:!0})}return(0,fwo.jsx)(sT,{})}";
 const currentCodexRouteFixture = "function app(){let D=data,O=forced?null:state,k=oMa({auth:e,codexFeatureAccess:t});(0,sX.useEffect)(()=>{if(!k)return;let e=k===`app`?`app`:`onboarding`},[k]);return k}";
+const reorderedCodexRouteFixture = "function app(){let O=forced?null:state,k=jja({gatewayOAuthLoginPending:l!=null,gatewayOAuthReadiness:u,auth:r,codexFeatureAccess:d,backendOnboardingCompleted:m?.desktop_onboarding_completed_at!=null,forcedOverride:O,isOnboardingContextFetched:h,isOnboardingContextLoading:g,projectlessOnboardingCompleted:v,workspaceRootsData:D,workspaceRootsIsLoading:C&&w.isPending,workspaceRootsTimedOut:b});(0,LX.useEffect)(()=>{if(!k)return;let e=k===`app`?`app`:`onboarding`;Kd.dispatchMessage(`electron-set-window-mode`,e===`onboarding`?{mode:e}:{mode:e})},[k]);let M=n.pathname,t=Tja({target:k,path:M});return t}";
 
 test("forces the Codex 26.901 app route target to the local app", () => {
   const patched = brandPatchCompat.patchAppRouteGate(currentAppRouteFixture);
@@ -469,6 +470,22 @@ test("forces the 26.928 route state without corrupting the surrounding let decla
   assert.equal(patched.length, currentCodexRouteFixture.length);
   assert.match(patched, /O=forced\?null:state;\/\*anticodex-app-route\*\/let k=`app`;/);
   assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
+});
+
+test("forces the 26.928.3736 route when gateway fields precede auth", () => {
+  const patched = brandPatchCompat.patchAppRouteGate(reorderedCodexRouteFixture);
+  assert.equal(patched.length, reorderedCodexRouteFixture.length);
+  assert.match(patched, /anticodex-app-route.*k=`app`/);
+  assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
+});
+
+test("accepts an already branded modern recovery page after a partial transaction", () => {
+  const modern = [
+    "function mwr({title:e=(0,J.jsx)(X,{id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`}),description:t=(0,J.jsx)(`p`,{children:`Try again or update ChatGPT if this keeps happening`}),actions:n}){return n}",
+    "function CRs(){return(0,J.jsx)(X,{id:`appServerCrash.feedbackGuidance`,defaultMessage:`Send feedback`})}",
+  ].join("");
+  assert.equal(brandPatchCompat.hasCrashRecoveryPageSignature(modern), true);
+  assert.equal(brandPatchCompat.patchCrashRecoveryPage(modern), modern);
 });
 
 test("fails closed when app-server spawn anchors are missing or repeated", () => {

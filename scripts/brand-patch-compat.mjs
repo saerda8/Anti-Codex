@@ -169,8 +169,18 @@ export function patchAppRouteGate(text) {
     "g",
   );
   const matches = allMatches(source, currentPattern);
-  if (matches.length !== 1) throw new Error("Expected exactly one supported webview app route gate");
-  const match = matches[0];
+  let match = matches[0];
+  if (matches.length !== 1) {
+    const reorderedPattern = new RegExp(
+      String.raw`(?<target>${IDENTIFIER_SOURCE})=(?<gate>${IDENTIFIER_SOURCE})\(\{(?=[^{}]{0,1800}?\bauth:)(?=[^{}]{0,1800}?\bcodexFeatureAccess:)(?=[^{}]{0,1800}?\bworkspaceRootsIsLoading:)[^{}]{1,1800}\}\)(?=;\(0,${IDENTIFIER_SOURCE}\.useEffect\)\(\(\)=>\{if\(!\k<target>\)return;)`,
+      "g",
+    );
+    const reorderedMatches = allMatches(source, reorderedPattern);
+    if (reorderedMatches.length !== 1) {
+      throw new Error("Expected exactly one supported webview app route gate");
+    }
+    match = reorderedMatches[0];
+  }
   if (!source.includes("electron-set-window-mode") ||
       !source.includes(`{target:${match.groups.target},path:`)) {
     throw new Error("Expected exactly one supported webview app route gate");
@@ -714,7 +724,8 @@ export function hasCrashRecoveryPagePatch(text) {
 export function hasCrashRecoveryPageSignature(text) {
   const source = String(text ?? "");
   return hasCurrentCrashRecoveryPageSignature(source) || hasLatestCrashRecoveryPageSignature(source) ||
-    (isModernCrashRecoveryPage(source) && MODERN_CRASH_TITLE_PATTERN.test(source)) || [
+    (isModernCrashRecoveryPage(source) &&
+      (MODERN_CRASH_TITLE_PATTERN.test(source) || MODERN_CRASH_TITLE_PATCHED_PATTERN.test(source))) || [
     "id:`appServerCrash.title`,defaultMessage:`{appName} stopped unexpectedly`",
     "id:`appServerCrash.description`,defaultMessage:`Restart {appName} to continue. If the problem persists, check your configuration or visit the {documentationLink}`",
     "id:`appServerCrash.restart`,defaultMessage:`Restart`",
@@ -733,9 +744,12 @@ export function selectCrashRecoveryBundleCandidate(candidates) {
 }
 
 export function patchCrashRecoveryPage(text) {
-  if (isModernCrashRecoveryPage(text) && MODERN_CRASH_TITLE_PATTERN.test(String(text ?? ""))) {
+  if (isModernCrashRecoveryPage(text)) {
     const source = String(text ?? "");
     if (MODERN_CRASH_TITLE_PATCHED_PATTERN.test(source)) return source;
+    if (!MODERN_CRASH_TITLE_PATTERN.test(source)) {
+      throw new Error("Detected a partially patched Anti-Codex modern crash recovery page");
+    }
     return source.replace(MODERN_CRASH_TITLE_PATTERN, (match) => {
       const replacement = match.replace("ChatGPT hit a snag", "Anti-Codex hit a snag").replace(/,description:`[^`]+`/, "");
       return padReplacement(match, replacement);
