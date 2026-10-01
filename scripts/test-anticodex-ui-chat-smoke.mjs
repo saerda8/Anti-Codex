@@ -4582,11 +4582,17 @@ async function activateNativeProjectRoot(ws, root, label) {
     const visible = await waitForVisibleProjectLabel(ws, label, 2_000);
     if (visible.matched !== true) {
       const savedRootJson = JSON.stringify(savedInfo.savedRoot || root);
+      const rootsJson = JSON.stringify([savedInfo.savedRoot || root]);
+      const labelsJson = JSON.stringify({ [savedInfo.savedRoot || root]: label });
       const result = await ws.send("Runtime.evaluate", {
         expression: `(async () => {
           const bridge = window.electronBridge?.sendMessageFromView;
           if (!bridge) return { ok: false, reason: 'electron_bridge_missing' };
-          await bridge({ type: 'electron-pick-workspace-root-option', root: ${savedRootJson} });
+          try {
+            void bridge({ type: 'electron-update-workspace-root-options', roots: ${rootsJson} });
+            void bridge({ type: 'electron-workspace-root-labels', labels: ${labelsJson} });
+            void bridge({ type: 'electron-pick-workspace-root-option', root: ${savedRootJson} });
+          } catch {}
           return { ok: true, mode: 'reselect-active-root', root: ${savedRootJson} };
         })()`,
         returnByValue: true,
