@@ -7876,11 +7876,12 @@ async function main() {
     failures.push("reconnect remained unresolved after the submitted prompt");
   }
   diagnostics = idleResult.diagnostics;
+  const terminalProviderFailure = Boolean(reconnectOutcome.terminalProviderError);
   if (!diagnostics) {
     failures.push(`diagnostics endpoint did not respond after desktop task: ${idleResult.lastError || "unknown error"}`);
-  } else if (idleResult.stable !== true) {
+  } else if (!terminalProviderFailure && idleResult.stable !== true) {
     failures.push(`desktop task did not remain idle for ${idleResult.quietMs} ms after the assistant reply`);
-  } else if (!diagnosticsAreIdle(diagnostics)) {
+  } else if (!terminalProviderFailure && !diagnosticsAreIdle(diagnostics)) {
     failures.push("desktop task did not become idle after the assistant reply");
   }
   if (taskMode === "agentic-step-flow") {
