@@ -416,10 +416,11 @@ function runUiTurn({
   const payload = parseJsonOutput(child.stdout);
   const history = settleMarkerHistoryEvidence(marker, artifactDir, 5_000, { allowDuplicateCommand });
   const modelProof = buildTurnModelProof(payload || {}, model);
-  const expectedWorkspaceCwd = artifactDir && existsSync(artifactDir)
-    ? resolve(artifactDir)
-    : trustedProjectRoot;
-  const workspaceCwdMatches = workspacePathsEqual(history.sessionCwd, expectedWorkspaceCwd);
+  const expectedWorkspaceCwd = trustedProjectRoot;
+  const acceptedWorkspaceCwds = [trustedProjectRoot, artifactDir]
+    .filter((value) => value && existsSync(value))
+    .map((value) => resolve(value));
+  const workspaceCwdMatches = acceptedWorkspaceCwds.some((value) => workspacePathsEqual(history.sessionCwd, value));
   const turn = {
     journeyId,
     turnId,
