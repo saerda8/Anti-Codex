@@ -460,6 +460,11 @@ function Normalize-McpEnvForCompare {
                     "NODE_REPL_TRUSTED_CODE_PATHS",
                     "CODEX_HOME",
                     "CODEX_CLI_PATH",
+                    "NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS",
+                    "NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER",
+                    "NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME",
+                    "NODE_REPL_TRUSTED_SERVICES",
+                    "NODE_REPL_UNTRUSTED_ENV_ALLOWLIST",
                     "SKY_CUA_NATIVE_PIPE",
                     "SKY_CUA_NATIVE_PIPE_DIRECTORY"
                 )
@@ -1022,7 +1027,7 @@ if (-not (Test-Path -LiteralPath $appToolsCachePath -PathType Container)) {
 
 $mcpNames = @()
 if ($configText) {
-    $mcpNames = @(Get-McpServerNamesFromToml $configText)
+    $mcpNames = @(Get-McpServerNamesFromToml $configText | Where-Object { $_ -ne "cua_repl" })
     $sharedConfigText = ""
     if (Test-Path -LiteralPath $sharedConfigPath -PathType Leaf) {
         try {
