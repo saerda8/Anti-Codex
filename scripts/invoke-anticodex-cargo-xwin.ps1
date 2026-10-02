@@ -46,6 +46,7 @@ if ($existingContainer) {
     throw "Refusing to reuse or remove an existing container: $ContainerName"
 }
 
+$bootstrapToolchain = $env:ANTICODEX_CARGO_XWIN_BOOTSTRAP -eq "1"
 $dockerArgs = @(
     "run",
     "--rm",
@@ -56,10 +57,22 @@ $dockerArgs = @(
     "--volume", "anticodex-cargo-xwin-cache:/root/.cache/cargo-xwin",
     "--volume", "anticodex-cargo-git:/usr/local/cargo/git",
     "--volume", "anticodex-cargo-registry:/usr/local/cargo/registry",
-    "--workdir", "/work",
-    $image,
-    "cargo"
-) + $CargoArguments
+    "--workdir", "/work"
+)
+if ($bootstrapToolchain) {
+    $cargoArgsText = ($CargoArguments | ForEach-Object {
+        "'" + ([string]$_).Replace("'", "'\\''") + "'"
+    }) -join " "
+    $bootstrapCommand = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang llvm lld && export PATH=/usr/local/cargo/bin:`$PATH CC_x86_64_pc_windows_msvc=clang-cl AR_x86_64_pc_windows_msvc=llvm-lib && exec cargo $cargoArgsText"
+    $dockerArgs += @(
+        "--entrypoint", "/bin/sh",
+        $image,
+        "-lc",
+        $bootstrapCommand
+    )
+} else {
+    $dockerArgs += @($image, "cargo") + $CargoArguments
+}
 
 try {
     & docker @dockerArgs

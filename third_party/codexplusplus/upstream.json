@@ -1,27 +1,27 @@
 {
-    "component":  "CodexPlusPlus",
-    "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
-    "license":  "AGPL-3.0-only",
-    "version":  "1.4.0",
-    "tag":  "v1.4.0",
-    "upstreamCommit":  "27cdd21f06b59e6b71e0455672e20ed96cbd41de",
-    "isolationPatchCommit":  "83e54c40cef104556425ddebe3ccd1b2d89e11c4",
-    "patchCommit":  "83e54c40cef104556425ddebe3ccd1b2d89e11c4",
-    "patches":  [
-                    {
-                        "file":  "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-                        "sha256":  "d41d7ab739a6848fd67d6c231eae7e877b38c68cdfdb77a8db1b30086123ce77",
-                        "scope":  "complete Anti-Codex v1.4 compatibility adapter: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy and stream safeguards; historical patches are folded into this cumulative patch because v1.4 changed their contexts"
-                    }
-                ],
-    "verification":  {
-                         "patchReplay":  "1 project patches replayed without automatic conflict resolution; head 83e54c40cef104556425ddebe3ccd1b2d89e11c4; tree 2adeb3ea0dcee1e29dd79b7fc5af7cd52588589f",
-                         "sourceIsolationAudit":  "passed",
-                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
-                         "cargoFmt":  "passed",
-                         "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
-                         "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
-                         "launcherReleaseBuild":  "sha256:6d1b2662280e3fed96c78ae3b8f10d1a263f34b93d6e1cbcfb378faab7704ffd",
-                         "runtimeIsolation":  "candidate only; not activated"
-                     }
+    "component": "CodexPlusPlus",
+    "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+    "license": "AGPL-3.0-only",
+    "version": "1.5.0",
+    "tag": "v1.5.0",
+    "upstreamCommit": "23ed5515e69431794cbef363a886d974abcc6179",
+    "isolationPatchCommit": "e341ca5f4b8a8807397528ac73cef325aef5ea3b",
+    "patchCommit": "e341ca5f4b8a8807397528ac73cef325aef5ea3b",
+    "patches": [
+        {
+            "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
+            "sha256": "db79e83646958e280b2ad5dc4832addab4adadc38ce6cc9b86c696e36a1a366f",
+            "scope": "complete Anti-Codex v1.5 compatibility adapter plus upstream-format normalization: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy, stream safeguards and Codex v1.5 navigation/protocol compatibility"
+        }
+    ],
+    "verification": {
+        "patchReplay": "1 project patch replayed without automatic conflict resolution; head e341ca5f4b8a8807397528ac73cef325aef5ea3b; tree 5b45dac027bbbf2460d40e147d330bcde5527c20",
+        "sourceIsolationAudit": "passed",
+        "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; core candidate regression 526/527 passed with 1 native-browser fixture ignored",
+        "cargoFmt": "passed",
+        "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed through the managed bootstrap runner",
+        "windowsNativeTests": "Windows x64 release launcher build passed through the managed bootstrap runner",
+        "launcherReleaseBuild": "sha256:e428f5c9027ad195c6aca74f314fe57f218a8e775530ccd8b6e77a699e883fecb4",
+        "runtimeIsolation": "candidate only; not activated"
+    }
 }
