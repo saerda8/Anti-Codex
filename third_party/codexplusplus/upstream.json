@@ -5,8 +5,8 @@
     "version": "1.5.0",
     "tag": "v1.5.0",
     "upstreamCommit": "23ed5515e69431794cbef363a886d974abcc6179",
-    "isolationPatchCommit": "18492339dbd40a9a62c82828093624a3b2ac1571",
-    "patchCommit": "18492339dbd40a9a62c82828093624a3b2ac1571",
+    "isolationPatchCommit": "638b582a7b1c0ae1b47f5d91e72f2e60ba68d425",
+    "patchCommit": "638b582a7b1c0ae1b47f5d91e72f2e60ba68d425",
     "patches": [
         {
             "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
@@ -15,13 +15,13 @@
         }
     ],
     "verification": {
-        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 18492339dbd40a9a62c82828093624a3b2ac1571; tree 7a90f6361ab9e03926e8bc423dcacddf720bf4bb",
+        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 638b582a7b1c0ae1b47f5d91e72f2e60ba68d425; tree 7a90f6361ab9e03926e8bc423dcacddf720bf4bb",
         "sourceIsolationAudit": "passed",
-        "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; core regression 527/528 passed with 1 native-browser fixture ignored; beta-header and quota-gate regressions passed",
+        "auditRegressionTests": "Candidate-local format, protocol proxy 156/156, watcher 13/13, core 527/528 with 1 native-browser fixture ignored, beta-header and quota-gate regressions passed",
         "cargoFmt": "passed",
-        "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed through the managed bootstrap runner",
-        "windowsNativeTests": "Windows x64 release launcher build passed through the managed bootstrap runner",
-        "launcherReleaseBuild": "sha256:e428f5c9027ad195c6aca74f314fe57f218a8e775530ccd8b6e77a699e883fecb4",
+        "cargoCheck": "Windows x64 Manager release check passed through managed bootstrap runner",
+        "windowsNativeTests": "Windows x64 launcher release build and process creation passed through managed bootstrap runner",
+        "launcherReleaseBuild": "sha256:659f4b4897a8ceda304a15179c4219e8d0cb0006143f66f92fce541075ad548f",
         "runtimeIsolation": "candidate only; not activated"
     }
 }
