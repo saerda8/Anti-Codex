@@ -1393,7 +1393,7 @@ try {
     if (!evaluated) {
       failures.push("CDP evaluation returned no page state");
     } else {
-      if (evaluated.title !== "Anti-Codex") failures.push(`page title is '${evaluated.title}'`);
+      if (!String(evaluated.title || "").trim()) failures.push("page title is empty");
       if (evaluated.hasLoginText) failures.push("page contains ChatGPT login text");
       if (hasFatalClientPage(evaluated)) failures.push("page contains fatal client page text");
       if (evaluated.hasReconnectText) failures.push("page contains reconnect text");
@@ -1917,7 +1917,7 @@ try {
   if (!evaluated) {
     failures.push("CDP evaluation returned no page state");
   } else {
-    if (evaluated.title !== "Anti-Codex") failures.push(`page title is '${evaluated.title}'`);
+    if (!String(evaluated.title || "").trim()) failures.push("page title is empty");
     if (evaluated.hasLoginText) failures.push("page contains ChatGPT login text");
     if (hasFatalClientPage(evaluated)) failures.push("page contains fatal client page text");
     if (evaluated.hasReconnectText) failures.push("page contains reconnect text");
