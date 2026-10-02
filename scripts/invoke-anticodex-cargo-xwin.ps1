@@ -63,7 +63,8 @@ if ($bootstrapToolchain) {
     $cargoArgsText = ($CargoArguments | ForEach-Object {
         "'" + ([string]$_).Replace("'", "'\\''") + "'"
     }) -join " "
-    $bootstrapCommand = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang llvm lld && export PATH=/usr/local/cargo/bin:`$PATH CC_x86_64_pc_windows_msvc=clang-cl AR_x86_64_pc_windows_msvc=llvm-lib && exec cargo $cargoArgsText"
+    $tool = if ($CargoArguments[0] -ceq "xwin") { "cargo-xwin" } else { "cargo" }
+    $bootstrapCommand = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang llvm lld && ln -sf `$(command -v clang-19 || command -v clang) /usr/local/bin/clang-cl && ln -sf `$(command -v llvm-lib-19 || command -v llvm-lib || command -v llvm-ar) /usr/local/bin/llvm-lib && export PATH=/usr/local/cargo/bin:`$PATH CC_x86_64_pc_windows_msvc=clang-cl AR_x86_64_pc_windows_msvc=llvm-lib && exec $tool $cargoArgsText"
     $dockerArgs += @(
         "--entrypoint", "/bin/sh",
         $image,
