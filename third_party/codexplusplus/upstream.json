@@ -5,19 +5,19 @@
     "version": "1.5.0",
     "tag": "v1.5.0",
     "upstreamCommit": "23ed5515e69431794cbef363a886d974abcc6179",
-    "isolationPatchCommit": "e341ca5f4b8a8807397528ac73cef325aef5ea3b",
-    "patchCommit": "e341ca5f4b8a8807397528ac73cef325aef5ea3b",
+    "isolationPatchCommit": "4746479681ca3be778c2f04394cc7dd245d5b1b0",
+    "patchCommit": "4746479681ca3be778c2f04394cc7dd245d5b1b0",
     "patches": [
         {
             "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-            "sha256": "db79e83646958e280b2ad5dc4832addab4adadc38ce6cc9b86c696e36a1a366f",
+            "sha256": "6fc6a0fba0cbb08696f525e6c1b578e7574a262c4e691b95ab6913033f243dd7",
             "scope": "complete Anti-Codex v1.5 compatibility adapter plus upstream-format normalization: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy, stream safeguards and Codex v1.5 navigation/protocol compatibility"
         }
     ],
     "verification": {
-        "patchReplay": "1 project patch replayed without automatic conflict resolution; head e341ca5f4b8a8807397528ac73cef325aef5ea3b; tree 5b45dac027bbbf2460d40e147d330bcde5527c20",
+        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 4746479681ca3be778c2f04394cc7dd245d5b1b0; tree 106ddd8d30c2a320c9850b131a0a25a6b4097be7",
         "sourceIsolationAudit": "passed",
-        "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; core candidate regression 526/527 passed with 1 native-browser fixture ignored",
+        "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; core regression 527/528 passed with 1 native-browser fixture ignored; beta-header and quota-gate regressions passed",
         "cargoFmt": "passed",
         "cargoCheck": "protocol proxy and watcher tests passed; Windows x64 Manager check passed through the managed bootstrap runner",
         "windowsNativeTests": "Windows x64 release launcher build passed through the managed bootstrap runner",

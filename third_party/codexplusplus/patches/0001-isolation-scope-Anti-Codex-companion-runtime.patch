@@ -1,4 +1,4 @@
-From 97474003430d5aaf217af852639412eb7ddd7505 Mon Sep 17 00:00:00 2001
+From 4746479681ca3be778c2f04394cc7dd245d5b1b0 Mon Sep 17 00:00:00 2001
 From: "Anti-Codex v1.4 Adapter" <anticodex-v140@example.invalid>
 Date: Wed, 30 Sep 2026 07:48:39 +0800
 Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
@@ -11,19 +11,19 @@ Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
  apps/codex-plus-manager/src-tauri/src/lib.rs  |   44 +-
  crates/codex-plus-core/Cargo.toml             |    4 +
  crates/codex-plus-core/src/app_paths.rs       |  262 +-
- crates/codex-plus-core/src/bridge.rs          |  214 +-
+ crates/codex-plus-core/src/bridge.rs          |  215 +-
  .../codex-plus-core/src/channel_protection.rs |    9 +-
  crates/codex-plus-core/src/codex_sqlite.rs    |    7 +-
  .../codex-plus-core/src/connect/app_server.rs |    3 +-
  crates/codex-plus-core/src/connect/mod.rs     |   16 +-
  crates/codex-plus-core/src/install/macos.rs   |    4 +-
- crates/codex-plus-core/src/launcher.rs        | 1150 +++++-
+ crates/codex-plus-core/src/launcher.rs        | 1151 +++++-
  crates/codex-plus-core/src/lib.rs             |    1 +
- crates/codex-plus-core/src/loopback_http.rs   |   91 +
+ crates/codex-plus-core/src/loopback_http.rs   |  136 +
  crates/codex-plus-core/src/model_suffix.rs    |   15 +-
  crates/codex-plus-core/src/native_browser.rs  |  155 +-
  crates/codex-plus-core/src/paths.rs           |   29 +
- crates/codex-plus-core/src/protocol_proxy.rs  | 3145 +++++++++++++++--
+ crates/codex-plus-core/src/protocol_proxy.rs  | 3146 +++++++++++++++--
  crates/codex-plus-core/src/relay_config.rs    |  127 +-
  crates/codex-plus-core/src/routes.rs          |    9 +-
  crates/codex-plus-core/src/script_market.rs   |    4 +-
@@ -51,7 +51,7 @@ Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
  crates/codex-plus-data/src/storage.rs         |   29 +-
  crates/codex-plus-data/tests/provider_sync.rs |  121 +-
  .../codex-plus-data/tests/storage_adapter.rs  |   73 +-
- 47 files changed, 6748 insertions(+), 941 deletions(-)
+ 47 files changed, 6798 insertions(+), 939 deletions(-)
  create mode 100644 crates/codex-plus-core/src/loopback_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
@@ -1093,7 +1093,7 @@ index 0ca7c35..7a13623 100644
      for spec in APP_PACKAGE_SPECS {
          let Some(rest) = strip_prefix_ignore_ascii_case(package_name, spec.identity) else {
 diff --git a/crates/codex-plus-core/src/bridge.rs b/crates/codex-plus-core/src/bridge.rs
-index b513c46..c0947c8 100644
+index b513c46..69db3c6 100644
 --- a/crates/codex-plus-core/src/bridge.rs
 +++ b/crates/codex-plus-core/src/bridge.rs
 @@ -316,6 +316,206 @@ fn spawn_app_server_client_capture(websocket_url: &str, generation: BridgeGenera
@@ -1331,6 +1331,14 @@ index b513c46..c0947c8 100644
      else {
          let _ = crate::diagnostic_log::append_diagnostic_log(
              "bridge.app_server_client_capture_skipped",
+@@ -543,6 +743,7 @@ pub async fn install_bridge(
+     );
+ 
+     spawn_app_server_client_capture(websocket_url, generation.clone());
++    spawn_external_api_quota_gate(websocket_url, generation.clone());
+ 
+     let mut pending_calls = FuturesUnordered::new();
+     session.enqueue_binding_calls(&mut pending_calls);
 diff --git a/crates/codex-plus-core/src/channel_protection.rs b/crates/codex-plus-core/src/channel_protection.rs
 index 84f9f1e..9006d05 100644
 --- a/crates/codex-plus-core/src/channel_protection.rs
@@ -1447,7 +1455,7 @@ index 91c9358..d710bfb 100644
  
  pub fn build_app_bundle(options: &InstallOptions, manager: bool) -> MacosAppBundle {
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 2edfe24..e1a1652 100644
+index 2edfe24..e60f35e 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
 @@ -11,10 +11,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
@@ -1721,10 +1729,11 @@ index 2edfe24..e1a1652 100644
  fn decode_protocol_proxy_request_body(
      body: &[u8],
      content_encoding: Option<&str>,
-@@ -1742,24 +1837,425 @@ async fn handle_models_proxy_connection(
+@@ -1742,24 +1837,428 @@ async fn handle_models_proxy_connection(
      stream.shutdown().await?;
      Ok(())
  }
+-async fn handle_protocol_proxy_connection(
 +async fn wait_for_downstream_disconnect<R>(reader: &mut R)
 +where
 +    R: tokio::io::AsyncRead + Unpin,
@@ -1762,19 +1771,26 @@ index 2edfe24..e1a1652 100644
 +}
 +
 +async fn try_handle_cancel_aware_protocol_proxy_stream(
-+    stream: &mut tokio::net::TcpStream,
-+    request_body: &str,
-+    request_user_agent: Option<&str>,
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+     request_user_agent: Option<&str>,
+     request_beta_features: Option<&str>,
 +    request_turn_metadata: Option<&str>,
 +    request_json: Option<&serde_json::Value>,
-+    method: &str,
-+    path: &str,
-+    remote_addr_text: Option<String>,
+     method: &str,
+     path: &str,
+     remote_addr_text: Option<String>,
+-) -> anyhow::Result<()> {
+-    let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
+-    let upstream = match crate::protocol_proxy::open_responses_proxy_request_for_path_with_beta(
 +) -> anyhow::Result<bool> {
 +    let open_upstream = crate::protocol_proxy::open_cancel_aware_loopback_responses_proxy_request(
-+        request_body,
-+        request_user_agent,
-+        path,
+         request_body,
+         request_user_agent,
+         path,
+         request_beta_features,
+-    )
+-    .await
 +        request_turn_metadata,
 +    );
 +    let open_result = tokio::select! {
@@ -2109,29 +2125,23 @@ index 2edfe24..e1a1652 100644
 +    Ok(true)
 +}
 +
- async fn handle_protocol_proxy_connection(
-     stream: &mut tokio::net::TcpStream,
-     request_body: &str,
-     request_user_agent: Option<&str>,
-     request_beta_features: Option<&str>,
++async fn handle_protocol_proxy_connection(
++    stream: &mut tokio::net::TcpStream,
++    request_body: &str,
++    request_user_agent: Option<&str>,
++    request_beta_features: Option<&str>,
 +    request_turn_metadata: Option<&str>,
-     method: &str,
-     path: &str,
-     remote_addr_text: Option<String>,
- ) -> anyhow::Result<()> {
-     let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
--    let upstream = match crate::protocol_proxy::open_responses_proxy_request_for_path_with_beta(
--        request_body,
--        request_user_agent,
--        path,
--        request_beta_features,
--    )
--    .await
++    method: &str,
++    path: &str,
++    remote_addr_text: Option<String>,
++) -> anyhow::Result<()> {
++    let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
 +    if request_wants_stream(request_json.as_ref())
 +        && try_handle_cancel_aware_protocol_proxy_stream(
 +            stream,
 +            request_body,
 +            request_user_agent,
++            request_beta_features,
 +            request_turn_metadata,
 +            request_json.as_ref(),
 +            method,
@@ -2154,7 +2164,7 @@ index 2edfe24..e1a1652 100644
          Ok(upstream) => upstream,
          Err(error) => {
              let body = serde_json::to_vec(
-@@ -1785,10 +2281,29 @@ async fn handle_protocol_proxy_connection(
+@@ -1785,10 +2284,29 @@ async fn handle_protocol_proxy_connection(
      };
      if !upstream.is_success() {
          let status = upstream.status();
@@ -2185,7 +2195,7 @@ index 2edfe24..e1a1652 100644
              &upstream_content_type,
              &upstream_body,
          );
-@@ -1844,7 +2359,27 @@ async fn handle_protocol_proxy_connection(
+@@ -1844,7 +2362,27 @@ async fn handle_protocol_proxy_connection(
          }
          if upstream.wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
              let mut bytes_stream = upstream.response.bytes_stream();
@@ -2214,7 +2224,7 @@ index 2edfe24..e1a1652 100644
                  if let Ok(bytes) = chunk {
                      stream.write_all(&bytes).await?;
                  } else {
-@@ -1867,7 +2402,37 @@ async fn handle_protocol_proxy_connection(
+@@ -1867,7 +2405,37 @@ async fn handle_protocol_proxy_connection(
              .unwrap_or_default();
          let mut bytes_stream = upstream.response.bytes_stream();
          let mut stream_failed = false;
@@ -2253,7 +2263,7 @@ index 2edfe24..e1a1652 100644
              match chunk {
                  Ok(bytes) => {
                      let converted = converter.push_bytes(&bytes);
-@@ -2110,6 +2675,20 @@ async fn handle_chat_completions_proxy_connection(
+@@ -2110,6 +2678,20 @@ async fn handle_chat_completions_proxy_connection(
      path: &str,
      remote_addr_text: Option<String>,
  ) -> anyhow::Result<()> {
@@ -2274,7 +2284,7 @@ index 2edfe24..e1a1652 100644
      let upstream = match crate::protocol_proxy::open_chat_completions_proxy_request(
          request_body,
          request_user_agent,
-@@ -2149,7 +2728,27 @@ async fn handle_chat_completions_proxy_connection(
+@@ -2149,7 +2731,27 @@ async fn handle_chat_completions_proxy_connection(
      if upstream.is_stream && is_success {
          write_http_stream_headers(stream, &status, &content_type).await?;
          let mut bytes_stream = upstream.response.bytes_stream();
@@ -2303,7 +2313,7 @@ index 2edfe24..e1a1652 100644
              stream.write_all(&chunk?).await?;
          }
          log_helper_response(
-@@ -2258,14 +2857,68 @@ mod computer_use_tests {
+@@ -2258,14 +2860,68 @@ mod computer_use_tests {
  }
  
  const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
@@ -2374,7 +2384,7 @@ index 2edfe24..e1a1652 100644
  #[derive(Debug)]
  struct HttpRequestReadError {
      status: &'static str,
-@@ -2287,6 +2940,13 @@ impl HttpRequestReadError {
+@@ -2287,6 +2943,13 @@ impl HttpRequestReadError {
          }
      }
  
@@ -2388,7 +2398,7 @@ index 2edfe24..e1a1652 100644
      fn status(&self) -> &'static str {
          self.status
      }
-@@ -2404,65 +3064,97 @@ impl ChunkedScanState {
+@@ -2404,65 +3067,97 @@ impl ChunkedScanState {
      }
  }
  
@@ -2524,7 +2534,7 @@ index 2edfe24..e1a1652 100644
              ChunkedBody::Complete(body) => body,
              ChunkedBody::Incomplete => {
                  return Err(HttpRequestReadError::bad_request(
-@@ -3523,6 +4215,14 @@ fn activate_packaged_app_blocking(app_user_model_id: &str, arguments: &str) -> a
+@@ -3523,6 +4218,14 @@ fn activate_packaged_app_blocking(app_user_model_id: &str, arguments: &str) -> a
      }
  }
  
@@ -2539,7 +2549,7 @@ index 2edfe24..e1a1652 100644
  #[cfg(test)]
  mod tests {
      use super::*;
-@@ -3538,6 +4238,28 @@ mod tests {
+@@ -3538,6 +4241,28 @@ mod tests {
          })
      }
  
@@ -2568,7 +2578,7 @@ index 2edfe24..e1a1652 100644
      #[test]
      fn owned_launcher_exit_follows_its_debug_port_not_other_codex_processes() {
          assert!(owned_launcher_target_alive(false, true));
-@@ -3653,7 +4375,10 @@ mod tests {
+@@ -3653,7 +4378,10 @@ mod tests {
  
      #[test]
      fn fixed_helper_port_is_required_only_when_protocol_proxy_is_used() {
@@ -2580,7 +2590,7 @@ index 2edfe24..e1a1652 100644
  
          let official_mix = BackendSettings {
              active_relay_id: "official-mix".to_string(),
-@@ -3856,6 +4581,12 @@ mod tests {
+@@ -3856,6 +4584,12 @@ mod tests {
          assert_eq!(error.status(), "413 Payload Too Large");
      }
  
@@ -2593,7 +2603,7 @@ index 2edfe24..e1a1652 100644
      #[tokio::test]
      async fn helper_returns_400_for_ambiguous_body_framing() {
          let response = send_raw_helper_request(
-@@ -4074,6 +4805,243 @@ mod tests {
+@@ -4074,6 +4808,243 @@ mod tests {
          crate::paths::set_settings_path_for_tests(previous_settings_path);
      }
  
@@ -2837,7 +2847,7 @@ index 2edfe24..e1a1652 100644
      async fn send_raw_helper_request(request: &[u8]) -> Vec<u8> {
          let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
              .await
-@@ -4167,13 +5135,17 @@ mod tests {
+@@ -4167,13 +5138,17 @@ mod tests {
          let helper_addr = helper_listener.local_addr().unwrap();
          let helper = tokio::spawn(async move {
              let (stream, remote_addr) = helper_listener.accept().await.unwrap();
@@ -2873,10 +2883,10 @@ index 30dcaf2..251cc45 100644
  pub mod model_catalog;
 diff --git a/crates/codex-plus-core/src/loopback_http.rs b/crates/codex-plus-core/src/loopback_http.rs
 new file mode 100644
-index 0000000..b28cd21
+index 0000000..9d05f92
 --- /dev/null
 +++ b/crates/codex-plus-core/src/loopback_http.rs
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,136 @@
 +use std::net::IpAddr;
 +use std::time::Duration;
 +
@@ -2913,6 +2923,7 @@ index 0000000..b28cd21
 +    endpoint: &str,
 +    bearer_token: Option<&str>,
 +    user_agent: &str,
++    beta_features: Option<&str>,
 +    body: &serde_json::Value,
 +    timeout: Duration,
 +) -> anyhow::Result<hyper::Response<hyper::body::Incoming>> {
@@ -2935,6 +2946,9 @@ index 0000000..b28cd21
 +    if !user_agent.trim().is_empty() {
 +        request = request.header(USER_AGENT, user_agent.trim());
 +    }
++    if let Some(beta_features) = beta_features.filter(|value| !value.trim().is_empty()) {
++        request = request.header("x-codex-beta-features", beta_features.trim());
++    }
 +    let request = request
 +        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))
 +        .context("failed to build loopback model request")?;
@@ -2956,7 +2970,8 @@ index 0000000..b28cd21
 +
 +#[cfg(test)]
 +mod tests {
-+    use super::supports;
++    use super::{post_json, supports};
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 +
 +    #[test]
 +    fn only_plain_http_loopback_endpoints_are_supported() {
@@ -2966,6 +2981,46 @@ index 0000000..b28cd21
 +        assert!(!supports("https://127.0.0.1/v1/chat/completions"));
 +        assert!(!supports("http://example.com/v1/chat/completions"));
 +        assert!(!supports("not a URL"));
++    }
++    #[tokio::test]
++    async fn post_json_forwards_beta_features_header() {
++        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let address = listener.local_addr().unwrap();
++        let server = tokio::spawn(async move {
++            let (mut stream, _) = listener.accept().await.unwrap();
++            let mut bytes = Vec::new();
++            let mut chunk = [0_u8; 1024];
++            loop {
++                let read = stream.read(&mut chunk).await.unwrap();
++                if read == 0 {
++                    break;
++                }
++                bytes.extend_from_slice(&chunk[..read]);
++                if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
++                    break;
++                }
++            }
++            let headers = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
++            assert!(headers.contains("x-codex-beta-features: responses=v2"));
++            stream
++                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
++                .await
++                .unwrap();
++        });
++        let response = post_json(
++            &format!("http://{address}/v1/responses"),
++            None,
++            "unit-test",
++            Some("responses=v2"),
++            &serde_json::json!({"stream": true}),
++            std::time::Duration::from_secs(5),
++        )
++        .await
++        .unwrap();
++        assert_eq!(response.status(), 200);
++        server.await.unwrap();
 +    }
 +}
 diff --git a/crates/codex-plus-core/src/model_suffix.rs b/crates/codex-plus-core/src/model_suffix.rs
@@ -3387,7 +3442,7 @@ index ef17749..9e4cdf4 100644
 +    }
  }
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index 33abe8d..c6cb696 100644
+index 33abe8d..5b262b8 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -4,13 +4,18 @@
@@ -5111,7 +5166,7 @@ index 33abe8d..c6cb696 100644
          (route.relay.clone(), vec![route.relay.clone()])
      } else {
          let relay = crate::relay_rotation::select_relay_for_request(&settings, context)?;
-@@ -1144,10 +2632,285 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1144,10 +2632,286 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
      let mut cooldown_retries = 0_usize;
      'request: loop {
          for (attempt, relay) in relays.iter().cloned().enumerate() {
@@ -5335,6 +5390,7 @@ index 33abe8d..c6cb696 100644
 +    body: &str,
 +    original_user_agent: Option<&str>,
 +    request_path: &str,
++    beta_features: Option<&str>,
 +    turn_metadata: Option<&str>,
 +) -> anyhow::Result<Option<AbortiveUpstreamProxyResponse>> {
 +    let mut request_json: Value = serde_json::from_str(body)?;
@@ -5400,7 +5456,7 @@ index 33abe8d..c6cb696 100644
          let model_override = aggregate_upstream_model_override(&settings, &relay);
          let (endpoint, upstream_body, wire_api, compaction) = upstream_request_parts(
              &relay,
-@@ -1156,9 +2919,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1156,9 +2920,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
              model_override.as_deref(),
          )
          .await?;
@@ -5415,7 +5471,7 @@ index 33abe8d..c6cb696 100644
          let _ = crate::diagnostic_log::append_diagnostic_log(
              "protocol_proxy.upstream_request",
              json!({
-@@ -1166,10 +2931,14 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1166,10 +2932,14 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "relayName": relay.name,
                  "endpoint": endpoint,
                  "wireApi": wire_api,
@@ -5433,7 +5489,7 @@ index 33abe8d..c6cb696 100644
                  "modelRoute": model_route.as_ref().map(|route| json!({
                      "sourceRelayId": route.source_relay_id,
                      "sourceModel": route.source_model,
-@@ -1178,25 +2947,17 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1178,25 +2948,18 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  }))
              }),
          );
@@ -5448,6 +5504,7 @@ index 33abe8d..c6cb696 100644
 -            is_stream,
 +            (!relay.uses_no_auth()).then_some(relay.api_key.trim()),
 +            &user_agent,
++            beta_features,
              &upstream_body,
 -        );
 -        if wire_api == UpstreamWireApi::Responses {
@@ -5466,7 +5523,7 @@ index 33abe8d..c6cb696 100644
                  let _ = crate::diagnostic_log::append_diagnostic_log(
                      "protocol_proxy.upstream_request_failed",
                      json!({
-@@ -1204,10 +2965,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1204,10 +2967,11 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                          "relayName": relay.name,
                          "endpoint": endpoint,
                          "wireApi": wire_api,
@@ -5481,7 +5538,7 @@ index 33abe8d..c6cb696 100644
                          "willFailover": has_more_candidates,
                          "error": error.to_string()
                      }),
-@@ -1218,14 +2980,19 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1218,14 +2982,19 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  }
                  return Err(error).with_context(|| {
                      format!(
@@ -5503,7 +5560,7 @@ index 33abe8d..c6cb696 100644
          let _ = crate::diagnostic_log::append_diagnostic_log(
              "protocol_proxy.upstream_response",
              json!({
-@@ -1233,11 +3000,12 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1233,11 +3002,12 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  "relayName": relay.name,
                  "endpoint": endpoint,
                  "wireApi": wire_api,
@@ -5519,7 +5576,7 @@ index 33abe8d..c6cb696 100644
                  "willFailover": has_more_candidates && !(200..300).contains(&status_code)
              }),
          );
-@@ -1249,118 +3017,33 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+@@ -1249,118 +3019,33 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
                  RotationEvent::Failure
              },
          );
@@ -5577,7 +5634,7 @@ index 33abe8d..c6cb696 100644
 -        .await;
 -        drop(channel_permit);
          let _ = crate::diagnostic_log::append_diagnostic_log(
--            "protocol_proxy.upstream_failover",
+             "protocol_proxy.upstream_failover",
 -            json!({
 -                "relayId": relay.id,
 -                "relayName": relay.name,
@@ -5626,7 +5683,6 @@ index 33abe8d..c6cb696 100644
 -    }
 -    if target.protocol != RelayProtocol::Responses {
 -        anyhow::bail!("模型路由目标必须使用 Responses API：{}", target.name);
-+            "protocol_proxy.upstream_failover",
 +            json!({
 +                "relayId": relay.id,
 +                "relayName": relay.name,
@@ -5657,7 +5713,7 @@ index 33abe8d..c6cb696 100644
  }
  
  fn aggregate_upstream_model_override(
-@@ -1607,6 +3290,54 @@ fn response_header_timeout(is_stream: bool) -> Duration {
+@@ -1607,6 +3292,55 @@ fn response_header_timeout(is_stream: bool) -> Duration {
      }
  }
  
@@ -5688,6 +5744,7 @@ index 33abe8d..c6cb696 100644
 +        &endpoint,
 +        (!relay.uses_no_auth()).then_some(relay.api_key.trim()),
 +        &user_agent,
++        None,
 +        &request_json,
 +        UPSTREAM_STREAM_HEADER_TIMEOUT,
 +    )
@@ -5712,7 +5769,7 @@ index 33abe8d..c6cb696 100644
  pub async fn open_chat_completions_proxy_request(
      body: &str,
      original_user_agent: Option<&str>,
-@@ -1631,8 +3362,7 @@ pub async fn open_chat_completions_proxy_request(
+@@ -1631,8 +3365,7 @@ pub async fn open_chat_completions_proxy_request(
      let channel_key = crate::channel_protection::key_for_relay(&relay);
      let mut cooldown_retries = 0_usize;
      loop {
@@ -5722,7 +5779,7 @@ index 33abe8d..c6cb696 100644
          let request = crate::http_client::proxied_client(&effective_user_agent(
              &relay.user_agent,
              original_user_agent,
-@@ -1640,13 +3370,16 @@ pub async fn open_chat_completions_proxy_request(
+@@ -1640,13 +3373,16 @@ pub async fn open_chat_completions_proxy_request(
          .post(chat_completions_url(&relay.base_url))
          .header(reqwest::header::CONTENT_TYPE, "application/json")
          .json(&request_json);
@@ -5746,7 +5803,7 @@ index 33abe8d..c6cb696 100644
          let status_code = upstream.status().as_u16();
          let retry_after = crate::channel_protection::retry_after_duration(upstream.headers());
          if !(200..300).contains(&status_code) {
-@@ -1700,6 +3433,7 @@ async fn upstream_request_parts(
+@@ -1700,6 +3436,7 @@ async fn upstream_request_parts(
  ) -> anyhow::Result<(String, Value, UpstreamWireApi, bool)> {
      let compact = is_responses_compact_proxy_path(request_path)
          || request_has_compaction_trigger(&request_json);
@@ -5754,7 +5811,7 @@ index 33abe8d..c6cb696 100644
      let is_v2_compaction = compact && request_has_compaction_trigger(&request_json);
      // 原生 Responses 状态必须来自上游，不能以普通摘要冒充加密状态。
      let synthetic_compaction = compact && relay.protocol == RelayProtocol::ChatCompletions;
-@@ -2404,6 +4138,10 @@ impl ChatSseState {
+@@ -2404,6 +4141,10 @@ impl ChatSseState {
      }
  
      fn push_reasoning_delta_into(&mut self, delta: &str, output: &mut String) {
@@ -5765,7 +5822,7 @@ index 33abe8d..c6cb696 100644
          if !self.reasoning.added {
              let output_index = self.next_output_index();
              let item_id = format!("rs_{}", self.response_id);
-@@ -2528,12 +4266,12 @@ impl ChatSseState {
+@@ -2528,12 +4269,12 @@ impl ChatSseState {
  
          {
              let state = self.tools.entry(chat_index).or_default();
@@ -5784,7 +5841,7 @@ index 33abe8d..c6cb696 100644
                  }
              }
              if !args_delta.is_empty() {
-@@ -2548,7 +4286,9 @@ impl ChatSseState {
+@@ -2548,7 +4289,9 @@ impl ChatSseState {
              let waiting_for_custom_tool_name =
                  self.tool_context.has_custom_tools && state.name.is_empty();
              if !state.added
@@ -5795,7 +5852,7 @@ index 33abe8d..c6cb696 100644
                  && !waiting_for_custom_tool_name
              {
                  should_add = true;
-@@ -2621,6 +4361,9 @@ impl ChatSseState {
+@@ -2621,6 +4364,9 @@ impl ChatSseState {
          self.finalize_tools_into(output);
  
          let status = response_status(self.finish_reason.as_deref());
@@ -5805,7 +5862,7 @@ index 33abe8d..c6cb696 100644
          let mut response = self.base_response(status, self.completed_output_items());
          if status == "incomplete" {
              response["incomplete_details"] = json!({ "reason": "max_output_tokens" });
-@@ -2776,12 +4519,21 @@ impl ChatSseState {
+@@ -2776,12 +4522,21 @@ impl ChatSseState {
          }
      }
  
@@ -5828,7 +5885,7 @@ index 33abe8d..c6cb696 100644
          let mut response = self.base_response("failed", self.completed_output_items());
          response["error"] = error;
          push_sse(
-@@ -2812,6 +4564,30 @@ impl ChatSseState {
+@@ -2812,6 +4567,30 @@ impl ChatSseState {
          })
      }
  
@@ -5859,7 +5916,7 @@ index 33abe8d..c6cb696 100644
      fn next_output_index(&mut self) -> u32 {
          let index = self.next_output_index;
          self.next_output_index += 1;
-@@ -2819,6 +4595,16 @@ impl ChatSseState {
+@@ -2819,6 +4598,16 @@ impl ChatSseState {
      }
  }
  
@@ -5876,7 +5933,7 @@ index 33abe8d..c6cb696 100644
  fn take_sse_block(buffer: &mut String) -> Option<String> {
      let lf = buffer.find("\n\n").map(|index| (index, 2));
      let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
-@@ -2885,16 +4671,22 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+@@ -2885,16 +4674,22 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
      if trimmed.is_empty() {
          return ThinkPrefixDecision::NeedMore;
      }
@@ -5902,7 +5959,7 @@ index 33abe8d..c6cb696 100644
      let error = value.get("error").unwrap_or(value);
      let message = error
          .as_str()
-@@ -2909,10 +4701,13 @@ fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
+@@ -2909,10 +4704,13 @@ fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
          .unwrap_or_else(|| error.to_string());
      let error_type = error
          .get("type")
@@ -5918,7 +5975,7 @@ index 33abe8d..c6cb696 100644
  }
  
  fn http_status_line(status: u16) -> String {
-@@ -2945,6 +4740,34 @@ pub fn responses_error_from_upstream(status_code: u16, content_type: &str, body:
+@@ -2945,6 +4743,34 @@ pub fn responses_error_from_upstream(status_code: u16, content_type: &str, body:
      json!({ "error": error })
  }
  
@@ -5953,7 +6010,7 @@ index 33abe8d..c6cb696 100644
  fn upstream_error_parts(
      status_code: u16,
      content_type: &str,
-@@ -3964,96 +5787,550 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
+@@ -3964,96 +5790,550 @@ fn add_namespace_tools_to_context(context: &mut CodexToolContext, namespace_tool
          if child.get("type").and_then(Value::as_str) != Some("function") {
              continue;
          }
@@ -6581,7 +6638,7 @@ index 33abe8d..c6cb696 100644
  }
  
  fn detect_codex_custom_tool_kind(tool: &Value, name: &str) -> CodexCustomToolKind {
-@@ -4327,6 +6604,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
+@@ -4327,6 +6607,15 @@ fn generic_custom_proxy_tool(name: &str, description: &str) -> Value {
  
  fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      vec![
@@ -6597,7 +6654,7 @@ index 33abe8d..c6cb696 100644
          function_tool(
              &format!("{name}_add_file"),
              &patch_proxy_description(
-@@ -4375,6 +6661,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
+@@ -4375,6 +6664,20 @@ fn apply_patch_proxy_tools(name: &str, description: &str) -> Vec<Value> {
      ]
  }
  
@@ -6618,7 +6675,7 @@ index 33abe8d..c6cb696 100644
  fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
      json!({
          "type": "function",
-@@ -4439,11 +6739,13 @@ fn dedup_chat_tools_by_name(tools: &mut Vec<Value>) {
+@@ -4439,11 +6742,13 @@ fn dedup_chat_tools_by_name(tools: &mut Vec<Value>) {
  }
  
  fn patch_proxy_description(description: &str, action: &str, default_description: &str) -> String {
@@ -6634,7 +6691,7 @@ index 33abe8d..c6cb696 100644
  }
  
  fn apply_patch_add_file_schema() -> Value {
-@@ -4548,15 +6850,16 @@ fn apply_patch_hunks_schema() -> Value {
+@@ -4548,15 +6853,16 @@ fn apply_patch_hunks_schema() -> Value {
  }
  
  fn proxy_action_from_upstream_name(name: &str) -> Option<CodexPatchProxyAction> {
@@ -6656,7 +6713,7 @@ index 33abe8d..c6cb696 100644
          Some(CodexPatchProxyAction::Batch)
      } else {
          None
-@@ -4625,7 +6928,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
+@@ -4625,7 +6931,9 @@ fn responses_tool_choice_to_chat(tool_choice: &Value, context: &CodexToolContext
              let name = object.get("name").and_then(Value::as_str)?;
              let spec = context.custom_tools.get(name)?;
              let upstream_name = if spec.kind == CodexCustomToolKind::ApplyPatch {
@@ -6667,7 +6724,7 @@ index 33abe8d..c6cb696 100644
              } else {
                  spec.openai_name.clone()
              };
-@@ -4846,7 +7151,9 @@ fn push_tool_call_delta_sse(
+@@ -4846,7 +7154,9 @@ fn push_tool_call_delta_sse(
                  "delta": delta
              }),
          );
@@ -6678,7 +6735,7 @@ index 33abe8d..c6cb696 100644
          let _ = delta;
      } else {
          push_sse(
-@@ -4899,6 +7206,7 @@ fn push_tool_call_done_sse(
+@@ -4899,6 +7209,7 @@ fn push_tool_call_done_sse(
          );
          return;
      }
@@ -6686,7 +6743,7 @@ index 33abe8d..c6cb696 100644
      push_sse(
          output,
          "response.function_call_arguments.done",
-@@ -4906,7 +7214,7 @@ fn push_tool_call_done_sse(
+@@ -4906,7 +7217,7 @@ fn push_tool_call_done_sse(
              "type": "response.function_call_arguments.done",
              "item_id": state.item_id,
              "output_index": output_index,
@@ -6695,7 +6752,7 @@ index 33abe8d..c6cb696 100644
          }),
      );
  }
-@@ -4945,6 +7253,7 @@ fn response_tool_call_item(
+@@ -4945,6 +7256,7 @@ fn response_tool_call_item(
          });
      }
      let (display_name, namespace) = tool_context.openai_name_for_function_tool(name);
@@ -6703,7 +6760,7 @@ index 33abe8d..c6cb696 100644
      let mut item = json!({
          "id": format!("fc_{call_id}"),
          "type": "function_call",
-@@ -4975,13 +7284,14 @@ fn tool_call_item_id(call_id: &str, name: &str, tool_context: &CodexToolContext)
+@@ -4975,13 +7287,14 @@ fn tool_call_item_id(call_id: &str, name: &str, tool_context: &CodexToolContext)
  fn split_leading_think_block(text: &str) -> Option<(String, String)> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -6724,7 +6781,7 @@ index 33abe8d..c6cb696 100644
      Some((
          text[body_start..close_start].trim().to_string(),
          strip_think_answer_separator(&text[answer_start..]).to_string(),
-@@ -4991,9 +7301,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+@@ -4991,9 +7304,11 @@ fn split_leading_think_block(text: &str) -> Option<(String, String)> {
  fn strip_leading_think_open_tag(text: &str) -> Option<String> {
      let leading_ws_len = text.len() - text.trim_start().len();
      let after_ws = &text[leading_ws_len..];
@@ -6739,7 +6796,7 @@ index 33abe8d..c6cb696 100644
  }
  
  fn strip_think_answer_separator(text: &str) -> &str {
-@@ -5104,6 +7416,54 @@ fn default_responses_usage() -> Value {
+@@ -5104,6 +7419,54 @@ fn default_responses_usage() -> Value {
      })
  }
  
@@ -6794,7 +6851,7 @@ index 33abe8d..c6cb696 100644
  fn chat_usage_to_responses_usage(usage: Option<&Value>) -> Value {
      let Some(usage) = usage.filter(|value| value.is_object() && !value.is_null()) else {
          return default_responses_usage();
-@@ -5347,10 +7707,10 @@ fn guard_inline_image_data_urls(value: &mut Value) -> bool {
+@@ -5347,10 +7710,10 @@ fn guard_inline_image_data_urls(value: &mut Value) -> bool {
  /// 无图时原样返回 `response_output_text` 的结果，保持既有行为不变。
  fn tool_output_content(output: &Value) -> Value {
      let Some(parts) = output.as_array() else {
@@ -6807,7 +6864,7 @@ index 33abe8d..c6cb696 100644
      }
  
      let mut chat_parts = Vec::new();
-@@ -5378,6 +7738,135 @@ fn tool_output_content(output: &Value) -> Value {
+@@ -5378,6 +7741,135 @@ fn tool_output_content(output: &Value) -> Value {
      Value::Array(chat_parts)
  }
  
@@ -6943,7 +7000,7 @@ index 33abe8d..c6cb696 100644
  fn build_custom_tool_call_history(name: &str, input: &Value) -> (String, String) {
      let input = response_output_text(input);
      if name == "apply_patch" || input.starts_with("*** Begin Patch") {
-@@ -5736,6 +8225,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
+@@ -5736,6 +8228,70 @@ fn copy_response_request_fields(response: &mut Value, original_request: Option<&
      }
  }
  
