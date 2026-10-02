@@ -125,6 +125,16 @@ function Read-ToolArguments {
     try { return $Call.arguments | ConvertFrom-Json } catch { Add-Failure "function tool arguments are invalid JSON: $($_.Exception.Message)"; return $null }
 }
 
+function Normalize-ProbePath {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+    try {
+        return ([IO.Path]::GetFullPath($Path)).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).ToLowerInvariant()
+    } catch {
+        return $Path.Replace('/', '\').TrimEnd('\').ToLowerInvariant()
+    }
+}
+
 function Resolve-NodeRuntime {
     $bundled = Join-Path $InstallRoot "codex-patched-app\resources\cua_node\bin\node.exe"
     if (Test-Path -LiteralPath $bundled -PathType Leaf) { return $bundled }
@@ -233,7 +243,7 @@ try {
     if (-not $first.id) { Add-Failure "first response did not contain an id" }
     if (-not $call -or -not $call.call_id) { Add-Failure "first response did not emit create_probe_file function_call" }
     $arguments = Read-ToolArguments $call
-    if ($arguments -and [string]$arguments.path -ne $artifactFile) {
+    if ($arguments -and (Normalize-ProbePath ([string]$arguments.path)) -ne (Normalize-ProbePath $artifactFile)) {
         Add-Failure "create_probe_file path mismatch"
     }
     if ($arguments -and [string]$arguments.marker -ne $marker) {
