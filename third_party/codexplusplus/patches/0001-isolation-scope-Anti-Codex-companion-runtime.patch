@@ -1,4 +1,4 @@
-From 4746479681ca3be778c2f04394cc7dd245d5b1b0 Mon Sep 17 00:00:00 2001
+From 18492339dbd40a9a62c82828093624a3b2ac1571 Mon Sep 17 00:00:00 2001
 From: "Anti-Codex v1.4 Adapter" <anticodex-v140@example.invalid>
 Date: Wed, 30 Sep 2026 07:48:39 +0800
 Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
@@ -41,7 +41,7 @@ Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
  .../tests/live_settings_migration.rs          |   18 +-
  crates/codex-plus-core/tests/model_suffix.rs  |   24 +-
  .../tests/node_repl_flattened_profile.rs      |    8 +-
- .../codex-plus-core/tests/protocol_proxy.rs   | 1043 +++++-
+ .../codex-plus-core/tests/protocol_proxy.rs   | 1044 +++++-
  crates/codex-plus-core/tests/relay_config.rs  |   24 +-
  .../codex-plus-core/tests/relay_rotation.rs   |   78 +-
  crates/codex-plus-core/tests/relay_switch.rs  |   24 +-
@@ -51,7 +51,7 @@ Subject: [PATCH] port Anti-Codex stack to CodexPlusPlus v1.4.0
  crates/codex-plus-data/src/storage.rs         |   29 +-
  crates/codex-plus-data/tests/provider_sync.rs |  121 +-
  .../codex-plus-data/tests/storage_adapter.rs  |   73 +-
- 47 files changed, 6798 insertions(+), 939 deletions(-)
+ 47 files changed, 6799 insertions(+), 939 deletions(-)
  create mode 100644 crates/codex-plus-core/src/loopback_http.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
@@ -8252,7 +8252,7 @@ index cddb30e..2004eef 100644
 \ No newline at end of file
 +}
 diff --git a/crates/codex-plus-core/tests/protocol_proxy.rs b/crates/codex-plus-core/tests/protocol_proxy.rs
-index e5fe531..39d875f 100644
+index e5fe531..cc10d24 100644
 --- a/crates/codex-plus-core/tests/protocol_proxy.rs
 +++ b/crates/codex-plus-core/tests/protocol_proxy.rs
 @@ -5,7 +5,9 @@ use codex_plus_core::protocol_proxy::{
@@ -9394,7 +9394,7 @@ index e5fe531..39d875f 100644
  #[test]
  fn chat_sse_converter_handles_partial_chunks_and_utf8_boundaries() {
      let sse = "data: {\"id\":\"chatcmpl_utf8\",\"created\":123,\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"你好\"},\"finish_reason\":\"stop\"}]}\r\n\r\n";
-@@ -3866,6 +4779,32 @@ async fn no_auth_proxy_endpoints_omit_authorization_header() {
+@@ -3866,6 +4779,33 @@ async fn no_auth_proxy_endpoints_omit_authorization_header() {
          .unwrap();
      assert_eq!(upstream.status_code, 200);
      assert_eq!(server.finish().authorization, None);
@@ -9405,6 +9405,7 @@ index e5fe531..39d875f 100644
 +        r#"{"model":"gpt-5.5","input":"hello","stream":true}"#,
 +        None,
 +        "/v1/responses",
++        None,
 +        None,
 +    )
 +    .await

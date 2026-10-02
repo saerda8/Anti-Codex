@@ -5,17 +5,17 @@
     "version": "1.5.0",
     "tag": "v1.5.0",
     "upstreamCommit": "23ed5515e69431794cbef363a886d974abcc6179",
-    "isolationPatchCommit": "4746479681ca3be778c2f04394cc7dd245d5b1b0",
-    "patchCommit": "4746479681ca3be778c2f04394cc7dd245d5b1b0",
+    "isolationPatchCommit": "18492339dbd40a9a62c82828093624a3b2ac1571",
+    "patchCommit": "18492339dbd40a9a62c82828093624a3b2ac1571",
     "patches": [
         {
             "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-            "sha256": "6fc6a0fba0cbb08696f525e6c1b578e7574a262c4e691b95ab6913033f243dd7",
+            "sha256": "36dc9a1ce5b214b60211427c3785957c9f159c6a24e9e8be003231e5b6c9847e",
             "scope": "complete Anti-Codex v1.5 compatibility adapter plus upstream-format normalization: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy, stream safeguards and Codex v1.5 navigation/protocol compatibility"
         }
     ],
     "verification": {
-        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 4746479681ca3be778c2f04394cc7dd245d5b1b0; tree 106ddd8d30c2a320c9850b131a0a25a6b4097be7",
+        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 18492339dbd40a9a62c82828093624a3b2ac1571; tree 7a90f6361ab9e03926e8bc423dcacddf720bf4bb",
         "sourceIsolationAudit": "passed",
         "auditRegressionTests": "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; core regression 527/528 passed with 1 native-browser fixture ignored; beta-header and quota-gate regressions passed",
         "cargoFmt": "passed",
