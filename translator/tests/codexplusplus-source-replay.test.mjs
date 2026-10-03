@@ -16,9 +16,9 @@ const patchManifest = readCodexPlusPlusPatchManifest(root);
 test("current promotion targets the reviewed upstream tag and manifest patch set", () => {
   const accepted = patchManifest.metadata;
 
-  assert.equal(accepted.version, "1.4.0");
-  assert.equal(accepted.tag, "v1.4.0");
-  assert.equal(accepted.upstreamCommit, "27cdd21f06b59e6b71e0455672e20ed96cbd41de");
+  assert.equal(accepted.version, "1.5.0");
+  assert.equal(accepted.tag, "v1.5.0");
+  assert.equal(accepted.upstreamCommit, "23ed5515e69431794cbef363a886d974abcc6179");
   assert.match(accepted.patchCommit, /^[0-9a-f]{40}$/);
   assert.equal(accepted.patches.length, 1);
   assert.equal(
@@ -34,7 +34,7 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
       patch.file,
     );
   }
-  assert.match(accepted.verification.patchReplay, /v1\.4|cumulative|patch/i);
+  assert.match(accepted.verification.patchReplay, /v1\.5|cumulative|patch/i);
   assert.match(accepted.verification.launcherReleaseBuild, /^sha256:[0-9a-f]{64}$/);
 });
 
