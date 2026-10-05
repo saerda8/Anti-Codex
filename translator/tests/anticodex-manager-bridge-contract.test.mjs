@@ -1489,6 +1489,14 @@ test("connector allowlist save receives its status and reload dependencies", asy
   assert.match(result.textContent, /allowlist.*已保存/);
 });
 
+test("external connector authorization only shows connectors with OAuth configured", () => {
+  assert.match(
+    managerInject,
+    /auth\?\.connectors[^;]*\.filter\(\(item\) => [^)]*item\.oauthConfigured === true\)/,
+    "connectors without OAuth configuration must not be presented as requiring login",
+  );
+});
+
 test("Manager high-impact real-mouse helper requires dispatch evidence instead of disabled UI", () => {
   assert.match(managerRealMouseAction, /const inspectOnly =/);
   assert.match(managerRealMouseAction, /const timeoutMs = Number\(args\.get\("--timeout-ms"\) \|\| 35_000\)/);
