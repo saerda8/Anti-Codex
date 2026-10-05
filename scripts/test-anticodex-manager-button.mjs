@@ -675,6 +675,9 @@ function realBridgeSource(enabled = !uiOnlyMode) {
   if (!Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__")) {
     window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_ACTION__;
   }
+  if (!Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__")) {
+    window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__ = window.__ANTICODEX_RUN_MANAGER_REQUEST__;
+  }
   if (!Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__")) {
     window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__ = window.__ANTICODEX_MANAGER_BRIDGE_READY__;
   }
@@ -696,6 +699,12 @@ function realBridgeSource(enabled = !uiOnlyMode) {
         delete window.__ANTICODEX_RUN_MANAGER_ACTION__;
       }
     }
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__")) {
+      window.__ANTICODEX_RUN_MANAGER_REQUEST__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__;
+      if (typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function") {
+        delete window.__ANTICODEX_RUN_MANAGER_REQUEST__;
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__")) {
       window.__ANTICODEX_MANAGER_BRIDGE_READY__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
       if (typeof window.__ANTICODEX_MANAGER_BRIDGE_READY__ !== "boolean") {
@@ -705,6 +714,7 @@ function realBridgeSource(enabled = !uiOnlyMode) {
     clearTimeout(window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__);
     delete window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__;
@@ -728,6 +738,30 @@ function realBridgeSource(enabled = !uiOnlyMode) {
   });
   testActionBridge.__ANTICODEX_MANAGER_BUTTON_TEST_BRIDGE__ = true;
   window.__ANTICODEX_RUN_MANAGER_ACTION__ = testActionBridge;
+  const testRequestBridge = async (requestedPath) => {
+    const responses = window.__ANTICODEX_MANAGER_SNAPSHOT__?.responses || {};
+    const fallback = {
+      "/anticodex/manager/bootstrap": { ok: true, token: "manager-button-test-token" },
+      "/health": { ok: true, accountReady: true, accountState: "ready" },
+      "/models": { object: "list", data: [] },
+      "/anticodex/account": { ok: true, identityAvailable: false, fingerprint: "" },
+      "/anticodex/diagnostics": { ok: true, localFeatures: { mcp: { count: 1 }, skills: { count: 1 } } },
+      "/backend-api/ps/plugins/installed": { plugins: [] },
+      "/backend-api/aip/connectors": { connectors: [] },
+      "/backend-api/plugins/list": { plugins: [] },
+      "/backend-api/wham/apps": { tools: [] },
+      "/anticodex/local-connectors/allowlist": { persisted: [], env: [], counts: {} },
+      "/anticodex/connectors/auth": { connectors: [] },
+      "/anticodex/upstream-profile": { active: "antigravity" },
+      "/anticodex/model-routes": { latest: null },
+    };
+    const value = Object.prototype.hasOwnProperty.call(responses, requestedPath)
+      ? responses[requestedPath]
+      : (fallback[requestedPath] || {});
+    return { kind: "manager-request", path: requestedPath, ok: true, value };
+  };
+  testRequestBridge.__ANTICODEX_MANAGER_BUTTON_TEST_BRIDGE__ = true;
+  window.__ANTICODEX_RUN_MANAGER_REQUEST__ = testRequestBridge;
   window.__ANTICODEX_MANAGER_BRIDGE_READY__ = true;
   window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__ = setTimeout(() => {
     window.__ANTICODEX_RESTORE_MANAGER_BUTTON_ACTION_BRIDGE__?.();
@@ -760,8 +794,15 @@ function cleanupRealBridgeSource(enabled = true) {
         delete window.__ANTICODEX_MANAGER_BRIDGE_READY__;
       }
     }
+    if (Object.prototype.hasOwnProperty.call(window, "__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__")) {
+      window.__ANTICODEX_RUN_MANAGER_REQUEST__ = window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__;
+      if (typeof window.__ANTICODEX_RUN_MANAGER_REQUEST__ !== "function") {
+        delete window.__ANTICODEX_RUN_MANAGER_REQUEST__;
+      }
+    }
     delete window.__ANTICODEX_MANAGER_BUTTON_BRIDGE_RESTORE_TIMER__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_ACTION_BRIDGE__;
+    delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_REQUEST_BRIDGE__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ORIGINAL_BRIDGE_READY__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__;
     delete window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__;
@@ -1414,6 +1455,23 @@ await ws.call(id++, "Runtime.evaluate", runtimeParams(managerInjectSource, {
   returnByValue: true,
   allowUnsafeEvalBlockedByCSP: true,
 }), 10000);
+if (!uiOnlyBatchMode && !upstreamConfigOnly && !closeOnly) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await drainManagerActionQueue();
+    const state = await evaluate(`(() => {
+      const grid = document.querySelector("#anticodex-manager-overlay .anticodex-grid");
+      return {
+        snapshotInFlight: window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ === true,
+        queueLength: Array.isArray(window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__)
+          ? window.__ANTICODEX_MANAGER_BUTTON_ACTION_QUEUE__.length : 0,
+        promiseCount: Object.keys(window.__ANTICODEX_MANAGER_BUTTON_ACTION_PROMISES__ || {}).length,
+        loading: grid?.childElementCount === 1 && grid.querySelector(".anticodex-loading") !== null,
+      };
+    })()`, 2500).catch(() => ({}));
+    if (!state.snapshotInFlight && state.queueLength === 0 && state.promiseCount === 0 && !state.loading) break;
+    await sleep(100);
+  }
+}
 if (uiOnlyBatchMode) {
   await ws.call(id++, "Runtime.evaluate", runtimeParams(uiOnlyBatchBridgeSource(true), {
     awaitPromise: true,
@@ -1856,6 +1914,7 @@ async function waitForManagerActionSurfaceStable(actionName) {
         .find((candidate) => candidate.dataset.action === actionName) || null;
       const result = overlay?.querySelector('[data-anticodex-result="action"]') || null;
       const grid = overlay?.querySelector(".anticodex-grid") || null;
+      const actionCount = overlay?.querySelectorAll("button[data-action]")?.length || 0;
       const snapshotInFlight = window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ === true;
       const actionInFlight = Boolean(window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__);
       const busy = overlay?.getAttribute("data-anticodex-busy") === "true"
@@ -1864,12 +1923,11 @@ async function waitForManagerActionSurfaceStable(actionName) {
       const loading = grid?.childElementCount === 1
         && grid.querySelector(".anticodex-loading") !== null;
       const confirming = button?.getAttribute("data-confirming-high-impact") === "true";
-      const ready = Boolean(overlay && button && result && grid)
+      const ready = Boolean(overlay && button && result && grid && actionCount > 0)
         && !snapshotInFlight
         && !actionInFlight
         && !busy
         && !running
-        && !loading
         && !confirming
         && button.disabled !== true;
       return {
@@ -1878,6 +1936,7 @@ async function waitForManagerActionSurfaceStable(actionName) {
         buttonPresent: Boolean(button),
         resultPresent: Boolean(result),
         gridPresent: Boolean(grid),
+        actionCount,
         snapshotInFlight,
         actionInFlight,
         busy,

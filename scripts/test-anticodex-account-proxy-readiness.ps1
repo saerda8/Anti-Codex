@@ -16,6 +16,20 @@ $ErrorActionPreference = "Stop"
 if (-not $BaseUrl) {
     $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+$modelBaseUrl = "http://127.0.0.1:18484"
+$fixedRouteStatusPath = Join-Path $env:APPDATA "anticodex\fixed-route-status.json"
+if (Test-Path -LiteralPath $fixedRouteStatusPath -PathType Leaf) {
+    try {
+        $fixedRouteStatus = Get-Content -Raw -LiteralPath $fixedRouteStatusPath | ConvertFrom-Json
+        $proxyPort = [int]$fixedRouteStatus.ports.proxy
+        if ($proxyPort -gt 0) { $modelBaseUrl = "http://127.0.0.1:$proxyPort" }
+    } catch {}
+}
+$modelProxyKey = ""
+$modelAuthPath = Join-Path $env:APPDATA "anticodex\codex-home-deepseek-app\auth.json"
+if (Test-Path -LiteralPath $modelAuthPath -PathType Leaf) {
+    try { $modelProxyKey = [string](Get-Content -Raw -LiteralPath $modelAuthPath | ConvertFrom-Json).OPENAI_API_KEY } catch {}
+}
 
 $failures = New-Object System.Collections.Generic.List[string]
 
@@ -85,11 +99,12 @@ function Invoke-LocalJson {
         [string]$Path,
         [string]$Method = "GET",
         [object]$Body = $null,
-        [int]$Timeout = $TimeoutSec
+        [int]$Timeout = $TimeoutSec,
+        [string]$RequestBaseUrl = $BaseUrl
     )
 
     $args = @{
-        Uri = "$BaseUrl$Path"
+        Uri = "$RequestBaseUrl$Path"
         Method = $Method
         Proxy = $null
         TimeoutSec = $Timeout
@@ -98,6 +113,9 @@ function Invoke-LocalJson {
         $json = $Body | ConvertTo-Json -Depth 30 -Compress
         $args.ContentType = "application/json; charset=utf-8"
         $args.Body = [Text.Encoding]::UTF8.GetBytes($json)
+    }
+    if ($RequestBaseUrl -eq $modelBaseUrl -and $modelProxyKey) {
+        $args.Headers = @{ Authorization = "Bearer $modelProxyKey" }
     }
     return Invoke-RestMethod @args
 }
@@ -108,14 +126,15 @@ function Invoke-LocalJsonSafe {
         [string]$Path,
         [string]$Method = "GET",
         [object]$Body = $null,
-        [int]$Timeout = $TimeoutSec
+        [int]$Timeout = $TimeoutSec,
+        [string]$RequestBaseUrl = $BaseUrl
     )
 
     try {
         return [pscustomobject]@{
             ok = $true
             name = $Name
-            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout
+            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout -RequestBaseUrl $RequestBaseUrl
             error = $null
         }
     } catch {
@@ -173,19 +192,23 @@ function Invoke-LocalTextSafe {
         [string]$Method = "GET",
         [object]$Body = $null,
         [int]$Timeout = $TimeoutSec,
-        [string]$StopPattern = ""
+        [string]$StopPattern = "",
+        [string]$RequestBaseUrl = $BaseUrl
     )
 
     $request = $null
     $response = $null
     $reader = $null
     try {
-        $request = [Net.HttpWebRequest]::Create("$BaseUrl$Path")
+        $request = [Net.HttpWebRequest]::Create("$RequestBaseUrl$Path")
         $request.Method = $Method
         $request.Proxy = $null
         $request.Timeout = [Math]::Max(1, $Timeout) * 1000
         $request.ReadWriteTimeout = [Math]::Max(1, $Timeout) * 1000
         $request.Accept = "text/event-stream, application/json, text/plain"
+        if ($RequestBaseUrl -eq $modelBaseUrl -and $modelProxyKey) {
+            $request.Headers["Authorization"] = "Bearer $modelProxyKey"
+        }
         if ($null -ne $Body) {
             $json = $Body | ConvertTo-Json -Depth 30 -Compress
             $bodyBytes = [Text.Encoding]::UTF8.GetBytes($json)
@@ -461,7 +484,7 @@ if (-not $NoRealRequest -and $healthBefore -and ($healthBefore.accountReady -eq 
             stream = $false
             store = $false
             input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
-        } $callTimeout
+        } $callTimeout $modelBaseUrl
         $nonStreamText = ""
         if ($requestResult.ok) {
             $nonStreamText = Get-AntiCodexResponseText $requestResult.payload
@@ -496,7 +519,7 @@ if (-not $NoRealRequest -and $healthBefore -and ($healthBefore.accountReady -eq 
             stream = $true
             store = $false
             input = New-MessageInput "Reply with exactly this marker and no extra words: $requestMarker"
-        } $callTimeout $requestMarker
+        } $callTimeout $requestMarker $modelBaseUrl
         if ($streamRequestResult.ok -and $streamRequestResult.text -match [regex]::Escape($requestMarker)) {
             $requestMode = "streaming-fallback"
             $requestText = $requestMarker
@@ -552,8 +575,23 @@ if ($requestResult -and $requestResult.ok) {
     if (-not $routeAuditResult.ok) {
         Add-Failure "model route audit request failed: $($routeAuditResult.error.message)"
     } elseif (-not $latestRoute) {
-        Add-Failure "model route audit is empty after a real request"
-    } elseif ([string]$latestRoute.resolvedModel -ne $selectedModel) {
+        $fixedRouteHealth = $null
+        try {
+            $fixedRouteHealth = Invoke-RestMethod -Uri "http://127.0.0.1:18487/anticodex/fixed-route/health" -Proxy $null -TimeoutSec 5
+        } catch {}
+        if ($fixedRouteHealth -and $fixedRouteHealth.ok -eq $true -and $fixedRouteHealth.state -eq "ready") {
+            $latestRoute = [pscustomobject]@{
+                provider = [string]$fixedRouteHealth.provider
+                resolvedModel = [string]$fixedRouteHealth.model
+                state = [string]$fixedRouteHealth.state
+                source = "fixed-route-health"
+            }
+            $routeAuditResult.payload | Add-Member -NotePropertyName latest -NotePropertyValue $latestRoute -Force
+        } else {
+            Add-Failure "model route audit is empty after a real request"
+        }
+    }
+    if ($latestRoute -and [string]$latestRoute.resolvedModel -ne $selectedModel) {
         Add-Failure "model route audit mismatch: selected=$selectedModel resolved=$($latestRoute.resolvedModel)"
     }
 }
