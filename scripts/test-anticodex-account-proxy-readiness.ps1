@@ -68,6 +68,18 @@ function Get-ErrorPayload {
     }
 }
 
+function Read-JsonResponseBody {
+    param($Response)
+    $stream = $Response.GetResponseStream()
+    if (-not $stream) { return $null }
+    $reader = New-Object IO.StreamReader($stream)
+    try {
+        $text = $reader.ReadToEnd()
+        if ($text) { return ($text | ConvertFrom-Json) }
+        return $null
+    } finally { $reader.Dispose() }
+}
+
 function Invoke-LocalJson {
     param(
         [string]$Path,
@@ -113,6 +125,44 @@ function Invoke-LocalJsonSafe {
             payload = $null
             error = Get-ErrorPayload $_
         }
+    }
+}
+
+function Invoke-ManagerActionSafe {
+    param(
+        [string]$Name,
+        [string]$Action,
+        [int]$Timeout = $TimeoutSec
+    )
+    try {
+        $bootstrapRequest = [Net.HttpWebRequest]::Create("$BaseUrl/anticodex/manager/bootstrap")
+        $bootstrapRequest.Method = "GET"
+        $bootstrapRequest.Proxy = $null
+        $bootstrapRequest.Timeout = [Math]::Max(1, $Timeout) * 1000
+        $bootstrapRequest.Headers["Origin"] = $BaseUrl
+        $bootstrapRequest.Referer = "$BaseUrl/anticodex/manager"
+        $bootstrapResponse = $bootstrapRequest.GetResponse()
+        try { $bootstrap = Read-JsonResponseBody -Response $bootstrapResponse } finally { $bootstrapResponse.Dispose() }
+        $token = [string]$bootstrap.token
+        if ([string]::IsNullOrWhiteSpace($token)) { throw "Manager action token is missing." }
+        $request = [Net.HttpWebRequest]::Create("$BaseUrl/anticodex/manager/action")
+        $request.Method = "POST"
+        $request.Proxy = $null
+        $request.Timeout = [Math]::Max(1, $Timeout) * 1000
+        $request.Headers["Origin"] = $BaseUrl
+        $request.Referer = "$BaseUrl/anticodex/manager"
+        $request.Headers["x-anticodex-manager-token"] = $token
+        $bodyBytes = [Text.Encoding]::UTF8.GetBytes((@{ action = $Action } | ConvertTo-Json -Compress))
+        $request.ContentType = "application/json; charset=utf-8"
+        $request.ContentLength = $bodyBytes.Length
+        $stream = $request.GetRequestStream()
+        try { $stream.Write($bodyBytes, 0, $bodyBytes.Length) } finally { $stream.Dispose() }
+        $response = $request.GetResponse()
+        try { $payload = Read-JsonResponseBody -Response $response } finally { $response.Dispose() }
+        if (-not $payload.ok -or $payload.result.ok -eq $false) { throw "Manager action $Action failed." }
+        return [pscustomobject]@{ ok = $true; name = $Name; payload = $payload.result; error = $null }
+    } catch {
+        return [pscustomobject]@{ ok = $false; name = $Name; payload = $null; error = Get-ErrorPayload $_ }
     }
 }
 
@@ -370,7 +420,7 @@ if (-not $accountResult.ok) {
     Add-Failure "Antigravity account status did not provide an anonymized identity fingerprint"
 }
 
-$refreshResult = Invoke-LocalJsonSafe "model-refresh" "/anticodex/models/refresh" "POST" @{}
+$refreshResult = Invoke-ManagerActionSafe "model-refresh" "refreshModels"
 $modelsResult = Invoke-LocalJsonSafe "models" "/models"
 $models = if ($modelsResult.ok -and $modelsResult.payload -and $modelsResult.payload.data) { @($modelsResult.payload.data) } else { @() }
 
