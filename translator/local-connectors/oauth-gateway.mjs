@@ -211,6 +211,22 @@ function writeConnectorMcpConfig(codexHome, sessions) {
     return target;
 }
 
+function requestRouteRestart(stateRoot) {
+    const status = readJson(path.join(stateRoot, "fixed-route-status.json"));
+    const supervisorPid = Number(status?.pid || status?.processes?.managerService || 0);
+    if (!Number.isInteger(supervisorPid) || supervisorPid <= 0) return false;
+    const target = path.join(stateRoot, "route-restart-request.json");
+    const temp = `${target}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify({
+        schema: "anticodex-route-restart-request-v1",
+        requestId: crypto.randomUUID().replace(/-/g, ""),
+        requestedAt: new Date().toISOString(),
+        expectedSupervisorPid: supervisorPid,
+    }), "utf8");
+    fs.renameSync(temp, target);
+    return true;
+}
+
 function listConnectorAuth(options) {
     const state = readState(options.stateRoot);
     const sessions = state.sessions;
@@ -304,7 +320,12 @@ async function finishConnectorAuth(options, params) {
     };
     writeState(options.stateRoot, state);
     const configPath = writeConnectorMcpConfig(options.codexHome, state.sessions);
-    return { connectorId: context.connectorId, session: publicSession(state.sessions[context.connectorId]), configPath };
+    return {
+        connectorId: context.connectorId,
+        session: publicSession(state.sessions[context.connectorId]),
+        configPath,
+        restartRequested: requestRouteRestart(options.stateRoot),
+    };
 }
 
 export {
