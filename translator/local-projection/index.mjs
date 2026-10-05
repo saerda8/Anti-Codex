@@ -267,6 +267,11 @@ function collectPluginDir(pluginDir, marketplaceName, plugins, seen) {
     const metadata = safeReadJson(path.join(pluginDir, ".codex-plugin", "plugin.json"));
     if (!metadata?.name) return;
     if (ANTI_CODEX_EXCLUDED_PLUGIN_NAMES.has(metadata.name)) return;
+    const appData = safeReadJson(path.join(pluginDir, ".app.json"));
+    const hasConnectorApp = Boolean(appData?.apps && Object.keys(appData.apps).length > 0);
+    const hasLocalSkills = Boolean(metadata.skills) || fs.existsSync(path.join(pluginDir, "skills"));
+    const hasLocalMcp = Boolean(metadata.mcpServers) || fs.existsSync(path.join(pluginDir, ".mcp.json"));
+    if (hasConnectorApp && !hasLocalSkills && !hasLocalMcp) return;
     const key = `${metadata.name}@${marketplaceName}`;
     const record = {
         marketplaceName,
