@@ -263,6 +263,17 @@ function localWebMcpBlocks() {
   }];
 }
 
+function connectorMcpBlocks() {
+  const connectorPath = path.join(codexHome, "connector-mcp.toml");
+  if (!fs.existsSync(connectorPath)) return [];
+  try {
+    return splitTomlBlocks(fs.readFileSync(connectorPath, "utf8"))
+      .filter((block) => isMcpBlock(block) && mcpServerName(block).startsWith("connector-"));
+  } catch {
+    return [];
+  }
+}
+
 function render(blocks) {
   return blocks
     .map((block) => block.lines.join("\n").replace(/\n+$/g, ""))
@@ -293,10 +304,12 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
         || (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
     );
   const generatedWebMcp = localWebMcpBlocks();
+  const generatedConnectorMcp = connectorMcpBlocks();
   const merged = generatedWebMcp.length > 0
     ? [...keptTargetBlocks, ...sourceShared].filter((block) => !isLocalWebMcpBlock(block))
     : [...keptTargetBlocks, ...sourceShared];
-  return [...merged, ...generatedWebMcp];
+  const withoutConnectorMcp = merged.filter((block) => !(isMcpBlock(block) && mcpServerName(block).startsWith("connector-")));
+  return [...withoutConnectorMcp, ...generatedWebMcp, ...generatedConnectorMcp];
 }
 
 if (!fs.existsSync(sourcePath)) {

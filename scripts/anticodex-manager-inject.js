@@ -872,6 +872,39 @@
     ]);
   }
 
+  function connectorAuthEditor(auth, result, reload, runExclusive) {
+    const rows = Array.isArray(auth?.connectors) ? auth.connectors.filter((item) => item.oauthConfigured) : [];
+    if (!rows.length) return el("div", { className: "anticodex-result", text: "当前没有发现可自动授权的连接器。" });
+    const note = el("div", { className: "anticodex-result", text: "点连接后会打开服务商登录页；登录并允许一次，Anti-Codex 才会真正拿到工具。" });
+    const list = el("div", { style: "display:grid;gap:6px" });
+    for (const item of rows) {
+      const status = item.session?.status === "connected" ? "已连接" : "连接";
+      const button = el("button", { type: "button", text: `${item.pluginName} · ${status}` });
+      button.disabled = item.session?.status === "connected";
+      button.onclick = () => runExclusive(async () => {
+        button.disabled = true;
+        result.classList.remove("anticodex-error");
+        result.textContent = `正在准备 ${item.pluginName} 授权...`;
+        try {
+          const started = await managerPostJson("/anticodex/connectors/auth/start", { connectorId: item.connectorId });
+          const opened = window.open(started.authorizationUrl, "_blank", "noopener,noreferrer");
+          result.textContent = opened
+            ? `${item.pluginName} 已打开授权页；完成后回到 Anti-Codex 刷新。`
+            : `${item.pluginName} 授权页被浏览器拦截，请复制地址后打开：\n${started.authorizationUrl}`;
+        } catch (error) {
+          result.classList.add("anticodex-error");
+          result.textContent = `${item.pluginName} 授权准备失败：${error.message}`;
+          button.disabled = false;
+        }
+      });
+      list.append(el("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:center" }, [
+        el("span", { text: `${item.connectorName || item.pluginName} (${item.serverName})` }),
+        button,
+      ]));
+    }
+    return el("div", { style: "display:grid;gap:9px" }, [note, list]);
+  }
+
   function routeSummaryRows(route) {
     return [
       ["\u8bf7\u6c42\u6a21\u578b", route?.requestedModel || ""],
@@ -1994,7 +2027,7 @@
         await ensureSnapshotForLoad();
         reconcileManagerPendingActions(window.__ANTICODEX_MANAGER_SNAPSHOT__);
         const snapshotReadOptions = { preferSnapshot: true };
-        const [bootstrapResult, healthResult, modelsResult, diagnosticsResult, pluginsResult, connectorsResult, appToolsResult, allowlistResult, upstreamResult, routesResult] = await Promise.all([
+        const [bootstrapResult, healthResult, modelsResult, diagnosticsResult, pluginsResult, connectorsResult, appToolsResult, allowlistResult, authResult, upstreamResult, routesResult] = await Promise.all([
           safeJson("/anticodex/manager/bootstrap", snapshotReadOptions),
           safeJson("/health", snapshotReadOptions),
           safeJson("/models", snapshotReadOptions),
@@ -2003,6 +2036,7 @@
           safeJson("/backend-api/aip/connectors", snapshotReadOptions),
           safeJson("/backend-api/wham/apps", snapshotReadOptions),
           safeJson("/anticodex/local-connectors/allowlist", snapshotReadOptions),
+          safeJson("/anticodex/connectors/auth", snapshotReadOptions),
           safeJson("/anticodex/upstream-profile", snapshotReadOptions),
           safeJson("/anticodex/model-routes", snapshotReadOptions),
         ]);
@@ -2015,6 +2049,7 @@
         const connectors = safeValue(connectorsResult, { connectors: [] });
         const appTools = safeValue(appToolsResult, { tools: [] });
         const allowlist = safeValue(allowlistResult, { persisted: [], env: [], counts: {} });
+        const auth = safeValue(authResult, { connectors: [] });
         const upstreamProfile = safeValue(upstreamResult, {});
         const routes = safeValue(routesResult, {});
         const usingThirdParty = upstreamProfile.active === "third-party";
@@ -2026,6 +2061,7 @@
           [pluginsResult, "\u63d2\u4ef6"],
           [connectorsResult, "\u8fde\u63a5\u5668"],
           [allowlistResult, "\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177"],
+          [authResult, "\u8fde\u63a5\u5668\u6388\u6743"],
           [upstreamResult, "\u6a21\u578b\u901a\u9053"],
           [routesResult, "\u6700\u8fd1\u8def\u7531"],
         ].filter(([item]) => !item.ok).map(([item, label]) => {
@@ -2137,6 +2173,7 @@
             optionalLoadErrors.length ? ["\u8865\u5145\u63d0\u793a", optionalLoadErrors.join("\n")] : null,
           ].filter(Boolean))),
           card("\u672c\u5730\u8fde\u63a5\u5668\u5de5\u5177", connectorAllowlistEditor(allowlist, result, load, runManagerExclusive)),
+          card("\u5916\u90e8\u8fde\u63a5\u5668\u6388\u6743", connectorAuthEditor(auth, result, load, runManagerExclusive)),
         ].filter(Boolean);
         grid.replaceChildren(...cards);
         result.classList.toggle("anticodex-error", loadErrors.length > 0);

@@ -11,6 +11,11 @@ import {
     testCodexPlusPlusUpstreamConnection,
 } from "../translator/provider/codexplusplus-upstream-probe.mjs";
 import { localBackendApiResponse } from "../translator/local-projection/index.mjs";
+import {
+    finishConnectorAuth,
+    listConnectorAuth,
+    startConnectorAuth,
+} from "../translator/local-connectors/oauth-gateway.mjs";
 import { createAntigravityAccountManager } from "./anticodex-antigravity-accounts.mjs";
 import { createAntigravityAccountDriver } from "./anticodex-antigravity-accounts-driver.mjs";
 import { createAntigravityOfficialLogin } from "./anticodex-antigravity-login.mjs";
@@ -2442,6 +2447,49 @@ export function createAntiCodexManagerService(options = {}) {
         }, req);
       } catch (error) {
         return jsonResponse(res, error.statusCode || 500, { ok: false, message: error.message }, req);
+      }
+    }
+
+    if (req.method === "GET" && pathname === "/anticodex/connectors/auth") {
+      if (!validateManagerSourceRequest(req, res, "connector auth status")) return;
+      return jsonResponse(res, 200, {
+        ok: true,
+        connectors: listConnectorAuth({
+          stateRoot,
+          codexHome,
+          sharedCodexHome: process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || path.join(process.env.USERPROFILE || "", ".codex"),
+        }),
+      }, req);
+    }
+
+    if (req.method === "POST" && pathname === "/anticodex/connectors/auth/start") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      try {
+        const raw = await readRequestBody(req);
+        const body = raw.length ? JSON.parse(raw.toString("utf8")) : {};
+        const host = String(req.headers.host || `127.0.0.1:${resolvedPort}`);
+        const redirectUri = `http://${host}/anticodex/connectors/oauth/callback`;
+        const result = await startConnectorAuth({
+          stateRoot,
+          codexHome,
+          sharedCodexHome: process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || path.join(process.env.USERPROFILE || "", ".codex"),
+        }, String(body.connectorId || ""), redirectUri);
+        return jsonResponse(res, 200, { ok: true, ...result }, req);
+      } catch (error) {
+        return jsonResponse(res, 400, { ok: false, error: error.message }, req);
+      }
+    }
+
+    if (req.method === "GET" && pathname === "/anticodex/connectors/oauth/callback") {
+      try {
+        const result = await finishConnectorAuth({ stateRoot, codexHome }, Object.fromEntries(url.searchParams.entries()));
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        res.end(`<!doctype html><meta charset="utf-8"><title>Anti-Codex</title><p>Anti-Codex 授权成功，可以关闭此窗口。</p><script>window.close()</script>`);
+        return result;
+      } catch (error) {
+        res.writeHead(400, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        res.end(`<!doctype html><meta charset="utf-8"><title>Anti-Codex</title><p>授权失败：${String(error.message).replace(/[&<>]/g, "")}</p>`);
+        return null;
       }
     }
 

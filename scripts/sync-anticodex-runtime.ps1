@@ -384,6 +384,7 @@ $requiredSourceFiles = @(
     "translator\provider\codexplusplus-upstream-probe.mjs",
     "translator\provider\start-antigravity-chat-provider.mjs",
     "translator\local-projection\index.mjs",
+    "translator\local-connectors\oauth-gateway.mjs",
     "translator\sync-antigravity-model-catalog.mjs",
     "codex-home-deepseek-app\config.adaptive-oneapi.toml"
 )
@@ -1581,7 +1582,8 @@ $syntaxCheckedJavaScriptFiles = @(
     "translator\provider\antigravity-chat-adapter.mjs",
     "translator\provider\antigravity-chat-server.mjs",
     "translator\provider\codexplusplus-upstream-probe.mjs",
-    "translator\provider\start-antigravity-chat-provider.mjs"
+    "translator\provider\start-antigravity-chat-provider.mjs",
+    "translator\local-connectors\oauth-gateway.mjs"
 )
 $syncMutex = [Threading.Mutex]::new($false, "Global\AntiCodexHostSync")
 $compatibilitySyncMutex = [Threading.Mutex]::new($false, "Local\AntiCodexHostSync")
