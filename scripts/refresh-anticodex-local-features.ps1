@@ -422,7 +422,7 @@ if ($VerifyOnly) {
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
             $configSyncArgs = @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
-            if (Test-Path -LiteralPath $targetConfig -PathType Leaf -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
+            if ((Test-Path -LiteralPath $targetConfig -PathType Leaf) -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
                 $configSyncArgs += "--include-development-workers"
             }
             $configSyncSummary = Invoke-NodeText $sharedConfigSync $configSyncArgs
@@ -468,7 +468,7 @@ if ($VerifyOnly) {
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
             $finalConfigSyncArgs = @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
-            if (Test-Path -LiteralPath $targetConfig -PathType Leaf -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
+            if ((Test-Path -LiteralPath $targetConfig -PathType Leaf) -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
                 $finalConfigSyncArgs += "--include-development-workers"
             }
             $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync $finalConfigSyncArgs
