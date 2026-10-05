@@ -300,7 +300,12 @@ function pluginApps(pluginDir) {
     if (!appData?.apps || typeof appData.apps !== "object") return [];
     return Object.entries(appData.apps).flatMap(([name, app]) => {
         if (!app || typeof app !== "object" || !app.id) return [];
-        return [{ ...normalizeConnector({ ...app, id: app.id, name }), name }];
+        const normalized = normalizeConnector({ ...app, id: app.id, name });
+        // The local projection has connector metadata, but no OAuth/session
+        // authority.  Keep the plugin's local skills visible while hiding
+        // connector apps until the connector is genuinely accessible.
+        if (normalized.isAccessible !== true) return [];
+        return [{ ...normalized, name }];
     });
 }
 

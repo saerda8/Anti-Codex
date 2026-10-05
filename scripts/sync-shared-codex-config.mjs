@@ -23,6 +23,13 @@ const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
 const shouldNormalizeWindowsShims = process.platform === "win32" || process.env.DEEPCODEX_FORCE_WINDOWS_SHIM === "1";
 const localWebMcpName = "anticodex-web";
 const antiCodexExcludedMcpNames = new Set(["cua_repl"]);
+// These servers are owned by the native Codex desktop host.  Copying their
+// plugin blocks into Anti-Codex creates controls that cannot work there.
+const antiCodexExcludedPluginNames = new Set([
+  "codex-app-tools",
+  "code-review",
+  "unified-computer-use",
+]);
 
 function splitTomlBlocks(text) {
   const blocks = [];
@@ -53,6 +60,15 @@ function isMcpBlock(block) {
 function mcpServerName(block) {
   const match = block.header?.match(/^\[mcp_servers\.(?:"([^"]+)"|'([^']+)'|([^\.\]]+))(?:\.|\])/);
   return String(match?.[1] || match?.[2] || match?.[3] || "");
+}
+
+function pluginName(block) {
+  const match = block.header?.match(/^\[plugins\."([^"@]+)(?:@[^"].*)?"\]$/);
+  return String(match?.[1] || "");
+}
+
+function isPluginBlock(block) {
+  return Boolean(block.header?.startsWith("[plugins.\""));
 }
 
 function mcpBlockSuffix(block) {
@@ -261,6 +277,7 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
   const targetWorkerNames = workerServerNames(targetBlocks, { allowGeneratedHttp: true });
   const sourceShared = sourceBlocks
     .filter(isShared)
+    .filter((block) => !isPluginBlock(block) || !antiCodexExcludedPluginNames.has(pluginName(block)))
     .filter((block) => !antiCodexExcludedMcpNames.has(mcpServerName(block)))
     .filter((block) => includeDevelopmentWorkers || !isWorkerBlock(block, sourceWorkerNames))
     .filter((block) => !isWorkerBlock(block, targetWorkerNames))
@@ -269,10 +286,12 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
     .map(localizeNodeRepl);
   const sourceHeaders = new Set(sourceShared.map((block) => block.header));
   const sourceHasMcpBlocks = sourceShared.some(isMcpBlock);
-  const keptTargetBlocks = targetBlocks.filter(
-    (block) => isWorkerBlock(block, targetWorkerNames)
-      || (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
-  );
+  const keptTargetBlocks = targetBlocks
+    .filter((block) => !isPluginBlock(block) || !antiCodexExcludedPluginNames.has(pluginName(block)))
+    .filter(
+      (block) => isWorkerBlock(block, targetWorkerNames)
+        || (!isShared(block) || (!sourceHeaders.has(block.header) && !(sourceHasMcpBlocks && isMcpBlock(block))))
+    );
   const generatedWebMcp = localWebMcpBlocks();
   const merged = generatedWebMcp.length > 0
     ? [...keptTargetBlocks, ...sourceShared].filter((block) => !isLocalWebMcpBlock(block))
