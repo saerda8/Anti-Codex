@@ -48,16 +48,25 @@ export async function getCodexMcpServerDefinition({
   if (definition?.enabled !== true) {
     throw new Error(`Codex MCP server '${serverName}' is not enabled.`);
   }
-  if (definition?.transport?.type !== "stdio") {
-    throw new Error(`Codex MCP server '${serverName}' is not a stdio server.`);
+  if (definition?.transport?.type === "stdio") {
+    if (!definition.transport.command) {
+      throw new Error(`Codex MCP server '${serverName}' has no command.`);
+    }
+    definition.transport.args = Array.isArray(definition.transport.args) ? definition.transport.args : [];
+    definition.transport.env = definition.transport.env && typeof definition.transport.env === "object"
+      ? definition.transport.env
+      : {};
+  } else if (definition?.transport?.type === "streamable_http") {
+    if (!definition.transport.url) {
+      throw new Error(`Codex MCP server '${serverName}' has no streamable HTTP URL.`);
+    }
+    definition.transport.http_headers = definition.transport.http_headers
+      && typeof definition.transport.http_headers === "object"
+      ? definition.transport.http_headers
+      : {};
+  } else {
+    throw new Error(`Codex MCP server '${serverName}' uses unsupported transport.`);
   }
-  if (!definition.transport.command) {
-    throw new Error(`Codex MCP server '${serverName}' has no command.`);
-  }
-  definition.transport.args = Array.isArray(definition.transport.args) ? definition.transport.args : [];
-  definition.transport.env = definition.transport.env && typeof definition.transport.env === "object"
-    ? definition.transport.env
-    : {};
   return definition;
 }
 
@@ -112,23 +121,19 @@ export async function runRealMcpListSmoke({
   productEnvironment = {},
   timeoutMs = 10000,
 } = {}) {
-  if (!definition?.transport?.command) {
-    throw new Error("A structured stdio MCP definition is required.");
-  }
-  if (definition.transport.type !== "stdio") {
-    throw new Error(`MCP server '${definition.name || "unknown"}' is not a stdio server.`);
-  }
   const startedAt = Date.now();
-  const result = await runMcpStdioList({
-    command: definition.transport.command,
-    args: Array.isArray(definition.transport.args) ? definition.transport.args : [],
-    env: {
-      ...productEnvironment,
-      ...(definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {}),
-    },
-    cwd: definition.transport.cwd || undefined,
-    timeoutMs,
-  });
+  const result = definition.transport.type === "streamable_http"
+    ? await runMcpStreamableHttpList({ definition, timeoutMs })
+    : await runMcpStdioList({
+      command: definition.transport.command,
+      args: Array.isArray(definition.transport.args) ? definition.transport.args : [],
+      env: {
+        ...productEnvironment,
+        ...(definition.transport.env && typeof definition.transport.env === "object" ? definition.transport.env : {}),
+      },
+      cwd: definition.transport.cwd || undefined,
+      timeoutMs,
+    });
   const toolNames = result.tools
     .map((tool) => String(tool?.name || ""))
     .filter(Boolean)
@@ -136,13 +141,57 @@ export async function runRealMcpListSmoke({
   return {
     ok: true,
     serverName: definition.name || "unknown",
-    transport: "stdio",
-    commandName: basename(definition.transport.command),
+    transport: definition.transport.type,
+    commandName: definition.transport.type === "stdio" ? basename(definition.transport.command) : null,
     toolCount: result.tools.length,
     toolNames,
     serverInfo: result.serverInfo,
     elapsedMs: Date.now() - startedAt,
   };
+}
+
+async function runMcpStreamableHttpList({ definition, timeoutMs }) {
+  const headers = {
+    accept: "application/json, text/event-stream",
+    "content-type": "application/json",
+    ...(definition.transport.http_headers || {}),
+  };
+  const request = async (id, method, params) => {
+    const response = await fetch(definition.transport.url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    const payload = parseMcpHttpPayload(text);
+    if (payload?.error) throw new Error(String(payload.error.message || "MCP JSON-RPC error"));
+    return payload?.result ?? payload;
+  };
+  await request(1, "initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "anticodex-mcp-smoke", version: "1.0.0" },
+  });
+  const result = await request(2, "tools/list", {});
+  return {
+    tools: Array.isArray(result?.tools) ? result.tools : [],
+    serverInfo: result?.serverInfo ?? null,
+  };
+}
+
+function parseMcpHttpPayload(text) {
+  const raw = String(text || "").trim();
+  try { return JSON.parse(raw); } catch {}
+  const events = raw.split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .reverse();
+  for (const event of events) {
+    try { return JSON.parse(event); } catch {}
+  }
+  throw new Error("MCP streamable HTTP returned invalid JSON/SSE.");
 }
 
 function parseArgs(argv) {

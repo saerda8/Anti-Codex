@@ -5,7 +5,7 @@ import path from "node:path";
 const [, , sourcePath, targetPath, ...optionArgs] = process.argv;
 
 if (!sourcePath || !targetPath) {
-  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config> [--install-root <path>] [--codex-home <path>]");
+  console.error("Usage: sync-shared-codex-config.mjs <source-config> <target-config> [--install-root <path>] [--codex-home <path>] [--include-development-workers]");
   process.exit(2);
 }
 
@@ -16,6 +16,7 @@ function optionValue(name) {
 
 const installRoot = optionValue("--install-root");
 const codexHome = optionValue("--codex-home") || path.dirname(path.resolve(targetPath));
+const includeDevelopmentWorkers = optionArgs.includes("--include-development-workers");
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
 const workerToolSuffix = "_start_implementation";
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
@@ -261,7 +262,7 @@ function mergeSharedBlocks(targetBlocks, sourceBlocks) {
   const sourceShared = sourceBlocks
     .filter(isShared)
     .filter((block) => !antiCodexExcludedMcpNames.has(mcpServerName(block)))
-    .filter((block) => !isWorkerBlock(block, sourceWorkerNames))
+    .filter((block) => includeDevelopmentWorkers || !isWorkerBlock(block, sourceWorkerNames))
     .filter((block) => !isWorkerBlock(block, targetWorkerNames))
     .map(normalizeWindowsMcpShim)
     .map(normalizeMissingWindowsMcpCommand)

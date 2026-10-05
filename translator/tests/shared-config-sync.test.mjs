@@ -304,6 +304,26 @@ test("shared config sync excludes Anti-Codex development workers by default", ()
   assert.match(synchronizer, /start_implementation/);
 });
 
+test("shared config sync can explicitly include development workers", () => {
+  const dir = tempDir();
+  const source = path.join(dir, "global.toml");
+  const target = path.join(dir, "anticodex.toml");
+  fs.writeFileSync(source, [
+    "[mcp_servers.deepseek-external]",
+    'url = "http://127.0.0.1:47622/servers/deepseek-external/mcp"',
+    'http_headers = { Authorization = "Bearer test-token" }',
+    "",
+    "[mcp_servers.deepseek-external.tools.deepseek_start_implementation]",
+    'approval_mode = "approve"',
+  ].join("\n"));
+  fs.writeFileSync(target, "model = \"anticodex\"\n");
+
+  execFileSync(process.execPath, [syncSharedConfig, source, target, "--include-development-workers"]);
+  const next = fs.readFileSync(target, "utf8");
+  assert.match(next, /\[mcp_servers\.deepseek-external\]/);
+  assert.match(next, /deepseek_start_implementation/);
+});
+
 test("shared config sync excludes the native CUA server from Anti-Codex", () => {
   const dir = tempDir();
   const source = path.join(dir, "global.toml");
@@ -326,7 +346,7 @@ test("shared config sync excludes the native CUA server from Anti-Codex", () => 
   assert.match(next, /\[mcp_servers\.node_repl\]/);
 });
 
-test("MCP verifier rejects development workers inside the Anti-Codex product config", () => {
+test("MCP verifier keeps development workers opt-in", () => {
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
   assert.doesNotMatch(verifier, /deepseek-external/);
   assert.match(verifier, /Get-WorkerMcpNamesFromToml/);
@@ -334,6 +354,7 @@ test("MCP verifier rejects development workers inside the Anti-Codex product con
   assert.match(verifier, /start_implementation/);
   assert.doesNotMatch(verifier, /worker\[-_\]mcp/);
   assert.match(verifier, /must not include development MCP worker/);
+  assert.match(verifier, /developmentWorkersAllowed/);
 });
 
 test("DeepCodex-only plugin registrations stay local and cannot restore development MCP workers", () => {

@@ -227,6 +227,7 @@ $changedSharedMcpNames = @()
 $changedSharedMcpDetails = @()
 $excludedSharedDevelopmentMcpNames = @()
 $unexpectedLocalDevelopmentMcpNames = @()
+$developmentWorkersAllowed = $false
 $mcpSmokeChecks = @()
 $mcpListSmokeChecks = @()
 $directoryFingerprintCache = @{}
@@ -791,6 +792,7 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
 } else {
     try {
         $configText = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
+        $developmentWorkersAllowed = $configText -match '(?ms)^\[anticodex\.development_workers\]\s*\r?\nenabled\s*=\s*true\s*$'
         if ($configText -notmatch "\[mcp_servers\]") { Add-Failure "config.toml missing [mcp_servers]" }
         if ($configText -notmatch "\[mcp_servers\.node_repl\]") { Add-Failure "config.toml missing node_repl MCP server" }
         if ($configText -match "chatgpt\.com/(auth|login)") { Add-Failure "config.toml contains ChatGPT login route" }
@@ -1033,11 +1035,11 @@ if ($configText) {
         try {
             $sharedConfigText = Get-Content -LiteralPath $sharedConfigPath -Raw -Encoding UTF8
             $sharedMcpNamesAll = @(Get-McpServerNamesFromToml $sharedConfigText)
-            $excludedSharedDevelopmentMcpNames = @(Get-WorkerMcpNamesFromToml $sharedConfigText -AllowGeneratedHttp)
+            $excludedSharedDevelopmentMcpNames = if ($developmentWorkersAllowed) { @() } else { @(Get-WorkerMcpNamesFromToml $sharedConfigText -AllowGeneratedHttp) }
             $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $excludedSharedDevelopmentMcpNames -notcontains $_ })
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
             $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
-            $unexpectedLocalDevelopmentMcpNames = @(Get-WorkerMcpNamesFromToml $configText)
+            $unexpectedLocalDevelopmentMcpNames = if ($developmentWorkersAllowed) { @() } else { @(Get-WorkerMcpNamesFromToml $configText) }
             $localNodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
             $sharedNodeReplEnv = Get-McpNestedSectionText $sharedConfigText "node_repl" "env"
             $localNativePipe = Get-TomlQuotedFieldValue $localNodeReplEnv "SKY_CUA_NATIVE_PIPE"
@@ -1346,7 +1348,7 @@ $result = [pscustomobject]@{
         sharedAllNames = $sharedMcpNamesAll
         excludedSharedDevelopmentMcpNames = $excludedSharedDevelopmentMcpNames
         unexpectedLocalDevelopmentMcpNames = $unexpectedLocalDevelopmentMcpNames
-        developmentWorkersAllowed = $false
+        developmentWorkersAllowed = $developmentWorkersAllowed
         missingShared = $missingSharedMcpNames
         extraLocal = $extraLocalMcpNames
         changedShared = $changedSharedMcpNames
@@ -1433,7 +1435,7 @@ $consoleResult = [pscustomobject]@{
         sharedAllNames = $sharedMcpNamesAll
         excludedSharedDevelopmentMcpNames = $excludedSharedDevelopmentMcpNames
         unexpectedLocalDevelopmentMcpNames = $unexpectedLocalDevelopmentMcpNames
-        developmentWorkersAllowed = $false
+        developmentWorkersAllowed = $developmentWorkersAllowed
         missingShared = $missingSharedMcpNames
         changedShared = $changedSharedMcpNames
         changedSharedDetails = @($changedSharedMcpDetails)
