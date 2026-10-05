@@ -29,7 +29,7 @@ const REQUIRED_REPORTS = [
       if (report.ok !== true) fail("mcp-skills ok=false");
       if (report.mcp?.smoke?.passed !== true) fail("mcp-skills smoke not passed");
       if (Number(report.mcp?.count || 0) < 1 || report.mcp?.hasNodeRepl !== true) fail("mcp-skills node_repl missing");
-      if (report.mcp?.developmentWorkersAllowed === true
+      if ((report.mcp?.developmentWorkersAllowed === true && report.mcp?.developmentWorkersOptIn !== true)
         || (report.mcp?.unexpectedLocalDevelopmentMcpNames || []).length > 0) {
         fail("mcp-skills development workers leaked into the product");
       }
