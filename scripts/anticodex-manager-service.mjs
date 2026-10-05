@@ -14,6 +14,7 @@ import { localBackendApiResponse } from "../translator/local-projection/index.mj
 import {
     finishConnectorAuth,
     listConnectorAuth,
+    refreshConnectorSessions,
     startConnectorAuth,
 } from "../translator/local-connectors/oauth-gateway.mjs";
 import { createAntigravityAccountManager } from "./anticodex-antigravity-accounts.mjs";
@@ -2452,13 +2453,15 @@ export function createAntiCodexManagerService(options = {}) {
 
     if (req.method === "GET" && pathname === "/anticodex/connectors/auth") {
       if (!validateManagerSourceRequest(req, res, "connector auth status")) return;
+      const connectorOptions = {
+        stateRoot,
+        codexHome,
+        sharedCodexHome: process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || path.join(process.env.USERPROFILE || "", ".codex"),
+      };
+      await refreshConnectorSessions(connectorOptions);
       return jsonResponse(res, 200, {
         ok: true,
-        connectors: listConnectorAuth({
-          stateRoot,
-          codexHome,
-          sharedCodexHome: process.env.DEEPCODEX_SHARED_CODEX_HOME || process.env.GLOBAL_CODEX_HOME || path.join(process.env.USERPROFILE || "", ".codex"),
-        }),
+        connectors: listConnectorAuth(connectorOptions),
       }, req);
     }
 

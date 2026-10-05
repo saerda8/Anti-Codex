@@ -244,6 +244,46 @@ function listConnectorAuth(options) {
         }));
 }
 
+async function refreshConnectorSessions(options) {
+    const state = readState(options.stateRoot);
+    let changed = false;
+    for (const session of Object.values(state.sessions)) {
+        if (!session?.refreshToken || (session.expiresAt && Number(session.expiresAt) > Date.now() + 60_000)) continue;
+        const entry = connectorManifests(options).find((item) => item.connectorId === session.connectorId);
+        if (!entry || UNSUPPORTED_CONNECTOR_PLUGIN_NAMES.has(entry.pluginName)) continue;
+        try {
+            const discovery = await discoverOAuth(entry);
+            const clientId = session.clientId || (isPlaceholder(entry.config.oauth?.client_id) ? "" : String(entry.config.oauth.client_id || ""));
+            if (!clientId) continue;
+            const clientSecret = isPlaceholder(entry.config.oauth?.client_secret) ? "" : String(entry.config.oauth?.client_secret || "");
+            const token = await fetchJson(discovery.metadata.token_endpoint, {
+                method: "POST",
+                headers: { "content-type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    grant_type: "refresh_token",
+                    refresh_token: session.refreshToken,
+                    client_id: clientId,
+                    ...(clientSecret ? { client_secret: clientSecret } : {}),
+                }),
+            });
+            if (!token.access_token) continue;
+            session.accessToken = token.access_token;
+            session.refreshToken = token.refresh_token || session.refreshToken;
+            session.expiresAt = token.expires_in ? Date.now() + Number(token.expires_in) * 1000 : null;
+            session.lastError = "";
+            changed = true;
+        } catch (error) {
+            session.lastError = String(error.message || "refresh failed").slice(0, 240);
+        }
+    }
+    if (changed) {
+        writeState(options.stateRoot, state);
+        writeConnectorMcpConfig(options.codexHome, state.sessions);
+        requestRouteRestart(options.stateRoot);
+    }
+    return { changed, sessions: Object.values(state.sessions).map(publicSession) };
+}
+
 async function startConnectorAuth(options, connectorId, redirectUri) {
     const entry = connectorManifests(options).find((item) => item.connectorId === connectorId);
     if (!entry) throw new Error("No OAuth-capable MCP manifest was found for this connector.");
@@ -315,6 +355,7 @@ async function finishConnectorAuth(options, params) {
         url: context.url,
         accessToken: token.access_token,
         refreshToken: token.refresh_token || "",
+        clientId: context.clientId,
         expiresAt: token.expires_in ? Date.now() + Number(token.expires_in) * 1000 : null,
         tokenType: token.token_type || "Bearer",
     };
@@ -331,6 +372,7 @@ async function finishConnectorAuth(options, params) {
 export {
     finishConnectorAuth,
     listConnectorAuth,
+    refreshConnectorSessions,
     startConnectorAuth,
     UNSUPPORTED_CONNECTOR_PLUGIN_NAMES,
 };
