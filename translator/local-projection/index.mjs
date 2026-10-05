@@ -64,6 +64,7 @@ function listJsonFiles(dir) {
 function readConnectorDirectory() {
     const home = firstHomeWithRelativePath(path.join("cache", "codex_app_directory"));
     const locallyAuthorized = readLocalAuthorizedConnectorIds();
+    const oauthSessions = readOAuthSessionIds();
     if (home) {
         const dir = path.join(home, "cache", "codex_app_directory");
         for (const file of listJsonFiles(dir)) {
@@ -71,7 +72,7 @@ function readConnectorDirectory() {
             if (Array.isArray(data?.connectors)) {
                 return {
                     schema_version: data.schema_version || 1,
-                    connectors: data.connectors.map((connector) => normalizeConnector(connector, { locallyAuthorized })),
+                    connectors: data.connectors.map((connector) => normalizeConnector(connector, { locallyAuthorized, oauthSessions })),
                 };
             }
         }
@@ -113,6 +114,19 @@ function readLocalAuthorizedConnectorIds() {
     return ids;
 }
 
+function readOAuthSessionIds() {
+    const current = process.env.CODEX_HOME || process.env.CODEX_HOME_DIR || "";
+    const stateRoot = process.env.DEEPCODEX_STATE_ROOT || (current ? path.dirname(current) : "");
+    if (!stateRoot) return new Set();
+    const data = safeReadJson(path.join(stateRoot, "connector-auth-state.json"));
+    const sessions = data?.sessions && typeof data.sessions === "object" ? data.sessions : {};
+    const now = Date.now();
+    return new Set(Object.values(sessions)
+        .filter((session) => session && session.accessToken && (!session.expiresAt || Number(session.expiresAt) > now + 30_000))
+        .map((session) => String(session.connectorId || ""))
+        .filter(Boolean));
+}
+
 function readAppTools(options = {}) {
     const accessibleConnectorIds = options.accessibleConnectorIds instanceof Set ? options.accessibleConnectorIds : null;
     const tools = [];
@@ -141,6 +155,7 @@ function readAppTools(options = {}) {
 function normalizeConnector(connector, options = {}) {
     const id = connector?.id || connector?.connector_id || "";
     const locallyAuthorized = options.locallyAuthorized instanceof Set && options.locallyAuthorized.has(id);
+    const oauthSession = options.oauthSessions instanceof Set && options.oauthSessions.has(id);
     const normalized = {
         ...connector,
         id,
@@ -152,12 +167,14 @@ function normalizeConnector(connector, options = {}) {
         appMetadata: connector?.appMetadata || {},
         labels: connector?.labels || {},
         installUrl: localInstallUrl(connector?.installUrl),
-        isAccessible: connector?.isAccessible === true,
+        isAccessible: connector?.isAccessible === true || oauthSession,
         locallyAllowlisted: locallyAuthorized,
         isEnabled: connector?.isEnabled !== false,
         pluginDisplayNames: Array.isArray(connector?.pluginDisplayNames) ? connector.pluginDisplayNames : [],
     };
     if (locallyAuthorized) normalized.localAuthorization = "anticodex-local-allowlist";
+    if (oauthSession) normalized.localAuthorization = "anticodex-oauth-session";
+    if (oauthSession) normalized.oauthSession = true;
     if (!Array.isArray(normalized.supported_auth)) {
         normalized.supported_auth = [{ type: "UNSUPPORTED" }];
     }
