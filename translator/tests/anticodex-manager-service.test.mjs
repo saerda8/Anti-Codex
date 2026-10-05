@@ -548,6 +548,28 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     assert.equal(body.object, undefined);
   });
 
+  await t.test("third-party model listing uses the isolated unified catalog", async () => {
+    const catalogDir = path.join(tempDir, "codex-home-deepseek-app");
+    fs.mkdirSync(catalogDir, { recursive: true });
+    fs.writeFileSync(path.join(catalogDir, "anticodex-model-catalog.json"), JSON.stringify({
+      models: [
+        { slug: "anticodex/third-party/gpt-5.6-luna", display_name: "Third-party Luna", visibility: "list" },
+        { slug: "anticodex/third-party/hidden", display_name: "Hidden", visibility: "hide" },
+      ],
+    }), "utf8");
+    fs.writeFileSync(statusPath, JSON.stringify({ provider: "third-party", ports: { proxy: 18485 } }), "utf8");
+    try {
+      const response = await fetch(`${baseUrl}/models`);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.source, "isolated-unified-catalog");
+      assert.deepEqual(body.data.map((entry) => entry.id), ["anticodex/third-party/gpt-5.6-luna"]);
+    } finally {
+      fs.writeFileSync(statusPath, JSON.stringify({ ports: { proxy: 18485 } }), "utf8");
+      fs.rmSync(catalogDir, { recursive: true, force: true });
+    }
+  });
+
   await t.test("GET /health exposes a safe third-party profile summary", async () => {
     const healthServer = createServer((_req, res) => {
       res.writeHead(200, { "content-type": "application/json" });

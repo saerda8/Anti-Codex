@@ -2205,15 +2205,35 @@ export function createAntiCodexManagerService(options = {}) {
     if (req.method === "GET" && (pathname === "/models" || pathname === "/v1/models")) {
       let proxyPort = 18484;
       let localProxyKey = "anticodex-local-proxy-key";
+      let routeProvider = "";
       try {
         const statusPath = path.join(stateRoot, "fixed-route-status.json");
         if (fs.existsSync(statusPath)) {
           const statusData = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+          routeProvider = String(statusData?.provider || "").trim().toLowerCase();
           if (statusData && statusData.ports && statusData.ports.proxy) {
             proxyPort = statusData.ports.proxy;
           }
         }
       } catch {}
+      if (routeProvider === "third-party") {
+        try {
+          const catalogPath = path.join(stateRoot, "codex-home-deepseek-app", "anticodex-model-catalog.json");
+          const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+          const data = (Array.isArray(catalog?.models) ? catalog.models : [])
+            .filter((entry) => String(entry?.visibility || "").toLowerCase() !== "hide")
+            .map((entry) => ({
+              id: String(entry?.slug || "").trim(),
+              object: "model",
+              owned_by: "anticodex",
+              display_name: String(entry?.display_name || entry?.slug || "").trim(),
+            }))
+            .filter((entry) => entry.id);
+          if (data.length > 0) {
+            return jsonResponse(res, 200, { object: "list", data, source: "isolated-unified-catalog" }, req);
+          }
+        } catch {}
+      }
       try {
         const authPath = path.join(stateRoot, "codex-home-deepseek-app", "auth.json");
         if (fs.existsSync(authPath)) {
