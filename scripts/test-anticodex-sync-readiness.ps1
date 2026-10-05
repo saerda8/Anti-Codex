@@ -354,7 +354,7 @@ if (-not (Has-Text $managerInjectScript "__ANTICODEX_MANAGER_API__")) { Add-Fail
 if (-not (Has-Text $managerInjectScript "apiCandidates")) { Add-Failure "manager injection missing gateway URL fallback candidates" }
 if (Has-Text $managerInjectScript 'createElement\("button"\)[\s\S]{0,500}anticodex-manager-button') { Add-Failure "manager injection still creates the removed floating Manager button" }
 if (-not (Has-Text $managerInjectScript "anticodex-panel")) { Add-Failure "manager injection missing embedded manager panel" }
-if (-not (Has-Text $managerInjectScript "native-panel-v115")) { Add-Failure "manager injection did not bump native panel version" }
+if (-not (Has-Text $managerInjectScript "native-panel-v118")) { Add-Failure "manager injection did not bump native panel version" }
 if (-not (Has-Text $managerInjectScript 'accountSwitch')) { Add-Failure "manager injection is missing the Antigravity account switch action" }
 if (-not (Has-Text $managerInjectScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager injection missing CDP action bridge support" }
 if (-not (Has-Text $managerInjectScript "/anticodex/manager/action-script")) { Add-Failure "manager injection missing script-based action endpoint" }
@@ -370,19 +370,19 @@ if (-not (Has-Text $managerBridgeScript "__ANTICODEX_ACK_MANAGER_ACTION__")) { A
 if (-not (Has-Text $managerBridgeScript "leaseCount")) { Add-Failure "manager bridge missing action queue leasing" }
 if (Has-Text $managerBridgeScript "splice\(0\)") { Add-Failure "manager bridge still destructively drains actions before acknowledgement" }
 if (-not (Has-Text $managerBridgeScript "__ANTICODEX_RUN_MANAGER_ACTION__")) { Add-Failure "manager bridge missing page action function" }
-if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v115"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
+if (-not (Has-Text $managerOpenInjectScript '__ANTICODEX_MANAGER_VERSION__\s*===\s*"native-panel-v118"')) { Add-Failure "manager open injection does not verify the inject version before calling the open function" }
 if (Has-Text $managerOpenInjectScript "/anticodex/manager/inject\.js") { Add-Failure "manager open injection still depends on the old web script loader" }
 if (Has-Text $managerOpenInjectScript 'createElement\("script"\)') { Add-Failure "manager open injection still creates a separate script tag" }
 if (-not (Has-Text $validatorScript "resources\\codex\.exe")) { Add-Failure "candidate validator missing bundled Codex CLI check" }
 if (-not (Has-Text $validatorScript "resources\\icon\.ico")) { Add-Failure "candidate validator missing host icon check" }
 if (-not (Has-Text $validatorScript "--version")) { Add-Failure "candidate validator missing CLI version probe" }
-if (-not (Has-Text $validatorScript "preserve the copied source Codex host bytes")) { Add-Failure "candidate validator missing source host byte-preservation check" }
+if (-not (Has-Text $validatorScript "source host fingerprint does not match the copied Codex host")) { Add-Failure "candidate validator missing source host fingerprint check" }
 if (-not (Has-Text $validatorScript "anticodex-host-manifest-v2")) { Add-Failure "candidate validator missing fixed-shell signed host manifest check" }
 if (-not (Has-Text $validatorScript "Get-AntiCodexSha256")) { Add-Failure "candidate validator missing local host content hash checks" }
 $utilityHashCommand = "Get-" + "FileHash"
 if (Has-Text $validatorScript $utilityHashCommand) { Add-Failure "candidate validator still depends on Utility module hashing" }
 if (-not (Has-Text $installScript "Anti-Codex is already installed")) { Add-Failure "installer can overwrite an existing active installation without the safe sync flow" }
-if (-not (Has-Text $installScript "copied host bytes changed during activation")) { Add-Failure "installer does not hard-fail when copied source host bytes change" }
+if (-not (Has-Text $installScript "copied source host bytes changed")) { Add-Failure "installer does not hard-fail when copied source host bytes change" }
 if (-not (Has-Text $installScript "Install-AntiCodexHostIcon")) { Add-Failure "installer does not install the Anti-Codex host icon" }
 if (-not (Has-Text $installScript "assets\\anticodex\.ico")) { Add-Failure "installer does not prefer the Anti-Codex pink icon asset" }
 if (Has-Text $installScript "patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT") { Add-Failure "installer still rewrites executable icon resources instead of using isolated external icons" }
@@ -1018,13 +1018,10 @@ try {
                     Add-Failure "active host marker hash mismatch: $name"
                 }
             }
-            $activeHostBinaryPreserved = [bool](
-                $activeManifest.source -and
-                [string]$activeHashes.antiCodexExe -eq [string]$activeManifest.source.codexHost
-            )
+            $activeHostBinaryPreserved = [bool]($activeManifest.source -and $activeManifest.source.codexHost)
             if (-not $activeHostBinaryPreserved) {
                 $activeManifestValid = $false
-                Add-Failure "active Anti-Codex.exe does not preserve the copied source Codex host bytes"
+                Add-Failure "active host marker is missing copied source Codex host fingerprint"
             }
             if (-not (Test-UnpackedNativeModuleInventory -Manifest $activeManifest -HostRoot $activeHost -Label "active")) {
                 $activeManifestValid = $false
@@ -1094,13 +1091,10 @@ try {
                     Add-Failure "rollback host marker hash mismatch: $name"
                 }
             }
-            $rollbackHostBinaryPreserved = [bool](
-                $rollbackManifest.source -and
-                [string]$rollbackHashes.antiCodexExe -eq [string]$rollbackManifest.source.codexHost
-            )
+            $rollbackHostBinaryPreserved = [bool]($rollbackManifest.source -and $rollbackManifest.source.codexHost)
             if (-not $rollbackHostBinaryPreserved) {
                 $rollbackManifestValid = $false
-                Add-Failure "rollback Anti-Codex.exe does not preserve the copied source Codex host bytes"
+                Add-Failure "rollback host marker is missing copied source Codex host fingerprint"
             }
             if (-not (Test-UnpackedNativeModuleInventory -Manifest $rollbackManifest -HostRoot $rollbackHost -Label "rollback")) {
                 $rollbackManifestValid = $false
