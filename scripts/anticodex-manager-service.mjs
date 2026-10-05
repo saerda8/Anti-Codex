@@ -2300,6 +2300,18 @@ export function createAntiCodexManagerService(options = {}) {
       }
     }
 
+    if (req.method === "POST" && pathname === "/anticodex/models/refresh") {
+      if (!validateManagerActionRequest(req, res, managerActionToken)) return;
+      try {
+        if (typeof refreshModels !== "function") {
+          throw { statusCode: 503, message: "Anti-Codex model refresh is not ready." };
+        }
+        return jsonResponse(res, 200, await refreshModels(), req);
+      } catch (error) {
+        return jsonResponse(res, error.statusCode || 500, { ok: false, error: error.message || String(error) }, req);
+      }
+    }
+
     if (req.method === "POST" && pathname === "/anticodex/upstream-test") {
       if (!validateManagerActionRequest(req, res, managerActionToken)) return;
       const testGeneration = ++upstreamTestGeneration;
