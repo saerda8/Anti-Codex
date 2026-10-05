@@ -156,10 +156,12 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
     "content-type": "application/json",
     ...(definition.transport.http_headers || {}),
   };
+  let sessionId = "";
   const request = async (id, method, params) => {
+    const requestHeaders = sessionId ? { ...headers, "Mcp-Session-Id": sessionId } : headers;
     const response = await fetch(definition.transport.url, {
       method: "POST",
-      headers,
+      headers: requestHeaders,
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -167,17 +169,22 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
     const payload = parseMcpHttpPayload(text);
     if (payload?.error) throw new Error(String(payload.error.message || "MCP JSON-RPC error"));
-    return payload?.result ?? payload;
+    return {
+      payload,
+      sessionId: response.headers.get("mcp-session-id") || "",
+    };
   };
-  await request(1, "initialize", {
+  const initialized = await request(1, "initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
     clientInfo: { name: "anticodex-mcp-smoke", version: "1.0.0" },
   });
+  sessionId = initialized.sessionId;
   const result = await request(2, "tools/list", {});
+  const resultPayload = result.payload?.result ?? result.payload;
   return {
-    tools: Array.isArray(result?.tools) ? result.tools : [],
-    serverInfo: result?.serverInfo ?? null,
+    tools: Array.isArray(resultPayload?.tools) ? resultPayload.tools : [],
+    serverInfo: resultPayload?.serverInfo ?? null,
   };
 }
 
