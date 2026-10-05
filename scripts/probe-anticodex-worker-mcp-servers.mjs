@@ -77,6 +77,11 @@ function readWorkerConfig(configPath, workerName) {
   return {
     name: workerName,
     command: typeof server.command === "string" ? server.command : "",
+    url: typeof server.url === "string" ? server.url : "",
+    httpHeaders: (() => {
+      const match = text.match(new RegExp(`\\[mcp_servers\\.${workerName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\][\\s\\S]*?^http_headers\\s*=\\s*\\{\\s*Authorization\\s*=\\s*["']([^"']+)["']\\s*\\}`, "m"));
+      return match?.[1] ? { Authorization: match[1] } : {};
+    })(),
     args: Array.isArray(server.args) ? server.args : [],
     env,
     startupTimeoutMs: Number.isFinite(Number(server.startup_timeout_sec))
@@ -100,25 +105,29 @@ async function loadMcpSdk() {
     mcpSdkPromise = Promise.all([
       import("file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js"),
       import("file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js"),
-    ]).then(([clientModule, stdioModule]) => ({
+      import("file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js"),
+    ]).then(([clientModule, stdioModule, httpModule]) => ({
       Client: clientModule.Client,
       StdioClientTransport: stdioModule.StdioClientTransport,
+      StreamableHTTPClientTransport: httpModule.StreamableHTTPClientTransport,
     }));
   }
   return mcpSdkPromise;
 }
 
 async function probeWorker(config) {
-  if (!config.command) {
+  if (!config.command && !config.url) {
     return { name: config.name, ok: false, toolCount: 0, toolNames: [], error: "missing command" };
   }
 
-  const { Client, StdioClientTransport } = await loadMcpSdk();
-  const transport = new StdioClientTransport({
-    command: config.command,
-    args: config.args,
-    env: { ...process.env, ...config.env },
-  });
+  const { Client, StdioClientTransport, StreamableHTTPClientTransport } = await loadMcpSdk();
+  const transport = config.url
+    ? new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.httpHeaders } })
+    : new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      env: { ...process.env, ...config.env },
+    });
   const client = new Client({ name: "anticodex-worker-mcp-probe", version: "1.0.0" });
 
   try {

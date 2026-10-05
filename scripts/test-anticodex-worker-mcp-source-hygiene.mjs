@@ -3,17 +3,17 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const DEFAULT_CONFIG_PATH = "C:/Users/XD/.codex/config.toml";
 const DEFAULT_WORKERS = [
-  "mimo-claude-coworker",
-  "mimocode-worker",
-  "kilo-worker",
-  "opencode-worker",
-  "antigravity-code-worker",
   "deepseek-code-worker",
+  "deepseek-external",
   "deveco-code-worker",
+  "opencode-worker",
+  "kilo-worker",
+  "codebuddy-worker",
+  "agnes-worker",
 ];
 
 function argValue(name, fallback = "") {
@@ -74,6 +74,17 @@ function parseTomlTable(text, tableName) {
 function readWorkerConfig(configPath, workerName) {
   const text = readFileSync(configPath, "utf8");
   const server = parseTomlTable(text, `mcp_servers.${workerName}`);
+  if (!server.command && server.url) {
+    const runtimePath = resolve(dirname(configPath), "..", "shared-mcp", "servers.json");
+    try {
+      const runtime = JSON.parse(readFileSync(runtimePath, "utf8"));
+      const source = runtime?.mcpServers?.[workerName];
+      if (source?.command) {
+        const args = Array.isArray(source.args) ? source.args : [];
+        return { name: workerName, command: source.command, args, entrypoint: args.find((item) => typeof item === "string" && /\.(mjs|js|cjs)$/i.test(item)) || "" };
+      }
+    } catch {}
+  }
   const args = Array.isArray(server.args) ? server.args : [];
   const entrypoint = args.find((item) => typeof item === "string" && /\.(mjs|js|cjs)$/i.test(item)) || "";
   return {

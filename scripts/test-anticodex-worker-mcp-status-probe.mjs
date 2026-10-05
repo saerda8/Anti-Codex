@@ -2,30 +2,31 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import os from "node:os";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { Client } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
+import { StreamableHTTPClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
 
 const DEFAULT_CONFIG_PATH = "C:/Users/XD/.codex/config.toml";
 const DEFAULT_REPORT_ROOT = `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`;
 const DEFAULT_WORKERS = [
-  "mimo-claude-coworker",
-  "mimocode-worker",
-  "kilo-worker",
-  "opencode-worker",
   "deepseek-code-worker",
+  "deepseek-external",
   "deveco-code-worker",
-  "antigravity-code-worker",
+  "opencode-worker",
+  "kilo-worker",
+  "codebuddy-worker",
+  "agnes-worker",
 ];
 
 const STATUS_PROBES = {
-  "mimo-claude-coworker": { tool: "mimo_get_job", jobId: "dsw_mr3wn5f0_kiniqh", args: "get" },
-  "mimocode-worker": { tool: "mimocode_wait_for_job", jobId: "mcw_mr3wr6bu_ns6x36", args: "wait" },
-  "kilo-worker": { tool: "kilo_wait_for_job", jobId: "klw_mr3wublc_s55ypi", args: "wait" },
-  "opencode-worker": { tool: "opencode_wait_for_job", jobId: "ocw_mr3x0m41_c5km6z", args: "wait" },
-  "deepseek-code-worker": { tool: "deepseek_wait_for_job", jobId: "dsw_mr3wqqbw_l3huc0", args: "wait" },
-  "deveco-code-worker": { tool: "deveco_get_job", jobId: "dcw_mr3qocns_4twr7m", args: "get" },
-  "antigravity-code-worker": { tool: "antigravity_get_job", jobId: "", args: "skip" },
+  "deepseek-code-worker": { tool: "deepseek_get_job", jobId: "", args: "list_only" },
+  "deepseek-external": { tool: "deepseek_get_job", jobId: "", args: "list_only" },
+  "deveco-code-worker": { tool: "deveco_get_job", jobId: "", args: "list_only" },
+  "opencode-worker": { tool: "opencode_get_job", jobId: "", args: "list_only" },
+  "kilo-worker": { tool: "kilo_get_job", jobId: "", args: "list_only" },
+  "codebuddy-worker": { tool: "codebuddy_get_job", jobId: "", args: "list_only" },
+  "agnes-worker": { tool: "agnes_get_job", jobId: "", args: "list_only" },
 };
 
 function argValue(name, fallback = "") {
@@ -89,10 +90,13 @@ function readWorkerConfig(configPath, workerName) {
   const text = readFileSync(configPath, "utf8");
   const server = parseTomlTable(text, `mcp_servers.${workerName}`);
   const env = parseTomlTable(text, `mcp_servers.${workerName}.env`);
+  const headerMatch = text.match(new RegExp(`\\[mcp_servers\\.${workerName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\][\\s\\S]*?^http_headers\\s*=\\s*\\{\\s*Authorization\\s*=\\s*["']([^"']+)["']\\s*\\}`, "m"));
   return {
     name: workerName,
     command: typeof server.command === "string" ? server.command : "",
     args: Array.isArray(server.args) ? server.args : [],
+    url: typeof server.url === "string" ? server.url : "",
+    httpHeaders: headerMatch?.[1] ? { Authorization: headerMatch[1] } : {},
     env,
     startupTimeoutMs: Number.isFinite(Number(server.startup_timeout_sec))
       ? Number(server.startup_timeout_sec) * 1000
@@ -148,26 +152,16 @@ function statusArguments(probe) {
 async function probeWorker(workerName, options) {
   const probe = STATUS_PROBES[workerName];
   if (!probe) return { worker: workerName, ok: false, statusCallOk: false, error: "unsupported worker" };
-  if (probe.args === "skip" && !options.includeAntigravity) {
-    return {
-      worker: workerName,
-      ok: true,
-      skipped: true,
-      skipReason: "separate_antigravity_account_boundary_not_proven",
-      statusTool: probe.tool,
-      statusCallOk: false,
-    };
-  }
-  if (!probe.jobId) return { worker: workerName, ok: false, statusCallOk: false, statusTool: probe.tool, error: "missing job id" };
-
   const config = readWorkerConfig(options.configPath, workerName);
-  if (!config.command) return { worker: workerName, ok: false, statusCallOk: false, statusTool: probe.tool, error: "missing command" };
+  if (!config.command && !config.url) return { worker: workerName, ok: false, statusCallOk: false, statusTool: probe.tool, error: "missing transport" };
 
-  const transport = new StdioClientTransport({
-    command: config.command,
-    args: config.args,
-    env: { ...process.env, ...config.env },
-  });
+  const transport = config.url
+    ? new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.httpHeaders } })
+    : new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      env: { ...process.env, ...config.env },
+    });
   const client = new Client({ name: "anticodex-worker-mcp-status-probe", version: "1.0.0" });
   const startedAt = Date.now();
   try {
@@ -177,6 +171,19 @@ async function probeWorker(workerName, options) {
     const statusToolPresent = toolNames.includes(probe.tool);
     if (!statusToolPresent) {
       return { worker: workerName, ok: false, statusCallOk: false, statusTool: probe.tool, statusToolPresent, toolCount: toolNames.length, error: "status tool missing" };
+    }
+    if (probe.args === "list_only") {
+      return {
+        worker: workerName,
+        ok: true,
+        skipped: false,
+        statusCallOk: true,
+        statusTool: probe.tool,
+        statusToolPresent,
+        toolCount: toolNames.length,
+        listOnly: true,
+        status: "tools_list_only",
+      };
     }
     const called = await withTimeout(
       client.callTool({ name: probe.tool, arguments: statusArguments(probe) }),
