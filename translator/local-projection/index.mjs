@@ -8,6 +8,11 @@ const LOCAL_USER_ID = "deepcodex-local-user";
 const LOCAL_ACCOUNT_ID = "deepcodex-local-account";
 const LOCAL_DISPLAY_NAME = process.env.DEEPCODEX_ACCOUNT_DISPLAY_NAME || "娄老师说的对";
 const LOCAL_EMAIL = process.env.DEEPCODEX_ACCOUNT_EMAIL || "deepcodex@local";
+const ANTI_CODEX_EXCLUDED_PLUGIN_NAMES = new Set([
+    "codex-app-tools",
+    "code-review",
+    "unified-computer-use",
+]);
 
 function codexHomes() {
     const homes = [];
@@ -261,6 +266,7 @@ function collectPluginDirs(root, marketplaceName, plugins, seen) {
 function collectPluginDir(pluginDir, marketplaceName, plugins, seen) {
     const metadata = safeReadJson(path.join(pluginDir, ".codex-plugin", "plugin.json"));
     if (!metadata?.name) return;
+    if (ANTI_CODEX_EXCLUDED_PLUGIN_NAMES.has(metadata.name)) return;
     const key = `${metadata.name}@${marketplaceName}`;
     const record = {
         marketplaceName,
