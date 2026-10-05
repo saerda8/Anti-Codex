@@ -421,7 +421,11 @@ if ($VerifyOnly) {
         $sourceConfig = Join-Path $SharedCodexHome "config.toml"
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
-            $configSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
+            $configSyncArgs = @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
+            if (Test-Path -LiteralPath $targetConfig -PathType Leaf -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
+                $configSyncArgs += "--include-development-workers"
+            }
+            $configSyncSummary = Invoke-NodeText $sharedConfigSync $configSyncArgs
         }
     } catch {
         Add-Failure "shared config refresh failed: $($_.Exception.Message)"
@@ -463,7 +467,11 @@ if ($VerifyOnly) {
         $sourceConfig = Join-Path $SharedCodexHome "config.toml"
         $targetConfig = Join-Path $CodexHome "config.toml"
         if (Test-Path -LiteralPath $sourceConfig -PathType Leaf) {
-            $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
+            $finalConfigSyncArgs = @($sourceConfig, $targetConfig, "--install-root", $InstallRoot, "--codex-home", $CodexHome)
+            if (Test-Path -LiteralPath $targetConfig -PathType Leaf -and (Select-String -LiteralPath $targetConfig -Pattern '(?m)^\[anticodex\.development_workers\]\s*$' -Quiet)) {
+                $finalConfigSyncArgs += "--include-development-workers"
+            }
+            $finalConfigSyncSummary = Invoke-NodeText $sharedConfigSync $finalConfigSyncArgs
             if ($finalConfigSyncSummary) {
                 if ($configSyncSummary) {
                     $configSyncSummary = "$configSyncSummary; final-resync: $finalConfigSyncSummary"
