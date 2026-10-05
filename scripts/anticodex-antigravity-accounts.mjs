@@ -205,6 +205,11 @@ async function readState(path) {
     throw new Error("Antigravity account store is invalid.");
   }
   const accounts = value.accounts.map(validateStoredAccount);
+  const ids = new Set();
+  for (const account of accounts) {
+    if (ids.has(account.id)) throw new Error("Antigravity account store contains duplicate account ids.");
+    ids.add(account.id);
+  }
   const activeId = value.activeId == null ? null : String(value.activeId).toLowerCase();
   if (activeId && !accounts.some((account) => account.id === activeId)) {
     throw new Error("Antigravity account store has an invalid active account.");
