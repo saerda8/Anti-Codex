@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildCodexPlusPlusProbeRequest,
+  discoverCodexPlusPlusUpstreamModels,
   normalizeCodexPlusPlusProbeProfile,
   testCodexPlusPlusUpstreamConnection,
 } from "../provider/codexplusplus-upstream-probe.mjs";
@@ -96,4 +97,50 @@ test("connection probe rejects HTTP 200 bodies that do not match the selected pr
   });
   assert.equal(stages.at(-1).status, "fail");
   assert.match(stages.at(-1).detail, /Chat Completions response/i);
+});
+
+test("model discovery reads OpenAI-compatible ids without leaking the key", async () => {
+  const calls = [];
+  const models = await discoverCodexPlusPlusUpstreamModels({
+    protocol: "openai-compatible",
+    baseUrl: "http://127.0.0.1:8080/v1",
+    model: "selected-model",
+    apiKey: "DISCOVERY_SECRET",
+  }, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ data: [
+        { id: "selected-model" },
+        { id: "another-model" },
+        { id: "selected-model" },
+      ] }), { status: 200 });
+    },
+  });
+  assert.deepEqual(models, ["selected-model", "another-model"]);
+  assert.equal(calls[0].url, "http://127.0.0.1:8080/v1/models");
+  assert.equal(calls[0].init.headers.authorization, "Bearer DISCOVERY_SECRET");
+});
+
+test("connection probe can attach discovered provider models", async () => {
+  const calls = [];
+  const stages = await testCodexPlusPlusUpstreamConnection({
+    protocol: "openai-compatible",
+    baseUrl: "https://api.example.test/v1",
+    model: "selected-model",
+    apiKey: "secret",
+  }, {
+    discoverModels: true,
+    fetchImpl: async (url) => {
+      calls.push(url);
+      if (url.endsWith("/models")) {
+        return new Response(JSON.stringify({ data: [{ id: "selected-model" }, { id: "next-model" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }), { status: 200 });
+    },
+  });
+  assert.deepEqual(calls, [
+    "https://api.example.test/v1/chat/completions",
+    "https://api.example.test/v1/models",
+  ]);
+  assert.deepEqual(stages.at(-1).models, ["selected-model", "next-model"]);
 });

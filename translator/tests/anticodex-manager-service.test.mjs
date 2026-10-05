@@ -838,11 +838,13 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
     fs.copyFileSync(fixture.catalogPath, catalogPath);
 
     let providerRequests = 0;
-    const providerServer = createServer((_req, res) => {
-      providerRequests += 1;
+    const providerServer = createServer((req, res) => {
+      if (req.method === "POST") providerRequests += 1;
       setTimeout(() => {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
+        res.end(req.method === "GET"
+          ? JSON.stringify({ data: [{ id: "gpt-local" }, { id: "gpt-next" }] })
+          : JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
       }, 25);
     });
     await listenOnLoopback(providerServer);
@@ -893,7 +895,10 @@ test("Anti-Codex Manager Service API contract and security suite", async (t) => 
 
       const persisted = JSON.parse(fs.readFileSync(path.join(tempDir, "upstream-profile.json"), "utf8"));
       assert.deepEqual(Object.keys(persisted.capabilities).sort(), ["connectionStages", "providerModels"]);
+      assert.deepEqual(persisted.capabilities.providerModels, ["gpt-local", "gpt-next"]);
       assert.equal(persisted.capabilities.secretNote, undefined);
+      const savedCatalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+      assert.ok(savedCatalog.models.some((entry) => entry.slug === "anticodex/third-party/gpt-next"));
 
       const publicResponse = await fetch(`${baseUrl}/anticodex/upstream-profile`);
       assert.equal(publicResponse.status, 200);

@@ -104,6 +104,20 @@ export async function testCodexPlusPlusUpstreamConnection(value = {}, options = 
       status: "ok",
       detail: `HTTP ${response.status}; ${request.body.model}`,
     });
+    if (options.discoverModels === true) {
+      const models = await discoverCodexPlusPlusUpstreamModels(value, {
+        timeoutMs,
+        fetchImpl,
+      });
+      if (models.length > 0) {
+        stages.push({
+          stage: "模型列表",
+          status: "ok",
+          detail: `${models.length} provider model(s)`,
+          models,
+        });
+      }
+    }
     return stages;
   } catch (error) {
     stages.push({
@@ -112,6 +126,53 @@ export async function testCodexPlusPlusUpstreamConnection(value = {}, options = 
       detail: sanitizeDetail(error?.message ?? error, request.apiKey).slice(0, 600),
     });
     return stages;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function discoverCodexPlusPlusUpstreamModels(value = {}, options = {}) {
+  let profile;
+  try {
+    profile = normalizeCodexPlusPlusProbeProfile(value);
+  } catch {
+    return [];
+  }
+  const timeoutMs = positiveInteger(options.timeoutMs, 10_000);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const url = modelsPath(profile.baseUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException("Provider model list timed out.", "TimeoutError")), timeoutMs);
+  try {
+    const response = await fetchImpl(url, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${profile.apiKey}`,
+        accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) return [];
+    const body = await response.json();
+    const candidates = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.data)
+        ? body.data
+        : Array.isArray(body?.models) ? body.models : [];
+    const ids = [];
+    const seen = new Set();
+    for (const candidate of candidates) {
+      const id = typeof candidate === "string"
+        ? candidate.trim()
+        : String(candidate?.id ?? candidate?.name ?? candidate?.model ?? "").trim();
+      if (!id || id.length > 200 || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      if (ids.length >= 200) break;
+    }
+    return ids;
+  } catch {
+    return [];
   } finally {
     clearTimeout(timer);
   }
@@ -131,6 +192,14 @@ function probePath(pathname, protocol) {
   if (normalized.endsWith(responsesSuffix)) return normalized;
   if (normalized === "/" || normalized === "") return "/v1/responses";
   return `${normalized}${responsesSuffix}`.replace(/\/+/g, "/");
+}
+
+function modelsPath(baseUrl) {
+  const url = new URL(baseUrl.href);
+  const pathname = `/${String(url.pathname || "").replace(/^\/+|\/+$/g, "")}`;
+  if (pathname.endsWith("/models")) return url.href;
+  url.pathname = `${pathname === "/" ? "" : pathname}/models`.replace(/\/+/g, "/");
+  return url.href;
 }
 
 function isLoopback(hostname) {

@@ -2292,7 +2292,10 @@ export function createAntiCodexManagerService(options = {}) {
           apiKey,
           model: body.model,
         };
-        const stages = await testCodexPlusPlusUpstreamConnection(profile, { timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs) });
+        const stages = await testCodexPlusPlusUpstreamConnection(profile, {
+          timeoutMs: managerUpstreamTimeoutMs(body.timeoutMs),
+          discoverModels: true,
+        });
         const ok = stages.length > 0 && stages.every((stage) => stage.status !== "fail");
         const sanitizedStages = sanitizedConnectionStages(stages);
         if (ok && testGeneration === upstreamTestGeneration) {
