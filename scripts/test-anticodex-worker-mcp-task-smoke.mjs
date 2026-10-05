@@ -6,6 +6,7 @@ import os from "node:os";
 import { resolve } from "node:path";
 import { Client } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StdioClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js";
+import { StreamableHTTPClientTransport } from "file:///G:/Trae-Project/mimocode-worker-mcp-main/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
 
 const DEFAULT_CONFIG_PATH = "C:/Users/XD/.codex/config.toml";
 const DEFAULT_REPORT_ROOT = `${process.env.APPDATA || os.tmpdir()}/anticodex/reports`;
@@ -51,6 +52,11 @@ function printUsage() {
 
 function parseTomlValue(raw) {
   const value = String(raw || "").trim();
+  if (value.startsWith("{") && value.endsWith("}")) {
+    const object = {};
+    for (const match of value.matchAll(/([A-Za-z0-9_-]+)\s*=\s*(["'])(.*?)\2/g)) object[match[1]] = match[3];
+    return object;
+  }
   if (value.startsWith("[") && value.endsWith("]")) {
     return [...value.matchAll(/(['"])(.*?)\1/g)].map((match) => match[2]);
   }
@@ -90,6 +96,8 @@ function readWorkerConfig(configPath, workerName) {
     name: workerName,
     command: typeof server.command === "string" ? server.command : "",
     args: Array.isArray(server.args) ? server.args : [],
+    url: typeof server.url === "string" ? server.url : "",
+    httpHeaders: server.http_headers && typeof server.http_headers === "object" ? server.http_headers : {},
     env,
     startupTimeoutMs: Number.isFinite(Number(server.startup_timeout_sec))
       ? Number(server.startup_timeout_sec) * 1000
@@ -490,23 +498,27 @@ async function runWorker(workerName, options) {
   const def = WORKERS[workerName];
   if (!def) throw new Error(`Unsupported worker for task smoke: ${workerName}`);
   const config = readWorkerConfig(options.configPath, workerName);
-  if (!config.command) throw new Error(`Missing command for ${workerName}`);
+  if (!config.command && !config.url) throw new Error(`Missing command or URL for ${workerName}`);
 
   const marker = `WORKER_MCP_TASK_SMOKE_${Date.now()}`;
   const workspace = makeWorkspace(workerName, options.workspaceRoot, options.scenario);
   const timeoutMs = Number(options.timeoutMs || def.timeoutMs);
   const rpcTimeoutMs = Math.max(config.startupTimeoutMs, 120000, timeoutMs);
   const workerArgs = buildWorkerArgs(workerName, workspace, marker, timeoutMs, options.scenario);
-  const transport = new StdioClientTransport({
-    command: config.command,
-    args: config.args,
-    env: {
-      ...process.env,
-      ...config.env,
-      ANTICODEX_WORKER_SMOKE_MARKER: marker,
-      ANTICODEX_WORKER_SMOKE_WORKER: workerName,
-    },
-  });
+  const transport = config.url
+    ? new StreamableHTTPClientTransport(new URL(config.url), {
+      requestInit: { headers: config.httpHeaders },
+    })
+    : new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      env: {
+        ...process.env,
+        ...config.env,
+        ANTICODEX_WORKER_SMOKE_MARKER: marker,
+        ANTICODEX_WORKER_SMOKE_WORKER: workerName,
+      },
+    });
   const client = new Client({ name: "anticodex-worker-mcp-task-smoke", version: "1.0.0" });
   const startedAt = Date.now();
   let jobId = "";
