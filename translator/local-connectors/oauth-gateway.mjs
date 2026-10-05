@@ -180,6 +180,10 @@ function publicSession(session) {
     };
 }
 
+function hasOAuthConfiguration(entry) {
+    return Boolean(entry?.config?.oauth || entry?.config?.oauth_resource);
+}
+
 function tomlString(value) {
     return JSON.stringify(String(value));
 }
@@ -238,8 +242,9 @@ function listConnectorAuth(options) {
         pluginName: entry.pluginName,
         serverName: entry.serverName,
         url: entry.url,
-        oauthConfigured: Boolean(entry.config.oauth || entry.config.oauth_resource),
-        oauthAvailable: true,
+        oauthConfigured: hasOAuthConfiguration(entry),
+        oauthAvailable: hasOAuthConfiguration(entry),
+        authMode: hasOAuthConfiguration(entry) ? "oauth" : "metadata_only",
         session: publicSession(sessions[entry.connectorId]),
         }));
 }
@@ -289,6 +294,9 @@ async function startConnectorAuth(options, connectorId, redirectUri) {
     if (!entry) throw new Error("No OAuth-capable MCP manifest was found for this connector.");
     if (UNSUPPORTED_CONNECTOR_PLUGIN_NAMES.has(entry.pluginName)) {
         throw new Error("This connector is not supported by the current Anti-Codex OAuth runtime.");
+    }
+    if (!hasOAuthConfiguration(entry)) {
+        throw new Error("This connector has no configured OAuth client; it remains metadata-only and does not require an Anti-Codex login.");
     }
     const discovery = await discoverOAuth(entry);
     const verifier = randomUrlSafe(48);

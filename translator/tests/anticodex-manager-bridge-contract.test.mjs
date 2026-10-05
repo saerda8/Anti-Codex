@@ -12,6 +12,7 @@ import {
 const root = resolve(import.meta.dirname, "..", "..");
 const source = readFileSync(resolve(root, "scripts", "anticodex-manager-bridge.mjs"), "utf8");
 const managerInject = readFileSync(resolve(root, "scripts", "anticodex-manager-inject.js"), "utf8");
+const oauthGateway = readFileSync(resolve(root, "translator", "local-connectors", "oauth-gateway.mjs"), "utf8");
 const managerOpenInject = readFileSync(resolve(root, "scripts", "anticodex-manager-open-inject.js"), "utf8");
 const managerService = readFileSync(resolve(root, "scripts", "anticodex-manager-service.mjs"), "utf8");
 const cdpInject = readFileSync(resolve(root, "scripts", "deepcodex-cdp-inject.mjs"), "utf8");
@@ -1495,6 +1496,13 @@ test("external connector authorization only shows connectors with OAuth configur
     /auth\?\.connectors[^;]*\.filter\(\(item\) => [^)]*item\.oauthConfigured === true\)/,
     "connectors without OAuth configuration must not be presented as requiring login",
   );
+});
+
+test("OAuth gateway keeps metadata-only connectors out of the authorization flow", () => {
+  assert.match(oauthGateway, /function hasOAuthConfiguration\(entry\)/);
+  assert.match(oauthGateway, /oauthAvailable: hasOAuthConfiguration\(entry\)/);
+  assert.match(oauthGateway, /if \(!hasOAuthConfiguration\(entry\)\)/);
+  assert.match(oauthGateway, /metadata-only and does not require an Anti-Codex login/);
 });
 
 test("Manager high-impact real-mouse helper requires dispatch evidence instead of disabled UI", () => {
