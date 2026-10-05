@@ -873,7 +873,7 @@
   }
 
   function connectorAuthEditor(auth, result, reload, runExclusive) {
-    const rows = Array.isArray(auth?.connectors) ? auth.connectors.filter((item) => item.oauthConfigured) : [];
+    const rows = Array.isArray(auth?.connectors) ? auth.connectors.filter((item) => item.oauthAvailable === true) : [];
     if (!rows.length) return el("div", { className: "anticodex-result", text: "当前没有发现可自动授权的连接器。" });
     const note = el("div", { className: "anticodex-result", text: "点连接后会打开服务商登录页；登录并允许一次，Anti-Codex 才会真正拿到工具。" });
     const list = el("div", { style: "display:grid;gap:6px" });

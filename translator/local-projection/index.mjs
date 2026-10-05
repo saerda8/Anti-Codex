@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { UNSUPPORTED_CONNECTOR_PLUGIN_NAMES } from "./../local-connectors/oauth-gateway.mjs";
 
 const EMPTY_PNG_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l6w7YwAAAABJRU5ErkJggg==";
@@ -12,6 +13,7 @@ const ANTI_CODEX_EXCLUDED_PLUGIN_NAMES = new Set([
     "codex-app-tools",
     "code-review",
     "unified-computer-use",
+    ...UNSUPPORTED_CONNECTOR_PLUGIN_NAMES,
 ]);
 
 function codexHomes() {

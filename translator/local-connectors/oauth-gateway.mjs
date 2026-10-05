@@ -4,6 +4,19 @@ import path from "node:path";
 
 const pending = new Map();
 const SESSION_VERSION = 1;
+const UNSUPPORTED_CONNECTOR_PLUGIN_NAMES = new Set([
+    "airtable",
+    "datadog",
+    "dropbox",
+    "figma",
+    "gmail",
+    "google-calendar",
+    "google-drive",
+    "monday-com",
+    "shopify",
+    "stripe",
+    "zoom",
+]);
 
 function readJson(file) {
     try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -201,20 +214,26 @@ function writeConnectorMcpConfig(codexHome, sessions) {
 function listConnectorAuth(options) {
     const state = readState(options.stateRoot);
     const sessions = state.sessions;
-    return connectorManifests(options).map((entry) => ({
+    return connectorManifests(options)
+        .filter((entry) => !UNSUPPORTED_CONNECTOR_PLUGIN_NAMES.has(entry.pluginName))
+        .map((entry) => ({
         connectorId: entry.connectorId,
         connectorName: entry.connectorName,
         pluginName: entry.pluginName,
         serverName: entry.serverName,
         url: entry.url,
         oauthConfigured: Boolean(entry.config.oauth || entry.config.oauth_resource),
+        oauthAvailable: true,
         session: publicSession(sessions[entry.connectorId]),
-    }));
+        }));
 }
 
 async function startConnectorAuth(options, connectorId, redirectUri) {
     const entry = connectorManifests(options).find((item) => item.connectorId === connectorId);
     if (!entry) throw new Error("No OAuth-capable MCP manifest was found for this connector.");
+    if (UNSUPPORTED_CONNECTOR_PLUGIN_NAMES.has(entry.pluginName)) {
+        throw new Error("This connector is not supported by the current Anti-Codex OAuth runtime.");
+    }
     const discovery = await discoverOAuth(entry);
     const verifier = randomUrlSafe(48);
     const state = randomUrlSafe(24);
@@ -292,4 +311,5 @@ export {
     finishConnectorAuth,
     listConnectorAuth,
     startConnectorAuth,
+    UNSUPPORTED_CONNECTOR_PLUGIN_NAMES,
 };
