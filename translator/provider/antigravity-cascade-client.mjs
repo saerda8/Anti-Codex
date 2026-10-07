@@ -92,7 +92,8 @@ export function createAntigravityCascadeClient(options = {}) {
     try {
       return await serviceCall(firstConnection, method, body, { fetchImpl, ...requestOptions });
     } catch (error) {
-      if (explicitConnection || requestOptions.signal?.aborted || !isConnectionError(error)) throw error;
+      const staleCsrf = error?.statusCode === 401 && /invalid csrf token/i.test(String(error.message));
+      if (explicitConnection || requestOptions.signal?.aborted || (!isConnectionError(error) && !staleCsrf)) throw error;
       cachedConnection = null;
       const rediscovered = connection();
       return serviceCall(rediscovered, method, body, { fetchImpl, ...requestOptions });

@@ -68,6 +68,25 @@ test("short email addresses are still masked", { skip: process.platform !== "win
   for (const value of JSON.parse(result.stdout)) assert.ok(value.includes("*"), "A masked email must not disclose its complete local part");
 });
 
+test("Desktop opener finishes after successful helper exit and complete JSON without inherited pipe close", async (t) => {
+  let child;
+  const stub = t.mock.method(childProcess, "spawn", () => {
+    child = new EventEmitter();
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough(); child.kill = () => {};
+    child.stdin.once("finish", () => {
+      child.stdout.write('{"ok":');
+      child.emit("exit", 0);
+      setImmediate(() => child.stdout.write('true,"launched":true}'));
+    });
+    return child;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { child?.emit("close", 0); stub.mock.restore(); syncBuiltinESMExports(); });
+  const driver = createAntigravityAccountDriver({ scriptsRoot, env: { ...process.env, LOCALAPPDATA: os.tmpdir() } });
+  const result = await Promise.race([driver.openDesktop().then(() => true), new Promise(resolve => setTimeout(() => resolve(false), 150))]);
+  assert.equal(result, true);
+});
+
 test("credential driver waits for closed stdout rather than the earlier process exit", async (t) => {
   const capture = { id: `sha256:${"a".repeat(64)}`, maskedEmail: "te***@example.test", sealed: "dpapi:v1:AA==", credentialHash: "b".repeat(64) };
   const stub = t.mock.method(childProcess, "spawn", () => {

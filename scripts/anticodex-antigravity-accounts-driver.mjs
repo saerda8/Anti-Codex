@@ -47,6 +47,7 @@ function defaultRunner(env) {
     const chunks = [];
     let length = 0;
     let settled = false;
+    let openExited = false;
     const finish = (error, output = "") => {
       if (settled) return;
       settled = true;
@@ -58,6 +59,16 @@ function defaultRunner(env) {
       child.kill();
       finish(new Error("process timeout"));
     }, request.kind === "usage" ? 35_000 : 180_000);
+    const finishExitedOpen = () => {
+      if (request.kind !== "open" || !openExited || settled) return;
+      const output = Buffer.concat(chunks).toString("utf8");
+      let value;
+      try { value = JSON.parse(output); } catch { return; }
+      // Desktop descendants can retain pipes after the launcher has exited.
+      finish(value?.ok === true ? null : new Error("open rejected"), output);
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
     child.stdout.on("data", (chunk) => {
       length += chunk.length;
       if (length > MAX_OUTPUT_BYTES) {
@@ -66,11 +77,18 @@ function defaultRunner(env) {
         return;
       }
       chunks.push(chunk);
+      finishExitedOpen();
     });
     child.stderr.resume();
     child.stdin.on("error", (error) => finish(error));
     child.stdout.on("error", (error) => finish(error));
     child.once("error", (error) => finish(error));
+    child.once("exit", (code) => {
+      if (request.kind !== "open") return;
+      if (code !== 0) { finish(new Error("process failed")); return; }
+      openExited = true;
+      finishExitedOpen();
+    });
     child.once("close", (code) => finish(code === 0 ? null : new Error("process failed"), Buffer.concat(chunks).toString("utf8")));
     child.stdin.end(request.kind === "powershell" ? JSON.stringify(request.input || {}) : String(request.input || ""));
   });

@@ -966,6 +966,25 @@ test("provider boundary imports no legacy task controller or home-grown Response
   }
 });
 
+test("read-only discovery refreshes a stale CSRF token once but keeps other 401 failures terminal", async () => {
+  for (const stale of [true, false]) {
+    let discoveries = 0;
+    const client = createAntigravityCascadeClient({
+      discoverConnection: () => ({ lsAddress: "127.0.0.1:41001", csrfToken: String(++discoveries) }),
+      fetchImpl: async (_url, options) => options.headers["x-codeium-csrf-token"] === "1"
+        ? new Response(JSON.stringify({ code: "unauthenticated", message: stale ? "invalid CSRF token" : "login required" }), { status: 401 })
+        : jsonResponse(modelPayload()),
+    });
+    if (stale) {
+      assert.equal((await client.listModels()).length, 2);
+      assert.equal(discoveries, 2);
+    } else {
+      await assert.rejects(client.listModels(), /login required/);
+      assert.equal(discoveries, 1);
+    }
+  }
+});
+
 function clientFor(fetchImpl, overrides = {}) {
   return createAntigravityCascadeClient({
     connection: {
