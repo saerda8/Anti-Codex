@@ -6,6 +6,18 @@ import {
   createAntigravityChatAdapter,
 } from "../provider/antigravity-chat-adapter.mjs";
 
+test("native instructions do not reject an earlier user image on follow-up", async () => {
+  const client = fakeClient({ startEvents: [{ type: "text_delta", delta: "ok" }, { type: "done" }] });
+  const adapter = createAntigravityChatAdapter({ client, nativeCustomInstructions: "Use native tools." });
+  const image = { type: "image_url", image_url: { url: "data:image/png;base64,AA==" } };
+  await adapter.complete({ model: "gemini-pro-agent", messages: [
+    { role: "user", content: [image] }, { role: "assistant", content: "Received" },
+    { role: "user", content: "What is in that image?" },
+  ] });
+  assert.deepEqual(client.starts[0].systemSections.find((s) => s.kind === "chat_history").messages[0].content, [image]);
+  await adapter.close();
+});
+
 test("exposes only anonymized Antigravity account readiness", async () => {
   const fingerprint = `sha256:${"a".repeat(64)}`;
   const client = fakeClient({

@@ -568,7 +568,17 @@ function updateAssistantText(continuation, latest) {
 
 function normalizeUserItems(request) {
   const items = Array.isArray(request.userItems) ? request.userItems : [];
-  return items.length ? items : [{ text: requiredText(request.userText, "current user text") }];
+  const historyImages = (request.systemSections ?? [])
+    .filter((section) => section.kind === "chat_history")
+    .flatMap((section) => section.messages ?? [])
+    .flatMap((message) => Array.isArray(message.content) ? message.content : [])
+    .flatMap((part) => {
+      if (part?.type !== "image_url") return [];
+      const url = typeof part.image_url === "string" ? part.image_url : part.image_url?.url;
+      const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/iu.exec(String(url ?? ""));
+      return match ? [{ image: { mimeType: match[1], data: match[2].replace(/\s/g, "") } }] : [];
+    });
+  return [...historyImages, ...(items.length ? items : [{ text: requiredText(request.userText, "current user text") }])];
 }
 
 function extractTrajectoryError(payload) {
@@ -608,7 +618,7 @@ function renderSystemPromptSections(sections = []) {
         const dataImage = typeof value === "string"
           ? /^data:(image\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,/iu.exec(value)
           : null;
-        return dataImage ? `[historical image omitted: ${dataImage[1].toLowerCase()}]` : value;
+        return dataImage ? `[historical image attached as media: ${dataImage[1].toLowerCase()}]` : value;
       })).join("\n");
     }
     if (!content) return [];

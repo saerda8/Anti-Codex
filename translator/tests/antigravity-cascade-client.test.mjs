@@ -411,7 +411,7 @@ test("native custom instructions reach final Cascade once while joined environme
   await adapter.close();
 });
 
-test("omits data-image payloads from text-rendered chat history", async () => {
+test("sends historical images as media while keeping base64 out of textual history", async () => {
   const service = fakeService({
     GetAvailableModels: () => jsonResponse(modelPayload()),
     StartCascade: () => jsonResponse({ cascadeId: "cascade_image_history" }),
@@ -445,8 +445,10 @@ test("omits data-image payloads from text-rendered chat history", async () => {
   const history = start.body.customAgentSpec.customAgent.systemPromptSections[0].content;
   assert.match(history, /Rendered frame/u);
   assert.match(history, /call_image/u);
-  assert.match(history, /\[historical image omitted: image\/png\]/u);
+  assert.match(history, /\[historical image attached as media: image\/png\]/u);
   assert.doesNotMatch(history, /A{64}/u);
+  const send = service.calls.find((call) => call.method === "SendUserCascadeMessage");
+  assert.deepEqual(send.body.media, [{ inlineData: "A".repeat(10_000), mimeType: "image/png" }]);
 });
 
 test("gives Cascade startup a bounded 60 second default while preserving explicit overrides", async () => {

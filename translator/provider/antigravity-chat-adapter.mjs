@@ -648,6 +648,7 @@ function addNativeCustomInstructions(systemSections, value, include = true) {
 
 function stripExactNativeCustomInstructions(message, content) {
   if (!content || String(message?.role ?? "").toLowerCase() !== "user") return message;
+  if (Array.isArray(message.content) && message.content.some((part) => !["text", "input_text"].includes(part?.type ?? "text"))) return message;
   const text = messageText(message?.content, { allowEmpty: true }).replace(/\r\n?/g, "\n");
   const wrapper = `# AGENTS.md instructions\n\n<INSTRUCTIONS>\n${content}\n</INSTRUCTIONS>`;
   if (text === wrapper) return null;
