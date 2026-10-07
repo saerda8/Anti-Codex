@@ -502,6 +502,14 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
   let resumeTrajectoryReads = 0;
   let bridgeOptions = null;
   const bridge = fakeBridge(() => { phase = "resume"; });
+  const discoveredTools = [{ type: "function", function: { name: "mcp__node_repl__js", parameters: { type: "object", properties: { code: { type: "string" } } } } }];
+  let updatedTools = null;
+  bridge.updateTools = (tools) => { updatedTools = tools; };
+  const completeCall = bridge.completeCall;
+  bridge.completeCall = (...args) => {
+    assert.deepEqual(updatedTools, discoveredTools, "new tool schemas must be registered before the old result resumes the model");
+    return completeCall.apply(bridge, args);
+  };
   const service = fakeService({
     GetAvailableModels: () => jsonResponse(modelPayload()),
     StartCascade: () => jsonResponse({ cascadeId: "cascade_tool" }),
@@ -567,7 +575,7 @@ test("captures a native MCP call and resumes the exact same Cascade with the exa
   const secondEvents = await collect(client.resume(
     firstEvents[0].continuation,
     [{ callId: "bridge_call_1", output: "EXACT\r\nRESULT", isError: false }],
-    {},
+    { tools: discoveredTools },
   ));
   assert.deepEqual(bridge.completions, [{
     callId: "bridge_call_1",

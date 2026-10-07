@@ -8,8 +8,8 @@ import {
 } from "./antigravity-contract.mjs";
 
 export async function createAntigravityNativeMcpBridge(options = {}) {
-  const canonicalTools = normalizeTools(options.tools);
-  const { tools, canonicalNameByNativeName } = withAntigravityToolAliases(canonicalTools);
+  let canonicalTools = normalizeTools(options.tools);
+  let { tools, canonicalNameByNativeName } = withAntigravityToolAliases(canonicalTools);
   const systemPromptSections = normalizeSystemPromptSections(options.systemPromptSections);
   const calls = [];
   const waiters = [];
@@ -147,6 +147,13 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
     return calls.splice(0);
   }
 
+  function updateTools(nextTools) {
+    canonicalTools = normalizeTools(nextTools);
+    const result = withAntigravityToolAliases(canonicalTools);
+    tools = result.tools;
+    canonicalNameByNativeName = result.canonicalNameByNativeName;
+  }
+
   async function close(reason = new Error("Antigravity native MCP bridge closed.")) {
     if (closed) return;
     closed = true;
@@ -163,17 +170,22 @@ export async function createAntigravityNativeMcpBridge(options = {}) {
   return {
     url,
     secret,
-    tools,
-    customAgentSpec: withAntigravitySystemPromptSections({
-      customizationConfig: {
-        customizationServerUrl: url,
-        toolNames: canonicalTools.map((tool) => tool.name),
-      },
-      customTools: canonicalTools.map((tool) => tool.name),
-    }, systemPromptSections),
+    get tools() {
+      return tools;
+    },
+    get customAgentSpec() {
+      return withAntigravitySystemPromptSections({
+        customizationConfig: {
+          customizationServerUrl: url,
+          toolNames: canonicalTools.map((tool) => tool.name),
+        },
+        customTools: canonicalTools.map((tool) => tool.name),
+      }, systemPromptSections);
+    },
     waitForCall,
     takeCalls,
     completeCall,
+    updateTools,
     close,
     maxBodyBytes,
     pendingCallTimeoutMs,

@@ -268,6 +268,111 @@ test("native MCP bridge evicts abandoned calls after waiter timeout", async () =
   }
 });
 
+test("native MCP bridge updateTools adds, removes, and aliases tools live while preserving pending calls", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    tools: [{
+      type: "function",
+      function: {
+        name: "tool_a",
+        description: "Tool A",
+        parameters: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+      },
+    }],
+  });
+  try {
+    const listedInitial = await rpc(bridge.url, 1, "tools/list", {});
+    assert.deepEqual(listedInitial.result.tools.map((t) => t.name), ["tool_a"]);
+
+    const callAResponse = rpc(bridge.url, 2, "tools/call", { name: "tool_a", arguments: { value: "first" } });
+    const callA = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(callA.name, "tool_a");
+    assert.equal(callA.nativeCallId, "2");
+    assert.equal(bridge.pendingCount, 1);
+
+    bridge.updateTools([
+      { name: "tool_a", description: "Tool A", parameters: { type: "object" } },
+      { name: "tool_b", description: "Tool B", parameters: { type: "object" } },
+    ]);
+
+    const listedAfterAdd = await rpc(bridge.url, 3, "tools/list", {});
+    assert.deepEqual(listedAfterAdd.result.tools.map((t) => t.name).sort(), ["tool_a", "tool_b"].sort());
+
+    const callBResponse = rpc(bridge.url, 4, "tools/call", { name: "tool_b", arguments: { value: "second" } });
+    const callB = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(callB.name, "tool_b");
+    assert.equal(callB.nativeCallId, "4");
+    assert.equal(bridge.pendingCount, 2);
+
+    assert.equal(bridge.completeCall(callB.callId, "B done"), true);
+    const completedB = await callBResponse;
+    assert.equal(completedB.result.content[0].text, "B done");
+
+    assert.equal(bridge.completeCall(callA.callId, "A done"), true);
+    const completedA = await callAResponse;
+    assert.equal(completedA.result.content[0].text, "A done");
+    assert.equal(bridge.pendingCount, 0);
+
+    bridge.updateTools([{ name: "tool_b", description: "Tool B", parameters: { type: "object" } }]);
+    const listedAfterRemove = await rpc(bridge.url, 5, "tools/list", {});
+    assert.deepEqual(listedAfterRemove.result.tools.map((t) => t.name), ["tool_b"]);
+
+    const rejectedA = await rpc(bridge.url, 6, "tools/call", { name: "tool_a", arguments: { value: "blocked" } });
+    assert.equal(rejectedA.error.code, -32602);
+
+    const callB2Response = rpc(bridge.url, 7, "tools/call", { name: "tool_b", arguments: { value: "third" } });
+    const callB2 = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(bridge.completeCall(callB2.callId, "B again"), true);
+    assert.equal((await callB2Response).result.content[0].text, "B again");
+
+    const agentSpec = bridge.customAgentSpec;
+    assert.deepEqual(agentSpec.customTools, ["tool_b"]);
+    assert.deepEqual(agentSpec.customizationConfig.toolNames, ["tool_b"]);
+  } finally {
+    await bridge.close();
+  }
+});
+
+test("native MCP bridge updateTools aliases canonicalize for shell_command and host-qualified names", async () => {
+  const bridge = await createAntigravityNativeMcpBridge({
+    tools: [
+      { name: "shell_command", description: "Run shell", parameters: { type: "object" } },
+      { name: "exec_command", description: "Exec", parameters: { type: "object" } },
+      { name: "apply_patch", description: "Patch", parameters: { type: "object" } },
+    ],
+  });
+  try {
+    bridge.updateTools([
+      { name: "shell_command", description: "Run shell", parameters: { type: "object" } },
+      { name: "exec_command", description: "Exec", parameters: { type: "object" } },
+      { name: "apply_patch", description: "Patch", parameters: { type: "object" } },
+    ]);
+
+    const listed = await rpc(bridge.url, 10, "tools/list", {});
+    const names = listed.result.tools.map((t) => t.name).sort();
+    assert.deepEqual(names, ["apply_patch", "command", "exec_command", "functions.apply_patch", "functions.exec", "shell_command"].sort());
+
+    const agentSpec = bridge.customAgentSpec;
+    assert.deepEqual(agentSpec.customTools.sort(), ["apply_patch", "exec_command", "shell_command"].sort());
+    assert.deepEqual(agentSpec.customizationConfig.toolNames.sort(), ["apply_patch", "exec_command", "shell_command"].sort());
+
+    const callAliasResponse = rpc(bridge.url, 11, "tools/call", { name: "command", arguments: { command: "echo hi" } });
+    const callAlias = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(callAlias.name, "shell_command");
+    assert.equal(callAlias.nativeName, "command");
+    assert.equal(bridge.completeCall(callAlias.callId, "ok"), true);
+    assert.equal((await callAliasResponse).result.content[0].text, "ok");
+
+    const callHostResponse = rpc(bridge.url, 12, "tools/call", { name: "functions.exec", arguments: { cmd: "pwd" } });
+    const callHost = await bridge.waitForCall({ timeoutMs: 1000 });
+    assert.equal(callHost.name, "exec_command");
+    assert.equal(callHost.nativeName, "functions.exec");
+    assert.equal(bridge.completeCall(callHost.callId, "ok"), true);
+    assert.equal((await callHostResponse).result.content[0].text, "ok");
+  } finally {
+    await bridge.close();
+  }
+});
+
 async function rpc(url, id, method, params) {
   const response = await fetch(url, {
     method: "POST",

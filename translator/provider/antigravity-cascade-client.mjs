@@ -205,6 +205,8 @@ export function createAntigravityCascadeClient(options = {}) {
     }
 
     try {
+      // Releasing a result resumes Cascade immediately; register newly discovered tools first.
+      if (Array.isArray(request.tools)) continuation.bridge.updateTools(request.tools);
       for (const call of expected) {
         const result = resultMap.get(call.callId);
         const completed = continuation.bridge.completeCall(call.callId, result.output, {
