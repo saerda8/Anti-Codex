@@ -384,15 +384,16 @@ function Accept-Settings([string]$text) {
 [pscustomobject]@{
   modern = Accept-Settings ${quotePowerShell(modern)}
   legacy = Accept-Settings ${quotePowerShell(legacy)}
+  legacySecurityItem = Accept-Settings ${quotePowerShell(legacy + item)}
   unpatched = Accept-Settings ${quotePowerShell(modern.replace("securitySettingsEnabled:0", "securitySettingsEnabled:n"))}
-  ambiguous = Accept-Settings ${quotePowerShell(modern + "/*anticodex-hide-external-account*/null")}
+  ambiguous = Accept-Settings ${quotePowerShell(modern + "/*anticodex-hide-external-account*/null/*anticodex-hide-external-account*/null")}
   duplicate = Accept-Settings ${quotePowerShell(modern + item)}
   noMessages = Accept-Settings ${quotePowerShell(modern.replace("message:k.securitySettings", "message:k.account"))}
 } | ConvertTo-Json -Compress
 `, "utf8");
       const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness], {cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true});
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.deepEqual(JSON.parse(result.stdout.trim()), {modern: true, legacy: true, unpatched: false, ambiguous: false, duplicate: false, noMessages: false});
+      assert.deepEqual(JSON.parse(result.stdout.trim()), {modern: true, legacy: true, legacySecurityItem: true, unpatched: false, ambiguous: false, duplicate: false, noMessages: false});
     }
   } finally { rmSync(fixture, {recursive: true, force: true}); }
 });
