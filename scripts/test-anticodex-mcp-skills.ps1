@@ -792,7 +792,12 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
 } else {
     try {
         $configText = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
-        $developmentWorkersAllowed = $configText -match '(?ms)^\[anticodex\.development_workers\]\s*\r?\nenabled\s*=\s*true\s*$'
+        $featureSettingsPath = Join-Path $CodexHome "anticodex-features.json"
+        $developmentWorkersAllowed = $false
+        if (Test-Path -LiteralPath $featureSettingsPath -PathType Leaf) {
+            $featureSettings = Get-Content -LiteralPath $featureSettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $developmentWorkersAllowed = $featureSettings.developmentWorkers -eq $true
+        }
         if ($configText -notmatch "\[mcp_servers\]") { Add-Failure "config.toml missing [mcp_servers]" }
         if ($configText -notmatch "\[mcp_servers\.node_repl\]") { Add-Failure "config.toml missing node_repl MCP server" }
         if ($configText -match "chatgpt\.com/(auth|login)") { Add-Failure "config.toml contains ChatGPT login route" }

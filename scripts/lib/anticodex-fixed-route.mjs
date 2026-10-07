@@ -240,7 +240,7 @@ export function mergeCodexRouteConfig(existingConfig, route) {
   const firstSection = lines.findIndex((line) => /^\s*\[[^\]]+\]\s*(?:#.*)?$/.test(line));
   const rootEnd = firstSection < 0 ? lines.length : firstSection;
   const rootLines = lines.slice(0, rootEnd);
-  const sectionLines = lines.slice(rootEnd);
+  const sectionLines = ensureMemoryModels(lines.slice(rootEnd), route.clientModel ?? route.model);
   const managedKeys = new Set([
     "model",
     "model_catalog_json",
@@ -301,6 +301,19 @@ function trimBoundaryBlankLines(lines) {
   while (start < end && !String(lines[start]).trim()) start += 1;
   while (end > start && !String(lines[end - 1]).trim()) end -= 1;
   return lines.slice(start, end);
+}
+
+function ensureMemoryModels(lines, model) {
+  const models = ["extract_model", "consolidation_model"].map((key) => `${key} = ${tomlString(model)}`);
+  const start = lines.findIndex((line) => /^\s*\[memories\]\s*(?:#.*)?$/.test(line));
+  if (start < 0) return [...lines, "", "[memories]", ...models];
+  let end = lines.findIndex((line, index) => index > start && /^\s*\[[^\]]+\]/.test(line));
+  if (end < 0) end = lines.length;
+  return [
+    ...lines.slice(0, start + 1), ...models,
+    ...lines.slice(start + 1, end).filter((line) => !/^\s*(?:extract_model|consolidation_model)\s*=/.test(line)),
+    ...lines.slice(end),
+  ];
 }
 
 function ensureUnifiedExecFeature(config) {

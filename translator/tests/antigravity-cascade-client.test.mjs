@@ -326,7 +326,7 @@ test("starts a workspace-blind Cascade and returns one text terminal outcome", a
   assert.equal(Object.hasOwn(start.body, "cwd"), false);
 });
 
-test("sends image inputs through the Cascade request image field", async () => {
+test("sends image inputs through the Cascade media field instead of retired images", async () => {
   const service = fakeService({
     GetAvailableModels: () => jsonResponse(modelPayload()),
     StartCascade: () => jsonResponse({ cascadeId: "cascade_image" }),
@@ -346,7 +346,8 @@ test("sends image inputs through the Cascade request image field", async () => {
   }));
   const send = service.calls.find((call) => call.method === "SendUserCascadeMessage");
   assert.deepEqual(send.body.items, [{ text: "看图" }]);
-  assert.deepEqual(send.body.images, [{ base64Data: "AA==", mimeType: "image/png" }]);
+  assert.deepEqual(send.body.media, [{ inlineData: "AA==", mimeType: "image/png" }]);
+  assert.equal(Object.hasOwn(send.body, "images"), false);
 });
 
 test("emits planner text deltas while a Cascade is still running", async () => {

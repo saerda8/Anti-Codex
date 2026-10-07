@@ -357,6 +357,23 @@ test("MCP verifier keeps development workers opt-in", () => {
   assert.match(verifier, /developmentWorkersAllowed/);
 });
 
+test("development worker opt-in migrates out of native config and survives refresh", () => {
+  for (const enabled of [true, false]) {
+    const dir = tempDir();
+    const source = path.join(dir, "global.toml");
+    const target = path.join(dir, "config.toml");
+    fs.writeFileSync(source, '[mcp_servers.audit-worker]\ncommand = "worker.exe"\n[mcp_servers.audit-worker.tools.audit_start_implementation]\napproval_mode = "approve"\n');
+    fs.writeFileSync(target, `model = "anticodex"\n[anticodex.development_workers]\nenabled = ${enabled}\n[features]\nunified_exec = true\n`);
+    execFileSync(process.execPath, [syncSharedConfig, source, target]);
+    const first = fs.readFileSync(target, "utf8");
+    assert.doesNotMatch(first, /\[anticodex\./);
+    assert.equal(first.includes('[mcp_servers.audit-worker]'), enabled);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "anticodex-features.json"), "utf8")).developmentWorkers, enabled);
+    execFileSync(process.execPath, [syncSharedConfig, source, target]);
+    assert.equal(fs.readFileSync(target, "utf8"), first);
+  }
+});
+
 test("DeepCodex-only plugin registrations stay local and cannot restore development MCP workers", () => {
   const dir = tempDir();
   const current = path.join(dir, "current.toml");

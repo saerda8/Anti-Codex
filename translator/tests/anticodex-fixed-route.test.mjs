@@ -13,6 +13,22 @@ import {
   buildCodexPlusPlusSettings
 } from "../../scripts/lib/anticodex-fixed-route.mjs";
 
+test("memory models follow the selected route while preserving memory controls", () => {
+  const firstRoute = generateRouteConfig({ provider: "antigravity", model: "gemini-3-flash-agent", proxyPort: 41002, adapterPort: 41003 });
+  const secondRoute = generateRouteConfig({ provider: "third-party", model: "test-model", proxyPort: 41002, thirdPartyConfig: { baseUrl: "https://example.com/v1", apiKey: "test-key" } });
+  for (const initial of ["", '[memories] # native settings\nextract_model = "gpt-5.6-luna"\nconsolidation_model = "old-model"\ngenerate_memories = false\nuse_memories = true\n']) {
+    const first = mergeCodexRouteConfig(initial, firstRoute);
+    assert.match(first, /extract_model = "gemini-3-flash-agent"/);
+    assert.match(first, /consolidation_model = "gemini-3-flash-agent"/);
+    assert.doesNotMatch(first, /gpt-5\.6-luna|old-model/);
+    if (initial) assert.match(first, /generate_memories = false\nuse_memories = true/);
+    const second = mergeCodexRouteConfig(first, secondRoute);
+    assert.match(second, /extract_model = "test-model"/);
+    assert.match(second, /consolidation_model = "test-model"/);
+    assert.equal(mergeCodexRouteConfig(second, secondRoute), second);
+  }
+});
+
 test("Contract 1: Product paths are isolated under install/state roots and CodexPlusPlus binary is correct", () => {
   const installRoot = "G:\\mock-install-root";
   const stateRoot = "G:\\mock-state-root";

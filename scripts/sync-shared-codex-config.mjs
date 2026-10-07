@@ -16,7 +16,7 @@ function optionValue(name) {
 
 const installRoot = optionValue("--install-root");
 const codexHome = optionValue("--codex-home") || path.dirname(path.resolve(targetPath));
-const includeDevelopmentWorkers = optionArgs.includes("--include-development-workers");
+let includeDevelopmentWorkers = optionArgs.includes("--include-development-workers");
 const sharedSectionRe = /^\[(features|marketplaces|plugins|mcp_servers|projects)(\.|\])/;
 const workerToolSuffix = "_start_implementation";
 const windowsShimCommands = new Set(["npx", "npm", "pnpm", "yarn"]);
@@ -325,4 +325,23 @@ const target = fs.readFileSync(targetPath, "utf8");
 const sourceBlocks = splitTomlBlocks(source);
 const targetBlocks = splitTomlBlocks(target);
 
-fs.writeFileSync(targetPath, render(mergeSharedBlocks(targetBlocks, sourceBlocks)));
+// Product preferences are not native Codex configuration keys.
+const featureSettingsPath = path.join(codexHome, "anticodex-features.json");
+const featureSettings = fs.existsSync(featureSettingsPath)
+  ? JSON.parse(fs.readFileSync(featureSettingsPath, "utf8"))
+  : {};
+const legacyWorkerBlock = targetBlocks.find((block) => block.header === "[anticodex.development_workers]");
+const legacyWorkersEnabled = legacyWorkerBlock
+  ? blockHasAssignment(legacyWorkerBlock, "enabled", "true(?:\\s*(?:#.*)?)$")
+  : undefined;
+includeDevelopmentWorkers ||= (legacyWorkersEnabled ?? featureSettings.developmentWorkers) === true;
+if (legacyWorkerBlock || includeDevelopmentWorkers) {
+  fs.writeFileSync(featureSettingsPath, JSON.stringify({
+    ...featureSettings,
+    developmentWorkers: includeDevelopmentWorkers,
+  }, null, 2) + "\n");
+}
+
+fs.writeFileSync(targetPath, render(mergeSharedBlocks(
+  targetBlocks.filter((block) => block !== legacyWorkerBlock), sourceBlocks,
+)));

@@ -159,8 +159,8 @@ export function createAntigravityCascadeClient(options = {}) {
         cascadeId,
         items: userItems.filter((item) => item?.text !== undefined),
         ...(userItems.some((item) => item?.image)
-          ? { images: userItems.filter((item) => item?.image).map((item) => ({
-            base64Data: item.image.data,
+          ? { media: userItems.filter((item) => item?.image).map((item) => ({
+            inlineData: item.image.data,
             mimeType: item.image.mimeType,
           })) }
           : {}),
