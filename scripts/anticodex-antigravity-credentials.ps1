@@ -40,7 +40,8 @@ function Assert-OfficialCredentialJson([byte[]]$Blob) {
     $top = @($value.PSObject.Properties.Name)
     $token = $value.token
     $tokenFields = if ($null -ne $token) { @($token.PSObject.Properties.Name) } else { @() }
-    if ($top.Count -ne 2 -or $top -notcontains "token" -or $top -notcontains "auth_method" -or
+    $validTop = $top.Count -eq 2 -or ($top.Count -eq 3 -and $top -contains "id_token" -and $value.id_token -is [string])
+    if (-not $validTop -or $top -notcontains "token" -or $top -notcontains "auth_method" -or
         $tokenFields.Count -ne 4 -or $tokenFields -notcontains "access_token" -or
         $tokenFields -notcontains "token_type" -or $tokenFields -notcontains "refresh_token" -or
         $tokenFields -notcontains "expiry" -or [string]::IsNullOrWhiteSpace([string]$token.access_token) -or

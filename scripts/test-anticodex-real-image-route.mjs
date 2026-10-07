@@ -146,6 +146,7 @@ async function main() {
     fixedRoute: { baseUrl, modelsStatus: modelsResponse.status, model, modelAvailable, responseStatus: response.status },
     image: { path: imagePath, bytes: imageBytes.length, mimeType, requestPartType: "input_image" },
     response: { id: payload?.id || "", model: payload?.model || "", recognitionMatched, recognized, text: text.slice(0, 500) },
+    ...(response.ok ? {} : { error: { code: payload?.error?.code, message: String(payload?.error?.message ?? "").slice(0, 1000) } }),
     uiUploadVerified: false,
     uiUploadReason: "Direct loopback HTTP request intentionally bypasses the desktop file picker.",
   }, ok ? 0 : 1);

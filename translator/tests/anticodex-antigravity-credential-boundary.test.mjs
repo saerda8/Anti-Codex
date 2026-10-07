@@ -109,6 +109,23 @@ test("a running Desktop with an unverifiable identity cannot be treated as stopp
   assert.notEqual(result.status, 0, "Unknown running Antigravity process must refuse credential changes");
 });
 
+test("credential schema accepts optional identity token but rejects unknown or malformed fields", { skip: process.platform !== "win32" }, () => {
+  const token = { access_token: "synthetic", token_type: "Bearer", refresh_token: "synthetic-refresh", expiry: "2099-01-01T00:00:00Z" };
+  const old = { token, auth_method: "oauth" };
+  const modern = { ...old, id_token: "synthetic-id" };
+  const cases = [old, modern, { ...modern, extra: "unknown" }, ...[{}, 1, null].map(id_token => ({ ...old, id_token })), { token }, { ...old, token: { ...token, access_token: "" } }];
+  const result = runPowerShell(`
+$ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+$ast=[Management.Automation.Language.Parser]::ParseFile(${psLiteral(helper)},[ref]$null,[ref]$null)
+$fn=$ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -eq 'Assert-OfficialCredentialJson' }
+. ([scriptblock]::Create($fn.Extent.Text))
+$cases=[Console]::In.ReadToEnd() | ConvertFrom-Json
+$result=@($cases | ForEach-Object {try {Assert-OfficialCredentialJson ([Text.Encoding]::UTF8.GetBytes(($_ | ConvertTo-Json -Depth 8 -Compress))) | Out-Null; $true} catch {$false}})
+ConvertTo-Json -InputObject $result -Compress`, JSON.stringify(cases));
+  assert.equal(result.status, 0);
+  assert.deepEqual(JSON.parse(result.stdout), [true, true, false, false, false, false, false, false]);
+});
+
 test("DPAPI restore decodes only the supplied synthetic credential without touching the keyring", { skip: process.platform !== "win32" }, () => {
   const fake = JSON.stringify({ token: { access_token: "synthetic-access", token_type: "Bearer", refresh_token: "synthetic-refresh", expiry: "2030-01-01T00:00:00Z" }, auth_method: "oauth" });
   const sealed = runPowerShell("Add-Type -AssemblyName System.Security; $b=[Text.Encoding]::UTF8.GetBytes([Console]::In.ReadToEnd()); $e=[Text.Encoding]::UTF8.GetBytes('anticodex-antigravity-accounts-v1'); [Console]::Write('dpapi:v1:'+[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser)))", fake);
