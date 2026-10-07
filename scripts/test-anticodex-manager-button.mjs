@@ -897,6 +897,14 @@ function managerSummaryFromActionPayload(actionName, payload) {
       `\u53ef\u8c03\u7528\u9a8c\u8bc1\uff1a${capabilities.callableState || "checked"}`,
     ].join("\n") + note;
   }
+  if (actionName === "refreshFeatures") {
+    return [
+      `本地功能刷新：${unwrapped.ok === false ? "需要处理" : "完成"}`,
+      `MCP ${unwrapped.mcp?.count ?? "未知"} / Skill ${unwrapped.skills?.count ?? "未知"}`,
+      `sourceSnapshot: files=${unwrapped.sourceSnapshot?.fileCount ?? "未知"}`,
+      "可调用验证：本次仅刷新本地资料，另行检查插件/应用和 MCP/Skill",
+    ].join("\n");
+  }
   if (actionName === "diagnosticsBundle") {
     const unwrapped = result?.result && typeof result.result === "object" ? result.result : result;
     return [
@@ -964,6 +972,15 @@ if (args.has("--report-io-self-test")) {
 }
 
 if (args.has("--self-test")) {
+  const refreshPayload = { ok: true, result: { ok: true, mcp: { count: 9 }, skills: { count: 103 }, sourceSnapshot: { fileCount: 1003 } } };
+  for (const payload of [refreshPayload, { result: refreshPayload }]) {
+    const summary = managerSummaryFromActionPayload("refreshFeatures", payload);
+    assert.equal(hasActionSpecificResult("refreshFeatures", summary), true);
+    assert.equal(isFinishedText(summary), true);
+    assert.equal(isActionFailureText("refreshFeatures", summary), false);
+    assert.match(summary, /sourceSnapshot: files=1003/);
+  }
+  assert.equal(isActionFailureText("refreshFeatures", managerSummaryFromActionPayload("refreshFeatures", { ok: false, result: { ok: false } })), true);
   assert.equal(hasActionSpecificResult("fastOverallNoTraffic", "\u901a\u8fc7"), false);
   assert.equal(hasActionSpecificResult("fastOverallNoTraffic", "\u5feb\u901f\u68c0\u67e5\uff1a\u901a\u8fc7\n\u8017\u65f6\uff1a23000 ms"), true);
   assert.equal(isRunningText("\u68c0\u67e5\u5b89\u88c5/\u540c\u6b65\uff1a\u4ecd\u5728\u8fd0\u884c\u6216\u672c\u673a\u811a\u672c\u6b63\u5728\u6536\u5c3e\u3002"), true);
