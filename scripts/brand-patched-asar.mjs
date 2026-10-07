@@ -5,6 +5,7 @@ import {
   buildAsarIntegrity,
   hasAppServerManagedSessionFlags,
   hasCrashRecoveryPageSignature,
+  hasModernModelUpgradeDataSurface,
   hasPatchedAuthRequirement,
   hasProductNameDrivenSessionTitle,
   hasStartupMcpConfigReload,
@@ -593,14 +594,23 @@ function findModelSwitchWarningPatch(fd, header, dataOffset) {
 }
 
 function findModelUpgradeBannerPatch(fd, header, dataOffset) {
+  const modernData = [];
+  let modernConsumer = false;
+  let legacyUi = false;
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith("webview/assets/app-primary-") || !rel.endsWith(".js")) continue;
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
+    if (/\/[a-z]{2,3}(?:-[A-Za-z0-9]{2,4})?-[a-f0-9]+\.js$/.test(rel)) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes("composer.modelUpgradeBanner.introductionTitle")) {
       return [rel, patchModelUpgradeBanner];
     }
+    legacyUi ||= text.includes("composer.modelUpgradeBanner.");
+    if (rel.startsWith("webview/assets/app-shared-") && hasModernModelUpgradeDataSurface(text)) modernData.push(rel);
+    if (rel.startsWith("webview/assets/app-initial-") && /\.modelUpgrades\?\.\[/.test(text)) modernConsumer = true;
   }
+  // New shells retain upgrade data but removed the banner renderer. Verify both surfaces before a no-op.
+  if (!legacyUi && modernConsumer && modernData.length === 1) return [modernData[0], (text) => text];
   throw new Error("Could not find model upgrade banner bundle");
 }
 
@@ -849,8 +859,10 @@ function findSettingsExternalLinksPatch(fd, header, dataOffset) {
     if ((text.includes("https://chatgpt.com/#settings") &&
          text.includes("https://chatgpt.com/open-security-settings")) ||
         hasSettingsExternalNavigationPatch(text)) {
-      patchSettingsExternalNavigation(text);
-      definitionCandidates.push([rel, patchSettingsExternalNavigation]);
+      try {
+        patchSettingsExternalNavigation(text);
+        definitionCandidates.push([rel, patchSettingsExternalNavigation]);
+      } catch {}
     }
     try {
       patchSettingsExternalNavigationRender(text);

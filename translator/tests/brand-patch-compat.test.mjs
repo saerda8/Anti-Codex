@@ -10,6 +10,10 @@ const brandPatcherSource = readFileSync(new URL("../../scripts/brand-patched-asa
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+const modernSettingsDefinitionFixture = "function Mi(){ki=Ut({account:{id:`settings.nav.chatSettings`,defaultMessage:`Account`,description:`Account navigation item that opens ChatGPT settings in the browser`},securitySettings:{id:`settings.nav.securitySettings`,defaultMessage:`Security Settings`,description:`Settings navigation item that opens ChatGPT security settings in the browser`}}),ji={account:{href:`https://chatgpt.com/#settings`,icon:qt,message:ki.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:ni,message:ki.securitySettings}}}";
+const modernSettingsRenderFixture = "function Or(e){return(0,Q.jsx)(kr,{...e,securitySettingsEnabled:n})}function kr(e){let{securitySettingsEnabled:y}=e;return[...e.sections,...y&&rn(i,k)>0?[{href:hn.securitySettings.href,id:`external:security-settings`,kind:`external`,label:i}]:[]]}";
+const modernModelDataFixture = "function buildModelData(e){return{modelUpgrades:e.model_upgrades,defaultSliderUpgrades:e.default_slider_upgrades}}";
+
 test("brands Codex and ChatGPT webview titles without changing HTML size", () => {
   for (const title of ["Codex", "ChatGPT"]) {
     const source = `<!doctype html>\n  <head>\n    <title>${title}</title>\n  </head>\n`;
@@ -26,6 +30,60 @@ test("discovers webview titles through the shared compatibility patch", () => {
     /function findWebviewHtmlTitlePatch[\s\S]*?\n\}/,
   )?.[0] ?? "";
   assert.match(finder, /patchWebviewHtmlTitle\(text\)/);
+});
+
+test("supports the v1002 settings definition and external-entry render shape", () => {
+  const patchedDefinition = brandPatchCompat.patchSettingsExternalNavigation(modernSettingsDefinitionFixture);
+  assert.equal(patchedDefinition.length, modernSettingsDefinitionFixture.length);
+  assert.match(patchedDefinition, /anticodex-local-settings-only/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigation(patchedDefinition), patchedDefinition);
+
+  const patchedRender = brandPatchCompat.patchSettingsExternalNavigationRender(modernSettingsRenderFixture);
+  assert.equal(patchedRender.length, modernSettingsRenderFixture.length);
+  assert.match(patchedRender, /securitySettingsEnabled:0/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patchedRender), patchedRender);
+});
+
+test("recognizes the v1002 model-upgrade data surface when the banner UI is retired", () => {
+  assert.equal(brandPatchCompat.hasModernModelUpgradeDataSurface(modernModelDataFixture), true);
+  assert.equal(brandPatchCompat.hasModernModelUpgradeDataSurface("composer.modelUpgradeBanner.introductionTitle"), false);
+  assert.equal(brandPatchCompat.hasModernModelUpgradeDataSurface("const unrelated = {modelUpgrades: []}"), false);
+  assert.equal(brandPatchCompat.hasModernModelUpgradeDataSurface(modernModelDataFixture + "composer.modelUpgradeBanner.dismiss"), false);
+});
+
+test("v1002 banner discovery requires the recognized schema, consumer and absent UI", () => {
+  const declaration = brandPatcherSource.match(/function findModelUpgradeBannerPatch[\s\S]*?(?=function findWindowsClosePatch)/)[0];
+  const finder = new Function("walkFiles", "readFileFromAsar", "hasModernModelUpgradeDataSurface", "patchModelUpgradeBanner", `${declaration};return findModelUpgradeBannerPatch;`)(
+    (header) => Object.entries(header), (_fd, entry) => ({buf: Buffer.from(entry)}), brandPatchCompat.hasModernModelUpgradeDataSurface, (text) => text,
+  );
+  const bundles = {
+    "webview/assets/app-shared-new.js": modernModelDataFixture,
+    "webview/assets/app-initial-new.js": "const upgrade = data.modelUpgrades?.[model];",
+    "webview/assets/zh-CN-b05cfd55c534.js": '"composer.modelUpgradeBanner.dismiss":"关闭"',
+  };
+  assert.equal(finder(null, bundles, 0)[0], "webview/assets/app-shared-new.js");
+  assert.throws(() => finder(null, {...bundles, "webview/assets/composer-new.js": "composer.modelUpgradeBanner.dismiss"}, 0));
+  assert.throws(() => finder(null, {"webview/assets/app-shared-new.js": "modelUpgrades"}, 0));
+  assert.throws(() => finder(null, {...bundles, "webview/assets/app-shared-other.js": modernModelDataFixture}, 0));
+});
+
+test("patches v1002 visible models while preserving API access-program guards", () => {
+  const source = "function jli({additionalAvailableModels:e,apiKeyDaybreakSupported:t=!1,authMethod:n,availableModels:r,hasConfiguredModelCatalog:i,isCustomModelProvider:a,model:o,useHiddenModels:s}){let c=o.availableAccessPrograms?.cyber;return n===`apikey`&&!t&&c!=null&&c.length>0&&!c.includes(`standard`)?!1:e?.has(o.model)===!0||o.model!==`codex-auto-review`&&(i&&!o.hidden||(s&&!a&&n!==`amazonBedrock`?r.has(o.model)||n===`apikey`&&t&&!o.hidden&&c?.some(e=>e!==`standard`)===!0:!o.hidden))}";
+  const patched = brandPatchCompat.patchLocalModelAvailability(source);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(brandPatchCompat.patchLocalModelAvailability(source.replace("apiKeyDaybreakSupported:t=!1", "apiKeyDaybreakSupported:t"))), true);
+  assert.equal(patched.length, source.length);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(patched), true);
+  assert.equal(brandPatchCompat.patchLocalModelAvailability(patched), patched);
+  const filter = new Function(`${patched};return jli;`)();
+  const args = {additionalAvailableModels: new Set(), availableModels: new Set(), authMethod: "apikey", isCustomModelProvider: false, useHiddenModels: true};
+  assert.equal(filter({...args, model: {model: "claude", hidden: false}}), true);
+  assert.equal(filter({...args, model: {model: "hidden", hidden: true}}), false);
+  assert.equal(filter({...args, model: {model: "codex-auto-review", hidden: false}}), false);
+  const restricted = {model: "restricted", hidden: false, availableAccessPrograms: {cyber: ["restricted"]}};
+  assert.equal(filter({...args, model: restricted}), false);
+  assert.equal(filter({...args, model: restricted, additionalAvailableModels: new Set(["restricted"])}), false);
+  assert.equal(filter({...args, model: restricted, apiKeyDaybreakSupported: true}), true);
+  assert.equal(filter({...args, model: {...restricted, availableAccessPrograms: {cyber: ["standard"]}}}), true);
 });
 
 const crashRecoveryBundle = [

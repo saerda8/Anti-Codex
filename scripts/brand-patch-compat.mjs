@@ -25,6 +25,8 @@ const SETTINGS_SECURITY_ENABLED_PATTERN =
 const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
   /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
+const SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN =
+  /\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}/g;
 const APP_SERVER_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN =
@@ -837,10 +839,14 @@ export function patchSettingsExternalNavigation(text) {
 
 export function hasSettingsExternalNavigationRenderPatch(text) {
   const source = String(text ?? "");
-  return allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN).length === 1
+  const legacy = allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN).length === 1
     && allMatches(source, SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN).length === 1
     && allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN).length === 0
     && allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN).length === 0;
+  const modern = allMatches(source, SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN).length === 1
+    && allMatches(source, SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN).length === 1
+    && allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN).length === 0;
+  return legacy || modern;
 }
 
 export function patchSettingsExternalNavigationRender(text) {
@@ -848,6 +854,13 @@ export function patchSettingsExternalNavigationRender(text) {
   if (hasSettingsExternalNavigationRenderPatch(source)) return source;
   const account = allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN);
   const security = allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN);
+  const modernExternalSecurity = allMatches(source, SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN);
+  if (account.length === 0 && security.length === 1 && modernExternalSecurity.length === 1) {
+    const valueIndex = security[0].index + security[0].groups.prefix.length;
+    return source.slice(0, valueIndex)
+      + padReplacement(security[0].groups.value, "0")
+      + source.slice(valueIndex + security[0].groups.value.length);
+  }
   if (account.length !== 1 || security.length !== 1) {
     throw new Error("Expected exactly one supported ChatGPT settings navigation render");
   }
@@ -1035,8 +1048,11 @@ export function hasPatchedAuthRequirement(text) {
   );
 }
 
+const MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),apiKeyDaybreakSupported:(?<daybreak>[\w$]+)(?:=!1)?,authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:(?<catalog>[\w$]+),isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{let (?<cyber>[\w$]+)=\k<model>\.availableAccessPrograms\?\.cyber;return \k<auth>===`apikey`&&!\k<daybreak>&&\k<cyber>!=null&&\k<cyber>\.length>0&&!\k<cyber>\.includes\(`standard`\)\?!1:\k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<catalog>&&!\k<model>\.hidden\|\|\((?<gate>\k<hidden>&&!\k<custom>&&\k<auth>!==`amazonBedrock`|!1\s*)\?\k<available>\.has\(\k<model>\.model\)\|\|\k<auth>===`apikey`&&\k<daybreak>&&!\k<model>\.hidden&&\k<cyber>\?\.some\((?<item>[\w$]+)=>\k<item>!==`standard`\)===!0:!\k<model>\.hidden\)\)\}/;
+
 export function hasPatchedLocalModelAvailability(text) {
   const source = String(text ?? "");
+  if (MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN.exec(source)?.groups.gate.trim() === "!1") return true;
   return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(source) ||
     /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
     /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),isCustomModelProvider:[\w$]+,model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
@@ -1070,8 +1086,20 @@ export function patchLocalModelAvailability(text) {
     const gateIndex = extractedWithConfiguredCatalog.index + extractedWithConfiguredCatalog[0].indexOf(gate);
     return source.slice(0, gateIndex) + "!1" + " ".repeat(gate.length - 2) + source.slice(gateIndex + gate.length);
   }
+  const modern = MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN.exec(source);
+  if (modern && modern.groups.gate.trim() !== "!1") {
+    const gate = modern.groups.gate;
+    const gateIndex = modern.index + modern[0].indexOf(gate);
+    return source.slice(0, gateIndex) + padReplacement(gate, "!1") + source.slice(gateIndex + gate.length);
+  }
   if (hasPatchedLocalModelAvailability(source)) return source;
   throw new Error("Local model availability filter pattern not found");
+}
+
+export function hasModernModelUpgradeDataSurface(text) {
+  const source = String(text ?? "");
+  return /modelUpgrades:(?<data>[\w$]+)\.model_upgrades,defaultSliderUpgrades:\k<data>\.default_slider_upgrades/.test(source)
+    && !source.includes("composer.modelUpgradeBanner.");
 }
 
 function hasPatchedProductNameDrivenSessionTitle(text) {
