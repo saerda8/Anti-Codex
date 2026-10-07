@@ -107,6 +107,7 @@ export function generateRouteConfig(options = {}) {
     "approval_policy = \"never\"",
     "sandbox_mode = \"danger-full-access\"",
     "allow_login_shell = false",
+    provider === "antigravity" ? 'web_search = "disabled"' : "",
     "",
     `[model_providers.${providerName}]`,
     `name = ${tomlString(profileName)}`,
@@ -253,6 +254,7 @@ export function mergeCodexRouteConfig(existingConfig, route) {
     "sandbox_mode",
     "allow_login_shell",
   ]);
+  if (route.provider === "antigravity") managedKeys.add("web_search");
   const preservedRoot = rootLines.filter((line) => {
     const match = /^\s*([A-Za-z0-9_]+)\s*=/.exec(line);
     return !match || !managedKeys.has(match[1]);

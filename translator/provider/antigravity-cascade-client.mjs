@@ -30,6 +30,7 @@ const TOOL_COMPATIBILITY_SECTION = Object.freeze({
     "If a tool result is too long, truncated, or mentions provider-saved output, rerun a narrower command inside the user workspace instead of reading the provider file.",
     "Do not run git status or inspect parent directories unless the user explicitly requests it and the current directory is a Git repository.",
     "Use the exact tool names exposed in this request, such as exec_command and apply_patch. Never call functions.exec or functions.apply_patch; those are host-internal labels.",
+    "Web search is provided by the local anticodex-web MCP server. Discover it with tool_search using the exact query anticodex-web, then call the returned namespaced web_search or web_fetch tool. Do not call the bare built-in web_search; it cannot execute through this provider.",
   ].join("\n"),
   metadata: { isInternal: true },
 });

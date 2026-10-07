@@ -259,6 +259,18 @@ command = "node"
   assert.ok(!merged.includes("8484"), "Output should not contain legacy port 8484");
 });
 
+test("Antigravity removes hosted web search while preserving the local web MCP", () => {
+  const route = generateRouteConfig({ provider: "antigravity", proxyPort: 41002, adapterPort: 41003 });
+  const source = 'web_search = "live"\n[features]\nunified_exec = true\n[mcp_servers.anticodex-web]\ncommand = "python"\n';
+  const merged = mergeCodexRouteConfig(source, route);
+  assert.equal((merged.match(/^web_search = "disabled"$/gm) ?? []).length, 1);
+  assert.doesNotMatch(merged, /^web_search = "live"$/m);
+  assert.match(merged, /\[mcp_servers\.anticodex-web\]\ncommand = "python"/);
+  assert.equal(mergeCodexRouteConfig(merged, route), merged);
+  const thirdPartyRoute = generateRouteConfig({ provider: "third-party", proxyPort: 41002, thirdPartyConfig: { baseUrl: "https://example.com/v1", apiKey: "fixture-key", model: "fixture-model" } });
+  assert.match(mergeCodexRouteConfig(source, thirdPartyRoute), /^web_search = "live"$/m);
+});
+
 test("Contract 6: Repeated mergeCodexRouteConfig is idempotent (byte-level equal), and buildCodexPlusPlusSettings configuration is correct", () => {
   const route = generateRouteConfig({
     provider: "antigravity",
