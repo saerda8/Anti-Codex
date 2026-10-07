@@ -1933,6 +1933,7 @@ async function waitForManagerActionSurfaceStable(actionName) {
       const grid = overlay?.querySelector(".anticodex-grid") || null;
       const actionCount = overlay?.querySelectorAll("button[data-action]")?.length || 0;
       const snapshotInFlight = window.__ANTICODEX_MANAGER_SNAPSHOT_IN_FLIGHT__ === true;
+      const initialLoading = overlay?.getAttribute("data-anticodex-initial-loading") === "true";
       const actionInFlight = Boolean(window.__ANTICODEX_MANAGER_ACTION_IN_FLIGHT_TOKEN__);
       const busy = overlay?.getAttribute("data-anticodex-busy") === "true"
         || overlay?.querySelector(".anticodex-actions")?.getAttribute("data-anticodex-busy") === "true";
@@ -1942,6 +1943,7 @@ async function waitForManagerActionSurfaceStable(actionName) {
       const confirming = button?.getAttribute("data-confirming-high-impact") === "true";
       const ready = Boolean(overlay && button && result && grid && actionCount > 0)
         && !snapshotInFlight
+        && !initialLoading
         && !actionInFlight
         && !busy
         && !running
@@ -1955,6 +1957,7 @@ async function waitForManagerActionSurfaceStable(actionName) {
         gridPresent: Boolean(grid),
         actionCount,
         snapshotInFlight,
+        initialLoading,
         actionInFlight,
         busy,
         running,

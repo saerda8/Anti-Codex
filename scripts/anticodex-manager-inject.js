@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v118";
+  const VERSION = "native-panel-v119";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -2953,12 +2953,16 @@
     }
 
     installActions();
+    root.setAttribute("data-anticodex-initial-loading", "true");
     managerInitialLoadPromise = load({ updateResult: !preserveLastActionResult })
       .catch((error) => {
         result.classList.add("anticodex-error");
         result.textContent = "读取失败：" + (error?.message || "本地状态暂不可用");
       })
-      .finally(() => { managerInitialLoadPromise = null; });
+      .finally(() => {
+        managerInitialLoadPromise = null;
+        root.removeAttribute("data-anticodex-initial-loading");
+      });
   }
 
   function installManagerRuntime() {

@@ -2080,8 +2080,8 @@ test("Manager correlates fresh background reports and keeps their final result v
 });
 
 test("current Manager UI exposes no legacy session-controller action", () => {
-  assert.match(managerInject, /const VERSION = "native-panel-v118"/);
-  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v118"/);
+  assert.match(managerInject, /const VERSION = "native-panel-v119"/);
+  assert.match(managerOpenInject, /__ANTICODEX_MANAGER_VERSION__ === "native-panel-v119"/);
   assert.match(managerInject, /\.anticodex-head\{[^}]*position:sticky;top:0;z-index:3;background:var\(--ac-bg\)/);
   for (const [name, text] of Object.entries({
     source,
