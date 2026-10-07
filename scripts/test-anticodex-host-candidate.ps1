@@ -482,10 +482,12 @@ $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
 $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
 $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
 $settingsAccountHiddenPattern = '/\*anticodex-hide-external-account\*/null'
+$settingsModernSecurityItemPattern = '\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}'
 $settingsSecurityDisabledPattern = 'securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
 $settingsDynamicWrapperPattern = '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
 if ([regex]::Matches($asarText, $settingsDefinitionPattern).Count -ne 1 -or
-    [regex]::Matches($asarText, $settingsAccountHiddenPattern).Count -ne 1 -or
+    ([regex]::Matches($asarText, $settingsAccountHiddenPattern).Count +
+        [regex]::Matches($asarText, $settingsModernSecurityItemPattern).Count) -ne 1 -or
     [regex]::Matches($asarText, $settingsSecurityDisabledPattern).Count -ne 1 -or
     [regex]::Matches($asarText, $settingsDynamicWrapperPattern).Count -ne 0 -or
     [regex]::Matches($asarText, '\.securitySettings\.message').Count -lt 1 -or

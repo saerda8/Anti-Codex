@@ -364,6 +364,39 @@ test("candidate and rollback validators require both preserved Settings messages
   }
 });
 
+test("candidate and rollback accept v1002 Settings and reject incomplete or ambiguous patches", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-settings-v1002-"));
+  const definition = "/*anticodex-local-settings-only*/account:{href:`about:blank`,icon:q,message:k.account},securitySettings:{href:`about:blank`,icon:n,message:k.securitySettings}";
+  const security = "(0,Q.jsx)(kr,{...e,securitySettingsEnabled:0});hn.securitySettings.message;";
+  const item = "{href:hn.securitySettings.href,id:`external:security-settings`,kind:`external`,label:i}";
+  const modern = definition + security + item;
+  const legacy = definition + security + "/*anticodex-hide-external-account*/null";
+  try {
+    for (const [index, source] of [candidateValidator, rollback].entries()) {
+      const block = source.match(/\$settingsDefinitionPattern\s*=[\s\S]*?throw "[^"\r\n]+Settings compatibility patch is invalid\."\s*\}/)?.[0];
+      assert.ok(block, "Settings validation block not found");
+      const harness = join(fixture, `settings-${index}.ps1`);
+      writeFileSync(harness, `$ErrorActionPreference = "Stop"
+function Accept-Settings([string]$text) {
+  $asarText = $text
+  try { ${block}; return $true } catch { return $false }
+}
+[pscustomobject]@{
+  modern = Accept-Settings ${quotePowerShell(modern)}
+  legacy = Accept-Settings ${quotePowerShell(legacy)}
+  unpatched = Accept-Settings ${quotePowerShell(modern.replace("securitySettingsEnabled:0", "securitySettingsEnabled:n"))}
+  ambiguous = Accept-Settings ${quotePowerShell(modern + "/*anticodex-hide-external-account*/null")}
+  duplicate = Accept-Settings ${quotePowerShell(modern + item)}
+  noMessages = Accept-Settings ${quotePowerShell(modern.replace("message:k.securitySettings", "message:k.account"))}
+} | ConvertTo-Json -Compress
+`, "utf8");
+      const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness], {cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true});
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.deepEqual(JSON.parse(result.stdout.trim()), {modern: true, legacy: true, unpatched: false, ambiguous: false, duplicate: false, noMessages: false});
+    }
+  } finally { rmSync(fixture, {recursive: true, force: true}); }
+});
+
 test("shortcuts continue to use the external Anti-Codex icon", () => {
   assert.match(shortcutRepair, /\$hostIcon\s*=\s*Join-Path\s+\$hostRoot\s+"resources\\icon\.ico"/);
   assert.match(shortcutRepair, /\$shortcut\.IconLocation\s*=\s*\[string\]\$Spec\.expectedIconLocation/);

@@ -429,8 +429,10 @@ function Test-AntiCodexAsarPatches {
     }
     if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5, 6, 7)) {
         $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
+        $settingsModernSecurityItemPattern = '\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}'
         if ([regex]::Matches($text, $settingsDefinitionPattern).Count -ne 1 -or
-            [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count -ne 1 -or
+            ([regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count +
+                [regex]::Matches($text, $settingsModernSecurityItemPattern).Count) -ne 1 -or
             [regex]::Matches($text, 'securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}').Count -ne 1 -or
             [regex]::Matches($text, '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}').Count -ne 0 -or
             [regex]::Matches($text, '\.securitySettings\.message').Count -lt 1 -or
