@@ -804,6 +804,11 @@ test("revision 7 leaves the official primary-window tracker unpatched", () => {
   assert.doesNotMatch(method, /on\(`restore`|webContents\.invalidate|setImmediate/);
 });
 
+test("revision 7 accepts the official badge refresh added by the next Codex host", () => {
+  const method = "trackPrimaryWindow(e){this.primaryWindows.add(e),this.refreshAppBadgeCount(),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
+  assert.equal(brandPatchCompat.hasPrimaryWindowRestoreRepaint(`before:${method}:after`), false);
+});
+
 test("routes every Windows tray brand to the Anti-Codex tray resource", () => {
   const officialTrayGuid = "e5768d8b-6936-4f45-b1ad-4c5fb414cb35";
   const antiCodexTrayGuid = "a91c0de5-7b42-4fa8-9d31-2e6c5b7048f3";
