@@ -1,0 +1,26 @@
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index c102f11..50cb2ca 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -874,7 +874,7 @@ impl LaunchHooks for DefaultLaunchHooks {
+         app_dir: Option<&Path>,
+         settings: &BackendSettings,
+     ) -> anyhow::Result<PathBuf> {
+-        crate::app_paths::resolve_codex_app_dir_with_saved(
++        let resolved = crate::app_paths::resolve_codex_app_dir_with_saved(
+             app_dir,
+             Some(settings.codex_app_path.as_str()),
+         )
+@@ -894,7 +894,11 @@ impl LaunchHooks for DefaultLaunchHooks {
+                 }),
+             );
+             anyhow::anyhow!(message)
+-        })
++        })?;
++        if crate::paths::isolated_instance_mode() {
++            crate::app_paths::validate_isolated_copied_app_dir(&resolved)?;
++        }
++        Ok(resolved)
+     }
+ 
+     fn select_debug_port(&self, requested: u16) -> u16 {

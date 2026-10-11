@@ -153,6 +153,13 @@ function Test-ExactString {
     return $Value -is [string] -and $Value -ceq $Expected
 }
 
+function Test-MailboxPatch {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $firstLine = Get-Content -LiteralPath $Path -Encoding UTF8 -TotalCount 1
+    return $firstLine -match '^From [0-9a-f]{40} Mon Sep 17 '
+}
+
 function Assert-CandidateWindowsLaunchable {
     param(
         [Parameter(Mandatory = $true)][string]$BinaryPath,
@@ -514,10 +521,33 @@ try {
     $stage = "patch_replay"
     $firstPatchCommit = ""
     foreach ($patch in $patches) {
-        [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
-            "-C", $worktree, "-c", "core.hooksPath=NUL", "am",
-            "--empty=keep", "--no-3way", "--committer-date-is-author-date", $patch.path
-        ) -WorkingDirectory $stagingRoot -Name "Patch replay $($patch.file)")
+        if (Test-MailboxPatch -Path $patch.path) {
+            [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
+                "-C", $worktree, "-c", "core.hooksPath=NUL", "am",
+                "--empty=keep", "--no-3way", "--committer-date-is-author-date", $patch.path
+            ) -WorkingDirectory $stagingRoot -Name "Patch replay $($patch.file)")
+        } else {
+            [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
+                "-C", $worktree, "apply", "--whitespace=nowarn", $patch.path
+            ) -WorkingDirectory $stagingRoot -Name "Patch replay $($patch.file)")
+            [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
+                "-C", $worktree, "add", "--all", "--"
+            ) -WorkingDirectory $stagingRoot -Name "Patch staging $($patch.file)")
+            $authorDate = $env:GIT_AUTHOR_DATE
+            $committerDate = $env:GIT_COMMITTER_DATE
+            try {
+                $env:GIT_AUTHOR_DATE = "2000-01-01T00:00:00Z"
+                $env:GIT_COMMITTER_DATE = "2000-01-01T00:00:00Z"
+                [void](Invoke-Checked -FilePath "git.exe" -Arguments @(
+                    "-C", $worktree, "-c", "core.hooksPath=NUL", "commit", "--no-verify",
+                    "--allow-empty", "--author", "Anti-Codex Candidate <anticodex-candidate@example.invalid>",
+                    "--date", "2000-01-01T00:00:00Z", "-m", "Apply $($patch.file)"
+                ) -WorkingDirectory $stagingRoot -Name "Patch commit $($patch.file)")
+            } finally {
+                if ($null -eq $authorDate) { Remove-Item Env:GIT_AUTHOR_DATE -ErrorAction SilentlyContinue } else { $env:GIT_AUTHOR_DATE = $authorDate }
+                if ($null -eq $committerDate) { Remove-Item Env:GIT_COMMITTER_DATE -ErrorAction SilentlyContinue } else { $env:GIT_COMMITTER_DATE = $committerDate }
+            }
+        }
         $currentCommit = Invoke-Checked -FilePath "git.exe" -Arguments @(
             "-C", $worktree, "rev-parse", "HEAD"
         ) -WorkingDirectory $stagingRoot -Name "Patch commit identity"

@@ -1,0 +1,12 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index cb5329b..5391688 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -424,6 +424,7 @@ dependencies = [
+  "anyhow",
+  "async-trait",
+  "base64 0.22.1",
++ "bytes",
+  "directories",
+  "fs2",
+  "futures-util",

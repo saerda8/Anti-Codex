@@ -1,27 +1,82 @@
 {
-    "component": "CodexPlusPlus",
-    "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
-    "license": "AGPL-3.0-only",
-    "version": "1.5.0",
-    "tag": "v1.5.0",
-    "upstreamCommit": "23ed5515e69431794cbef363a886d974abcc6179",
-    "isolationPatchCommit": "638b582a7b1c0ae1b47f5d91e72f2e60ba68d425",
-    "patchCommit": "638b582a7b1c0ae1b47f5d91e72f2e60ba68d425",
-    "patches": [
-        {
-            "file": "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-            "sha256": "36dc9a1ce5b214b60211427c3785957c9f159c6a24e9e8be003231e5b6c9847e",
-            "scope": "complete Anti-Codex v1.5 compatibility adapter plus upstream-format normalization: isolation, loopback cancellation, model routing, multimodal output, command policy, compaction routing, prompt policy, stream safeguards and Codex v1.5 navigation/protocol compatibility"
-        }
-    ],
-    "verification": {
-        "patchReplay": "1 project patch replayed without automatic conflict resolution; head 638b582a7b1c0ae1b47f5d91e72f2e60ba68d425; tree 7a90f6361ab9e03926e8bc423dcacddf720bf4bb",
-        "sourceIsolationAudit": "passed",
-        "auditRegressionTests": "Candidate-local format, protocol proxy 156/156, watcher 13/13, core 527/528 with 1 native-browser fixture ignored, beta-header and quota-gate regressions passed",
-        "cargoFmt": "passed",
-        "cargoCheck": "Windows x64 Manager release check passed through managed bootstrap runner",
-        "windowsNativeTests": "Windows x64 launcher release build and process creation passed through managed bootstrap runner",
-        "launcherReleaseBuild": "sha256:659f4b4897a8ceda304a15179c4219e8d0cb0006143f66f92fce541075ad548f",
-        "runtimeIsolation": "candidate only; not activated"
-    }
+    "component":  "CodexPlusPlus",
+    "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+    "license":  "AGPL-3.0-only",
+    "version":  "1.7.1",
+    "tag":  "v1.7.1",
+    "upstreamCommit":  "5fe25892eb312abbc091512565a8dc2621a8c999",
+    "isolationPatchCommit":  "abdc7cac7a3b6bdf6c962ea6a2d1bfff9c67f7a1",
+    "patchCommit":  "37d6bac1d68567edfdcaa387c460adcbedb8d275",
+    "patches":  [
+                    {
+                        "file":  "patches/0001-v171-app-path-isolation.patch",
+                        "sha256":  "8372ece2b5a93c83f629723ac5d64d9c849b7453dbf5164751a000156187751f",
+                        "scope":  "explicit CODEX_PLUS_APP_EXECUTABLE selection, copied-app root and canonical executable validation, symlink/reparse rejection, and Windows alias regression"
+                    },
+                    {
+                        "file":  "patches/0002-v171-state-dir-isolation.patch",
+                        "sha256":  "25085a3b8455e8dab098ca7e70627f8172717fbb0879b57008cc410e6735f9de",
+                        "scope":  "absolute CODEX_PLUS_STATE_DIR selection, isolated default state root, and explicit absolute/relative/empty value regression"
+                    },
+                    {
+                        "file":  "patches/0003-v171-launcher-isolation-check.patch",
+                        "sha256":  "36737e5f8f8f5213d399a75f5fe552e2ac97cc0f4b6089fa2ff8fcf63a741618",
+                        "scope":  "isolated launcher validation of the copied app root and explicit executable before launch"
+                    },
+                    {
+                        "file":  "patches/0004-v171-bridge-quota-gate.patch",
+                        "sha256":  "81108d63397602b5066240027881904bbd401618afa5b07bc7621df5145ac448",
+                        "scope":  "safe external API quota breakpoint discovery, reconnect supervision, generation stop, and identifier injection regression"
+                    },
+                    {
+                        "file":  "patches/0005-v171-protocol-compatibility-merge.patch",
+                        "sha256":  "927be38730e5f7299c7512d3cac20ecac565c498b5bed1ac9fa47d53ee88be5b",
+                        "scope":  "v1.5 Anti-Codex protocol compatibility carried onto v1.7.1 while preserving beta headers, relay routing, compaction alignment, and cancel-aware streaming"
+                    },
+                    {
+                        "file":  "patches/0006-v171-isolation-blockers.patch",
+                        "sha256":  "bf14a7ae70255831dceaef7f3bccf652999083af20e73b419d66fd2215626385",
+                        "scope":  "executable-scoped process watcher and launcher stop paths, isolated watcher disablement, dynamic manager helper port, and native launcher ProxySessionHeaders compatibility entry"
+                    },
+                    {
+                        "file":  "patches/0007-v171-final-isolation-and-session-headers.patch",
+                        "sha256":  "f9d5c68dc0b0ae45eca5f598cc15f5a9d7c5809f48d0ee5e403012361b80cc8c",
+                        "scope":  "copied-app-scoped launcher and manager discovery/stop/restart, session-id/thread-id/x-opencode-session allowlisted forwarding with explicit custom-header precedence, and session-header regression"
+                    },
+                    {
+                        "file":  "patches/0008-v171-rustfmt-normalization.patch",
+                        "sha256":  "73b0cb9a9a6691560bbe90d4e380833f30ce40706b1fd70f389eac59c7655056",
+                        "scope":  "cargo fmt normalization for the merged v1.7.1 compatibility source"
+                    },
+                    {
+                        "file":  "patches/0009-v171-isolation-audit-contract-marker.patch",
+                        "sha256":  "ecce4d6b1fd297a55d10c767fd5f41bd7d7e2b2d13f263889615226997222122",
+                        "scope":  "preserve the formatted process.executable_path isolation audit contract"
+                    },
+                    {
+                        "file":  "patches/0010-v171-native-contracts.patch",
+                        "sha256":  "8fed29aa9c8138d9c45d6d1fbd2cbabdc8df7c4ffb320dcd406e011e41954702",
+                        "scope":  "restore v1.7.1 native protocol observer and encrypted-content contracts, Hyper loopback transport, and compile-time workspace dependencies"
+                    },
+                    {
+                        "file":  "patches/0011-v171-bytes-dependency.patch",
+                        "sha256":  "50214a0b36bf4353169a90e099812dcabc412dd574515efbfd5f2c5e434a8826",
+                        "scope":  "register the bytes workspace dependency required by the loopback transport"
+                    },
+                    {
+                        "file":  "patches/0012-v171-lockfile-bytes.patch",
+                        "sha256":  "44fabc9b8c8e0dd2e92bf0b0e49926d706d988607f55ec6b922778ce82fc7d4a",
+                        "scope":  "register bytes in the codex-plus-core Cargo.lock dependency list"
+                    }
+                ],
+    "verification":  {
+                         "patchReplay":  "12 project patches replayed without automatic conflict resolution; head 37d6bac1d68567edfdcaa387c460adcbedb8d275; tree 1cf21fbf9c04b76f428c538a4bc6e50ba5079989",
+                         "sourceIsolationAudit":  "passed",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
+                         "cargoFmt":  "passed",
+                         "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
+                         "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
+                         "launcherReleaseBuild":  "sha256:781cdf9f923cd0bb28ccc8142774e2b705dbca2afb6e4cc038094c300513f307",
+                         "runtimeIsolation":  "candidate only; not activated"
+                     }
 }

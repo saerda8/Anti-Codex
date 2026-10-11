@@ -43,7 +43,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function createSuccessFixture(t, { annotatedTag = false } = {}) {
+function createSuccessFixture(t, { annotatedTag = false, plainPatch = false } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), "anticodex-cpp-candidate-"));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
 
@@ -73,7 +73,9 @@ function createSuccessFixture(t, { annotatedTag = false } = {}) {
   write(join(repository, "marker.txt"), "patched\n");
   git(repository, "add", "marker.txt");
   git(repository, "commit", "-m", "isolation patch");
-  const patch = git(repository, "format-patch", "-1", "--stdout");
+  const patch = plainPatch
+    ? git(repository, "diff", "v1.2.44..HEAD")
+    : git(repository, "format-patch", "-1", "--stdout");
   git(repository, "reset", "--hard", "v1.2.44");
   write(join(repository, "default-only.txt"), "must not be fetched\n");
   git(repository, "add", "default-only.txt");
@@ -332,6 +334,23 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
     "hygiene runtime-clean",
   ]);
   assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+});
+
+test("CodexPlusPlus candidate preparation replays a plain unified diff", (t) => {
+  const fixture = createSuccessFixture(t, { plainPatch: true });
+  const result = runCandidate(fixture);
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const output = JSON.parse(result.stdout);
+  const candidateRoot = join(
+    fixture.stateRoot,
+    "candidates",
+    "1.2.44",
+    fixture.upstreamCommit,
+    output.patchCommit,
+  );
+  assert.equal(readFileSync(join(candidateRoot, "source", "marker.txt"), "utf8").replaceAll("\r\n", "\n"), "patched\n");
+  assert.match(output.patchCommit, /^[0-9a-f]{40}$/);
 });
 
 test("preparing the same accepted candidate twice reuses it without rebuilding", (t) => {

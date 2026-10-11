@@ -1,0 +1,356 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 6c129a8..cb5329b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -427,6 +427,9 @@ dependencies = [
+  "directories",
+  "fs2",
+  "futures-util",
++ "http-body-util",
++ "hyper",
++ "hyper-util",
+  "qrcode",
+  "reqwest 0.12.28",
+  "rusqlite",
+diff --git a/Cargo.toml b/Cargo.toml
+index d8c2fd1..4c72161 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -19,6 +19,9 @@ anyhow = "1"
+ base64 = "0.22"
+ directories = "6"
+ fs2 = "0.4"
++http-body-util = "0.1"
++hyper = { version = "1", features = ["client", "http1"] }
++hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+ futures-util = "0.3"
+ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls", "rustls-tls-native-roots", "system-proxy"], default-features = false }
+ rusqlite = { version = "0.32", features = ["bundled"] }
+diff --git a/crates/codex-plus-core/Cargo.toml b/crates/codex-plus-core/Cargo.toml
+index 5672ba6..0f29f03 100644
+--- a/crates/codex-plus-core/Cargo.toml
++++ b/crates/codex-plus-core/Cargo.toml
+@@ -13,6 +13,9 @@ base64.workspace = true
+ directories.workspace = true
+ futures-util = "0.3"
+ fs2.workspace = true
++http-body-util.workspace = true
++hyper.workspace = true
++hyper-util.workspace = true
+ reqwest.workspace = true
+ qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+ rusqlite.workspace = true
+diff --git a/crates/codex-plus-core/src/lib.rs b/crates/codex-plus-core/src/lib.rs
+index 093158a..f8cc0b1 100644
+--- a/crates/codex-plus-core/src/lib.rs
++++ b/crates/codex-plus-core/src/lib.rs
+@@ -24,6 +24,7 @@ pub mod grok_config;
+ pub mod http_client;
+ pub mod install;
+ pub mod launcher;
++mod loopback_http;
+ pub mod manager_navigation;
+ pub mod mcp_config;
+ pub mod model_catalog;
+diff --git a/crates/codex-plus-core/src/loopback_http.rs b/crates/codex-plus-core/src/loopback_http.rs
+new file mode 100644
+index 0000000..9d05f92
+--- /dev/null
++++ b/crates/codex-plus-core/src/loopback_http.rs
+@@ -0,0 +1,136 @@
++use std::net::IpAddr;
++use std::time::Duration;
++
++use anyhow::Context as _;
++use bytes::Bytes;
++use http_body_util::Full;
++use hyper::header::{ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, USER_AGENT};
++use hyper::{Method, Request, Uri};
++use hyper_util::client::legacy::Client;
++use hyper_util::client::legacy::connect::HttpConnector;
++use hyper_util::rt::TokioExecutor;
++
++pub fn supports(endpoint: &str) -> bool {
++    let Ok(uri) = endpoint.parse::<Uri>() else {
++        return false;
++    };
++    if uri.scheme_str() != Some("http") {
++        return false;
++    }
++    let Some(host) = uri.host() else {
++        return false;
++    };
++    let host = host
++        .strip_prefix('[')
++        .and_then(|host| host.strip_suffix(']'))
++        .unwrap_or(host);
++    host.eq_ignore_ascii_case("localhost")
++        || host
++            .parse::<IpAddr>()
++            .is_ok_and(|address| address.is_loopback())
++}
++
++pub async fn post_json(
++    endpoint: &str,
++    bearer_token: Option<&str>,
++    user_agent: &str,
++    beta_features: Option<&str>,
++    body: &serde_json::Value,
++    timeout: Duration,
++) -> anyhow::Result<hyper::Response<hyper::body::Incoming>> {
++    anyhow::ensure!(
++        supports(endpoint),
++        "cancel-aware model transport only supports HTTP loopback endpoints"
++    );
++    let uri = endpoint
++        .parse::<Uri>()
++        .context("invalid loopback model endpoint")?;
++    let mut request = Request::builder()
++        .method(Method::POST)
++        .uri(uri)
++        .header(CONTENT_TYPE, "application/json")
++        .header(ACCEPT, "text/event-stream")
++        .header(CACHE_CONTROL, "no-cache");
++    if let Some(token) = bearer_token.filter(|token| !token.trim().is_empty()) {
++        request = request.header(AUTHORIZATION, format!("Bearer {}", token.trim()));
++    }
++    if !user_agent.trim().is_empty() {
++        request = request.header(USER_AGENT, user_agent.trim());
++    }
++    if let Some(beta_features) = beta_features.filter(|value| !value.trim().is_empty()) {
++        request = request.header("x-codex-beta-features", beta_features.trim());
++    }
++    let request = request
++        .body(Full::new(Bytes::from(serde_json::to_vec(body)?)))
++        .context("failed to build loopback model request")?;
++    let mut connector = HttpConnector::new();
++    connector.enforce_http(true);
++    let client = Client::builder(TokioExecutor::new())
++        .pool_max_idle_per_host(0)
++        .build(connector);
++    tokio::time::timeout(timeout, client.request(request))
++        .await
++        .with_context(|| {
++            format!(
++                "loopback model request exceeded {} seconds before response headers",
++                timeout.as_secs()
++            )
++        })?
++        .context("loopback model request failed")
++}
++
++#[cfg(test)]
++mod tests {
++    use super::{post_json, supports};
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
++
++    #[test]
++    fn only_plain_http_loopback_endpoints_are_supported() {
++        assert!(supports("http://127.0.0.1:57321/v1/chat/completions"));
++        assert!(supports("http://[::1]:57321/v1/chat/completions"));
++        assert!(supports("http://localhost:57321/v1/chat/completions"));
++        assert!(!supports("https://127.0.0.1/v1/chat/completions"));
++        assert!(!supports("http://example.com/v1/chat/completions"));
++        assert!(!supports("not a URL"));
++    }
++    #[tokio::test]
++    async fn post_json_forwards_beta_features_header() {
++        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let address = listener.local_addr().unwrap();
++        let server = tokio::spawn(async move {
++            let (mut stream, _) = listener.accept().await.unwrap();
++            let mut bytes = Vec::new();
++            let mut chunk = [0_u8; 1024];
++            loop {
++                let read = stream.read(&mut chunk).await.unwrap();
++                if read == 0 {
++                    break;
++                }
++                bytes.extend_from_slice(&chunk[..read]);
++                if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
++                    break;
++                }
++            }
++            let headers = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
++            assert!(headers.contains("x-codex-beta-features: responses=v2"));
++            stream
++                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
++                .await
++                .unwrap();
++        });
++        let response = post_json(
++            &format!("http://{address}/v1/responses"),
++            None,
++            "unit-test",
++            Some("responses=v2"),
++            &serde_json::json!({"stream": true}),
++            std::time::Duration::from_secs(5),
++        )
++        .await
++        .unwrap();
++        assert_eq!(response.status(), 200);
++        server.await.unwrap();
++    }
++}
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index c645ba4..c1ceeb5 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -974,6 +974,48 @@ pub fn local_responses_proxy_base_url(port: u16) -> String {
+     format!("http://127.0.0.1:{port}/v1")
+ }
+ 
++#[derive(Debug)]
++pub(crate) struct UnsupportedEncryptedAgentContent;
++
++impl std::fmt::Display for UnsupportedEncryptedAgentContent {
++    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(formatter, "unsupported_encrypted_agent_content")
++    }
++}
++
++impl std::error::Error for UnsupportedEncryptedAgentContent {}
++
++impl UnsupportedEncryptedAgentContent {
++    pub(crate) fn response_body(&self) -> Value {
++        json!({"error": {
++            "type": "invalid_request_error",
++            "code": "unsupported_encrypted_agent_content",
++            "param": "input",
++            "message": self.to_string()
++        }})
++    }
++}
++
++fn input_has_encrypted_agent_content(input: &Value) -> bool {
++    fn item_has_encrypted_content(item: &Value) -> bool {
++        item.get("type").and_then(Value::as_str) == Some("encrypted_content")
++            || item.get("content").is_some_and(|content| match content {
++                Value::Array(parts) => parts.iter().any(|part| {
++                    part.get("type").and_then(Value::as_str) == Some("encrypted_content")
++                }),
++                Value::Object(_) => {
++                    content.get("type").and_then(Value::as_str) == Some("encrypted_content")
++                }
++                _ => false,
++            })
++    }
++    match input {
++        Value::Array(items) => items.iter().any(item_has_encrypted_content),
++        Value::Object(_) => item_has_encrypted_content(input),
++        _ => false,
++    }
++}
++
+ pub fn responses_to_chat_completions(body: Value) -> anyhow::Result<Value> {
+     responses_to_chat_completions_with_options(body, false)
+ }
+@@ -982,6 +1024,12 @@ pub fn responses_to_chat_completions_with_options(
+     body: Value,
+     standard: bool,
+ ) -> anyhow::Result<Value> {
++    if body
++        .get("input")
++        .is_some_and(input_has_encrypted_agent_content)
++    {
++        return Err(UnsupportedEncryptedAgentContent.into());
++    }
+     let mut result = json!({});
+ 
+     if let Some(model) = body.get("model") {
+@@ -1305,6 +1353,78 @@ pub async fn send_upstream_request_with_header_timeout(
+         .context("上游请求失败")
+ }
+ 
++#[derive(Default)]
++pub(crate) struct NativeResponsesSseObserver {
++    event_prefix: Vec<u8>,
++    event_tail: [u8; 4],
++    event_too_large: bool,
++    unclassified_large_event: bool,
++    completed: bool,
++    failure: Option<&'static str>,
++}
++
++const NATIVE_SSE_DIAGNOSTIC_PREFIX_LIMIT: usize = 64 * 1024;
++
++impl NativeResponsesSseObserver {
++    pub(crate) fn push_bytes(&mut self, bytes: &[u8]) {
++        for byte in bytes {
++            if self.event_prefix.len() < NATIVE_SSE_DIAGNOSTIC_PREFIX_LIMIT {
++                self.event_prefix.push(*byte);
++            } else {
++                self.event_too_large = true;
++            }
++            self.event_tail.rotate_left(1);
++            self.event_tail[3] = *byte;
++            if self.event_tail.ends_with(b"\n\n") || self.event_tail == *b"\r\n\r\n" {
++                self.observe_event();
++                self.event_prefix.clear();
++                self.event_tail = [0; 4];
++                self.event_too_large = false;
++            }
++        }
++    }
++
++    fn observe_event(&mut self) {
++        let prefix = String::from_utf8_lossy(&self.event_prefix);
++        let event_name = prefix
++            .lines()
++            .find_map(|line| strip_sse_field(line, "event"));
++        let data = prefix
++            .lines()
++            .filter_map(|line| strip_sse_field(line, "data"))
++            .collect::<Vec<_>>()
++            .join("\n");
++        let event_type = serde_json::from_str::<Value>(&data).ok().and_then(|value| {
++            value
++                .get("type")
++                .and_then(Value::as_str)
++                .map(str::to_string)
++        });
++        match event_type.as_deref().or(event_name.map(str::trim)) {
++            Some("response.completed") => self.completed = true,
++            Some("response.failed") => self.failure = Some("native response.failed"),
++            Some("response.incomplete") => self.failure = Some("native response.incomplete"),
++            Some("error") => self.failure = Some("native error event"),
++            None if self.event_too_large => self.unclassified_large_event = true,
++            _ => {}
++        }
++    }
++
++    pub(crate) fn finish(self) -> Option<String> {
++        self.failure
++            .or_else(|| {
++                if self.completed {
++                    None
++                } else if self.unclassified_large_event {
++                    Some("native response terminal state unknown")
++                } else {
++                    Some("native response ended before completion")
++                }
++            })
++            .map(str::to_string)
++    }
++}
++
+ pub struct ChatSseToResponsesConverter {
+     buffer: String,
+     utf8_remainder: Vec<u8>,
+@@ -1689,6 +1809,14 @@ impl Default for ChatSseToResponsesConverter {
+ }
+ 
+ impl ChatSseToResponsesConverter {
++    pub fn has_failed(&self) -> bool {
++        self.failed
++    }
++
++    pub fn has_terminal_event(&self) -> bool {
++        self.failed || self.state.completed || self.state.finish_reason.is_some()
++    }
++
+     pub fn with_request(original_request: &Value) -> Self {
+         Self {
+             state: ChatSseState::with_request(original_request),

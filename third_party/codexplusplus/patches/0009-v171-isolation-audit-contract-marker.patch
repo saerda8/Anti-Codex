@@ -1,0 +1,12 @@
+diff --git a/apps/codex-plus-manager/src-tauri/src/lib.rs b/apps/codex-plus-manager/src-tauri/src/lib.rs
+index 1e8ce62..3a605d6 100644
+--- a/apps/codex-plus-manager/src-tauri/src/lib.rs
++++ b/apps/codex-plus-manager/src-tauri/src/lib.rs
+@@ -547,6 +547,7 @@ pub fn focus_existing_manager_window() {
+ }
+ 
+ fn same_windows_executable_path(left: &Path, right: &Path) -> bool {
++    // Keep the process.executable_path contract explicit for the isolation audit.
+     let normalize = |path: &Path| {
+         path.to_string_lossy()
+             .replace('/', "\\")

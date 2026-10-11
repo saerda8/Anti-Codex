@@ -1,0 +1,207 @@
+diff --git a/crates/codex-plus-core/src/app_paths.rs b/crates/codex-plus-core/src/app_paths.rs
+index 8622772..0806db2 100644
+--- a/crates/codex-plus-core/src/app_paths.rs
++++ b/crates/codex-plus-core/src/app_paths.rs
+@@ -1,4 +1,4 @@
+-use std::ffi::OsStr;
++use std::ffi::{OsStr, OsString};
+ use std::path::{Path, PathBuf};
+ 
+ #[cfg(windows)]
+@@ -15,6 +15,7 @@ struct AppPackageSpec {
+ const CODEX_PACKAGE_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
+ #[cfg(not(target_os = "linux"))]
+ const STANDALONE_CODEX_EXECUTABLES: &[&str] = &["ChatGPT.exe", "Codex.exe", "codex.exe"];
++const APP_EXECUTABLE_ENV: &str = "CODEX_PLUS_APP_EXECUTABLE";
+ 
+ /// Linux 可执行文件名（原生优先，兼容便携包）
+ #[cfg(target_os = "linux")]
+@@ -625,6 +626,58 @@ mod standalone_cli_tests {
+     }
+ }
+ 
++#[cfg(test)]
++mod anticodex_isolation_tests {
++    use super::{
++        configured_codex_executable_from_value, explicit_codex_executable,
++        validate_isolated_copied_app_dir_against,
++    };
++
++    #[test]
++    fn copied_app_executable_must_be_absolute_and_inside_the_app_root() {
++        let temp = tempfile::tempdir().unwrap();
++        let app_dir = temp.path().join("copied-app");
++        let outside_dir = temp.path().join("outside");
++        std::fs::create_dir_all(&app_dir).unwrap();
++        std::fs::create_dir_all(&outside_dir).unwrap();
++        let inside = app_dir.join("Anti-Codex.exe");
++        let outside = outside_dir.join("Anti-Codex.exe");
++        std::fs::write(&inside, "copied").unwrap();
++        std::fs::write(&outside, "outside").unwrap();
++
++        assert_eq!(
++            explicit_codex_executable(&app_dir, inside.clone().into_os_string()),
++            Some(inside.clone())
++        );
++        assert_eq!(
++            explicit_codex_executable(&app_dir, outside.into_os_string()),
++            None
++        );
++        assert_eq!(
++            configured_codex_executable_from_value(&app_dir, Some("relative.exe".into())),
++            Some(std::path::PathBuf::new())
++        );
++        assert!(validate_isolated_copied_app_dir_against(&app_dir, &inside).is_ok());
++    }
++
++    #[cfg(windows)]
++    #[test]
++    fn copied_app_symlink_alias_is_rejected() {
++        use std::os::windows::fs::symlink_dir;
++
++        let temp = tempfile::tempdir().unwrap();
++        let app_dir = temp.path().join("copied-app");
++        let alias_dir = temp.path().join("copied-app-alias");
++        std::fs::create_dir_all(&app_dir).unwrap();
++        let executable = app_dir.join("Anti-Codex.exe");
++        std::fs::write(&executable, "copied").unwrap();
++        if symlink_dir(&app_dir, &alias_dir).is_err() {
++            return;
++        }
++        assert!(validate_isolated_copied_app_dir_against(&alias_dir, &executable).is_err());
++    }
++}
++
+ pub fn resolve_codex_app_dir_with_saved(
+     app_dir: Option<&Path>,
+     saved_app_path: Option<&str>,
+@@ -799,6 +852,9 @@ pub fn build_codex_executable(app_dir: &Path) -> PathBuf {
+         }
+         return macos_dir.join("Codex");
+     }
++    if let Some(executable) = configured_codex_executable(app_dir) {
++        return executable;
++    }
+     if let Some(executable) = executable_in_dir(app_dir) {
+         return executable;
+     }
+@@ -829,6 +885,119 @@ pub fn find_bundled_codex_cli(app_dir: &Path) -> Option<PathBuf> {
+     candidates.into_iter().find(|candidate| candidate.is_file())
+ }
+ 
++fn explicit_codex_executable(app_dir: &Path, value: OsString) -> Option<PathBuf> {
++    let executable = PathBuf::from(value);
++    if executable.as_os_str().is_empty()
++        || !executable.is_absolute()
++        || !executable
++            .extension()
++            .and_then(OsStr::to_str)
++            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
++        || !executable.is_file()
++    {
++        return None;
++    }
++    let canonical_app_dir = std::fs::canonicalize(app_dir).ok()?;
++    let canonical_executable = std::fs::canonicalize(&executable).ok()?;
++    (canonical_executable.parent() == Some(canonical_app_dir.as_path())).then_some(executable)
++}
++
++fn configured_codex_executable_from_value(
++    app_dir: &Path,
++    value: Option<OsString>,
++) -> Option<PathBuf> {
++    let value = value?;
++    Some(explicit_codex_executable(app_dir, value).unwrap_or_default())
++}
++
++pub fn configured_codex_executable(app_dir: &Path) -> Option<PathBuf> {
++    configured_codex_executable_from_value(app_dir, std::env::var_os(APP_EXECUTABLE_ENV))
++}
++
++pub fn validate_isolated_copied_app_dir(app_dir: &Path) -> anyhow::Result<PathBuf> {
++    let configured_executable = std::env::var_os(APP_EXECUTABLE_ENV)
++        .map(PathBuf::from)
++        .ok_or_else(|| anyhow::anyhow!("{APP_EXECUTABLE_ENV} is required for an isolated app"))?;
++    validate_isolated_copied_app_dir_against(app_dir, &configured_executable)
++}
++
++fn validate_isolated_copied_app_dir_against(
++    app_dir: &Path,
++    configured_executable: &Path,
++) -> anyhow::Result<PathBuf> {
++    if app_dir.as_os_str().is_empty() || !app_dir.is_absolute() || !app_dir.is_dir() {
++        anyhow::bail!("copied app path must be an existing absolute directory");
++    }
++    if configured_executable.as_os_str().is_empty()
++        || !configured_executable.is_absolute()
++        || !configured_executable.is_file()
++        || !configured_executable
++            .extension()
++            .and_then(OsStr::to_str)
++            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
++    {
++        anyhow::bail!("configured copied app executable is invalid");
++    }
++    let configured_app_dir = configured_executable
++        .parent()
++        .ok_or_else(|| anyhow::anyhow!("configured copied app executable has no parent"))?;
++    if !exact_app_path_matches(app_dir, configured_app_dir) {
++        anyhow::bail!("app path is not the exact configured Anti-Codex copied-app root");
++    }
++    reject_symlink_components(app_dir)?;
++    reject_symlink_components(configured_executable)?;
++    let canonical_app_dir = std::fs::canonicalize(app_dir)?;
++    let canonical_executable = std::fs::canonicalize(configured_executable)?;
++    if canonical_executable.parent() != Some(canonical_app_dir.as_path()) {
++        anyhow::bail!("app path is not the exact configured Anti-Codex copied-app root");
++    }
++    Ok(canonical_app_dir)
++}
++
++fn exact_app_path_matches(left: &Path, right: &Path) -> bool {
++    #[cfg(windows)]
++    {
++        let normalize = |path: &Path| {
++            path.to_string_lossy()
++                .trim_start_matches(r"\\?\")
++                .replace('/', "\\")
++                .trim_end_matches('\\')
++                .to_ascii_lowercase()
++        };
++        normalize(left) == normalize(right)
++    }
++    #[cfg(not(windows))]
++    {
++        left == right
++    }
++}
++
++fn reject_symlink_components(path: &Path) -> anyhow::Result<()> {
++    let mut current = PathBuf::new();
++    for component in path.components() {
++        current.push(component.as_os_str());
++        if matches!(
++            component,
++            std::path::Component::Prefix(_) | std::path::Component::RootDir
++        ) {
++            continue;
++        }
++        let metadata = std::fs::symlink_metadata(&current)?;
++        if metadata.file_type().is_symlink() {
++            anyhow::bail!("symlinked copied app paths are not allowed");
++        }
++        #[cfg(windows)]
++        {
++            use std::os::windows::fs::MetadataExt;
++            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
++            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
++                anyhow::bail!("reparse-point copied app paths are not allowed");
++            }
++        }
++    }
++    Ok(())
++}
++
+ /// 是否指向 Store 版安装目录（WindowsApps）里的可执行文件。
+ ///
+ /// MSIX 包目录受系统保护，第三方进程不能直接执行其中的 exe，

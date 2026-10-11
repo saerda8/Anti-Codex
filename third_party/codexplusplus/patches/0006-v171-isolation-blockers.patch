@@ -1,0 +1,271 @@
+diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
+index 9b05548..579f5b3 100644
+--- a/apps/codex-plus-manager/src-tauri/src/commands.rs
++++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
+@@ -6680,7 +6680,7 @@ fn default_debug_port() -> u16 {
+ }
+ 
+ fn default_helper_port() -> u16 {
+-    57321
++    codex_plus_core::protocol_proxy::protocol_proxy_port()
+ }
+ 
+ fn default_log_lines() -> usize {
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 5b262b8..5e713f4 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -1211,6 +1211,14 @@ pub struct UpstreamProxyResponse {
+     pub(crate) _channel_permit: Option<crate::channel_protection::ChannelPermit>,
+ }
+ 
++/// Client session headers accepted from the native Codex helper.
++#[derive(Clone, Copy, Default)]
++pub struct ProxySessionHeaders<'a> {
++    pub session_id: Option<&'a str>,
++    pub thread_id: Option<&'a str>,
++    pub opencode_session: Option<&'a str>,
++}
++
+ pub struct AbortiveUpstreamProxyResponse {
+     pub status_code: u16,
+     pub content_type: String,
+@@ -1882,6 +1890,23 @@ pub async fn open_responses_proxy_request_for_path_with_beta(
+     .await
+ }
+ 
++pub async fn open_responses_proxy_request_for_path_with_session_headers(
++    body: &str,
++    original_user_agent: Option<&str>,
++    request_path: &str,
++    beta_features: Option<&str>,
++    session_headers: ProxySessionHeaders<'_>,
++) -> anyhow::Result<UpstreamProxyResponse> {
++    let _ = session_headers;
++    open_responses_proxy_request_for_path_with_beta(
++        body,
++        original_user_agent,
++        request_path,
++        beta_features,
++    )
++    .await
++}
++
+ pub async fn open_responses_proxy_request_for_path_with_turn_metadata(
+     body: &str,
+     original_user_agent: Option<&str>,
+diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
+index 8f6b312..e2b07d7 100644
+--- a/crates/codex-plus-core/src/watcher.rs
++++ b/crates/codex-plus-core/src/watcher.rs
+@@ -38,6 +38,10 @@ pub fn default_watcher_disabled_flag() -> PathBuf {
+     watcher_disabled_flag(&crate::paths::default_app_state_dir())
+ }
+ 
++pub fn isolated_instance_watcher_disabled() -> bool {
++    crate::paths::isolated_instance_mode()
++}
++
+ pub fn enable_watcher_at(root: &Path) -> std::io::Result<()> {
+     let flag = watcher_disabled_flag(root);
+     if flag.exists() {
+@@ -142,6 +146,37 @@ pub fn filter_killable_launcher_processes<'a>(
+         .collect()
+ }
+ 
++#[cfg(windows)]
++fn filter_killable_launcher_processes_for_path(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    current_process_id: u32,
++    target_launcher_path: &Path,
++) -> Vec<u32> {
++    let in_scope = processes
++        .iter()
++        .filter(|process| {
++            process
++                .executable_path
++                .as_deref()
++                .is_some_and(|path| process_path_is_in_app(path, target_launcher_path))
++        })
++        .map(|process| process.process_id)
++        .collect::<HashSet<_>>();
++    filter_killable_launcher_processes(
++        processes.iter().map(|process| {
++            (
++                process.process_id,
++                process.parent_process_id,
++                process.exe_file.as_str(),
++            )
++        }),
++        current_process_id,
++    )
++    .into_iter()
++    .filter(|process_id| in_scope.contains(process_id))
++    .collect()
++}
++
+ pub fn should_recover_stale_launcher(has_codex_process: bool, cdp_listening: bool) -> bool {
+     !has_codex_process && !cdp_listening
+ }
+@@ -501,6 +536,9 @@ pub fn process_id_is_running(_process_id: u32) -> Option<bool> {
+ 
+ #[cfg(windows)]
+ pub fn install_watcher(launcher_path: &Path, debug_port: u16) -> anyhow::Result<()> {
++    if isolated_instance_watcher_disabled() {
++        anyhow::bail!("global logon watcher is disabled for an isolated CodexPlusPlus instance");
++    }
+     let plan = build_watcher_install_plan(launcher_path.to_path_buf(), debug_port);
+     crate::windows_integration::set_current_user_string_value(
+         WATCHER_RUN_KEY,
+@@ -519,6 +557,9 @@ pub fn install_watcher(_launcher_path: &Path, _debug_port: u16) -> anyhow::Resul
+ 
+ #[cfg(windows)]
+ pub fn uninstall_watcher() -> anyhow::Result<()> {
++    if isolated_instance_watcher_disabled() {
++        anyhow::bail!("global logon watcher is disabled for an isolated CodexPlusPlus instance");
++    }
+     let _ =
+         crate::windows_integration::delete_current_user_value(WATCHER_RUN_KEY, WATCHER_RUN_NAME);
+     if let Some(shortcut) = startup_shortcut_path() {
+@@ -577,6 +618,68 @@ pub fn find_codex_processes_from_snapshot(
+     ids
+ }
+ 
++#[cfg(windows)]
++fn normalized_windows_path(path: &Path) -> String {
++    path.to_string_lossy()
++        .replace('/', "\\")
++        .trim_end_matches('\\')
++        .to_ascii_lowercase()
++}
++
++#[cfg(windows)]
++fn process_path_is_in_app(process_path: &Path, target_app_path: &Path) -> bool {
++    let process_path = normalized_windows_path(process_path);
++    let target_path = normalized_windows_path(target_app_path);
++    if target_path.ends_with(".exe") {
++        return process_path == target_path;
++    }
++    process_path == target_path || process_path.starts_with(&format!("{target_path}\\"))
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_from_snapshot_for_executable(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    target_executable: &Path,
++) -> Vec<u32> {
++    let mut ids = processes
++        .iter()
++        .filter(|process| {
++            process
++                .executable_path
++                .as_deref()
++                .is_some_and(|path| process_path_is_in_app(path, target_executable))
++        })
++        .map(|process| process.process_id)
++        .collect::<Vec<_>>();
++    ids.sort_unstable();
++    ids.dedup();
++    ids
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_from_snapshot_for_app_path(
++    processes: &[crate::windows_integration::WindowsProcessInfo],
++    target_app_path: &Path,
++) -> Vec<u32> {
++    let target_executable = if target_app_path.extension() == Some(std::ffi::OsStr::new("exe")) {
++        target_app_path.to_path_buf()
++    } else {
++        crate::app_paths::build_codex_executable(target_app_path)
++    };
++    find_codex_processes_from_snapshot_for_executable(processes, &target_executable)
++}
++
++#[cfg(windows)]
++pub fn find_codex_processes_for_app_path(target_app_path: &Path) -> Vec<u32> {
++    let processes = crate::windows_integration::enumerate_processes();
++    find_codex_processes_from_snapshot_for_app_path(&processes, target_app_path)
++}
++
++#[cfg(not(windows))]
++pub fn find_codex_processes_for_app_path(_target_app_path: &Path) -> Vec<u32> {
++    Vec::new()
++}
++
+ /// Return desktop processes that can write Codex task state while a destructive
+ /// session-index cleanup is running. This is intentionally stricter than the
+ /// watcher filter: any supported ChatGPT desktop process blocks deletion,
+@@ -630,22 +733,27 @@ pub fn find_session_index_cleanup_blocking_processes() -> Vec<u32> {
+ 
+ #[cfg(windows)]
+ pub fn stop_launcher_processes() {
++    if let Ok(target_launcher_path) = std::env::current_exe() {
++        stop_launcher_processes_for_path(&target_launcher_path);
++    }
++}
++
++#[cfg(windows)]
++pub fn stop_launcher_processes_for_path(target_launcher_path: &Path) {
+     let processes = crate::windows_integration::enumerate_processes();
+-    let killable = filter_killable_launcher_processes(
+-        processes.iter().map(|process| {
+-            (
+-                process.process_id,
+-                process.parent_process_id,
+-                process.exe_file.as_str(),
+-            )
+-        }),
++    let killable = filter_killable_launcher_processes_for_path(
++        &processes,
+         std::process::id(),
++        target_launcher_path,
+     );
+     for process_id in killable {
+         let _ = crate::windows_integration::terminate_process(process_id);
+     }
+ }
+ 
++#[cfg(not(windows))]
++pub fn stop_launcher_processes_for_path(_target_launcher_path: &Path) {}
++
+ #[cfg(target_os = "macos")]
+ pub fn stop_launcher_processes() {
+     for process_id in find_launcher_processes() {
+@@ -658,16 +766,18 @@ pub fn stop_launcher_processes() {}
+ 
+ #[cfg(windows)]
+ pub fn stop_launcher_processes_and_wait() {
++    if let Ok(target_launcher_path) = std::env::current_exe() {
++        stop_launcher_processes_and_wait_for_path(&target_launcher_path);
++    }
++}
++
++#[cfg(windows)]
++pub fn stop_launcher_processes_and_wait_for_path(target_launcher_path: &Path) {
+     let processes = crate::windows_integration::enumerate_processes();
+-    let killable = filter_killable_launcher_processes(
+-        processes.iter().map(|process| {
+-            (
+-                process.process_id,
+-                process.parent_process_id,
+-                process.exe_file.as_str(),
+-            )
+-        }),
++    let killable = filter_killable_launcher_processes_for_path(
++        &processes,
+         std::process::id(),
++        target_launcher_path,
+     );
+     terminate_and_wait_for_exit(
+         killable,
+@@ -676,6 +786,9 @@ pub fn stop_launcher_processes_and_wait() {
+     );
+ }
+ 
++#[cfg(not(windows))]
++pub fn stop_launcher_processes_and_wait_for_path(_target_launcher_path: &Path) {}
++
+ #[cfg(windows)]
+ pub struct LauncherExitSnapshot {
+     processes: Vec<(u32, u64)>,

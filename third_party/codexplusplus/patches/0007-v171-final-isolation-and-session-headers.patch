@@ -1,0 +1,395 @@
+diff --git a/apps/codex-plus-launcher/src/main.rs b/apps/codex-plus-launcher/src/main.rs
+index 0bccaac..2d19ffe 100644
+--- a/apps/codex-plus-launcher/src/main.rs
++++ b/apps/codex-plus-launcher/src/main.rs
+@@ -79,6 +79,9 @@ async fn main() -> Result<()> {
+ }
+ 
+ async fn launcher_main(args: Vec<String>, helper_only: bool, options: LaunchOptions) -> Result<()> {
++    if !helper_only {
++        validate_isolated_app_path(options.app_dir.as_deref())?;
++    }
+     if helper_only {
+         let hooks = LauncherHooks::default();
+         hooks.start_helper(options.helper_port).await?;
+@@ -300,7 +303,15 @@ fn log_launcher_guard_fallback(fallback_lock_path: &Path) {
+ }
+ 
+ fn should_recover_stale_launcher(debug_port: u16) -> bool {
+-    let has_codex_process = !codex_plus_core::watcher::find_codex_processes().is_empty();
++    let has_codex_process = std::env::var_os("CODEX_PLUS_APP_EXECUTABLE")
++        .and_then(|value| PathBuf::from(value).parent().map(Path::to_path_buf))
++        .map_or_else(
++            || !codex_plus_core::watcher::find_codex_processes().is_empty(),
++            |target_app_path| {
++                !codex_plus_core::watcher::find_codex_processes_for_app_path(&target_app_path)
++                    .is_empty()
++            },
++        );
+     let cdp_listening = codex_plus_core::watcher::cdp_listening(debug_port);
+     let recover =
+         codex_plus_core::watcher::should_recover_stale_launcher(has_codex_process, cdp_listening);
+@@ -348,7 +359,10 @@ async fn activate_existing_codex_app(options: &LaunchOptions) -> anyhow::Result<
+             &settings.codex_extra_args,
+         )
+         .await;
+-    let process_ids = codex_plus_core::watcher::find_codex_processes();
++    let process_ids = options.app_dir.as_deref().map_or_else(
++        codex_plus_core::watcher::find_codex_processes,
++        codex_plus_core::watcher::find_codex_processes_for_app_path,
++    );
+     #[cfg(windows)]
+     let activated = process_ids
+         .iter()
+@@ -375,6 +389,16 @@ async fn activate_existing_codex_app(options: &LaunchOptions) -> anyhow::Result<
+     launch_result.map(|_| ())
+ }
+ 
++fn validate_isolated_app_path(app_path: Option<&Path>) -> anyhow::Result<()> {
++    if codex_plus_core::paths::isolated_instance_mode() {
++        let app_path = app_path.ok_or_else(|| {
++            anyhow::anyhow!("an isolated launcher requires an explicit copied application path")
++        })?;
++        codex_plus_core::app_paths::validate_isolated_copied_app_dir(app_path)?;
++    }
++    Ok(())
++}
++
+ fn should_finalize_pending_remote_control_recovery(
+     has_pending_recovery: bool,
+     blocking_process_ids: &[u32],
+diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
+index 579f5b3..4668be0 100644
+--- a/apps/codex-plus-manager/src-tauri/src/commands.rs
++++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
+@@ -872,14 +872,32 @@ fn restart_disposition(sync_active_relay: bool, app_running: bool) -> RestartDis
+     }
+ }
+ 
++fn validate_isolated_launch_app_path(request: &LaunchRequest) -> anyhow::Result<Option<PathBuf>> {
++    let raw = request.app_path.trim();
++    if codex_plus_core::paths::isolated_instance_mode() {
++        anyhow::ensure!(!raw.is_empty(), "an isolated manager requires an explicit copied application path");
++        let path = PathBuf::from(raw);
++        codex_plus_core::app_paths::validate_isolated_copied_app_dir(&path)?;
++        return Ok(Some(path));
++    }
++    Ok((!raw.is_empty()).then(|| PathBuf::from(raw)))
++}
++
+ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+     let _launch_guard = match try_acquire_launch_guard() {
+         Ok(guard) => guard,
+         Err(message) => return failed(message, json!({})),
+     };
+     let request = normalize_launch_request(request);
++    let target_app_path = match validate_isolated_launch_app_path(&request) {
++        Ok(path) => path,
++        Err(error) => return failed(&error.to_string(), json!({})),
++    };
+     // macOS scopes by debug port; other platforms detect all Codex desktop processes.
+-    let app_running = !codex_plus_core::watcher::find_codex_processes_for_debug_port(request.debug_port).is_empty();
++    let app_running = target_app_path.as_deref().map_or_else(
++        || !codex_plus_core::watcher::find_codex_processes_for_debug_port(request.debug_port).is_empty(),
++        |path| !codex_plus_core::watcher::find_codex_processes_for_app_path(path).is_empty(),
++    );
+     if restart_disposition(request.sync_active_relay, app_running) == RestartDisposition::LaunchOnly {
+         return spawn_codex_plus_launch(request, "Codex 未运行，已按直接启动方式在后台唤起。");
+     }
+@@ -907,7 +925,9 @@ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+         Err(message) => return failed(&message, json!({})),
+     };
+     #[cfg(windows)]
+-    let launchers = match codex_plus_core::watcher::LauncherExitSnapshot::capture() {
++    let launchers = match codex_plus_core::watcher::LauncherExitSnapshot::capture_for_path(
++        target_app_path.as_deref(),
++    ) {
+         Ok(snapshot) => snapshot,
+         Err(error) => return failed(&format!("无法确认旧启动器身份，未执行重启：{error}"), json!({})),
+     };
+@@ -928,8 +948,15 @@ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+     ));
+     let native_browser_shutdown = match stop_codex_plus_for_restart(
+         || {
+-            codex_plus_core::watcher::stop_codex_processes_for_debug_port_and_wait(request.debug_port);
+-            anyhow::ensure!(codex_plus_core::watcher::find_codex_processes_for_debug_port(request.debug_port).is_empty(),
++            if let Some(path) = target_app_path.as_deref() {
++                codex_plus_core::watcher::stop_codex_processes_and_wait_for_app_path(path);
++            } else {
++                codex_plus_core::watcher::stop_codex_processes_for_debug_port_and_wait(request.debug_port);
++            }
++            anyhow::ensure!(target_app_path.as_deref().map_or_else(
++                || codex_plus_core::watcher::find_codex_processes_for_debug_port(request.debug_port).is_empty(),
++                |path| codex_plus_core::watcher::find_codex_processes_for_app_path(path).is_empty(),
++            ),
+                 "Codex 进程尚未退出；未启动新实例");
+             Ok(())
+         },
+@@ -954,7 +981,11 @@ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+                 forced_launcher_process_ids.set(outcome.forced_process_ids);
+             }
+             #[cfg(not(windows))]
+-            codex_plus_core::watcher::stop_launcher_processes_and_wait();
++            if let Some(path) = target_app_path.as_deref() {
++                codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(path);
++            } else {
++                codex_plus_core::watcher::stop_launcher_processes_and_wait();
++            }
+             Ok(())
+         },
+     ) {
+diff --git a/apps/codex-plus-manager/src-tauri/src/lib.rs b/apps/codex-plus-manager/src-tauri/src/lib.rs
+index f9d900d..90dfd8a 100644
+--- a/apps/codex-plus-manager/src-tauri/src/lib.rs
++++ b/apps/codex-plus-manager/src-tauri/src/lib.rs
+@@ -2,6 +2,7 @@ pub mod commands;
+ pub mod install;
+ 
+ use std::sync::atomic::{AtomicBool, Ordering};
++use std::path::Path;
+ 
+ use tauri::menu::{Menu, MenuItem};
+ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+@@ -509,6 +510,7 @@ pub fn focus_existing_manager_window() {
+     #[cfg(windows)]
+     {
+         let current_process_id = std::process::id();
++        let current_executable = std::env::current_exe().ok();
+         for process in codex_plus_core::windows_enumerate_processes() {
+             if process.process_id == current_process_id {
+                 continue;
+@@ -516,6 +518,11 @@ pub fn focus_existing_manager_window() {
+             if process
+                 .exe_file
+                 .eq_ignore_ascii_case("codex-plus-plus-manager.exe")
++                && current_executable.as_deref().is_some_and(|current| {
++                    process.executable_path.as_deref().is_some_and(|path| {
++                        same_windows_executable_path(path, current)
++                    })
++                })
+             {
+                 let _ = codex_plus_core::windows_activate_process_window(process.process_id);
+                 break;
+@@ -531,6 +538,17 @@ pub fn focus_existing_manager_window() {
+     }
+ }
+ 
++fn same_windows_executable_path(left: &Path, right: &Path) -> bool {
++    let normalize = |path: &Path| {
++        path.to_string_lossy()
++            .replace('/', "\\")
++            .trim_start_matches(r"\\?\")
++            .trim_end_matches('\\')
++            .to_ascii_lowercase()
++    };
++    normalize(left) == normalize(right)
++}
++
+ fn install_panic_logger() {
+     std::panic::set_hook(Box::new(|panic_info| {
+         let payload = panic_info
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index 50cb2ca..7d845c5 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -1019,6 +1019,7 @@ impl LaunchHooks for DefaultLaunchHooks {
+         _settings: &BackendSettings,
+         extra_args: &[String],
+     ) -> anyhow::Result<CodexLaunch> {
++        let _target_process_ids = crate::watcher::find_codex_processes_for_app_path(app_dir);
+         let launch_extra_args = normalize_codex_extra_args(extra_args);
+         if cfg!(windows) {
+             // AUMID 解析留在调用点：它要查系统里的 Store 注册表（#2140），是有副作用
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 5e713f4..c645ba4 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -1897,12 +1897,15 @@ pub async fn open_responses_proxy_request_for_path_with_session_headers(
+     beta_features: Option<&str>,
+     session_headers: ProxySessionHeaders<'_>,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+-    let _ = session_headers;
+-    open_responses_proxy_request_for_path_with_beta(
++    let settings = SettingsStore::default().load().unwrap_or_default();
++    open_responses_proxy_request_with_settings_and_user_agent(
+         body,
++        settings,
+         original_user_agent,
+         request_path,
+         beta_features,
++        None,
++        session_headers,
+     )
+     .await
+ }
+@@ -1938,6 +1941,7 @@ pub async fn open_responses_proxy_request_for_path_with_beta_and_turn_metadata(
+         request_path,
+         beta_features,
+         turn_metadata,
++        ProxySessionHeaders::default(),
+     )
+     .await
+ }
+@@ -1953,6 +1957,7 @@ pub async fn open_responses_proxy_request_with_settings(
+         "/responses",
+         None,
+         None,
++        ProxySessionHeaders::default(),
+     )
+     .await
+ }
+@@ -1969,6 +1974,7 @@ pub async fn open_responses_proxy_request_with_settings_for_path(
+         request_path,
+         None,
+         None,
++        ProxySessionHeaders::default(),
+     )
+     .await
+ }
+@@ -1986,6 +1992,7 @@ pub async fn open_responses_proxy_request_with_settings_for_path_and_beta(
+         request_path,
+         beta_features,
+         None,
++        ProxySessionHeaders::default(),
+     )
+     .await
+ }
+@@ -2006,6 +2013,33 @@ fn relay_model_list_contains(profile: &RelayProfile, model: &str) -> bool {
+         .any(|entry| entry == model)
+ }
+ 
++fn with_client_session_headers(
++    mut builder: reqwest::RequestBuilder,
++    relay: &RelayProfile,
++    headers: ProxySessionHeaders<'_>,
++) -> reqwest::RequestBuilder {
++    for (name, value) in [
++        ("session-id", headers.session_id),
++        ("thread-id", headers.thread_id),
++        ("x-opencode-session", headers.opencode_session),
++    ] {
++        if relay
++            .custom_headers
++            .iter()
++            .any(|header| header.key.trim().eq_ignore_ascii_case(name))
++        {
++            continue;
++        }
++        let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
++            continue;
++        };
++        if let Ok(value) = reqwest::header::HeaderValue::from_str(value) {
++            builder = builder.header(name, value);
++        }
++    }
++    builder
++}
++
+ fn metadata_marks_codex_compaction(metadata: &Value) -> bool {
+     metadata
+         .get("request_kind")
+@@ -2604,6 +2638,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+     request_path: &str,
+     beta_features: Option<&str>,
+     turn_metadata: Option<&str>,
++    session_headers: ProxySessionHeaders<'_>,
+ ) -> anyhow::Result<UpstreamProxyResponse> {
+     let mut request_json: Value = serde_json::from_str(body)?;
+     let compaction_model_aligned = align_codex_compaction_model_with_live_selection(
+@@ -2703,6 +2738,7 @@ async fn open_responses_proxy_request_with_settings_and_user_agent(
+                 is_stream,
+                 &upstream_body,
+             );
++            builder = with_client_session_headers(builder, &relay, session_headers);
+             if wire_api == UpstreamWireApi::Responses {
+                 if let Some(value) = beta_features.filter(|value| !value.is_empty()) {
+                     builder = builder.header("x-codex-beta-features", value);
+@@ -8635,6 +8671,38 @@ mod relay_custom_header_tests {
+             "Bearer explicit"
+         );
+     }
++
++    #[test]
++    fn client_session_headers_are_forwarded_without_overriding_custom_values() {
++        let relay = relay_with(vec![header("thread-id", "configured-thread")]);
++        let builder = upstream_request_builder(
++            reqwest::Client::new(),
++            "http://upstream.example/v1/responses",
++            &relay,
++            false,
++            &serde_json::json!({ "model": "m" }),
++        );
++        let request = with_client_session_headers(
++            builder,
++            &relay,
++            ProxySessionHeaders {
++                session_id: Some("session-1"),
++                thread_id: Some("client-thread"),
++                opencode_session: Some("opencode-1"),
++            },
++        )
++        .build()
++        .unwrap();
++        assert_eq!(request.headers().get("session-id").unwrap(), "session-1");
++        assert_eq!(
++            request.headers().get("thread-id").unwrap(),
++            "configured-thread"
++        );
++        assert_eq!(
++            request.headers().get("x-opencode-session").unwrap(),
++            "opencode-1"
++        );
++    }
+ }
+ 
+ #[cfg(test)]
+diff --git a/crates/codex-plus-core/src/watcher.rs b/crates/codex-plus-core/src/watcher.rs
+index e2b07d7..293d953 100644
+--- a/crates/codex-plus-core/src/watcher.rs
++++ b/crates/codex-plus-core/src/watcher.rs
+@@ -797,10 +797,21 @@ pub struct LauncherExitSnapshot {
+ #[cfg(windows)]
+ impl LauncherExitSnapshot {
+     pub fn capture() -> anyhow::Result<Self> {
++        Self::capture_for_path(None)
++    }
++
++    pub fn capture_for_path(target_launcher_path: Option<&Path>) -> anyhow::Result<Self> {
+         let processes = crate::windows_integration::enumerate_processes();
+-        let ids = filter_killable_launcher_processes(
+-            processes.iter().map(|p| (p.process_id, p.parent_process_id, p.exe_file.as_str())),
+-            std::process::id(),
++        let ids = target_launcher_path.map_or_else(
++            || {
++                filter_killable_launcher_processes(
++                    processes.iter().map(|p| {
++                        (p.process_id, p.parent_process_id, p.exe_file.as_str())
++                    }),
++                    std::process::id(),
++                )
++            },
++            |path| filter_killable_launcher_processes_for_path(&processes, std::process::id(), path),
+         );
+         let mut captured = Vec::new();
+         for pid in ids {
+@@ -1168,6 +1179,20 @@ pub fn stop_codex_processes_and_wait() {
+ #[cfg(not(any(windows, target_os = "macos")))]
+ pub fn stop_codex_processes_and_wait() {}
+ 
++#[cfg(windows)]
++pub fn stop_codex_processes_and_wait_for_app_path(target_app_path: &Path) {
++    terminate_and_wait_for_exit(
++        find_codex_processes_for_app_path(target_app_path),
++        RESTART_STOP_WAIT_TIMEOUT_MS,
++        RESTART_STOP_WAIT_INTERVAL_MS,
++    );
++}
++
++#[cfg(not(windows))]
++pub fn stop_codex_processes_and_wait_for_app_path(_target_app_path: &Path) {
++    stop_codex_processes_and_wait();
++}
++
+ #[cfg(target_os = "macos")]
+ pub fn find_codex_processes_for_debug_port(debug_port: u16) -> Vec<u32> {
+     find_macos_codex_processes_for_debug_port(debug_port)

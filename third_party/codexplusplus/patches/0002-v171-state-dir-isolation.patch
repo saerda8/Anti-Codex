@@ -1,0 +1,47 @@
+diff --git a/crates/codex-plus-core/src/paths.rs b/crates/codex-plus-core/src/paths.rs
+index ef17749..9e4cdf4 100644
+--- a/crates/codex-plus-core/src/paths.rs
++++ b/crates/codex-plus-core/src/paths.rs
+@@ -12,8 +12,25 @@ const SKILLS_STATE_FILE: &str = "skills.json";
+ const SKILLS_DIR: &str = "skills";
+ const SKILL_BACKUPS_DIR: &str = "skill-backups";
+ const PENDING_MANAGER_NAVIGATION_FILE: &str = "pending-manager-navigation.json";
++const APP_STATE_DIR_ENV: &str = "CODEX_PLUS_STATE_DIR";
++
++fn explicit_app_state_dir(value: Option<std::ffi::OsString>) -> Option<PathBuf> {
++    let path = PathBuf::from(value?);
++    (!path.as_os_str().is_empty() && path.is_absolute()).then_some(path)
++}
++
++pub fn configured_app_state_dir() -> Option<PathBuf> {
++    explicit_app_state_dir(std::env::var_os(APP_STATE_DIR_ENV))
++}
++
++pub fn isolated_instance_mode() -> bool {
++    configured_app_state_dir().is_some()
++}
+ 
+ pub fn default_app_state_dir() -> PathBuf {
++    if let Some(path) = configured_app_state_dir() {
++        return path;
++    }
+     if let Some(home_dir) = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()) {
+         return home_dir.join(APP_STATE_DIR);
+     }
+@@ -149,4 +166,16 @@ mod tests {
+ 
+         assert!(path.ends_with(".codex-session-delete/pending-manager-navigation.json"));
+     }
++
++    #[test]
++    fn explicit_app_state_dir_accepts_only_absolute_non_empty_paths() {
++        let absolute = std::env::current_dir().unwrap().join("isolated-state");
++        assert_eq!(
++            explicit_app_state_dir(Some(absolute.clone().into_os_string())),
++            Some(absolute)
++        );
++        assert_eq!(explicit_app_state_dir(Some("relative".into())), None);
++        assert_eq!(explicit_app_state_dir(Some("".into())), None);
++        assert_eq!(explicit_app_state_dir(None), None);
++    }
+ }

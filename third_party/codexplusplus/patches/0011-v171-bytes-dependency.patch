@@ -1,0 +1,24 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 4c72161..7140b4a 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -17,6 +17,7 @@ repository = "https://github.com/BigPizzaV3/CodexPlusPlus"
+ aes-gcm = "0.10"
+ anyhow = "1"
+ base64 = "0.22"
++bytes = "1"
+ directories = "6"
+ fs2 = "0.4"
+ http-body-util = "0.1"
+diff --git a/crates/codex-plus-core/Cargo.toml b/crates/codex-plus-core/Cargo.toml
+index 0f29f03..797a047 100644
+--- a/crates/codex-plus-core/Cargo.toml
++++ b/crates/codex-plus-core/Cargo.toml
+@@ -10,6 +10,7 @@ aes-gcm.workspace = true
+ anyhow.workspace = true
+ async-trait = "0.1"
+ base64.workspace = true
++bytes.workspace = true
+ directories.workspace = true
+ futures-util = "0.3"
+ fs2.workspace = true
