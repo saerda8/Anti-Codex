@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "",
+    [string]$ManagerBaseUrl = "",
+    [string]$ProxyBaseUrl = "",
     [int]$TimeoutSec = 90,
     [string]$FirstModel = "",
     [string]$SecondModel = ""
@@ -8,22 +10,47 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+if (-not $ManagerBaseUrl -and -not $BaseUrl) {
+    $ManagerBaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+if (-not $ManagerBaseUrl -and $BaseUrl) {
+    if ($BaseUrl -match ':(18484)(/|$)') {
+        $ProxyBaseUrl = $BaseUrl
+        $ManagerBaseUrl = $BaseUrl -replace ':(18484)(?=/|$)', ':8484'
+    } else {
+        $ManagerBaseUrl = $BaseUrl
+    }
+}
+$ManagerBaseUrl = if ($ManagerBaseUrl) { $ManagerBaseUrl.TrimEnd('/') } else { $BaseUrl.TrimEnd('/') }
+if (-not $ProxyBaseUrl) {
+    try {
+        $fixedRouteHealth = Invoke-RestMethod -Uri "$ManagerBaseUrl/anticodex/fixed-route/health" -Proxy $null -TimeoutSec 5
+        $ProxyBaseUrl = [string]$fixedRouteHealth.route.codexBaseUrl
+        if ($ProxyBaseUrl) { $ProxyBaseUrl = ($ProxyBaseUrl.TrimEnd('/') -replace '/v1$', '') }
+    } catch {}
+}
+if (-not $ProxyBaseUrl) { $ProxyBaseUrl = $ManagerBaseUrl }
+$ProxyBaseUrl = $ProxyBaseUrl.TrimEnd('/')
 
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
 $marker = "MODEL_SWITCH_HISTORY_$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+$firstPrompt = "Remember the exact marker $marker. Reply with only that exact marker."
+$secondPrompt = "Continue the same conversation after switching models. What exact marker did I ask you to remember? Reply with only the exact marker."
 
 function Add-Failure {
     param([string]$Message)
     $failures.Add($Message) | Out-Null
 }
 
-function Invoke-LocalJson {
+function Invoke-ManagerJson {
     param([string]$Path, [int]$RequestTimeoutSec = $TimeoutSec)
-    return Invoke-RestMethod -Uri "$BaseUrl$Path" -Proxy $null -TimeoutSec $RequestTimeoutSec
+    return Invoke-RestMethod -Uri "$ManagerBaseUrl$Path" -Proxy $null -TimeoutSec $RequestTimeoutSec
+}
+
+function Invoke-ProxyJson {
+    param([string]$Path, [int]$RequestTimeoutSec = $TimeoutSec)
+    return Invoke-RestMethod -Uri "$ProxyBaseUrl$Path" -Proxy $null -TimeoutSec $RequestTimeoutSec
 }
 
 function Invoke-AntiCodexResponse {
@@ -32,7 +59,7 @@ function Invoke-AntiCodexResponse {
     $json = $Body | ConvertTo-Json -Depth 20 -Compress
     try {
         return Invoke-RestMethod `
-            -Uri "$BaseUrl/v1/responses" `
+            -Uri "$ProxyBaseUrl/v1/responses" `
             -Method Post `
             -ContentType "application/json; charset=utf-8" `
             -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
@@ -98,14 +125,14 @@ $skipped = $false
 $skipReason = ""
 
 try {
-    $health = Invoke-LocalJson "/health"
+    $health = Invoke-ManagerJson "/health"
     if ($health.ok -ne $true) { Add-Failure "health ok=false" }
 } catch {
     Add-Failure "health request failed: $($_.Exception.Message)"
 }
 
 try {
-    $modelsPayload = Invoke-LocalJson "/models"
+    $modelsPayload = Invoke-ProxyJson "/models"
     $models = @($modelsPayload.data | ForEach-Object { [string]$_.id } | Where-Object { $_ })
     if ($models.Count -lt 1) {
         Add-Failure "/models returned no usable model ids"
@@ -133,7 +160,7 @@ if (($failures.Count -eq 0) -and (-not $skipped)) {
             store = $true
             tools = @()
             tool_choice = "none"
-            input = New-UserInput "Remember the exact marker $marker. Reply with only that exact marker."
+            input = New-UserInput $firstPrompt
         }
         $firstText = Get-ResponseText $first
         if (-not $first.id) {
@@ -159,14 +186,30 @@ if (($failures.Count -eq 0) -and (-not $skipped)) {
             store = $true
             tools = @()
             tool_choice = "none"
-            input = New-UserInput "Continue the same conversation after switching models. What exact marker did I ask you to remember? Reply with only the exact marker."
+            input = @(
+                @{
+                    type = "message"
+                    role = "user"
+                    content = @(@{ type = "input_text"; text = $firstPrompt })
+                },
+                @{
+                    type = "message"
+                    role = "assistant"
+                    content = @(@{ type = "output_text"; text = $firstText })
+                },
+                @{
+                    type = "message"
+                    role = "user"
+                    content = @(@{ type = "input_text"; text = $secondPrompt })
+                }
+            )
         }
         $secondText = Get-ResponseText $second
         if (-not $second.id) {
             Add-Failure "second response did not include an id"
         }
         if ($secondText -notmatch [regex]::Escape($marker)) {
-            Add-Failure "second response did not preserve previous_response_id history after model switch"
+            Add-Failure "second response did not preserve explicit history after model switch"
         }
         if ($secondText -match "DeepCodex") {
             Add-Failure "second response leaked the legacy DeepCodex brand"
@@ -178,7 +221,7 @@ if (($failures.Count -eq 0) -and (-not $skipped)) {
 
 if (($failures.Count -eq 0) -and (-not $skipped)) {
     try {
-        $routes = Invoke-LocalJson "/anticodex/model-routes" 8
+        $routes = Invoke-ManagerJson "/anticodex/model-routes" 8
         $route = $routes.latest
         if (-not $route) {
             Add-Failure "model route audit missing latest route after model switch"
@@ -196,7 +239,9 @@ $result = [pscustomobject]@{
     skipped = $skipped
     reason = $skipReason
     failures = $failures.ToArray()
-    baseUrl = $BaseUrl
+    baseUrl = $ManagerBaseUrl
+    managerBaseUrl = $ManagerBaseUrl
+    proxyBaseUrl = $ProxyBaseUrl
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
     marker = $marker
     firstModel = $FirstModel

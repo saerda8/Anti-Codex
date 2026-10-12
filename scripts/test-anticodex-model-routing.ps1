@@ -1,6 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [string]$BaseUrl = "",
+    [string]$ManagerBaseUrl = "",
+    [string]$ProxyBaseUrl = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutSec = 20,
     [int]$RequestTimeoutSec = 120,
@@ -11,9 +13,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not $BaseUrl) {
-    $BaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+if (-not $ManagerBaseUrl -and -not $BaseUrl) {
+    $ManagerBaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
 }
+if (-not $ManagerBaseUrl -and $BaseUrl) {
+    if ($BaseUrl -match ':(18484)(/|$)') {
+        $ProxyBaseUrl = $BaseUrl
+        $ManagerBaseUrl = $BaseUrl -replace ':(18484)(?=/|$)', ':8484'
+    } else {
+        $ManagerBaseUrl = $BaseUrl
+    }
+}
+$ManagerBaseUrl = if ($ManagerBaseUrl) { $ManagerBaseUrl.TrimEnd('/') } else { $BaseUrl.TrimEnd('/') }
+if (-not $ProxyBaseUrl) {
+    try {
+        $fixedRouteHealth = Invoke-RestMethod -Uri "$ManagerBaseUrl/anticodex/fixed-route/health" -Proxy $null -TimeoutSec 5
+        $ProxyBaseUrl = [string]$fixedRouteHealth.route.codexBaseUrl
+        if ($ProxyBaseUrl) { $ProxyBaseUrl = ($ProxyBaseUrl.TrimEnd('/') -replace '/v1$', '') }
+    } catch {}
+}
+if (-not $ProxyBaseUrl) { $ProxyBaseUrl = $ManagerBaseUrl }
+$ProxyBaseUrl = $ProxyBaseUrl.TrimEnd('/')
 
 $failures = New-Object System.Collections.Generic.List[string]
 $results = New-Object System.Collections.Generic.List[object]
@@ -70,14 +90,15 @@ function Invoke-LocalJson {
         [string]$Method = "GET",
         [object]$Body = $null,
         [int]$Timeout = $TimeoutSec,
-        [int]$MaxAttempts = 2
+        [int]$MaxAttempts = 2,
+        [string]$RootUrl = $ManagerBaseUrl
     )
 
     $lastError = $null
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         try {
             $args = @{
-                Uri = "$BaseUrl$Path"
+                Uri = "$RootUrl$Path"
                 Method = $Method
                 Proxy = $null
                 TimeoutSec = $Timeout
@@ -106,14 +127,15 @@ function Invoke-LocalJsonSafe {
         [string]$Path,
         [string]$Method = "GET",
         [object]$Body = $null,
-        [int]$Timeout = $TimeoutSec
+        [int]$Timeout = $TimeoutSec,
+        [string]$RootUrl = $ManagerBaseUrl
     )
 
     try {
         return [pscustomobject]@{
             ok = $true
             name = $Name
-            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout
+            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout -RootUrl $RootUrl
             error = $null
         }
     } catch {
@@ -238,7 +260,7 @@ if (-not $SkipRefresh) {
     }
 }
 
-$modelsResult = Invoke-LocalJsonSafe "models" "/models"
+$modelsResult = Invoke-LocalJsonSafe "models" "/models" -RootUrl $ProxyBaseUrl
 $modelRecords = if ($modelsResult.ok -and $modelsResult.payload -and $modelsResult.payload.data) {
     @($modelsResult.payload.data)
 } else {
@@ -356,7 +378,7 @@ foreach ($model in $models) {
         stream = $false
         store = $false
         input = New-MessageInput "Reply with exactly this marker and no extra words: $marker"
-    } $RequestTimeoutSec
+    } $RequestTimeoutSec $ProxyBaseUrl
 
     $text = ""
     $route = $null
@@ -467,7 +489,9 @@ $result = [pscustomobject]@{
     reportName = "model-routing"
     failures = $failures.ToArray()
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
-    baseUrl = $BaseUrl
+    baseUrl = $ManagerBaseUrl
+    managerBaseUrl = $ManagerBaseUrl
+    proxyBaseUrl = $ProxyBaseUrl
     mode = $diagnosticMode
     providerProtocol = $diagnosticProtocol
     providerModel = $diagnosticModel
