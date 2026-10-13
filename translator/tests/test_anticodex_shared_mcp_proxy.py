@@ -42,6 +42,17 @@ def worker_blocks(
     )
 
 
+def absolute_worker_blocks(name: str, command: Path) -> str:
+    prefix = name.replace("-worker", "")
+    return (
+        f"[mcp_servers.{name}]\n"
+        f'command = "{command.as_posix()}"\n'
+        "args = []\n\n"
+        f"[mcp_servers.{name}.tools.{prefix}_start_implementation]\n"
+        "enabled = true\n"
+    )
+
+
 def mixed_config() -> str:
     return "\n".join(
         [
@@ -110,6 +121,101 @@ def test_build_artifacts_rewrites_only_discovered_workers() -> None:
         assert "env" not in new
         assert new["tools"] == old["tools"]
         assert runtime["mcpServers"][name]["command"] == old["command"]
+
+
+def test_missing_local_worker_is_reported_and_recovers_on_next_prepare(tmp_path: Path) -> None:
+    good_command = tmp_path / "good-worker.cmd"
+    restored_command = tmp_path / "restored-worker.cmd"
+    good_command.write_text("@echo off\n", encoding="utf-8")
+    restored_command.write_text("@echo off\n", encoding="utf-8")
+    source = "\n".join(
+        [
+            absolute_worker_blocks("good-worker", good_command),
+            absolute_worker_blocks("restored-worker", restored_command),
+            "[mcp_servers.remote-worker]",
+            'url = "https://example.invalid/mcp"',
+        ]
+    )
+    config = tmp_path / "config.toml"
+    state = tmp_path / "shared-mcp"
+    config.write_text(source, encoding="utf-8", newline="")
+    token = "M" * 43
+
+    first = shared.prepare_config(config, state, port=47631, token=token)
+    assert first["worker_names"] == ["good-worker", "restored-worker"]
+    restored_command.unlink()
+
+    degraded = shared.prepare_config(config, state, port=47631, token=token)
+    assert degraded["worker_names"] == ["good-worker"]
+    assert degraded["discovered_worker_names"] == ["good-worker", "restored-worker"]
+    assert degraded["unavailable_workers"] == [{
+        "name": "restored-worker",
+        "reason": "command_path_missing",
+        "error": "restored-worker: command path does not exist",
+    }]
+    runtime = json.loads((state / "servers.json").read_text(encoding="utf-8"))
+    assert set(runtime["mcpServers"]) == {"good-worker", "restored-worker"}
+    assert set(runtime["worker_runtime_paths"]) == {"good-worker"}
+    assert tomllib.loads(config.read_text(encoding="utf-8"))["mcp_servers"]["remote-worker"] == {
+        "url": "https://example.invalid/mcp"
+    }
+
+    restored_command.write_text("@echo off\n", encoding="utf-8")
+    recovered = shared.prepare_config(config, state, port=47631, token=token)
+    assert recovered["worker_names"] == ["good-worker", "restored-worker"]
+    assert recovered["unavailable_workers"] == []
+
+
+def test_missing_codebuddy_bin_env_degrades_only_that_worker_and_recovers(tmp_path: Path) -> None:
+    wrapper = tmp_path / "worker-wrapper.cmd"
+    codebuddy_bin = tmp_path / "codebuddy.cmd"
+    wrapper.write_text("@echo off\n", encoding="utf-8")
+    source = "\n".join(
+        [
+            absolute_worker_blocks("good-worker", wrapper),
+            (
+                "[mcp_servers.codebuddy-worker]\n"
+                f'command = "{wrapper.as_posix()}"\n'
+                "args = []\n\n"
+                "[mcp_servers.codebuddy-worker.env]\n"
+                f'CODEBUDDY_BIN = "{codebuddy_bin.as_posix()}"\n\n'
+                "[mcp_servers.codebuddy-worker.tools.codebuddy_start_implementation]\n"
+                "enabled = true\n"
+            ),
+        ]
+    )
+    config = tmp_path / "config.toml"
+    state = tmp_path / "shared-mcp"
+    config.write_text(source, encoding="utf-8", newline="")
+
+    degraded = shared.prepare_config(config, state, port=47631, token="C" * 43)
+    assert degraded["worker_names"] == ["good-worker"]
+    assert degraded["unavailable_workers"] == [{
+        "name": "codebuddy-worker",
+        "reason": "env_path_missing",
+        "error": "codebuddy-worker: CODEBUDDY_BIN path does not exist",
+    }]
+    runtime = json.loads((state / "servers.json").read_text(encoding="utf-8"))
+    assert set(runtime["mcpServers"]) == {"codebuddy-worker", "good-worker"}
+    assert set(runtime["worker_runtime_paths"]) == {"good-worker"}
+
+    codebuddy_bin.write_text("@echo off\n", encoding="utf-8")
+    recovered = shared.prepare_config(config, state, port=47631, token="C" * 43)
+    assert recovered["worker_names"] == ["codebuddy-worker", "good-worker"]
+    assert recovered["unavailable_workers"] == []
+
+
+def test_only_missing_entry_errors_are_degraded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    command = tmp_path / "worker.cmd"
+    command.write_text("@echo off\n", encoding="utf-8")
+    source = absolute_worker_blocks("future-worker", command)
+
+    def unexpected(_name: str, _server: object) -> None:
+        raise RuntimeError("unexpected validation failure")
+
+    monkeypatch.setattr(shared, "_validate_paths", unexpected)
+    with pytest.raises(RuntimeError, match="unexpected validation failure"):
+        shared.build_artifacts(source, port=47631, token="U" * 43)
 
 
 def test_previous_generated_worker_is_reused_then_stops_when_disabled_or_deleted() -> None:

@@ -85,6 +85,20 @@ test("shared MCP is an Anti-only owned child started before the copied client", 
   assert.doesNotMatch(source, /\.codex[\\/]mcp[\\/]shared-proxy/);
 });
 
+test("a missing local Worker is reported without blocking the remaining shared MCP set", () => {
+  const source = readFileSync(supervisorPath, "utf8");
+  const start = source.indexOf("async function startSharedMcp(plan)");
+  const end = source.indexOf("async function runSupervisor(plan)", start);
+  const block = source.slice(start, end);
+
+  assert.match(block, /prepared\.unavailable_workers/);
+  assert.match(block, /availableWorkerNames/);
+  assert.match(block, /discoveredWorkerNames/);
+  assert.match(block, /reason:\s*"missing_local_entry"/);
+  assert.match(block, /for \(const \[index, name\] of availableWorkerNames\.entries\(\)\)/);
+  assert.doesNotMatch(block, /catch \([^)]*\)\s*\{\s*return \{\s*children:\s*\[\]/s);
+});
+
 test("cold Antigravity startup gets the existing desktop warmup budget without delaying third-party startup", () => {
   const source = readFileSync(supervisorPath, "utf8");
   const start = source.indexOf("const antigravityClient = createAntigravityCascadeClient()");

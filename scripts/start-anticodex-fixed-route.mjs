@@ -474,17 +474,39 @@ async function startSharedMcp(plan) {
     "--port",
     String(DEFAULT_SHARED_MCP_PORT),
   ], { encoding: "utf8", env, windowsHide: true }).trim());
-  const workerNames = Array.isArray(prepared.worker_names) ? prepared.worker_names : [];
-  if (!workerNames.length) {
-    return { children: [], identities: [], logs: [], errorLogs: [], workerNames, failures: [] };
+  const availableWorkerNames = Array.isArray(prepared.worker_names) ? prepared.worker_names : [];
+  const discoveredWorkerNames = Array.isArray(prepared.discovered_worker_names)
+    ? prepared.discovered_worker_names
+    : availableWorkerNames;
+  const unavailableWorkers = Array.isArray(prepared.unavailable_workers) ? prepared.unavailable_workers : [];
+  const discoveredSet = new Set(discoveredWorkerNames);
+  const availableSet = new Set(availableWorkerNames);
+  const unavailableSet = new Set(unavailableWorkers.map((item) => item?.name));
+  if (discoveredWorkerNames.some((name) => typeof name !== "string" || !name)
+      || availableWorkerNames.some((name) => typeof name !== "string" || !name)
+      || discoveredSet.size !== discoveredWorkerNames.length
+      || availableSet.size !== availableWorkerNames.length
+      || unavailableSet.size !== unavailableWorkers.length
+      || availableWorkerNames.some((name) => !discoveredSet.has(name))
+      || unavailableWorkers.some((item) => !item || typeof item.name !== "string"
+        || !discoveredSet.has(item.name) || availableSet.has(item.name)
+        || typeof item.reason !== "string" || typeof item.error !== "string")
+      || discoveredWorkerNames.some((name) => !availableSet.has(name) && !unavailableSet.has(name))) {
+    throw new Error("Anti-Codex shared MCP prepare result is invalid.");
   }
+  const workerNames = [...discoveredWorkerNames];
 
   const children = [];
   const identities = [];
   const logs = [];
   const errorLogs = [];
-  const failures = [];
-  for (const [index, name] of workerNames.entries()) {
+  const failures = unavailableWorkers.map((item) => ({
+    name: item.name,
+    reason: "missing_local_entry",
+    detailReason: item.reason,
+    error: item.error,
+  }));
+  for (const [index, name] of availableWorkerNames.entries()) {
     const workerRuntimePath = prepared.runtime_paths?.[name];
     const workerPort = Number(prepared.server_ports?.[name]);
     if (!workerRuntimePath || !Number.isInteger(workerPort)) {

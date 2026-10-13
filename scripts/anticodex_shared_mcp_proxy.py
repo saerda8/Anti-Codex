@@ -43,6 +43,13 @@ MCP_TABLE = re.compile(
 )
 
 
+class LocalWorkerUnavailable(ValueError):
+    def __init__(self, name: str, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.worker_name = name
+        self.reason = reason
+
+
 class BearerAuthMiddleware:
     def __init__(self, app: Any, *, token: str) -> None:
         _validate_token(token)
@@ -202,18 +209,18 @@ def _validate_paths(name: str, server: Mapping[str, Any]) -> None:
     command_path = Path(command)
     if command_path.is_absolute():
         if not command_path.is_file():
-            raise ValueError(f"{name}: command path does not exist")
+            raise LocalWorkerUnavailable(name, "command_path_missing", f"{name}: command path does not exist")
     elif shutil.which(command) is None:
-        raise ValueError(f"{name}: command is not available")
+        raise LocalWorkerUnavailable(name, "command_unavailable", f"{name}: command is not available")
     for arg in server.get("args", []):
         path = Path(arg)
         if path.is_absolute() and path.suffix.lower() in {".js", ".mjs", ".cjs", ".py"}:
             if not path.is_file():
-                raise ValueError(f"{name}: worker entry path does not exist")
+                raise LocalWorkerUnavailable(name, "entry_path_missing", f"{name}: worker entry path does not exist")
     for key, value in server.get("env", {}).items():
         path = Path(value)
         if key.endswith(("_BIN", "_FILE")) and path.is_absolute() and not path.is_file():
-            raise ValueError(f"{name}: {key} path does not exist")
+            raise LocalWorkerUnavailable(name, "env_path_missing", f"{name}: {key} path does not exist")
 
 
 def _split_table_blocks(text: str) -> list[tuple[str | None, list[str]]]:
@@ -317,16 +324,28 @@ def build_artifacts(
     _validate_token(token)
     parsed = _parse_toml(source_text)
     previous = _load_runtime(previous_runtime)
-    names = discover_worker_names(source_text, previous)
-    if names and port + len(names) - 1 > 65535:
+    discovered_names = discover_worker_names(source_text, previous)
+    if discovered_names and port + len(discovered_names) - 1 > 65535:
         raise ValueError("not enough consecutive ports for discovered Workers")
-    server_ports = {name: port + index for index, name in enumerate(names)}
+    server_ports = {name: port + index for index, name in enumerate(discovered_names)}
     servers = parsed.get("mcp_servers", {})
-    sources = {name: _server_source(name, servers[name], previous) for name in names}
+    sources = {name: _server_source(name, servers[name], previous) for name in discovered_names}
+    available_names: list[str] = []
+    unavailable_workers: list[dict[str, str]] = []
     if check_paths:
         for name, server in sources.items():
-            _validate_paths(name, server)
-    candidate = _rewrite_candidate(source_text, server_ports, token=token)
+            try:
+                _validate_paths(name, server)
+            except LocalWorkerUnavailable as exc:
+                unavailable_workers.append(
+                    {"name": exc.worker_name, "reason": exc.reason, "error": str(exc)}
+                )
+            else:
+                available_names.append(name)
+    else:
+        available_names.extend(discovered_names)
+    available_ports = {name: server_ports[name] for name in available_names}
+    candidate = _rewrite_candidate(source_text, available_ports, token=token)
     after = _parse_toml(candidate)
     if {key: value for key, value in parsed.items() if key != "mcp_servers"} != {
         key: value for key, value in after.items() if key != "mcp_servers"
@@ -336,7 +355,7 @@ def build_artifacts(
         raise ValueError("generated config changed the MCP server set")
     for name, old in servers.items():
         new = after["mcp_servers"][name]
-        if name not in names:
+        if name not in available_names:
             if old != new:
                 raise ValueError(f"generated config changed unrelated server {name}")
             continue
@@ -359,6 +378,7 @@ def build_artifacts(
         "source_sha256": hashlib.sha256(source_text.encode("utf-8")).hexdigest(),
         "generated_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
         "mcpServers": sources,
+        "unavailable_workers": unavailable_workers,
     }
     return runtime, candidate
 
@@ -438,13 +458,17 @@ def prepare_config(
     _write_private(runtime_path, json.dumps(runtime, ensure_ascii=False, indent=2) + "\n")
     worker_runtime_dir = state_dir / "servers"
     worker_runtime_paths: dict[str, str] = {}
+    unavailable_names = {item["name"] for item in runtime.get("unavailable_workers", [])}
     for name, server in runtime["mcpServers"].items():
+        if name in unavailable_names:
+            continue
         worker_runtime_path = worker_runtime_dir / f"{hashlib.sha256(name.encode('utf-8')).hexdigest()[:16]}.json"
         worker_runtime = {
             **runtime,
             "port": runtime["server_ports"][name],
             "server_ports": {name: runtime["server_ports"][name]},
             "mcpServers": {name: server},
+            "unavailable_workers": [],
         }
         _write_private(worker_runtime_path, json.dumps(worker_runtime, ensure_ascii=False, indent=2) + "\n")
         worker_runtime_paths[name] = str(worker_runtime_path)
@@ -461,13 +485,17 @@ def prepare_config(
         "source_sha256": prior_manifest["source_sha256"] if preserve_backup else source_hash,
         "generated_sha256": generated_hash,
         "backup_path": str(backup_path) if candidate != source_text or preserve_backup else "",
-        "worker_names": list(runtime["mcpServers"]),
+        "worker_names": list(worker_runtime_paths),
+        "discovered_worker_names": list(runtime["mcpServers"]),
+        "unavailable_workers": runtime.get("unavailable_workers", []),
     }
     _write_private(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     if candidate != source_text:
         _write_private(config_path, candidate)
     return {
-        "worker_names": list(runtime["mcpServers"]),
+        "worker_names": list(worker_runtime_paths),
+        "discovered_worker_names": list(runtime["mcpServers"]),
+        "unavailable_workers": runtime.get("unavailable_workers", []),
         "changed": candidate != source_text,
         "generated_text": candidate,
         "runtime_path": str(runtime_path),
