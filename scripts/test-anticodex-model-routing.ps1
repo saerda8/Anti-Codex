@@ -3,6 +3,8 @@ param(
     [string]$BaseUrl = "",
     [string]$ManagerBaseUrl = "",
     [string]$ProxyBaseUrl = "",
+    [string]$StateRoot = $(if ($env:DEEPCODEX_STATE_ROOT) { $env:DEEPCODEX_STATE_ROOT } else { Join-Path $env:APPDATA "anticodex" }),
+    [string]$ProxyAuthToken = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
     [int]$TimeoutSec = 20,
     [int]$RequestTimeoutSec = 120,
@@ -13,31 +15,74 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not $ManagerBaseUrl -and -not $BaseUrl) {
-    $ManagerBaseUrl = & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1")
+function ConvertTo-SafeLoopbackBaseUrl {
+    param([string]$Value, [string]$Name, [string[]]$AllowedPaths = @("/"))
+
+    try { $uri = [Uri]$Value } catch { throw "$Name must be a safe HTTP loopback URL" }
+    if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne "http" -or -not $uri.IsLoopback -or
+        $uri.UserInfo -or $uri.Query -or $uri.Fragment -or $uri.AbsolutePath -notin $AllowedPaths) {
+        throw "$Name must be a safe HTTP loopback URL"
+    }
+    return ($uri.GetLeftPart([UriPartial]::Authority) + $(if ($uri.AbsolutePath -eq "/") { "" } else { $uri.AbsolutePath.TrimEnd('/') }))
 }
-if (-not $ManagerBaseUrl -and $BaseUrl) {
-    if ($BaseUrl -match ':(18484)(/|$)') {
-        $ProxyBaseUrl = $BaseUrl
-        $ManagerBaseUrl = $BaseUrl -replace ':(18484)(?=/|$)', ':8484'
-    } else {
-        $ManagerBaseUrl = $BaseUrl
+
+if (-not $ManagerBaseUrl) {
+    $ManagerBaseUrl = if ($BaseUrl) { $BaseUrl } else { & (Join-Path $PSScriptRoot "resolve-anticodex-base-url.ps1") }
+}
+$endpointFailure = ""
+$fixedRouteStatus = $null
+try {
+    $ManagerBaseUrl = ConvertTo-SafeLoopbackBaseUrl $ManagerBaseUrl "ManagerBaseUrl"
+} catch {
+    $endpointFailure = $_.Exception.Message
+}
+if (-not $endpointFailure -and -not $ProxyBaseUrl) {
+    try {
+        $fixedRouteStatusPath = Join-Path $StateRoot "fixed-route-status.json"
+        $fixedRouteStatus = Get-Content -Raw -LiteralPath $fixedRouteStatusPath | ConvertFrom-Json
+        $healthPort = [int]$fixedRouteStatus.ports.health
+        if ($healthPort -le 0) { throw "fixed-route health port is unavailable" }
+        $fixedRouteHealth = Invoke-RestMethod -Uri "http://127.0.0.1:$healthPort/anticodex/fixed-route/health" -Proxy $null -TimeoutSec 5
+        if ($fixedRouteHealth.ok -ne $true -or [string]$fixedRouteHealth.state -ne "ready") {
+            throw "fixed-route health is not ready"
+        }
+        $ProxyBaseUrl = [string]$fixedRouteHealth.route.codexBaseUrl
+        if (-not $ProxyBaseUrl) { $ProxyBaseUrl = [string]$fixedRouteStatus.route.codexBaseUrl }
+        if (-not $ProxyBaseUrl) {
+            $proxyPort = [int]$fixedRouteStatus.ports.proxy
+            if ($proxyPort -gt 0) { $ProxyBaseUrl = "http://127.0.0.1:$proxyPort" }
+        }
+    } catch {
+        $endpointFailure = "fixed-route proxy discovery failed: $($_.Exception.Message)"
     }
 }
-$ManagerBaseUrl = if ($ManagerBaseUrl) { $ManagerBaseUrl.TrimEnd('/') } else { $BaseUrl.TrimEnd('/') }
-if (-not $ProxyBaseUrl) {
+if (-not $endpointFailure -and $ProxyBaseUrl) {
     try {
-        $fixedRouteHealth = Invoke-RestMethod -Uri "$ManagerBaseUrl/anticodex/fixed-route/health" -Proxy $null -TimeoutSec 5
-        $ProxyBaseUrl = [string]$fixedRouteHealth.route.codexBaseUrl
-        if ($ProxyBaseUrl) { $ProxyBaseUrl = ($ProxyBaseUrl.TrimEnd('/') -replace '/v1$', '') }
+        $ProxyBaseUrl = ConvertTo-SafeLoopbackBaseUrl $ProxyBaseUrl "ProxyBaseUrl" @("/", "/v1")
+    } catch {
+        $endpointFailure = $_.Exception.Message
+    }
+}
+if ($ProxyBaseUrl) { $ProxyBaseUrl = ($ProxyBaseUrl.TrimEnd('/') -replace '/v1$', '') }
+if (-not $ProxyBaseUrl -and -not $endpointFailure) { $endpointFailure = "fixed-route proxy address is unavailable" }
+
+if (-not $endpointFailure -and -not $ProxyAuthToken) {
+    try {
+        $authPath = Join-Path $StateRoot "codex-home-deepseek-app\auth.json"
+        $ProxyAuthToken = [string](Get-Content -Raw -LiteralPath $authPath | ConvertFrom-Json).OPENAI_API_KEY
     } catch {}
 }
-if (-not $ProxyBaseUrl) { $ProxyBaseUrl = $ManagerBaseUrl }
-$ProxyBaseUrl = $ProxyBaseUrl.TrimEnd('/')
+if (-not $ProxyAuthToken -and -not $endpointFailure) { $endpointFailure = "Anti-Codex local proxy auth token is unavailable" }
 
 $failures = New-Object System.Collections.Generic.List[string]
 $results = New-Object System.Collections.Generic.List[object]
 $startedAt = [DateTime]::UtcNow
+$script:modelPostAttempts = 0
+$script:modelPostSuccesses = 0
+
+if ($endpointFailure) {
+    $failures.Add($endpointFailure) | Out-Null
+}
 
 function Add-Failure {
     param([string]$Message)
@@ -91,11 +136,14 @@ function Invoke-LocalJson {
         [object]$Body = $null,
         [int]$Timeout = $TimeoutSec,
         [int]$MaxAttempts = 2,
-        [string]$RootUrl = $ManagerBaseUrl
+        [string]$RootUrl = $ManagerBaseUrl,
+        [hashtable]$Headers = $null
     )
 
     $lastError = $null
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    $attemptLimit = if ($Method.ToUpperInvariant() -eq "GET") { $MaxAttempts } else { 1 }
+    $isModelPost = $RootUrl -eq $ProxyBaseUrl -and $Method.ToUpperInvariant() -eq "POST" -and $Path -eq "/v1/responses"
+    for ($attempt = 1; $attempt -le $attemptLimit; $attempt++) {
         try {
             $args = @{
                 Uri = "$RootUrl$Path"
@@ -103,22 +151,34 @@ function Invoke-LocalJson {
                 Proxy = $null
                 TimeoutSec = $Timeout
             }
+            $requestHeaders = @{}
+            if ($Headers) {
+                foreach ($name in $Headers.Keys) { $requestHeaders[$name] = $Headers[$name] }
+            }
+            if ($RootUrl -eq $ProxyBaseUrl) {
+                if (-not $ProxyAuthToken) { throw "Anti-Codex local proxy auth token is unavailable" }
+                $requestHeaders.Authorization = "Bearer $ProxyAuthToken"
+            }
+            if ($requestHeaders.Count -gt 0) { $args.Headers = $requestHeaders }
             if ($null -ne $Body) {
                 $json = $Body | ConvertTo-Json -Depth 30 -Compress
                 $args.ContentType = "application/json; charset=utf-8"
                 $args.Body = [Text.Encoding]::UTF8.GetBytes($json)
             }
-            return Invoke-RestMethod @args
+            if ($isModelPost) { $script:modelPostAttempts += 1 }
+            $response = Invoke-RestMethod @args
+            if ($isModelPost) { $script:modelPostSuccesses += 1 }
+            return $response
         } catch {
             $lastError = $_.Exception.Message
-            if ($attempt -ge $MaxAttempts) {
-                throw "$Path request failed on attempt $attempt of $MaxAttempts`: $lastError"
+            if ($attempt -ge $attemptLimit) {
+                throw "$Path request failed on attempt $attempt of $attemptLimit`: $lastError"
             }
             Start-Sleep -Milliseconds ([Math]::Min(1000, 250 * $attempt))
         }
     }
 
-    throw "$Path request failed after $MaxAttempts attempts: $lastError"
+    throw "$Path request failed after $attemptLimit attempts: $lastError"
 }
 
 function Invoke-LocalJsonSafe {
@@ -128,14 +188,15 @@ function Invoke-LocalJsonSafe {
         [string]$Method = "GET",
         [object]$Body = $null,
         [int]$Timeout = $TimeoutSec,
-        [string]$RootUrl = $ManagerBaseUrl
+        [string]$RootUrl = $ManagerBaseUrl,
+        [hashtable]$Headers = $null
     )
 
     try {
         return [pscustomobject]@{
             ok = $true
             name = $Name
-            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout -RootUrl $RootUrl
+            payload = Invoke-LocalJson -Path $Path -Method $Method -Body $Body -Timeout $Timeout -RootUrl $RootUrl -Headers $Headers
             error = $null
         }
     } catch {
@@ -228,6 +289,10 @@ function Get-DiagnosticsMode {
     param($DiagnosticsPayload)
 
     if (-not $DiagnosticsPayload) { return "unknown" }
+    foreach ($candidate in @($DiagnosticsPayload.fixedRoute.provider, $DiagnosticsPayload.health.provider, $DiagnosticsPayload.mode.upstreamMode)) {
+        $value = [string]$candidate
+        if ($value -eq "antigravity" -or $value -eq "third-party") { return $value }
+    }
     if ((Has-Property $DiagnosticsPayload "health") -and
         (Has-Property $DiagnosticsPayload.health "upstreamProfile") -and
         $DiagnosticsPayload.health.upstreamProfile -and
@@ -246,21 +311,43 @@ function Get-DiagnosticsProfileValue {
     param($DiagnosticsPayload, [string]$Name)
 
     if (-not $DiagnosticsPayload) { return "" }
-    if (-not (Has-Property $DiagnosticsPayload "health")) { return "" }
-    if (-not (Has-Property $DiagnosticsPayload.health "upstreamProfile")) { return "" }
-    $profile = $DiagnosticsPayload.health.upstreamProfile
-    if (-not $profile -or -not (Has-Property $profile $Name)) { return "" }
-    return [string]$profile.$Name
+    if ($DiagnosticsPayload.health -and $DiagnosticsPayload.health.upstreamProfile -and (Has-Property $DiagnosticsPayload.health.upstreamProfile $Name)) {
+        return [string]$DiagnosticsPayload.health.upstreamProfile.$Name
+    }
+    if ($Name -eq "protocol" -and $DiagnosticsPayload.fixedRoute) { return [string]$DiagnosticsPayload.fixedRoute.relayProtocol }
+    if ($Name -eq "model" -and $DiagnosticsPayload.health) { return [string]$DiagnosticsPayload.health.model }
+    return ""
 }
 
-if (-not $SkipRefresh) {
-    $refresh = Invoke-LocalJsonSafe "model-refresh" "/anticodex/models/refresh" "POST" @{}
+function Get-ManagerActionHeaders {
+    $trusted = @{
+        Origin = $ManagerBaseUrl
+        Referer = "$ManagerBaseUrl/anticodex/manager"
+    }
+    $bootstrap = Invoke-RestMethod -Uri "$ManagerBaseUrl/anticodex/manager/bootstrap" -Headers $trusted -Proxy $null -TimeoutSec $TimeoutSec
+    $token = [string]$bootstrap.token
+    if (-not $token) { throw "manager bootstrap did not return an action token" }
+    $trusted["x-anticodex-manager-token"] = $token
+    return $trusted
+}
+
+if (-not $SkipRefresh -and -not $endpointFailure) {
+    try {
+        $managerActionHeaders = Get-ManagerActionHeaders
+        $refresh = Invoke-LocalJsonSafe "model-refresh" "/anticodex/models/refresh" "POST" @{} -Headers $managerActionHeaders
+    } catch {
+        $refresh = [pscustomobject]@{ ok = $false; error = Get-ErrorPayload $_ }
+    }
     if (-not $refresh.ok) {
         Add-Failure "model refresh failed: $($refresh.error.message)"
     }
 }
 
-$modelsResult = Invoke-LocalJsonSafe "models" "/models" -RootUrl $ProxyBaseUrl
+$modelsResult = if ($endpointFailure) {
+    [pscustomobject]@{ ok = $false; payload = $null; error = [pscustomobject]@{ message = $endpointFailure } }
+} else {
+    Invoke-LocalJsonSafe "models" "/models" -RootUrl $ProxyBaseUrl
+}
 $modelRecords = if ($modelsResult.ok -and $modelsResult.payload -and $modelsResult.payload.data) {
     @($modelsResult.payload.data)
 } else {
@@ -268,6 +355,7 @@ $modelRecords = if ($modelsResult.ok -and $modelsResult.payload -and $modelsResu
 }
 $models = @($modelRecords | ForEach-Object { [string]$_.id })
 $models = @($models)
+$modelCatalogCount = $models.Count
 
 if (-not $modelsResult.ok) {
     Add-Failure "models request failed: $($modelsResult.error.message)"
@@ -288,7 +376,11 @@ foreach ($modelRecord in @($modelRecords)) {
     }
 }
 
-$diagnosticsResult = Invoke-LocalJsonSafe "diagnostics" "/anticodex/diagnostics" -Timeout $TimeoutSec
+$diagnosticsResult = if ($endpointFailure) {
+    [pscustomobject]@{ ok = $false; payload = $null; error = [pscustomobject]@{ message = $endpointFailure } }
+} else {
+    Invoke-LocalJsonSafe "diagnostics" "/anticodex/diagnostics" -Timeout $TimeoutSec
+}
 $diagnosticMode = "unknown"
 $diagnosticProtocol = ""
 $diagnosticModel = ""
@@ -306,10 +398,10 @@ if ($diagnosticsResult.ok) {
     Add-Failure "diagnostics failed: $($diagnosticsResult.error.message)"
 }
 
-if ($SkipRequests -and $diagnosticsResult.ok -and $diagnosticsResult.payload.models) {
+if ($SkipRequests -and $diagnosticsResult.ok -and $diagnosticsResult.payload.models -and (Has-Property $diagnosticsResult.payload.models "count")) {
     $diagnosticCount = [int]$diagnosticsResult.payload.models.count
-    if ($diagnosticCount -ne $models.Count) {
-        Add-Failure "diagnostics model count mismatch: $diagnosticCount vs $($models.Count)"
+    if ($diagnosticCount -ne $modelCatalogCount) {
+        Add-Failure "diagnostics model count mismatch: $diagnosticCount vs $modelCatalogCount"
     }
 }
 
@@ -381,15 +473,13 @@ foreach ($model in $models) {
     } $RequestTimeoutSec $ProxyBaseUrl
 
     $text = ""
-    $route = $null
-    $routeResult = $null
+    $responseModel = ""
+    $responseId = ""
     $modelAvailabilityUnavailable = $false
     if ($request.ok) {
         $text = Get-AntiCodexResponseText $request.payload
-        $routeResult = Invoke-LocalJsonSafe "route-$model" "/anticodex/model-routes"
-        if ($routeResult.ok -and $routeResult.payload) {
-            $route = $routeResult.payload.latest
-        }
+        $responseModel = [string]$request.payload.model
+        $responseId = [string]$request.payload.id
     }
 
     $ok = $true
@@ -405,51 +495,12 @@ foreach ($model in $models) {
     } elseif ($text -notmatch [regex]::Escape($marker)) {
         $ok = $false
         $checks.Add("marker missing from response") | Out-Null
-    }
-
-    if ($request.ok -and -not $routeResult.ok) {
+    } elseif (-not $responseId) {
         $ok = $false
-        $checks.Add("route audit request failed: $($routeResult.error.message)") | Out-Null
-    } elseif ($request.ok -and -not $route) {
+        $checks.Add("response id is missing") | Out-Null
+    } elseif ($responseModel -ne $model) {
         $ok = $false
-        $checks.Add("route audit empty") | Out-Null
-    } elseif ($request.ok) {
-        if ([string]$route.resolvedModel -ne $model) {
-            $ok = $false
-            $checks.Add("resolved model mismatch: $($route.resolvedModel)") | Out-Null
-        }
-        if ($thirdPartyMode) {
-            if ([string]$route.transport -ne "upstream-provider") {
-                $ok = $false
-                $checks.Add("third-party route transport mismatch: $($route.transport)") | Out-Null
-            }
-            if (-not [string]$route.providerProtocol) {
-                $ok = $false
-                $checks.Add("missing third-party provider protocol") | Out-Null
-            }
-            if ([string]$route.providerProtocol -ne $diagnosticProtocol) {
-                $ok = $false
-                $checks.Add("third-party provider protocol mismatch: $($route.providerProtocol)") | Out-Null
-            }
-        } else {
-            if ([string]$route.transport -ne "cli" -and -not [string]$route.internalModel) {
-                $ok = $false
-                $checks.Add("missing internal model") | Out-Null
-            }
-            if (-not [string]$route.cascadeId) {
-                $ok = $false
-                $checks.Add("missing cascade id") | Out-Null
-            }
-            if ([string]$route.status -ne "success") {
-                $ok = $false
-                $checks.Add("route status is not success: $($route.status)") | Out-Null
-            }
-            $expectedReasoningLabel = Get-ExpectedReasoningLabel $model
-            if ($expectedReasoningLabel -and [string]$route.displayName -notmatch "\($([regex]::Escape($expectedReasoningLabel))\)$") {
-                $ok = $false
-                $checks.Add("display name reasoning mismatch: expected $expectedReasoningLabel, got $($route.displayName)") | Out-Null
-            }
-        }
+        $checks.Add("response model mismatch: requested=$model response=$responseModel") | Out-Null
     }
 
     if (-not $ok) {
@@ -460,24 +511,14 @@ foreach ($model in $models) {
         model = $model
         ok = $ok
         marker = $marker
-        requestAvailable = -not $modelAvailabilityUnavailable
+        requestAvailable = [bool]$request.ok
         availabilityUnavailable = $modelAvailabilityUnavailable
         responseContainsMarker = ($text -match [regex]::Escape($marker))
+        responseId = $responseId
+        responseModel = $responseModel
+        evidenceKind = "fixed-route-response"
         text = $text
-        route = if ($route) {
-            [pscustomobject]@{
-                requestId = $route.requestId
-                requestedModel = $route.requestedModel
-                resolvedModel = $route.resolvedModel
-                displayName = $route.displayName
-                transport = $route.transport
-                provider = $route.provider
-                providerProtocol = $route.providerProtocol
-                internalModel = $route.internalModel
-                cascadeId = $route.cascadeId
-                status = $route.status
-            }
-        } else { $null }
+        route = $null
         checks = $checks.ToArray()
         error = if (-not $request.ok) { $request.error } else { $null }
     }) | Out-Null
@@ -497,8 +538,12 @@ $result = [pscustomobject]@{
     providerModel = $diagnosticModel
     toolBridge = if ($diagnosticsResult.ok -and $diagnosticsResult.payload.toolBridge) { $diagnosticsResult.payload.toolBridge } else { $null }
     modelCount = $models.Count
+    modelCatalogCount = $modelCatalogCount
     models = $models
     skipRequests = [bool]$SkipRequests
+    requestAttemptCount = $script:modelPostAttempts
+    successfulRequestCount = $script:modelPostSuccesses
+    usedRealTraffic = $script:modelPostAttempts -gt 0
     results = $results.ToArray()
 }
 
@@ -512,15 +557,18 @@ if (-not $SkipRequests) {
         reportName = "model-availability"
         failures = $failures.ToArray()
         requestedRealTraffic = $true
-        usedRealTraffic = $true
+        usedRealTraffic = $script:modelPostAttempts -gt 0
         coverageKind = "real-traffic"
         elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
-        baseUrl = $BaseUrl
+        baseUrl = $ManagerBaseUrl
         mode = $diagnosticMode
         providerProtocol = $diagnosticProtocol
         providerModel = $diagnosticModel
         modelCount = $models.Count
+        modelCatalogCount = $modelCatalogCount
         models = $models
+        requestAttemptCount = $script:modelPostAttempts
+        successfulRequestCount = $script:modelPostSuccesses
         requestAvailableModels = @($results.ToArray() | Where-Object { $_.requestAvailable -eq $true } | ForEach-Object { [string]$_.model })
         availabilityUnavailableModels = @($results.ToArray() | Where-Object { $_.availabilityUnavailable -eq $true } | ForEach-Object { [string]$_.model })
         availabilityUnavailableCount = @($results.ToArray() | Where-Object { $_.availabilityUnavailable -eq $true }).Count

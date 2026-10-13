@@ -4,6 +4,7 @@ param(
     [string]$FixedRouteHealthUrl = "http://127.0.0.1:18487/anticodex/fixed-route/health",
     [string]$Model = "",
     [string]$ReportRoot = $(Join-Path $env:APPDATA "anticodex\reports"),
+    [string]$StateRoot = $(Join-Path $env:APPDATA "anticodex"),
     [string]$LockName = "Local\AntiCodex.RealTrafficBridge",
     [int]$TimeoutSec = 90,
     [switch]$AllowRealTraffic
@@ -55,13 +56,14 @@ function Save-ProbeReport {
 }
 
 function Invoke-SingleChatRequest {
-    param([string]$Uri, [hashtable]$RequestBody)
+    param([string]$Uri, [hashtable]$RequestBody, [string]$LocalProxyKey)
 
     $json = $RequestBody | ConvertTo-Json -Depth 12 -Compress
     try {
         $response = Invoke-WebRequest `
             -Uri $Uri `
             -Method Post `
+            -Headers @{ Authorization = "Bearer $LocalProxyKey" } `
             -ContentType "application/json; charset=utf-8" `
             -Body ([Text.Encoding]::UTF8.GetBytes($json)) `
             -TimeoutSec $TimeoutSec `
@@ -173,15 +175,22 @@ try {
     if (-not $preflight.selectedModelPresent) { throw "selected model is absent from the current model catalog: $Model" }
     if ($preflight.adapterPort -lt 1 -or $preflight.adapterPort -gt 65535) { throw "fixed route returned an invalid adapter port" }
 
+    $proxyUrl = [uri]([string]$route.route.codexBaseUrl)
+    if (-not $proxyUrl.IsAbsoluteUri -or $proxyUrl.Scheme -ne 'http' -or -not $proxyUrl.IsLoopback -or $proxyUrl.UserInfo -or $proxyUrl.Query -or $proxyUrl.Fragment) {
+        throw "fixed route returned an invalid local proxy URL"
+    }
+    $authFile = Join-Path $StateRoot 'codex-home-deepseek-app\auth.json'
+    $localProxyKey = [string]((Get-Content -Raw -LiteralPath $authFile | ConvertFrom-Json).OPENAI_API_KEY)
+    if (-not $localProxyKey) { throw "local proxy credential is unavailable" }
     $requestCount = 1
-    $chat = Invoke-SingleChatRequest -Uri "http://127.0.0.1:$($preflight.adapterPort)/v1/chat/completions" -RequestBody @{
+    $chat = Invoke-SingleChatRequest -Uri "$($proxyUrl.AbsoluteUri.TrimEnd('/'))/responses" -LocalProxyKey $localProxyKey -RequestBody @{
         model = $Model
         stream = $false
         temperature = 0
-        max_tokens = 32
-        messages = @(@{
+        max_output_tokens = 64
+        input = @(@{
             role = "user"
-            content = "Reply with exactly $marker and nothing else."
+            content = @(@{ type = 'input_text'; text = "Reply with exactly $marker and nothing else." })
         })
     }
 
@@ -195,11 +204,8 @@ try {
     $errorCode = ""
     $payloadErrorMessage = ""
     if ($payload) {
-        $choices = @($payload.choices)
-        if ($choices.Count -gt 0 -and $choices[0]) {
-            $content = [string]$choices[0].message.content
-            $finishReason = [string]$choices[0].finish_reason
-        }
+        $content = (@($payload.output | Where-Object { $_.type -eq 'message' } | ForEach-Object { $_.content } | Where-Object { $_.type -eq 'output_text' } | ForEach-Object { [string]$_.text }) -join '')
+        $finishReason = [string]$payload.status
         if ($payload.error) {
             $errorType = [string]$payload.error.type
             $errorCode = [string]$payload.error.code
@@ -245,7 +251,7 @@ try {
             errorMessage = $errorMessage
         }
         failureType = $failureType
-        failures = if ($quotaReady) { @() } else { @("bounded quota probe failed: $failureType") }
+        failures = [string[]]@(if (-not $quotaReady) { "bounded quota probe failed: $failureType" })
         generatedAt = [DateTime]::UtcNow.ToString("o")
         elapsedMs = [int]([DateTime]::UtcNow - $startedAt).TotalMilliseconds
     }

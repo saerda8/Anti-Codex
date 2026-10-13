@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -601,7 +601,7 @@ test("the Gate 8 quota probe is locked, opt-in, and sends exactly one model requ
   assert.equal((source.match(/-Method Post/g) || []).length, 1);
   assert.match(source, /Enter-AntiCodexRealTrafficLock/);
   assert.match(source, /Exit-AntiCodexRealTrafficLock/);
-  assert.match(source, /\/v1\/chat\/completions/);
+  assert.match(source, /\/responses/);
   assert.match(source, /requestCount = 1/);
   assert.match(source, /selectedModelPresent/);
   assert.match(source, /\[string\]\$Model = ""/);
@@ -619,6 +619,10 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
   const canonicalReportRoot = await mkdtemp(join(tmpdir(), "anticodex-gate8-model-canonical-"));
   const mismatchReportRoot = await mkdtemp(join(tmpdir(), "anticodex-gate8-model-mismatch-"));
   const exhaustedReportRoot = await mkdtemp(join(tmpdir(), "anticodex-gate8-quota-exhausted-"));
+  const authRoot = join(reportRoot, 'codex-home-deepseek-app');
+  await mkdir(authRoot, { recursive: true });
+  const localToken = 'quota-fixture-local-token';
+  await writeFile(join(authRoot, 'auth.json'), JSON.stringify({ OPENAI_API_KEY: localToken }));
   let postCount = 0;
   let fixedRouteModel = model;
   const server = createServer(async (request, response) => {
@@ -628,7 +632,7 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
       response.end(JSON.stringify(payload));
     };
     if (request.method === "GET" && url.pathname === "/anticodex/fixed-route/health") {
-      send(200, { ok: true, state: "ready", provider: "antigravity", model: fixedRouteModel, ports: { adapter: server.address().port } });
+      send(200, { ok: true, state: "ready", provider: "antigravity", model: fixedRouteModel, ports: { adapter: server.address().port }, route: { codexBaseUrl: `http://127.0.0.1:${server.address().port}/v1` } });
       return;
     }
     if (request.method === "GET" && url.pathname === "/anticodex/account") {
@@ -639,8 +643,9 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
       send(200, { object: "list", data: [{ id: model }, { id: mismatchModel }, { id: exhaustedModel }] });
       return;
     }
-    if (request.method === "POST" && url.pathname === "/v1/chat/completions") {
+    if (request.method === "POST" && url.pathname === "/v1/responses") {
       postCount += 1;
+      if (request.headers.authorization !== `Bearer ${localToken}`) { send(401, { error: { message: 'Missing local proxy credential' } }); return; }
       let body = "";
       for await (const chunk of request) body += chunk;
       const requestBody = JSON.parse(body);
@@ -648,13 +653,14 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
         send(429, { error: { type: "antigravity_quota_exceeded", code: "quota_exceeded", message: "RESOURCE_EXHAUSTED: quota resets later" } });
         return;
       }
-      const prompt = requestBody?.messages?.at(-1)?.content || "";
+      const prompt = requestBody?.input?.at(-1)?.content?.[0]?.text || "";
       const marker = String(prompt).match(/GATE8_QUOTA_READY_\d{8}-\d{6}/)?.[0] || "";
       send(200, {
-        id: "chatcmpl-fixture",
-        object: "chat.completion",
+        id: "resp-fixture",
+        object: "response",
         model,
-        choices: [{ index: 0, message: { role: "assistant", content: marker }, finish_reason: "stop" }],
+        status: "completed",
+        output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: marker }] }],
       });
       return;
     }
@@ -670,6 +676,7 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
       "-BaseUrl", baseUrl,
       "-FixedRouteHealthUrl", `${baseUrl}/anticodex/fixed-route/health`,
       "-ReportRoot", root,
+      "-StateRoot", reportRoot,
       "-LockName", `Local\\AntiCodex.Gate8QuotaFixture.${process.pid}.${suffix}`,
       "-TimeoutSec", "10",
       "-AllowRealTraffic",
@@ -696,9 +703,11 @@ test("the Gate 8 quota probe completes one redacted request against a loopback f
     assert.equal(payload.longTaskStarted, false);
     const reportText = await readFile(join(reportRoot, "latest-gate8-quota-probe.json"), "utf8");
     const report = JSON.parse(reportText);
+    assert.deepEqual(report.failures, []);
     assert.equal(report.response.statusCode, 200);
     assert.match(report.response.contentSha256, /^[a-f0-9]{64}$/);
     assert.doesNotMatch(reportText, /GATE8_QUOTA_READY_/);
+    assert.equal(reportText.includes(localToken), false);
 
     postCount = 0;
     const canonical = await runProbe(model.toUpperCase(), canonicalReportRoot, "canonical");
