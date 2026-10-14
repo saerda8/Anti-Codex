@@ -174,6 +174,47 @@ def _load_runtime(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return dict(value)
 
 
+def _load_source_runtime(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if (
+        not isinstance(value, Mapping)
+        or value.get("schema") not in {1, RUNTIME_SCHEMA}
+        or value.get("host") != DEFAULT_HOST
+    ):
+        return None
+    servers = value.get("mcpServers")
+    if not isinstance(servers, dict):
+        return None
+    loaded_servers: dict[str, dict[str, Any]] = {}
+    for name, server in servers.items():
+        if not isinstance(name, str) or not isinstance(server, dict):
+            return None
+        command = server.get("command")
+        args = server.get("args", [])
+        env = server.get("env", {})
+        enabled = server.get("enabled", True)
+        if (
+            not isinstance(command, str)
+            or not command.strip()
+            or not isinstance(args, list)
+            or any(not isinstance(arg, str) for arg in args)
+            or not isinstance(env, dict)
+            or any(not isinstance(key, str) or not isinstance(item, str) for key, item in env.items())
+            or not isinstance(enabled, bool)
+        ):
+            return None
+        loaded_servers[name] = {
+            "command": command,
+            "args": list(args),
+            "env": dict(env),
+            "enabled": enabled,
+        }
+    return {
+        "schema": value["schema"],
+        "host": DEFAULT_HOST,
+        "mcpServers": loaded_servers,
+    }
+
+
 def _is_generated_server(
     name: str,
     server: object,
@@ -296,6 +337,8 @@ def _server_source(
     name: str,
     server: Mapping[str, Any],
     previous_runtime: Mapping[str, Any] | None,
+    source_runtime: Mapping[str, Any] | None = None,
+    source_worker_names: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     if _is_local_worker(name, server):
         result = {
@@ -306,6 +349,15 @@ def _server_source(
         }
     elif previous_runtime and _is_generated_server(name, server, previous_runtime):
         result = dict(previous_runtime["mcpServers"][name])
+        source = (source_runtime or {}).get("mcpServers", {}).get(name)
+        if (
+            name in source_worker_names
+            and isinstance(source, Mapping)
+            and source.get("enabled", True) is not False
+            and source.get("command") == result.get("command")
+            and source.get("args", []) == result.get("args", [])
+        ):
+            result = dict(source)
     else:
         raise ValueError(f"{name}: missing trusted local Worker source")
     return result
@@ -317,6 +369,8 @@ def build_artifacts(
     port: int = DEFAULT_PORT,
     token: str,
     previous_runtime: Mapping[str, Any] | None = None,
+    source_runtime: Mapping[str, Any] | None = None,
+    source_worker_names: set[str] | frozenset[str] = frozenset(),
     check_paths: bool = True,
 ) -> tuple[dict[str, Any], str]:
     if not 1024 <= port <= 65535:
@@ -324,12 +378,19 @@ def build_artifacts(
     _validate_token(token)
     parsed = _parse_toml(source_text)
     previous = _load_runtime(previous_runtime)
+    external = _load_source_runtime(source_runtime)
+    if source_runtime is not None and external is None:
+        raise ValueError("invalid source runtime")
+    selected_source_names = frozenset(source_worker_names)
     discovered_names = discover_worker_names(source_text, previous)
     if discovered_names and port + len(discovered_names) - 1 > 65535:
         raise ValueError("not enough consecutive ports for discovered Workers")
     server_ports = {name: port + index for index, name in enumerate(discovered_names)}
     servers = parsed.get("mcp_servers", {})
-    sources = {name: _server_source(name, servers[name], previous) for name in discovered_names}
+    sources = {
+        name: _server_source(name, servers[name], previous, external, selected_source_names)
+        for name in discovered_names
+    }
     available_names: list[str] = []
     unavailable_workers: list[dict[str, str]] = []
     if check_paths:
@@ -416,12 +477,22 @@ def _read_runtime_file(path: Path) -> dict[str, Any] | None:
     return _load_runtime(value)
 
 
+def _read_source_runtime_file(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return _load_source_runtime(value)
+
+
 def prepare_config(
     config_path: Path,
     state_dir: Path,
     *,
     port: int = DEFAULT_PORT,
     token: str | None = None,
+    source_runtime_path: Path | None = None,
+    source_worker_names: set[str] | frozenset[str] = frozenset(),
     check_paths: bool = True,
 ) -> dict[str, Any]:
     config_path = config_path.resolve()
@@ -429,12 +500,22 @@ def prepare_config(
     source_text = config_path.read_text(encoding="utf-8")
     runtime_path = state_dir / "servers.json"
     previous = _read_runtime_file(runtime_path)
+    external = None
+    if source_runtime_path is not None:
+        source_runtime_path = source_runtime_path.resolve()
+        if not source_runtime_path.is_file():
+            raise FileNotFoundError(f"source runtime does not exist: {source_runtime_path}")
+        external = _read_source_runtime_file(source_runtime_path)
+        if external is None:
+            raise ValueError(f"invalid source runtime: {source_runtime_path}")
     effective_token = token or (previous or {}).get("token") or secrets.token_urlsafe(32)
     runtime, candidate = build_artifacts(
         source_text,
         port=port,
         token=effective_token,
         previous_runtime=previous,
+        source_runtime=external,
+        source_worker_names=source_worker_names,
         check_paths=check_paths,
     )
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -620,6 +701,8 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--config", type=Path, required=True)
     prepare.add_argument("--state", type=Path, required=True)
     prepare.add_argument("--port", type=int, default=DEFAULT_PORT)
+    prepare.add_argument("--source-runtime", type=Path)
+    prepare.add_argument("--source-worker", action="append", default=[])
     run = subparsers.add_parser("run")
     run.add_argument("--runtime", type=Path, required=True)
     rollback = subparsers.add_parser("rollback")
@@ -631,7 +714,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": True, "worker_names": names}, ensure_ascii=False))
         return 0
     if args.action == "prepare":
-        result = prepare_config(args.config, args.state, port=args.port)
+        result = prepare_config(
+            args.config,
+            args.state,
+            port=args.port,
+            source_runtime_path=args.source_runtime,
+            source_worker_names=frozenset(args.source_worker),
+        )
         print(json.dumps({key: value for key, value in result.items() if key != "generated_text"}, ensure_ascii=False))
         return 0
     if args.action == "rollback":

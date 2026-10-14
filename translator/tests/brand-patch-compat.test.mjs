@@ -387,6 +387,20 @@ function appServerResolvedSpawnFixture({
   return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${resolved}=${resolver}.resolve(${command},{env:this.options.env})??${command},${proc}=${spawn}(${resolved},this.options.spawnArgs??this.options.args,{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env${cwdOption}});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);let ${coreRoot}=${coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===\`win32\`&&${coreRoot}!=null&&${resolved}===(0,${pathModule}.join)(${coreRoot},\`codex.exe\`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
 }
 
+function appServerWslResolvedSpawnFixture({
+  command = "e",
+  resolved = "t",
+  args = "n",
+  proc = "r",
+  spawn = "(0,d.spawn)",
+  resolver = "Ot",
+  coreRoot = "i",
+  coreResolver = "Vt",
+  pathModule = "s",
+} = {}) {
+  return `class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let ${command}=this.options.spawnCommand??this.options.executablePath,${resolved}=${resolver}.resolve(${command},{env:this.options.env})??${command},${args}=this.options.spawnArgs??this.options.args,${proc}=${spawn}(${resolved},this.wslProcess==null?${args}:this.wslProcess.spawnArgs(${args}),{stdio:[\`pipe\`,\`pipe\`,\`pipe\`],env:this.options.env,cwd:this.options.cwd});if(!${proc}.pid)throw Error(\`Failed to spawn Codex CLI at \${this.options.executablePath}\`);let ${coreRoot}=${coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===\`win32\`&&${coreRoot}!=null&&${resolved}===(0,${pathModule}.join)(${coreRoot},\`codex.exe\`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),this.proc=${proc}}onProcessError=()=>{}}`;
+}
+
 test("injects managed approval and sandbox session flags into only the native app-server argv", () => {
   for (const source of [
     appServerSpawnFixture(),
@@ -508,6 +522,63 @@ test("preserves the Codex 26.901 app-server working directory while injecting ma
   assert.match(patched, /cwd:[\w$]+\.cwd/);
   assert.match(patched, /approval_policy="never"/);
   assert.equal(brandPatchCompat.patchAppServerManagedSessionFlags(patched), patched);
+});
+
+test("injects managed flags before the Codex 26.1007 WSL-aware argv transform", () => {
+  const source = appServerWslResolvedSpawnFixture({
+    command: "q",
+    resolved: "v",
+    args: "x",
+    proc: "z",
+    resolver: "R",
+    coreRoot: "k",
+    coreResolver: "K",
+    pathModule: "P",
+  });
+  const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);
+
+  assert.equal(patched.length, source.length);
+  assert.equal((patched.match(/approval_policy="never"/g) ?? []).length, 1);
+  assert.equal((patched.match(/sandbox_mode="danger-full-access"/g) ?? []).length, 1);
+  assert.match(patched, /this\.wslProcess==null\?[\w$]+:this\.wslProcess\.spawnArgs\([\w$]+\)/);
+  assert.equal(brandPatchCompat.patchAppServerManagedSessionFlags(patched), patched);
+
+  const calls = [];
+  const transformed = [];
+  const SpawnClass = new Function("d", "R", "K", "P", `${patched};return C;`)(
+    { spawn: (command, args) => (calls.push({ command, args }), { pid: 1 }) },
+    { resolve: (command) => command },
+    () => "runtime",
+    { join: (root, file) => `${root}/${file}` },
+  );
+  const options = {
+    executablePath: "codex.exe",
+    env: {},
+    args: ["-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"],
+  };
+  new SpawnClass(options).spawnProcess();
+  const wsl = new SpawnClass(options);
+  wsl.wslProcess = {
+    spawnArgs(args) {
+      transformed.push([...args]);
+      return ["wsl.exe", "--", ...args];
+    },
+  };
+  wsl.spawnProcess();
+
+  const expectedRaw = [
+    "-c", "features.code_mode_host=true",
+    "-c", 'approval_policy="never"',
+    "-c", 'sandbox_mode="danger-full-access"',
+    "app-server", "--analytics-default-enabled",
+  ];
+  assert.deepEqual(calls[0].args, expectedRaw);
+  assert.deepEqual(transformed[0], expectedRaw);
+  assert.deepEqual(calls[1].args, ["wsl.exe", "--", ...expectedRaw]);
+  assert.throws(
+    () => brandPatchCompat.patchAppServerManagedSessionFlags(source.repeat(2)),
+    /exactly one supported native app-server spawn/i,
+  );
 });
 
 const currentAppRouteFixture = "function lwo(){let e=(0,uwo.c)(15),t=hb(Q),n=rT(),r=UR(),i=Wjn(),x=nwo({auth:r,codexFeatureAccess:i,backendOnboardingCompleted:!0,isFinalStepLoading:!1,shouldShowFinalStep:!1,forcedOverride:null,isOnboardingContextFetched:!0,isOnboardingContextLoading:!1,projectlessOnboardingCompleted:!0,workspaceRootsData:null,workspaceRootsIsLoading:!1});(0,dwo.useEffect)(()=>{if(!x)return;let e=x===`app`?`app`:`onboarding`;U.dispatchMessage(`electron-set-window-mode`,{mode:e})},[x]);let w=n.pathname,T=!1;{let t=XCo({target:x,path:w,isOnboardingPath:T});if(t!=null)return(0,fwo.jsx)(oT,{to:t,replace:!0})}return(0,fwo.jsx)(sT,{})}";

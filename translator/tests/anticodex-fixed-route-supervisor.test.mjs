@@ -80,6 +80,9 @@ test("shared MCP is an Anti-only owned child started before the copied client", 
   assert.match(source, /Local\\AntiCodexSharedMcpProxyV1|anticodex_shared_mcp_proxy\.py/);
   assert.match(source, /join\(plan\.paths\.installRoot, "shared-mcp"/);
   assert.match(source, /join\(plan\.paths\.stateRoot, "shared-mcp"/);
+  assert.match(source, /join\(plan\.sharedCodexHome, "mcp", "shared-proxy", "prepared", "servers\.json"\)/);
+  assert.match(source, /"--source-runtime",\s*sourceRuntimePath/);
+  assert.match(source, /"--source-worker",\s*"codebuddy-worker"/);
   assert.match(source, /captureSpawnedProcessIdentity\(sharedMcp/);
   assert.match(cleanup, /sharedMcp\.forEach\([^\n]+stopOwnedProcess\(child,\s*sharedMcpIdentity\[index\]\)/);
   assert.doesNotMatch(source, /\.codex[\\/]mcp[\\/]shared-proxy/);
@@ -1167,6 +1170,19 @@ test("production default ports stay below the Windows dynamic client range", () 
   });
   assert.equal(new Set(Object.values(plan.ports)).size, Object.values(plan.ports).length);
   assert.equal(Object.values(plan.ports).every((port) => port < 49152), true);
+});
+
+test("shared Codex home ignores the isolated Anti CODEX_HOME", () => {
+  const plan = buildFixedRoutePlan([
+    "--provider", "antigravity",
+    "--model", "gemini-3.5-flash-low",
+  ], {
+    LOCALAPPDATA: "C:\\Users\\XD\\AppData\\Local",
+    APPDATA: "C:\\Users\\XD\\AppData\\Roaming",
+    USERPROFILE: "C:\\Users\\XD",
+    CODEX_HOME: "C:\\Users\\XD\\AppData\\Roaming\\anticodex\\codex-home-deepseek-app",
+  });
+  assert.equal(plan.sharedCodexHome, resolve("C:\\Users\\XD\\.codex"));
 });
 
 test("Antigravity readiness verifies the selected model through the CodexPlusPlus proxy", async () => {

@@ -295,6 +295,10 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
   const args = parseArgs(argv);
   const installRoot = resolve(args.installRoot ?? join(requiredEnv(env, "LOCALAPPDATA"), "Anti-Codex"));
   const stateRoot = resolve(args.stateRoot ?? join(requiredEnv(env, "APPDATA"), "anticodex"));
+  const sharedCodexHomeValue = args.sharedCodexHome
+    ?? env.GLOBAL_CODEX_HOME
+    ?? (env.USERPROFILE ? join(env.USERPROFILE, ".codex") : null);
+  const sharedCodexHome = sharedCodexHomeValue ? resolve(sharedCodexHomeValue) : null;
   const paths = resolveProductPaths(installRoot, stateRoot);
   const provider = String(args.provider ?? env.ANTICODEX_PROVIDER ?? "antigravity").trim().toLowerCase();
   if (!["antigravity", "third-party"].includes(provider)) {
@@ -398,6 +402,7 @@ export function buildFixedRoutePlan(argv = process.argv.slice(2), env = process.
   return {
     args,
     paths,
+    sharedCodexHome,
     provider,
     model: route.model,
     antigravityModel,
@@ -463,7 +468,7 @@ async function startSharedMcp(plan) {
   }
 
   const env = buildSupervisorChildEnvironment(plan, process.env);
-  const prepared = JSON.parse(execFileSync(python, [
+  const prepareArgs = [
     "-B",
     proxyScript,
     "prepare",
@@ -473,7 +478,21 @@ async function startSharedMcp(plan) {
     stateRoot,
     "--port",
     String(DEFAULT_SHARED_MCP_PORT),
-  ], { encoding: "utf8", env, windowsHide: true }).trim());
+  ];
+  if (plan.sharedCodexHome) {
+    const sourceRuntimePath = join(plan.sharedCodexHome, "mcp", "shared-proxy", "prepared", "servers.json");
+    if (existsSync(sourceRuntimePath)) {
+      prepareArgs.push(
+        "--source-runtime", sourceRuntimePath,
+        "--source-worker", "codebuddy-worker",
+      );
+    }
+  }
+  const prepared = JSON.parse(execFileSync(
+    python,
+    prepareArgs,
+    { encoding: "utf8", env, windowsHide: true },
+  ).trim());
   const availableWorkerNames = Array.isArray(prepared.worker_names) ? prepared.worker_names : [];
   const discoveredWorkerNames = Array.isArray(prepared.discovered_worker_names)
     ? prepared.discovered_worker_names
@@ -1255,6 +1274,7 @@ function parseArgs(argv) {
   const aliases = new Map([
     ["--install-root", "installRoot"],
     ["--state-root", "stateRoot"],
+    ["--shared-codex-home", "sharedCodexHome"],
     ["--provider", "provider"],
     ["--model", "model"],
     ["--context-window", "contextWindow"],

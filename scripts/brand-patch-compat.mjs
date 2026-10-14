@@ -31,6 +31,8 @@ const APP_SERVER_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[\w$]+)=(?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\(\k<resolved>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);let (?<coreRoot>[\w$]+)=(?<coreResolver>[\w$]+)\(\);this\.logger\.info\(`stdio_transport_spawned`,\{safe:\{executablePath:this\.options\.executablePath,argsCount:this\.options\.args\.length,coreRuntimeInUse:process\.platform===`win32`&&\k<coreRoot>!=null&&\k<resolved>===\(0,(?<pathModule>[\w$]+)\.join\)\(\k<coreRoot>,`codex\.exe`\),spawnCommand:this\.options\.spawnCommand\?\?this\.options\.executablePath,pid:\k<proc>\.pid\},sensitive:\{\}\}\),/g;
+const APP_SERVER_WSL_RESOLVED_NATIVE_SPAWN_PATTERN =
+  /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[\w$]+)=(?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<args>[\w$]+)=this\.options\.spawnArgs\?\?this\.options\.args,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\(\k<resolved>,this\.wslProcess==null\?\k<args>:this\.wslProcess\.spawnArgs\(\k<args>\),\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);let (?<coreRoot>[\w$]+)=(?<coreResolver>[\w$]+)\(\);this\.logger\.info\(`stdio_transport_spawned`,\{safe:\{executablePath:this\.options\.executablePath,argsCount:this\.options\.args\.length,coreRuntimeInUse:process\.platform===`win32`&&\k<coreRoot>!=null&&\k<resolved>===\(0,(?<pathModule>[\w$]+)\.join\)\(\k<coreRoot>,`codex\.exe`\),spawnCommand:this\.options\.spawnCommand\?\?this\.options\.executablePath,pid:\k<proc>\.pid\},sensitive:\{\}\}\),/g;
 const APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN =
   /spawnProcess\(\)\{let [\w$]+=this\.options,[\s\S]{0,600}?approval_policy="never"[\s\S]{0,200}?sandbox_mode="danger-full-access"[\s\S]{0,600}?Error`Codex CLI spawn failed`;/g;
 const IDENTIFIER_SOURCE = String.raw`[A-Za-z_$][\w$]*`;
@@ -878,14 +880,16 @@ export function hasAppServerManagedSessionFlags(text) {
   const source = String(text ?? "");
   return allMatches(source, APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN).length === 1
     && allMatches(source, APP_SERVER_NATIVE_SPAWN_PATTERN).length === 0
-    && allMatches(source, APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN).length === 0;
+    && allMatches(source, APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN).length === 0
+    && allMatches(source, APP_SERVER_WSL_RESOLVED_NATIVE_SPAWN_PATTERN).length === 0;
 }
 
 export function patchAppServerManagedSessionFlags(text) {
   const source = String(text ?? "");
   const inlineOriginal = allMatches(source, APP_SERVER_NATIVE_SPAWN_PATTERN);
   const resolvedOriginal = allMatches(source, APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN);
-  const original = [...inlineOriginal, ...resolvedOriginal];
+  const wslResolvedOriginal = allMatches(source, APP_SERVER_WSL_RESOLVED_NATIVE_SPAWN_PATTERN);
+  const original = [...inlineOriginal, ...resolvedOriginal, ...wslResolvedOriginal];
   const patched = allMatches(source, APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN);
   if (original.length === 0 && patched.length === 1) return source;
   if (original.length !== 1 || patched.length !== 0) {
@@ -894,7 +898,8 @@ export function patchAppServerManagedSessionFlags(text) {
 
   const match = original[0];
   const { command, proc, resolver, spawn } = match.groups;
-  const resolvedVariant = resolvedOriginal.length === 1;
+  const wslResolvedVariant = wslResolvedOriginal.length === 1;
+  const resolvedVariant = resolvedOriginal.length === 1 || wslResolvedVariant;
   const logger = `this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),`;
   const target = resolvedVariant ? match[0] : match[0] + logger;
   if (!source.startsWith(target, match.index)) {
@@ -906,6 +911,7 @@ export function patchAppServerManagedSessionFlags(text) {
     command,
     proc,
     resolver,
+    match.groups.args,
     match.groups.resolved,
     match.groups.coreRoot,
     match.groups.coreResolver,
@@ -918,7 +924,9 @@ export function patchAppServerManagedSessionFlags(text) {
   if (aliases.length < 2) throw new Error("Could not reserve app-server patch aliases");
   const [options, args] = aliases;
   const cwdOption = match.groups.cwd ? `,cwd:${options}.cwd` : "";
-  const replacement = resolvedVariant
+  const replacement = wslResolvedVariant
+    ? `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`),${match.groups.resolved};if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${match.groups.resolved}=${resolver}.resolve(${command},{env:${options}.env})??${command};${proc}=${spawn}(${match.groups.resolved},this.wslProcess==null?${args}:this.wslProcess.spawnArgs(${args}),{stdio:\`pipe\`,env:${options}.env${cwdOption}});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;let ${match.groups.coreRoot}=${match.groups.coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,coreRuntimeInUse:process.platform===\`win32\`&&${match.groups.coreRoot}!=null&&${match.groups.resolved}===(0,${match.groups.pathModule}.join)(${match.groups.coreRoot},\`codex.exe\`),spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`
+    : resolvedVariant
     ? `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`),${match.groups.resolved};if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${match.groups.resolved}=${resolver}.resolve(${command},{env:${options}.env})??${command};${proc}=${spawn}(${match.groups.resolved},${args},{stdio:\`pipe\`,env:${options}.env${cwdOption}});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;let ${match.groups.coreRoot}=${match.groups.coreResolver}();this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,coreRuntimeInUse:process.platform===\`win32\`&&${match.groups.coreRoot}!=null&&${match.groups.resolved}===(0,${match.groups.pathModule}.join)(${match.groups.coreRoot},\`codex.exe\`),spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`
     : `spawnProcess(){let ${options}=this.options,${command}=${options}.spawnCommand??${options}.executablePath,${args}=${options}.spawnArgs??${options}.args,${proc}=${args}.indexOf(\`app-server\`);if(!${options}.spawnArgs&&${proc}<0)throw Error\`Missing app-server arg\`;${args}=${proc}<0?${args}:${args}.toSpliced(${proc},0,\`-c\`,\`approval_policy="never"\`,\`-c\`,\`sandbox_mode="danger-full-access"\`);${proc}=${spawn}(${resolver}.resolve(${command},{env:${options}.env})??${command},${args},{stdio:\`pipe\`,env:${options}.env${cwdOption}});if(!${proc}.pid)throw Error\`Codex CLI spawn failed\`;this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:${options}.executablePath,argsCount:${args}.length,spawnCommand:${command},pid:${proc}.pid},sensitive:{}}),`;
   if (replacement.length > target.length) {

@@ -53,6 +53,31 @@ def absolute_worker_blocks(name: str, command: Path) -> str:
     )
 
 
+def worker_blocks_with_env(name: str, env: dict[str, str]) -> str:
+    prefix = name.replace("-worker", "")
+    env_lines = "".join(f'{key} = "{value}"\n' for key, value in env.items())
+    return (
+        f"[mcp_servers.{name}]\n"
+        'command = "node"\n'
+        f'args = ["C:/workers/{name}.mjs"]\n\n'
+        f"[mcp_servers.{name}.env]\n"
+        f"{env_lines}\n"
+        f"[mcp_servers.{name}.tools.{prefix}_start_implementation]\n"
+        "enabled = true\n"
+    )
+
+
+def official_source_runtime(runtime: dict[str, object]) -> dict[str, object]:
+    return {
+        "schema": 1,
+        "host": runtime["host"],
+        "port": runtime["port"],
+        "token": runtime["token"],
+        "source_sha256": runtime["source_sha256"],
+        "mcpServers": runtime["mcpServers"],
+    }
+
+
 def mixed_config() -> str:
     return "\n".join(
         [
@@ -266,6 +291,121 @@ def test_previous_generated_worker_is_reused_then_stops_when_disabled_or_deleted
     assert deleted_runtime["mcpServers"] == {}
 
 
+def test_generated_codebuddy_refreshes_from_matching_official_source_without_reusing_transport() -> None:
+    stale = worker_blocks_with_env("codebuddy-worker", {
+        "CODEBUDDY_BIN": "C:/tools/codebuddy.cmd",
+        "CLAUDE_BIN": "C:/tools/claude.exe",
+    })
+    repaired = worker_blocks_with_env("codebuddy-worker", {
+        "CODEBUDDY_BIN": "C:/tools/codebuddy.cmd",
+        "CODEBUDDY_MODEL": "gpt-5.6-luna",
+        "HTTP_PROXY": "http://127.0.0.1:10808",
+        "NO_PROXY": "localhost,127.0.0.1",
+    })
+    anti_runtime, anti_config = shared.build_artifacts(
+        stale, port=47631, token="A" * 43, check_paths=False,
+    )
+    built_official_runtime, _ = shared.build_artifacts(
+        repaired, port=47621, token="O" * 43, check_paths=False,
+    )
+    official_runtime = official_source_runtime(built_official_runtime)
+
+    refreshed, candidate = shared.build_artifacts(
+        anti_config,
+        port=47631,
+        token="A" * 43,
+        previous_runtime=anti_runtime,
+        source_runtime=official_runtime,
+        source_worker_names={"codebuddy-worker"},
+        check_paths=False,
+    )
+    parsed = tomllib.loads(candidate)["mcp_servers"]["codebuddy-worker"]
+    assert refreshed["mcpServers"]["codebuddy-worker"]["env"] == {
+        "CODEBUDDY_BIN": "C:/tools/codebuddy.cmd",
+        "CODEBUDDY_MODEL": "gpt-5.6-luna",
+        "HTTP_PROXY": "http://127.0.0.1:10808",
+        "NO_PROXY": "localhost,127.0.0.1",
+    }
+    assert parsed["url"] == "http://127.0.0.1:47631/servers/codebuddy-worker/mcp"
+    assert parsed["http_headers"] == {"Authorization": "Bearer " + "A" * 43}
+    assert "command" not in parsed and "args" not in parsed and "env" not in parsed
+
+
+def test_prepare_refreshes_schema1_source_while_preserving_anti_transport(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    state = tmp_path / "shared-mcp"
+    source_runtime_path = tmp_path / "official-servers.json"
+    stale = worker_blocks_with_env("codebuddy-worker", {"CHAIN": "stale"})
+    repaired = worker_blocks_with_env("codebuddy-worker", {"CHAIN": "official"})
+    anti_runtime, anti_config = shared.build_artifacts(
+        stale, port=47631, token="A" * 43, check_paths=False,
+    )
+    built_official_runtime, _ = shared.build_artifacts(
+        repaired, port=47621, token="O" * 43, check_paths=False,
+    )
+    official_runtime = official_source_runtime(built_official_runtime)
+    state.mkdir()
+    config.write_text(anti_config, encoding="utf-8", newline="")
+    (state / "servers.json").write_text(json.dumps(anti_runtime), encoding="utf-8")
+    source_runtime_path.write_text(json.dumps(official_runtime), encoding="utf-8")
+
+    shared.prepare_config(
+        config,
+        state,
+        port=47631,
+        source_runtime_path=source_runtime_path,
+        source_worker_names={"codebuddy-worker"},
+        check_paths=False,
+    )
+
+    refreshed = json.loads((state / "servers.json").read_text(encoding="utf-8"))
+    parsed = tomllib.loads(config.read_text(encoding="utf-8"))["mcp_servers"]["codebuddy-worker"]
+    assert refreshed["mcpServers"]["codebuddy-worker"]["env"] == {"CHAIN": "official"}
+    assert refreshed["token"] == anti_runtime["token"]
+    assert refreshed["server_ports"] == anti_runtime["server_ports"]
+    assert parsed["url"] == "http://127.0.0.1:47631/servers/codebuddy-worker/mcp"
+    assert parsed["http_headers"] == {"Authorization": "Bearer " + "A" * 43}
+
+
+def test_source_runtime_does_not_override_custom_or_untargeted_workers() -> None:
+    official_source = "\n".join([
+        worker_blocks_with_env("codebuddy-worker", {"CHAIN": "official"}),
+        worker_blocks_with_env("future-worker", {"CHAIN": "official"}),
+    ])
+    built_official_runtime, _ = shared.build_artifacts(
+        official_source, port=47621, token="O" * 43, check_paths=False,
+    )
+    official_runtime = official_source_runtime(built_official_runtime)
+
+    custom_runtime, _ = shared.build_artifacts(
+        worker_blocks_with_env("codebuddy-worker", {"CHAIN": "custom"}),
+        port=47631,
+        token="A" * 43,
+        source_runtime=official_runtime,
+        source_worker_names={"codebuddy-worker"},
+        check_paths=False,
+    )
+    assert custom_runtime["mcpServers"]["codebuddy-worker"]["env"] == {"CHAIN": "custom"}
+
+    stale_source = "\n".join([
+        worker_blocks_with_env("codebuddy-worker", {"CHAIN": "stale-codebuddy"}),
+        worker_blocks_with_env("future-worker", {"CHAIN": "stale-future"}),
+    ])
+    stale_runtime, generated = shared.build_artifacts(
+        stale_source, port=47631, token="A" * 43, check_paths=False,
+    )
+    refreshed, _ = shared.build_artifacts(
+        generated,
+        port=47631,
+        token="A" * 43,
+        previous_runtime=stale_runtime,
+        source_runtime=official_runtime,
+        source_worker_names={"codebuddy-worker"},
+        check_paths=False,
+    )
+    assert refreshed["mcpServers"]["future-worker"]["env"] == {"CHAIN": "stale-future"}
+
+
 def test_prepare_and_safe_rollback_preserve_unrelated_changes(tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     state = tmp_path / "shared-mcp"
@@ -292,6 +432,34 @@ def test_prepare_and_safe_rollback_preserve_unrelated_changes(tmp_path: Path) ->
     config.write_text(prepared["generated_text"], encoding="utf-8", newline="")
     shared.rollback_config(config, state)
     assert 'command = "node.exe"' in config.read_text(encoding="utf-8")
+
+
+def test_prepare_rejects_missing_or_invalid_explicit_source_runtime(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    state = tmp_path / "shared-mcp"
+    source_runtime = tmp_path / "official-servers.json"
+    config.write_text(worker_blocks("future-worker"), encoding="utf-8", newline="")
+
+    with pytest.raises(FileNotFoundError, match="source runtime does not exist"):
+        shared.prepare_config(
+            config,
+            state,
+            port=47631,
+            token="R" * 43,
+            source_runtime_path=source_runtime,
+            check_paths=False,
+        )
+
+    source_runtime.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid source runtime"):
+        shared.prepare_config(
+            config,
+            state,
+            port=47631,
+            token="R" * 43,
+            source_runtime_path=source_runtime,
+            check_paths=False,
+        )
 
 
 def test_repeated_prepare_keeps_first_backup_for_exact_rollback(tmp_path: Path) -> None:
