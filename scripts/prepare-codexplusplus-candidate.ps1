@@ -406,6 +406,8 @@ try {
     )
     if ($hasResponseHistoryPatch) {
         $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--test", "response_history", "--", "--test-threads=2")
+        $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--lib", "response_history", "--", "--test-threads=1")
+        $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--lib", "proxy_stream_tests", "--", "--test-threads=1")
     }
     $commands += @(
         @("test", "--locked", "-p", "codex-plus-core", "--test", "watcher", "--", "--test-threads=2"),
@@ -417,7 +419,7 @@ try {
         $commandDescriptions.Add(($command -join " "))
     }
     $coreTestSummary = if ($hasResponseHistoryPatch) {
-        "protocol proxy, response history and watcher"
+        "protocol proxy, response history (integration and library), native stream forwarding and watcher"
     } else {
         "protocol proxy and watcher"
     }
@@ -782,7 +784,11 @@ try {
             "isolation_audit"
             "cargo_fmt"
             "protocol_proxy"
-            if ($hasResponseHistoryPatch) { "response_history" }
+            if ($hasResponseHistoryPatch) {
+                "response_history"
+                "response_history_library"
+                "proxy_stream_tests"
+            }
             "watcher"
             "manager_windows_check"
             "launcher_windows_build"

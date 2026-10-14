@@ -46,13 +46,14 @@ if ($existingContainer) {
     throw "Refusing to reuse or remove an existing container: $ContainerName"
 }
 
-$bootstrapToolchain = $env:ANTICODEX_CARGO_XWIN_BOOTSTRAP -eq "1"
+$bootstrapToolchain = $env:ANTICODEX_CARGO_XWIN_BOOTSTRAP -eq "1" -and $CargoArguments[0] -ceq "xwin"
 $dockerArgs = @(
     "run",
     "--rm",
     "--name", $ContainerName,
     "--label", "com.anticodex.ephemeral-build=true",
-    "--env", "CARGO_BUILD_JOBS=2",
+    "--env", "CARGO_BUILD_JOBS=1",
+    "--env", "CARGO_PROFILE_TEST_DEBUG=0",
     "--mount", "type=bind,source=$resolvedWorktree,destination=/work",
     "--volume", "anticodex-cargo-xwin-cache:/root/.cache/cargo-xwin",
     "--volume", "anticodex-cargo-git:/usr/local/cargo/git",

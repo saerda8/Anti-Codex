@@ -1,5 +1,5 @@
 {
-  "status": "source_ready_build_deferred",
+  "status": "source_ready_build_requested",
   "component": "CodexPlusPlus",
   "version": "1.7.1",
   "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
@@ -7,24 +7,31 @@
   "acceptedMetadataSha256": "680aa072a3be9736cbd0acca8a5df9219f57b687b7f748b4d1cb4a42319b8b40",
   "patch": {
     "file": "patches/0013-v171-response-history.patch",
-    "sha256": "1d3bdc3cb27729ef1936ea2cebb307754df859d1010fedd775f4c3940664deb4",
-    "scope": "user-approved isolated bounded persistent Responses history, credential-scoped previous_response_id reconstruction, native-provider compatibility, and successful completion capture"
+    "sha256": "c6ebb2d49370c349029f6b7f2d2730c34556192c180020ee6f68eb68e649dc25",
+    "scope": "user-approved isolated bounded persistent Responses history, credential-scoped previous_response_id reconstruction, native-provider compatibility, successful completion capture, and Windows extended-length atomic writes"
   },
-  "expectedPatchCommit": "b56571e97321f7e1c72cb8e09933e815afb18e9e",
-  "expectedPatchTree": "b0a03562209c481d9f1c42a5289beba35d27cd72",
+  "expectedPatchCommit": "8eb0adba4d09000b4974a8ab940fb732cd8de875",
+  "expectedPatchTree": "ea5ef1b7d1800ff6716ee30eb41951109935096e",
   "verification": {
     "patchReplay": "passed",
     "rustfmt": "passed",
-    "rustTests": "full_component_not_run",
+    "rustTests": "pending_full_candidate_after_windows_long_path_fix",
     "isolatedRustTests": {
       "storePassed": 7,
       "protocolFunctionsPassed": 5,
       "failed": 0,
       "actualSourceBytesVerified": true,
       "directDependencyVersionsMatchProduction": true,
-      "scope": "Linux micro crate; launcher, TCP, full component and Windows runtime remain unverified"
+      "scope": "Linux micro crate; launcher, TCP, full component and Windows runtime remain unverified",
+      "sourcePatchSha256": "1d3bdc3cb27729ef1936ea2cebb307754df859d1010fedd775f4c3940664deb4"
     },
-    "windowsBuild": "not_run",
+    "windowsBuild": "pending_after_windows_long_path_fix",
+    "windowsIsolatedTests": {
+      "passed": 10,
+      "failed": 0,
+      "settingsSha256": "d8978285f836bec58815650fc98d09f9df2fb7ed2f0357e25daf3fa463f65b43",
+      "scope": "Actual Windows long-path storage and path semantics; final full candidate remains pending"
+    },
     "installed": false
   }
 }

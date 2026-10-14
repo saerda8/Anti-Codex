@@ -336,7 +336,7 @@ index f8cc0b1..133f29e 100644
  pub mod script_market;
  pub mod session_share;
 diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
-index c1ceeb5..7d7fe90 100644
+index c1ceeb5..2a302a1 100644
 --- a/crates/codex-plus-core/src/protocol_proxy.rs
 +++ b/crates/codex-plus-core/src/protocol_proxy.rs
 @@ -80,6 +80,148 @@ mod direct_chat_timeout_contract_tests {
@@ -726,7 +726,7 @@ index c1ceeb5..7d7fe90 100644
 +            } else if self.unclassified_large_event {
 +                Some("native response terminal state unknown")
 +            } else {
-+                Some("native response ended before completion")
++                Some("上游缺少完成事件 (native response ended before completion)")
 +            }
 +        });
 +        NativeResponsesSseOutcome {
@@ -1678,6 +1678,142 @@ index 0000000..f4e58ec
 +            | "compaction"
 +    )
 +}
+diff --git a/crates/codex-plus-core/src/settings.rs b/crates/codex-plus-core/src/settings.rs
+index 428a64e..351eee2 100644
+--- a/crates/codex-plus-core/src/settings.rs
++++ b/crates/codex-plus-core/src/settings.rs
+@@ -2283,22 +2283,13 @@ fn replace_file(source: &Path, target: &Path) -> anyhow::Result<()> {
+ 
+ #[cfg(windows)]
+ fn replace_file(source: &Path, target: &Path) -> anyhow::Result<()> {
+-    use std::os::windows::ffi::OsStrExt;
+     use windows::Win32::Storage::FileSystem::{
+         MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+     };
+     use windows::core::PCWSTR;
+ 
+-    let source = source
+-        .as_os_str()
+-        .encode_wide()
+-        .chain(std::iter::once(0))
+-        .collect::<Vec<_>>();
+-    let target = target
+-        .as_os_str()
+-        .encode_wide()
+-        .chain(std::iter::once(0))
+-        .collect::<Vec<_>>();
++    let source = win32_extended_path_wide(source)?;
++    let target = win32_extended_path_wide(target)?;
+     unsafe {
+         MoveFileExW(
+             PCWSTR(source.as_ptr()),
+@@ -2309,6 +2300,48 @@ fn replace_file(source: &Path, target: &Path) -> anyhow::Result<()> {
+     Ok(())
+ }
+ 
++#[cfg(windows)]
++fn win32_extended_path_wide(path: &Path) -> anyhow::Result<Vec<u16>> {
++    use std::os::windows::ffi::OsStrExt;
++
++    const SEPARATOR: u16 = b'\\' as u16;
++    const QUESTION: u16 = b'?' as u16;
++    const DOT: u16 = b'.' as u16;
++    const VERBATIM_PREFIX: [u16; 4] = [SEPARATOR, SEPARATOR, QUESTION, SEPARATOR];
++    const DEVICE_PREFIX: [u16; 4] = [SEPARATOR, SEPARATOR, DOT, SEPARATOR];
++    const UNC_PREFIX: [u16; 2] = [SEPARATOR, SEPARATOR];
++    const VERBATIM_UNC_PREFIX: [u16; 8] = [
++        SEPARATOR,
++        SEPARATOR,
++        QUESTION,
++        SEPARATOR,
++        b'U' as u16,
++        b'N' as u16,
++        b'C' as u16,
++        SEPARATOR,
++    ];
++
++    let absolute = std::path::absolute(path)
++        .with_context(|| format!("failed to make {} absolute", path.display()))?;
++    let wide = absolute.as_os_str().encode_wide().collect::<Vec<_>>();
++    anyhow::ensure!(
++        !wide.contains(&0),
++        "Windows file path contains an interior NUL"
++    );
++    let mut extended = Vec::with_capacity(wide.len() + VERBATIM_UNC_PREFIX.len() + 1);
++    if wide.starts_with(&VERBATIM_PREFIX) || wide.starts_with(&DEVICE_PREFIX) {
++        extended.extend_from_slice(&wide);
++    } else if wide.starts_with(&UNC_PREFIX) {
++        extended.extend_from_slice(&VERBATIM_UNC_PREFIX);
++        extended.extend_from_slice(&wide[UNC_PREFIX.len()..]);
++    } else {
++        extended.extend_from_slice(&VERBATIM_PREFIX);
++        extended.extend_from_slice(&wide);
++    }
++    extended.push(0);
++    Ok(extended)
++}
++
+ fn temp_path_for(path: &Path) -> PathBuf {
+     let mut temp_path = path.to_path_buf();
+     let extension = path.extension().and_then(|value| value.to_str());
+@@ -2350,6 +2383,57 @@ mod tests {
+         std::fs::remove_dir_all(dir).unwrap();
+     }
+ 
++    #[cfg(windows)]
++    #[test]
++    fn atomic_write_creates_and_replaces_extended_length_file() {
++        let root = temp_dir();
++        let file_name = "history.json";
++        let fixed_length = root.as_os_str().len() + 1 + 1 + file_name.len();
++        let pad_length = 264_usize.checked_sub(fixed_length).unwrap();
++        assert!(pad_length <= 240);
++        let directory = root.join("x".repeat(pad_length));
++        std::fs::create_dir_all(&directory).unwrap();
++        let path = directory.join(file_name);
++        assert_eq!(path.as_os_str().len(), 264);
++        let temp_path = temp_path_for(&path);
++        assert_eq!(temp_path.as_os_str().len(), 268);
++
++        atomic_write(&path, b"first").unwrap();
++        assert_eq!(std::fs::read(&path).unwrap(), b"first");
++        assert!(!temp_path.exists());
++
++        atomic_write(&path, b"second").unwrap();
++        assert_eq!(std::fs::read(&path).unwrap(), b"second");
++        assert!(!temp_path.exists());
++        std::fs::remove_dir_all(root).unwrap();
++    }
++
++    #[cfg(windows)]
++    #[test]
++    fn extended_length_path_preserves_verbatim_and_converts_unc() {
++        use std::os::windows::ffi::OsStringExt;
++
++        let verbatim = Path::new(r"\\?\C:\already\verbatim.txt");
++        let verbatim_wide = win32_extended_path_wide(verbatim).unwrap();
++        let verbatim_text =
++            std::ffi::OsString::from_wide(&verbatim_wide[..verbatim_wide.len() - 1]);
++        assert_eq!(verbatim_text, verbatim.as_os_str());
++
++        let unc = Path::new(r"\\server\share\folder\file.txt");
++        let unc_wide = win32_extended_path_wide(unc).unwrap();
++        let unc_text = std::ffi::OsString::from_wide(&unc_wide[..unc_wide.len() - 1]);
++        assert_eq!(unc_text, r"\\?\UNC\server\share\folder\file.txt");
++
++        let relative = Path::new(r"relative\folder\file.txt");
++        let relative_wide = win32_extended_path_wide(relative).unwrap();
++        let relative_text =
++            std::ffi::OsString::from_wide(&relative_wide[..relative_wide.len() - 1]);
++        let absolute = std::path::absolute(relative).unwrap();
++        let mut expected = std::ffi::OsString::from(r"\\?\");
++        expected.push(absolute.as_os_str());
++        assert_eq!(relative_text, expected);
++    }
++
+     #[test]
+     fn settings_default_matches_expected_behavior() {
+         let settings = BackendSettings::default();
 diff --git a/crates/codex-plus-core/tests/response_history.rs b/crates/codex-plus-core/tests/response_history.rs
 new file mode 100644
 index 0000000..0bd3867

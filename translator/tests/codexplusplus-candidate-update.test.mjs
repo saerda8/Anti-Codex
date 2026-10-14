@@ -250,9 +250,9 @@ test("Docker build hygiene can require zero labeled build containers", () => {
   assert.doesNotMatch(hygiene, /\bexit\s+1\b/);
 });
 
-test("managed Cargo builds cap worker concurrency at two", () => {
+test("managed Cargo builds cap worker concurrency at one", () => {
   const runner = readFileSync(cargoRunnerPath, "utf8");
-  assert.match(runner, /"--env",\s*"CARGO_BUILD_JOBS=2"/);
+  assert.match(runner, /"--env",\s*"CARGO_BUILD_JOBS=1"/);
 });
 
 test("CodexPlusPlus candidate preparation peels and verifies an exact annotated tag", (t) => {
@@ -300,6 +300,8 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
     "fmt --all -- --check",
     "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
     "test --locked -p codex-plus-core --test response_history -- --test-threads=2",
+    "test --locked -p codex-plus-core --lib response_history -- --test-threads=1",
+    "test --locked -p codex-plus-core --lib proxy_stream_tests -- --test-threads=1",
     "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
@@ -334,6 +336,8 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
     "cargo fmt --all -- --check",
     "cargo test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
     "cargo test --locked -p codex-plus-core --test response_history -- --test-threads=2",
+    "cargo test --locked -p codex-plus-core --lib response_history -- --test-threads=1",
+    "cargo test --locked -p codex-plus-core --lib proxy_stream_tests -- --test-threads=1",
     "cargo test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "cargo xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "cargo xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
