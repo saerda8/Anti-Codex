@@ -22,6 +22,7 @@
 
 | 日期 | 事件 | 处理 | 结果 |
 |---|---|---|---|
+| 2026-10-15 | 收掉 CodeBuddy 检查器误报与桌面上传验收 | 共享 CodeBuddy wrapper 的 Windows checks 改用完整命令边界引号并传递 windowsVerbatimArguments，修复 Node -e 源码引号误传及非零退出码丢失；权限、超时和失败判定保持。通过既有受管入口刷新 Anti-Codex 后再发真实任务 | 两项定向测试通过，包含空格目录与退出码 7；新任务 cbw_mv8m269b_vz0wki 整项 completed，原样 quoted 检查与独立产物检查均退出 0，worker 已退出。用户明确确认“上传图片功能我试了是 OK 的”，桌面上传记为人工验收通过。版本 26.1007.9446.0、路由 ready、共享 MCP 7/7；证据见仓库外 .validation/20261015-codebuddy-checker-fix/final-acceptance.json。旧失败任务保留，未改官方 Codex 安装或重启官方进程，未推送。 |
 | 2026-10-15 | 复用官方 CodeBuddy 修复并适配 Codex 9446 | 官方 CodeBuddy 已修复模型及代理环境，Anti-Codex 的自动生成条目仍复用旧快照。现在只对点名且启动命令匹配的自动生成 CodeBuddy 条目读取官方运行清单，保留 Anti 自己的端口、令牌及进程；手工条目和其他 worker 不覆盖。官方 Codex 26.1007.9446.0 新增启动参数的 WSL 转换，补齐兼容匹配并在原生转换前加入既有受管参数 | Python 15/15、主管 48 项、新版兼容 50/50、打包契约 19/19 通过；真实配置副本 7 项隔离检查、官方 ASAR 的 18/18 关键补丁及幂等验证通过。运行态事务 c542bd15 激活 135 个文件，宿主同步操作 2ef2949f 成功；已安装 26.1007.9446.0，宿主和 CLI 哈希与官方一致，CodexPlusPlus c47/cf6 及 14 个补丁保持。安装快检、同步就绪、无更新漂移均通过，路由 ready、共享 MCP 7/7。CodeBuddy 经 Anti 独立链路真实写出 probe.mjs，模型退出 0，独立检查通过；原 job cbw_mv8bxfrv_u1tfbn 因检查器 Windows 引号错误保留 checks_failed，不冒充任务状态成功。新版原生 CLI 的 Gemini 图片识别、同线程切 Claude 续接、两次真实命令均通过，验证进程已退出。完整证据见仓库外 .validation/20261015-combined-update/final-acceptance.json；桌面文件选择器和 Settings 未自动化，未改官方 Codex，回滚点保留，未推送。 |
 | 2026-08-11 | 官方 Codex 自动更新至 `26.803.10989.0`;安装版仍为基于 `26.803.5235.0` 的 revision 7 | 只读检查确认 16/16 补丁可应用于临时副本;未同步 | 待一次受控同步 |
 | 2026-08-11 | CodexPlusPlus 发布 `v1.2.46`;已验收版本为 `v1.2.45` | 12 补丁源码重放通过、隔离审计通过;未构建/未激活 | 源码就绪,待受管构建 |
