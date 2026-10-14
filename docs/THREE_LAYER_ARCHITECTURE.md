@@ -3,6 +3,7 @@
 - Status: project cornerstone; supersedes conflicting runtime architecture decisions
 - Decision date: 2026-07-14
 - Decision owner: user-approved product direction
+- Approved addition (2026-10-14): bounded persistent Responses history inside the separately licensed Layer 2, including `previous_response_id` reconstruction across model changes and helper restarts. The [approved contract](superpowers/specs/2026-10-14-response-history-design.md) defines credential isolation, storage bounds, error behavior and native-provider compatibility. This explicitly permits the required history conversion patch; it does not move task control or compaction out of native Codex. Current patch count and hashes are authoritative in `third_party/codexplusplus/upstream.json`.
 - Upstream reference: `BigPizzaV3/CodexPlusPlus` commit `5036ff056b5c629f19356396b17d6eeb70da664c` (`v1.2.43`)
 
 > **Source update - 2026-07-28:** Layer 2 is pinned independently to CodexPlusPlus `v1.2.43`. The same ten narrow compatibility patches replay to head `7505a6d48ca05923139b8406811f72ab3e5247c4` and tree `42e6155185508512b9eb799832d3de994e047056`; no task controller or fourth layer was added. Installed-runtime acceptance remains pending the guarded candidate/rollback gate.

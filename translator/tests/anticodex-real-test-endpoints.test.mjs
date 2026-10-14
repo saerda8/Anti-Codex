@@ -69,6 +69,8 @@ async function createHarness(options = {}) {
   const managerRequests = [];
   const healthRequests = [];
   const proxyRequests = [];
+  const responseHistory = new Map();
+  const historyLookups = [];
   const modelData = options.models ?? [
     { id: "model-a", object: "model", display_name: "Model A" },
     { id: "model-b", object: "model", display_name: "Model B" },
@@ -91,15 +93,49 @@ async function createHarness(options = {}) {
         return;
       }
       const serialized = JSON.stringify(body.input ?? []);
-      const marker = serialized.match(/(?:MODEL_ROUTE|MODEL_SWITCH_HISTORY)_[A-Za-z0-9_]+/)?.[0] ?? "";
+      let marker = serialized.match(/(?:MODEL_ROUTE|MODEL_SWITCH_HISTORY)_[A-Za-z0-9_]+/)?.[0] ?? "";
       const hasClientHistory = Array.isArray(body.input)
         && body.input.length === 3
         && body.input[0]?.role === "user"
         && body.input[1]?.role === "assistant"
         && body.input[2]?.role === "user";
-      const text = body.previous_response_id && !hasClientHistory ? "UNKNOWN" : marker;
+      const hasPreviousId = Boolean(body.previous_response_id);
+      const barePreviousId = hasPreviousId && !hasClientHistory;
+      let text = marker;
+      if (hasPreviousId) {
+        historyLookups.push(String(body.previous_response_id));
+        if (options.responseHistoryMode === "unsupported") {
+          jsonResponse(response, 400, { error: { type: "invalid_request_error", code: "previous_response_id_unsupported", message: "stored response history is not supported" } });
+          return;
+        }
+        if (options.responseHistoryMode === "supported") {
+          const stored = responseHistory.get(String(body.previous_response_id));
+          if (!stored) {
+            jsonResponse(response, 410, {
+              error: {
+                type: "response_history_missing",
+                message: "Start a fresh request or reopen the original conversation context.",
+                details: {
+                  status: 410,
+                  retryable: false,
+                  previous_response_id: String(body.previous_response_id),
+                },
+              },
+            });
+            return;
+          }
+          if (barePreviousId) {
+            marker = stored.marker;
+            text = marker;
+          }
+        } else if (barePreviousId) {
+          text = "UNKNOWN";
+        }
+      }
+      const responseId = `resp-${proxyRequests.length}`;
+      if (body.store !== false && options.discardStoredResponses !== true) responseHistory.set(responseId, { marker, text });
       jsonResponse(response, 200, {
-        id: `resp-${proxyRequests.length}`,
+        id: responseId,
         object: "response",
         model: body.model,
         output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }],
@@ -193,7 +229,7 @@ async function createHarness(options = {}) {
 
   return {
     root, stateRoot, reportRoot, manager, fixedHealth, proxy,
-    managerRequests, healthRequests, proxyRequests,
+    managerRequests, healthRequests, proxyRequests, historyLookups,
     async close() {
       await Promise.all([manager.close(), fixedHealth.close(), proxy.close()]);
       await rm(root, { recursive: true, force: true });
@@ -345,7 +381,7 @@ test("MaxModels does not make no-traffic diagnostics compare a truncated list as
 });
 
 test("model switch validates explicit client history without a fabricated route audit", { skip: process.platform !== "win32" }, async () => {
-  const harness = await createHarness();
+  const harness = await createHarness({ responseHistoryMode: "supported" });
   try {
     const result = await runPowerShell(scripts.switching, [
       "-ManagerBaseUrl", harness.manager.baseUrl,
@@ -358,6 +394,7 @@ test("model switch validates explicit client history without a fabricated route 
     assert.equal(report.ok, true);
     assert.equal(report.historyMode, "explicit_client_history");
     assert.equal(report.previousResponseIdOnlySupported, null);
+    assert.equal(report.requestCount, 2);
     assert.deepEqual(report.responseModels, { first: "model-a", second: "model-b" });
     assert.equal(report.route, null);
     assert.equal(harness.managerRequests.some((entry) => entry.path === "/anticodex/model-routes"), false);
@@ -366,6 +403,7 @@ test("model switch validates explicit client history without a fabricated route 
     assert.equal(responseRequests[1].body.previous_response_id, report.firstResponseId);
     assert.deepEqual(responseRequests[1].body.input.map((item) => item.role), ["user", "assistant", "user"]);
     assert.ok(responseRequests.every((entry) => entry.authorization === "Bearer synthetic-token"));
+    assert.deepEqual(harness.historyLookups, [report.firstResponseId]);
   } finally {
     await harness.close();
   }
@@ -386,11 +424,86 @@ test("previous_response_id-only mode keeps the current fixed-route history gap v
     assert.equal(report.ok, false);
     assert.equal(report.historyMode, "previous_response_id_only");
     assert.equal(report.previousResponseIdOnlySupported, false);
+    assert.equal(report.requestCount, 2);
     assert.match(report.failures.join("\n"), /previous_response_id-only history was not preserved/i);
     const responseRequests = harness.proxyRequests.filter((entry) => entry.path === "/v1/responses");
     assert.equal(responseRequests.length, 2);
     assert.deepEqual(responseRequests[1].body.input.map((item) => item.role), ["user"]);
     assert.equal(responseRequests[1].body.previous_response_id, report.firstResponseId);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("previous_response_id-only mode restores stored history across a model switch", { skip: process.platform !== "win32" }, async () => {
+  const harness = await createHarness({ responseHistoryMode: "supported" });
+  try {
+    const result = await runPowerShell(scripts.switching, [
+      "-ManagerBaseUrl", harness.manager.baseUrl,
+      "-StateRoot", harness.stateRoot,
+      "-FirstModel", "model-a",
+      "-SecondModel", "model-b",
+      "-PreviousResponseIdOnly",
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = lastJson(result.stdout);
+    assert.equal(report.ok, true);
+    assert.equal(report.historyMode, "previous_response_id_only");
+    assert.equal(report.previousResponseIdOnlySupported, true);
+    assert.equal(report.requestCount, 2);
+    assert.deepEqual(report.responseModels, { first: "model-a", second: "model-b" });
+    const responseRequests = harness.proxyRequests.filter((entry) => entry.path === "/v1/responses");
+    assert.equal(responseRequests.length, 2);
+    assert.deepEqual(responseRequests[1].body.input.map((item) => item.role), ["user"]);
+    assert.equal(responseRequests[1].body.previous_response_id, report.firstResponseId);
+    assert.ok(responseRequests.every((entry) => entry.authorization === "Bearer synthetic-token"));
+    assert.deepEqual(harness.historyLookups, [report.firstResponseId]);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("previous_response_id-only mode fails honestly when the first stored response is missing", { skip: process.platform !== "win32" }, async () => {
+  const harness = await createHarness({ responseHistoryMode: "supported", discardStoredResponses: true });
+  try {
+    const result = await runPowerShell(scripts.switching, [
+      "-ManagerBaseUrl", harness.manager.baseUrl,
+      "-StateRoot", harness.stateRoot,
+      "-FirstModel", "model-a",
+      "-SecondModel", "model-b",
+      "-PreviousResponseIdOnly",
+    ]);
+    assert.equal(result.status, 1, `unknown previous id must fail\n${result.stderr}\n${result.stdout}`);
+    const report = lastJson(result.stdout);
+    assert.equal(report.ok, false);
+    assert.equal(report.requestCount, 2);
+    assert.match(report.failures.join("\n"), /second model request failed/i);
+    const responseRequests = harness.proxyRequests.filter((entry) => entry.path === "/v1/responses");
+    assert.equal(responseRequests.length, 2);
+    assert.deepEqual(harness.historyLookups, [report.firstResponseId]);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("previous_response_id-only mode fails honestly when an external service rejects stored history", { skip: process.platform !== "win32" }, async () => {
+  const harness = await createHarness({ responseHistoryMode: "unsupported" });
+  try {
+    const result = await runPowerShell(scripts.switching, [
+      "-ManagerBaseUrl", harness.manager.baseUrl,
+      "-StateRoot", harness.stateRoot,
+      "-FirstModel", "model-a",
+      "-SecondModel", "model-b",
+      "-PreviousResponseIdOnly",
+    ]);
+    assert.equal(result.status, 1, `unsupported history must fail\n${result.stderr}\n${result.stdout}`);
+    const report = lastJson(result.stdout);
+    assert.equal(report.ok, false);
+    assert.equal(report.requestCount, 2);
+    assert.match(report.failures.join("\n"), /second model request failed/i);
+    const responseRequests = harness.proxyRequests.filter((entry) => entry.path === "/v1/responses");
+    assert.equal(responseRequests.length, 2);
+    assert.deepEqual(harness.historyLookups, [report.firstResponseId]);
   } finally {
     await harness.close();
   }

@@ -150,9 +150,18 @@ if ($SourceBinary) {
                 if (-not $runnerImageMatch.Success) {
                     throw "Prepared-candidate runner has no fixed image identity."
                 }
+                $responseHistoryPatchFile = "patches/0013-v171-response-history.patch"
+                $hasResponseHistoryPatch = @($metadata.patches | Where-Object {
+                    $_.file -is [string] -and $_.file -ceq $responseHistoryPatchFile
+                }).Count -gt 0
                 $expectedBuildCommands = @(
                     "fmt --all -- --check",
-                    "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+                    "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2"
+                )
+                if ($hasResponseHistoryPatch) {
+                    $expectedBuildCommands += "test --locked -p codex-plus-core --test response_history -- --test-threads=2"
+                }
+                $expectedBuildCommands += @(
                     "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
                     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
                     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher"

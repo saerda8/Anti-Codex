@@ -77,6 +77,7 @@ $marker = "MODEL_SWITCH_HISTORY_$([DateTimeOffset]::UtcNow.ToUnixTimeMillisecond
 $firstPrompt = "Remember the exact marker $marker. Reply with only that exact marker."
 $secondPrompt = "Continue the same conversation after switching models. What exact marker did I ask you to remember? Reply with only the exact marker."
 $historyMode = if ($PreviousResponseIdOnly) { "previous_response_id_only" } else { "explicit_client_history" }
+$responseRequestCount = 0
 
 if ($endpointFailure) {
     $failures.Add($endpointFailure) | Out-Null
@@ -100,6 +101,7 @@ function Invoke-ProxyJson {
 function Invoke-AntiCodexResponse {
     param([hashtable]$Body)
 
+    $script:responseRequestCount += 1
     $json = $Body | ConvertTo-Json -Depth 20 -Compress
     try {
         return Invoke-RestMethod `
@@ -293,6 +295,7 @@ $result = [pscustomobject]@{
     proxyBaseUrl = $ProxyBaseUrl
     historyMode = $historyMode
     previousResponseIdOnlySupported = if ($PreviousResponseIdOnly -and $second) { $secondText -match [regex]::Escape($marker) } else { $null }
+    requestCount = $responseRequestCount
     evidenceKind = "fixed-route-response"
     elapsedMs = [int]($endedAt - $startedAt).TotalMilliseconds
     marker = $marker

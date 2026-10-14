@@ -18,6 +18,8 @@ const root = resolve(import.meta.dirname, "..", "..");
 const scriptPath = resolve(root, "scripts", "prepare-codexplusplus-candidate.ps1");
 const hygienePath = resolve(root, "scripts", "test-anticodex-docker-build-hygiene.ps1");
 const cargoRunnerPath = resolve(root, "scripts", "invoke-anticodex-cargo-xwin.ps1");
+const responseHistoryPatchFile = "patches/0013-v171-response-history.patch";
+const responseHistoryBuildCommand = "test --locked -p codex-plus-core --test response_history -- --test-threads=2";
 
 function write(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -43,7 +45,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function createSuccessFixture(t, { annotatedTag = false, plainPatch = false } = {}) {
+function createSuccessFixture(t, { annotatedTag = false, plainPatch = false, responseHistoryPatch = true } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), "anticodex-cpp-candidate-"));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
 
@@ -52,7 +54,8 @@ function createSuccessFixture(t, { annotatedTag = false, plainPatch = false } = 
   const stateRoot = join(sandbox, "state");
   const logPath = join(sandbox, "calls.log");
   const activeSentinel = join(sandbox, "local-app-data", "Anti-Codex", "active-sentinel.txt");
-  const patchPath = join(project, "third_party", "codexplusplus", "patches", "0001-test.patch");
+  const patchFile = responseHistoryPatch ? responseHistoryPatchFile : "patches/0001-test.patch";
+  const patchPath = join(project, "third_party", "codexplusplus", patchFile);
 
   write(activeSentinel, "active-unchanged\n");
   write(join(repository, "Cargo.toml"), '[workspace]\nmembers = []\n\n[workspace.package]\nversion = "1.2.44"\n');
@@ -95,7 +98,7 @@ function createSuccessFixture(t, { annotatedTag = false, plainPatch = false } = 
       isolationPatchCommit: "1".repeat(40),
       patchCommit: "2".repeat(40),
       patches: [{
-        file: "patches/0001-test.patch",
+        file: patchFile,
         sha256: sha256(Buffer.from(`${patch}\n`)),
         scope: "test isolation",
       }],
@@ -283,6 +286,7 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
   assert.ok(report.checks.includes("build_hygiene_preflight"));
   assert.ok(report.checks.includes("build_hygiene_postflight"));
   assert.ok(report.checks.includes("windows_process_creation"));
+  assert.ok(report.checks.includes("response_history"));
   assert.equal(
     report.inputs.sourceMetadata.sha256,
     sha256(readFileSync(join(fixture.project, "third_party", "codexplusplus", "upstream.json"))),
@@ -295,6 +299,7 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
   assert.deepEqual(report.build.commands, [
     "fmt --all -- --check",
     "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+    "test --locked -p codex-plus-core --test response_history -- --test-threads=2",
     "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
@@ -308,7 +313,7 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
     new RegExp(`${output.patchCommit}.*tree ${report.patchTree}$`),
   );
   assert.match(proposed.verification.auditRegressionTests, /promotion preflight/i);
-  const patchSnapshot = join(candidateRoot, "patches", "0001-0001-test.patch");
+  const patchSnapshot = join(candidateRoot, "patches", `0001-${responseHistoryPatchFile.split("/").at(-1)}`);
   assert.equal(sha256(readFileSync(patchSnapshot)), proposed.patches[0].sha256);
   assert.equal(
     readFileSync(join(candidateRoot, "source", "marker.txt"), "utf8").replaceAll("\r\n", "\n"),
@@ -328,12 +333,34 @@ test("CodexPlusPlus candidate preparation peels and verifies an exact annotated 
     "hygiene runtime-clean",
     "cargo fmt --all -- --check",
     "cargo test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+    "cargo test --locked -p codex-plus-core --test response_history -- --test-threads=2",
     "cargo test --locked -p codex-plus-core --test watcher -- --test-threads=2",
     "cargo xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
     "cargo xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
     "hygiene runtime-clean",
   ]);
   assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+});
+
+test("old CodexPlusPlus patch baselines do not request the response history test target", (t) => {
+  const fixture = createSuccessFixture(t, { responseHistoryPatch: false });
+  const result = runCandidate(fixture);
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const output = JSON.parse(result.stdout);
+  const report = JSON.parse(readFileSync(join(
+    fixture.stateRoot,
+    "candidates",
+    "1.2.44",
+    fixture.upstreamCommit,
+    output.patchCommit,
+    "candidate.json",
+  ), "utf8"));
+  const calls = readFileSync(fixture.logPath, "utf8").trim().split(/\r?\n/);
+  assert.equal(report.build.commands.includes(responseHistoryBuildCommand), false);
+  assert.equal(report.checks.includes("response_history"), false);
+  assert.ok(report.checks.every((check) => typeof check === "string"));
+  assert.equal(calls.includes(`cargo ${responseHistoryBuildCommand}`), false);
 });
 
 test("CodexPlusPlus candidate preparation replays a plain unified diff", (t) => {

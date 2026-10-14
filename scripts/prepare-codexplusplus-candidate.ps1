@@ -396,9 +396,18 @@ try {
         throw "Managed Cargo runner has no fixed image identity."
     }
     $runnerImage = $runnerImageMatch.Groups["value"].Value
+    $responseHistoryPatchFile = "patches/0013-v171-response-history.patch"
+    $hasResponseHistoryPatch = @($metadata.patches | Where-Object {
+        $_.file -is [string] -and $_.file -ceq $responseHistoryPatchFile
+    }).Count -gt 0
     $commands = @(
         @("fmt", "--all", "--", "--check"),
-        @("test", "--locked", "-p", "codex-plus-core", "--test", "protocol_proxy", "--", "--test-threads=2"),
+        @("test", "--locked", "-p", "codex-plus-core", "--test", "protocol_proxy", "--", "--test-threads=2")
+    )
+    if ($hasResponseHistoryPatch) {
+        $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--test", "response_history", "--", "--test-threads=2")
+    }
+    $commands += @(
         @("test", "--locked", "-p", "codex-plus-core", "--test", "watcher", "--", "--test-threads=2"),
         @("xwin", "check", "--locked", "--release", "--target", "x86_64-pc-windows-msvc", "-p", "codex-plus-manager"),
         @("xwin", "build", "--locked", "--release", "--target", "x86_64-pc-windows-msvc", "-p", "codex-plus-launcher")
@@ -406,6 +415,11 @@ try {
     $commandDescriptions = [Collections.Generic.List[string]]::new()
     foreach ($command in $commands) {
         $commandDescriptions.Add(($command -join " "))
+    }
+    $coreTestSummary = if ($hasResponseHistoryPatch) {
+        "protocol proxy, response history and watcher"
+    } else {
+        "protocol proxy and watcher"
     }
     if (-not (Test-ExactString -Value $metadata.component -Expected "CodexPlusPlus") -or
         -not (Test-ExactString -Value $metadata.license -Expected "AGPL-3.0-only")) {
@@ -703,9 +717,9 @@ try {
         verification = [ordered]@{
             patchReplay = "$($patches.Count) project patches replayed without automatic conflict resolution; head $patchCommit; tree $patchTree"
             sourceIsolationAudit = "passed"
-            auditRegressionTests = "Candidate-local format, protocol proxy, watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json."
+            auditRegressionTests = "Candidate-local format, $coreTestSummary, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json."
             cargoFmt = "passed"
-            cargoCheck = "protocol proxy and watcher tests passed; Windows x64 Manager check passed"
+            cargoCheck = "$coreTestSummary tests passed; Windows x64 Manager check passed"
             windowsNativeTests = "Windows x64 release launcher build passed through the managed project runner"
             launcherReleaseBuild = "sha256:$binaryHash"
             runtimeIsolation = "candidate only; not activated"
@@ -762,18 +776,19 @@ try {
             commands = @($commandDescriptions)
         }
         checks = @(
-            "exact_tag",
-            "patch_hashes",
-            "patch_replay",
-            "isolation_audit",
-            "cargo_fmt",
-            "protocol_proxy",
-            "watcher",
-            "manager_windows_check",
-            "launcher_windows_build",
-            "windows_process_creation",
-            "build_hygiene_preflight",
-            "build_hygiene_postflight",
+            "exact_tag"
+            "patch_hashes"
+            "patch_replay"
+            "isolation_audit"
+            "cargo_fmt"
+            "protocol_proxy"
+            if ($hasResponseHistoryPatch) { "response_history" }
+            "watcher"
+            "manager_windows_check"
+            "launcher_windows_build"
+            "windows_process_creation"
+            "build_hygiene_preflight"
+            "build_hygiene_postflight"
             "clean_source"
         )
         preparedAt = [DateTime]::UtcNow.ToString("o")

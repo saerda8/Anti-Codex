@@ -28,9 +28,14 @@ const candidateInputFiles = {
   managedCargoRunner: "invoke-anticodex-cargo-xwin.ps1",
   hygieneVerifier: "test-anticodex-docker-build-hygiene.ps1",
 };
+const responseHistoryPatchFile = "patches/0013-v171-response-history.patch";
+const responseHistoryBuildCommand = "test --locked -p codex-plus-core --test response_history -- --test-threads=2";
+const responseHistoryPatchSource = resolve(root, "third_party", "codexplusplus", responseHistoryPatchFile);
+const responseHistoryPatchHash = sha256(readFileSync(responseHistoryPatchSource));
 const candidateBuildCommands = [
   "fmt --all -- --check",
   "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2",
+  responseHistoryBuildCommand,
   "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
   "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
   "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
@@ -51,7 +56,7 @@ function writeBytes(path, value) {
   writeFileSync(path, value);
 }
 
-function createMetadata(expectedHash) {
+function createMetadata(expectedHash, { responseHistoryPatch = true } = {}) {
   return {
     component: "CodexPlusPlus",
     license: "AGPL-3.0-only",
@@ -64,7 +69,11 @@ function createMetadata(expectedHash) {
     verification: {
       launcherReleaseBuild: `sha256:${expectedHash}`,
     },
-    patches: [],
+    patches: responseHistoryPatch ? [{
+      file: responseHistoryPatchFile,
+      sha256: responseHistoryPatchHash,
+      scope: "response history",
+    }] : [],
   };
 }
 
@@ -100,6 +109,10 @@ function createInstallerSandbox(t) {
   for (const file of Object.values(candidateInputFiles)) {
     copyFileSync(resolve(root, "scripts", file), join(sourceRoot, "scripts", file));
   }
+  writeBytes(
+    join(sourceRoot, "third_party", "codexplusplus", responseHistoryPatchFile),
+    readFileSync(responseHistoryPatchSource),
+  );
 
   return {
     sandboxRoot,
@@ -164,7 +177,9 @@ function writePreparedCandidate(
     build: {
       runnerImage,
       lockedDependencies: true,
-      commands: candidateBuildCommands,
+      commands: metadata.patches.some((patch) => patch?.file === responseHistoryPatchFile)
+        ? candidateBuildCommands
+        : candidateBuildCommands.filter((command) => command !== responseHistoryBuildCommand),
     },
   });
 }
@@ -386,6 +401,23 @@ test("automatic selection accepts promoted metadata while preserving the histori
   assertSucceeded(result);
   assert.deepEqual(readFileSync(fixture.candidateBinary), trustedBinary);
   assert.equal(existsSync(fixture.candidateManifest), true);
+});
+
+test("automatic selection accepts an old patch baseline without a response history test command", (t) => {
+  const fixture = createInstallerSandbox(t);
+  const expectedHash = sha256(trustedBinary);
+  const metadata = createMetadata(expectedHash, { responseHistoryPatch: false });
+  writeJson(fixture.sourceMetadata, metadata);
+  writeBytes(fixture.candidateBinary, Buffer.from("wrong candidate binary\n", "utf8"));
+  writeBytes(fixture.activeBinary, Buffer.from("wrong active binary\n", "utf8"));
+  writePreparedCandidate(fixture, trustedBinary, metadata);
+
+  const report = JSON.parse(readFileSync(fixture.preparedCandidateReport, "utf8"));
+  assert.equal(report.build.commands.includes(responseHistoryBuildCommand), false);
+  const result = runInstaller(fixture);
+
+  assertSucceeded(result);
+  assert.deepEqual(readFileSync(fixture.candidateBinary), trustedBinary);
 });
 
 test("automatic selection rejects a prepared candidate after verifier inputs change", (t) => {

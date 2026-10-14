@@ -1,19 +1,21 @@
 # CodexPlusPlus Component Boundary
 
-This directory pins the separately licensed CodexPlusPlus component and carries exactly twenty-five narrow Anti-Codex compatibility patches for the v1.3.0 upstream layout. It does not vendor CodexPlusPlus source, binaries, provider credentials or user state.
+This directory pins the separately licensed CodexPlusPlus component and carries the compatibility patches listed in `upstream.json`. That manifest is authoritative for the current source identity, patch order and hashes. This directory does not vendor source, binaries, provider credentials or user state.
 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.3.0`
-- Accepted commit: `be6a45852f9992a688f33be933f444ee098fc67a`
+- Accepted version: `v1.7.1`
+- Accepted commit: `5fe25892eb312abbc091512565a8dc2621a8c999`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.
 
 ## Allowed Patch Scope
 
-The patch may change only isolation behavior:
+The user approved a further Layer 2 exception on 2026-10-14: bounded persistent response history for `previous_response_id`, with credential isolation, explicit missing-history failures and native-provider continuation preserved. See the [approved contract](../../docs/superpowers/specs/2026-10-14-response-history-design.md). Approval does not imply that the new candidate has passed build or runtime acceptance.
+
+The isolation patch may change only isolation behavior:
 
 - explicit absolute `CODEX_PLUS_STATE_DIR` for CodexPlusPlus settings, logs and locks;
 - configurable `CODEX_PLUS_PROTOCOL_PROXY_PORT`;
