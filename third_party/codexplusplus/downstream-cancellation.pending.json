@@ -1,0 +1,22 @@
+{
+  "status": "candidate_validated_install_pending",
+  "component": "CodexPlusPlus",
+  "version": "1.7.1",
+  "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
+  "basePatchCommit": "841e4900830b9c18f690b6fe12bc2761dc4479be",
+  "acceptedMetadataSha256": "3307567acd1dc93fe572ba7cd7563eabe57d1114367327fa1b77e4052bb9b3c2",
+  "patch": {
+    "file": "patches/0014-v171-downstream-cancellation.patch",
+    "sha256": "42d0431d454c8b4fb8becb3719f19fdc62bb4628513e5cb0c919805574f5bcb4",
+    "scope": "cancel pending headers, quiet streaming and response-body reads when the downstream client disconnects; preserve normal completion and durable history"
+  },
+  "expectedPatchCommit": "c47a056083fe92782e7aca7502d93351ac96ed4d",
+  "expectedPatchTree": "6cd6ec61eeff6e0d2ce9f7823b75caf4f316adb1",
+  "verification": {
+    "rustfmt": "passed",
+    "rustTests": "236 passed; zero failures",
+    "windowsBuild": "passed; binary sha256 cf6ba9449eb68849d2c1990524ce58b42e1e5f7f94c3c117721315dd3821ee7d",
+    "windowsBlackBoxes": "26 passed: history 19, authentication 2, cancellation and normal completion 5",
+    "installed": false
+  }
+}

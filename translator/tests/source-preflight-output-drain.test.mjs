@@ -14,7 +14,9 @@ test("source preflight drains redirected process output before reading report ta
 test("source preflight keeps translator test concurrency below the Windows process-init failure threshold", async () => {
   const source = await readFile(new URL("../../scripts/test-anticodex-source-preflight.ps1", import.meta.url), "utf8");
 
-  assert.match(source, /@\("--test",\s*"--test-concurrency=2"\)\s*\+\s*\$testFiles/);
+  assert.match(source, /@\("--test",\s*"--test-concurrency=2",[\s\S]{0,400}?\)\s*\+\s*\$testFiles/);
+  assert.equal((source.match(/--test-concurrency=2/g) ?? []).length, 1);
+  assert.doesNotMatch(source, /--test-concurrency=(?!2\b)\d+/);
   assert.match(source, /\[int\]\$TranslatorTimeoutSec\s*=\s*600/);
   assert.match(source, /\$translatorTimeout\s*=\s*\[Math\]::Max\(600,\s*\$TranslatorTimeoutSec\)/);
   assert.match(source, /translator source regression[\s\S]{0,500}-TimeoutSec\s+\$translatorTimeout/);

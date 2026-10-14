@@ -19,7 +19,7 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
   assert.equal(accepted.version, "1.7.1");
   assert.equal(accepted.tag, "v1.7.1");
   assert.equal(accepted.upstreamCommit, "5fe25892eb312abbc091512565a8dc2621a8c999");
-  assert.equal(accepted.patchCommit, "841e4900830b9c18f690b6fe12bc2761dc4479be");
+  assert.equal(accepted.patchCommit, "c47a056083fe92782e7aca7502d93351ac96ed4d");
   assert.deepEqual(accepted.patches.map(({ file }) => file), [
     "patches/0001-v171-app-path-isolation.patch",
     "patches/0002-v171-state-dir-isolation.patch",
@@ -34,6 +34,7 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
     "patches/0011-v171-bytes-dependency.patch",
     "patches/0012-v171-lockfile-bytes.patch",
     "patches/0013-v171-response-history.patch",
+    "patches/0014-v171-downstream-cancellation.patch",
   ]);
   assert.equal(patchManifest.patches.length, accepted.patches.length);
   for (const patch of patchManifest.patches) {
@@ -44,7 +45,7 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
       patch.file,
     );
   }
-  assert.match(accepted.verification.patchReplay, /13 project patches/);
+  assert.match(accepted.verification.patchReplay, /14 project patches/);
   assert.match(accepted.verification.patchReplay, new RegExp(accepted.patchCommit));
   assert.match(accepted.verification.patchReplay, /tree [0-9a-f]{40}$/);
   assert.match(accepted.verification.launcherReleaseBuild, /^sha256:[0-9a-f]{64}$/);

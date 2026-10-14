@@ -6,7 +6,7 @@
   "tag": "v1.7.1",
   "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
   "isolationPatchCommit": "abdc7cac7a3b6bdf6c962ea6a2d1bfff9c67f7a1",
-  "patchCommit": "841e4900830b9c18f690b6fe12bc2761dc4479be",
+  "patchCommit": "c47a056083fe92782e7aca7502d93351ac96ed4d",
   "patches": [
     {
       "file": "patches/0001-v171-app-path-isolation.patch",
@@ -72,16 +72,21 @@
       "file": "patches/0013-v171-response-history.patch",
       "sha256": "6b6cd02f6df460fec63c6ad6d6c9d2d478410f217faf966479b721f818e52c99",
       "scope": "user-approved bounded persistent Responses history, credential isolation, native continuation, Windows extended-length atomic writes, and restoration of local proxy authentication, stream failure and scoped restart safeguards"
+    },
+    {
+      "file": "patches/0014-v171-downstream-cancellation.patch",
+      "sha256": "42d0431d454c8b4fb8becb3719f19fdc62bb4628513e5cb0c919805574f5bcb4",
+      "scope": "cancel pending headers, quiet streaming and response-body reads when the downstream client disconnects; preserve normal completion and durable history"
     }
   ],
   "verification": {
-    "patchReplay": "13 project patches replayed without automatic conflict resolution; head 841e4900830b9c18f690b6fe12bc2761dc4479be; tree b21defe034d2ddaa26bcdebb07513b03b981afbf",
+    "patchReplay": "14 project patches replayed without automatic conflict resolution; head c47a056083fe92782e7aca7502d93351ac96ed4d; tree 6cd6ec61eeff6e0d2ce9f7823b75caf4f316adb1",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:ac2b65fc3e1dbec78399c5f4cb34e299275e7a01badd20a33c7fbe6e26c86a86",
+    "launcherReleaseBuild": "sha256:cf6ba9449eb68849d2c1990524ce58b42e1e5f7f94c3c117721315dd3821ee7d",
     "runtimeIsolation": "candidate only; not activated"
   }
 }

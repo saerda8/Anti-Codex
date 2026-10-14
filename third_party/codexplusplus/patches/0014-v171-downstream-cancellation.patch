@@ -1,0 +1,449 @@
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index aaca38a..6b9ef1a 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -90,6 +90,7 @@ const MAX_HELPER_CONNECTIONS: usize = 32;
+ const HELPER_HEADER_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+ const HELPER_BODY_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+ const UPSTREAM_STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
++const DOWNSTREAM_DISCONNECTED: &str = "downstream client disconnected";
+ 
+ /// 协议代理的端口写死在 `config.toml` 的 `base_url = "http://127.0.0.1:57321/v1"` 里，
+ /// 不能像普通 helper 端口那样临时换一个空闲的，否则 Codex CLI 会连到没人监听的地址。
+@@ -2003,6 +2004,33 @@ fn upstream_stream_timeout_message() -> String {
+     )
+ }
+ 
++async fn wait_for_downstream_disconnect<R>(reader: &mut R)
++where
++    R: tokio::io::AsyncRead + Unpin,
++{
++    let mut probe = [0_u8; 1];
++    loop {
++        match reader.read(&mut probe).await {
++            Ok(0) | Err(_) => return,
++            Ok(_) => {}
++        }
++    }
++}
++
++async fn await_upstream_or_downstream_disconnect<R, F>(
++    downstream_reader: &mut R,
++    upstream_future: F,
++) -> Option<F::Output>
++where
++    R: tokio::io::AsyncRead + Unpin,
++    F: Future,
++{
++    tokio::select! {
++        output = upstream_future => Some(output),
++        _ = wait_for_downstream_disconnect(downstream_reader) => None,
++    }
++}
++
+ async fn handle_protocol_proxy_connection(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+@@ -2014,55 +2042,76 @@ async fn handle_protocol_proxy_connection(
+     remote_addr_text: Option<String>,
+ ) -> anyhow::Result<()> {
+     let request_json = serde_json::from_str::<serde_json::Value>(request_body).ok();
+-    let upstream =
+-        match crate::protocol_proxy::open_responses_proxy_request_for_path_with_session_headers(
++    let open_upstream =
++        crate::protocol_proxy::open_responses_proxy_request_for_path_with_session_headers(
+             request_body,
+             request_user_agent,
+             path,
+             request_beta_features,
+             session_headers,
+-        )
+-        .await
+-        {
+-            Ok(upstream) => upstream,
+-            Err(error) => {
+-                let unsupported =
+-                    error.downcast_ref::<crate::protocol_proxy::UnsupportedEncryptedAgentContent>();
+-                let history_error =
+-                    error.downcast_ref::<crate::response_history::ResponseHistoryError>();
+-                let status = if let Some(history_error) = history_error {
+-                    response_history_status_line(history_error.http_status())
+-                } else if unsupported.is_some() {
+-                    "400 Bad Request"
+-                } else {
+-                    "502 Bad Gateway"
+-                };
+-                let body = serde_json::to_vec(
+-                    &history_error
+-                        .map(crate::response_history::ResponseHistoryError::response_body)
+-                        .or_else(|| unsupported.map(|error| error.response_body()))
+-                        .unwrap_or_else(
+-                            || serde_json::json!({"status":"failed","message":error.to_string()}),
+-                        ),
+-                )?;
+-                write_http_response(stream, status, "application/json; charset=utf-8", &body)
+-                    .await?;
+-                log_helper_proxy_failure(
+-                    "helper.protocol_proxy_failed",
+-                    method,
+-                    path,
+-                    &error.to_string(),
+-                    remote_addr_text,
+-                );
+-                stream.shutdown().await?;
+-                return Ok(());
+-            }
+-        };
++        );
++    let Some(open_result) = await_upstream_or_downstream_disconnect(stream, open_upstream).await
++    else {
++        log_helper_response(
++            "helper.protocol_proxy_downstream_disconnected",
++            method,
++            path,
++            "499 Client Closed Request",
++            remote_addr_text,
++        );
++        return Ok(());
++    };
++    let upstream = match open_result {
++        Ok(upstream) => upstream,
++        Err(error) => {
++            let unsupported =
++                error.downcast_ref::<crate::protocol_proxy::UnsupportedEncryptedAgentContent>();
++            let history_error =
++                error.downcast_ref::<crate::response_history::ResponseHistoryError>();
++            let status = if let Some(history_error) = history_error {
++                response_history_status_line(history_error.http_status())
++            } else if unsupported.is_some() {
++                "400 Bad Request"
++            } else {
++                "502 Bad Gateway"
++            };
++            let body = serde_json::to_vec(
++                &history_error
++                    .map(crate::response_history::ResponseHistoryError::response_body)
++                    .or_else(|| unsupported.map(|error| error.response_body()))
++                    .unwrap_or_else(
++                        || serde_json::json!({"status":"failed","message":error.to_string()}),
++                    ),
++            )?;
++            write_http_response(stream, status, "application/json; charset=utf-8", &body).await?;
++            log_helper_proxy_failure(
++                "helper.protocol_proxy_failed",
++                method,
++                path,
++                &error.to_string(),
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(());
++        }
++    };
+     if !upstream.is_success() {
+         let status = upstream.status();
+         let status_code = upstream.status_code;
+         let upstream_content_type = upstream.content_type.clone();
+-        let upstream_body = upstream.response.bytes().await?.to_vec();
++        let Some(upstream_body) =
++            await_upstream_or_downstream_disconnect(stream, upstream.response.bytes()).await
++        else {
++            log_helper_response(
++                "helper.protocol_proxy_downstream_disconnected",
++                method,
++                path,
++                "499 Client Closed Request",
++                remote_addr_text,
++            );
++            return Ok(());
++        };
++        let upstream_body = upstream_body?.to_vec();
+         if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
+             request_json.as_ref(),
+             status_code,
+@@ -2121,12 +2170,25 @@ async fn handle_protocol_proxy_connection(
+             }
+             let mut bytes_stream = upstream.response.bytes_stream();
+             loop {
+-                match with_upstream_stream_idle_timeout(
+-                    bytes_stream.next(),
+-                    UPSTREAM_STREAM_IDLE_TIMEOUT,
++                let Some(chunk) = await_upstream_or_downstream_disconnect(
++                    stream,
++                    with_upstream_stream_idle_timeout(
++                        bytes_stream.next(),
++                        UPSTREAM_STREAM_IDLE_TIMEOUT,
++                    ),
+                 )
+                 .await
+-                {
++                else {
++                    log_helper_response(
++                        "helper.protocol_proxy_downstream_disconnected",
++                        method,
++                        path,
++                        "499 Client Closed Request",
++                        remote_addr_text,
++                    );
++                    return Ok(());
++                };
++                match chunk {
+                     Ok(Some(Ok(bytes))) => converter.push_upstream_bytes(&bytes),
+                     Ok(Some(Err(error))) => {
+                         converter.fail(format!("Stream error: {error}"), None);
+@@ -2195,7 +2257,19 @@ async fn handle_protocol_proxy_connection(
+         stream.shutdown().await?;
+         return Ok(());
+     }
+-    let upstream_body = upstream.response.bytes().await?;
++    let Some(upstream_body) =
++        await_upstream_or_downstream_disconnect(stream, upstream.response.bytes()).await
++    else {
++        log_helper_response(
++            "helper.protocol_proxy_downstream_disconnected",
++            method,
++            path,
++            "499 Client Closed Request",
++            remote_addr_text,
++        );
++        return Ok(());
++    };
++    let upstream_body = upstream_body?;
+     if upstream.compaction {
+         // v2 远程压缩非流式路径：同样重组为单个 compaction 输出项。
+         let body = crate::protocol_proxy::wrap_non_stream_response_as_compaction(
+@@ -2760,9 +2834,15 @@ async fn forward_protocol_proxy_stream(
+         if !persist_history && !restore_parent {
+             let mut observer = crate::protocol_proxy::NativeResponsesSseObserver::passthrough();
+             loop {
+-                match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT)
+-                    .await
+-                {
++                let Some(chunk) = await_upstream_or_downstream_disconnect(
++                    stream,
++                    with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT),
++                )
++                .await
++                else {
++                    return Ok(Some(DOWNSTREAM_DISCONNECTED.to_string()));
++                };
++                match chunk {
+                     Ok(Some(Ok(bytes))) => {
+                         stream.write_all(&bytes).await?;
+                         let _ = observer.push_bytes(&bytes);
+@@ -2777,9 +2857,15 @@ async fn forward_protocol_proxy_stream(
+         let mut observer =
+             crate::protocol_proxy::NativeResponsesSseObserver::for_history_capture(persist_history);
+         loop {
+-            match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT)
+-                .await
+-            {
++            let Some(chunk) = await_upstream_or_downstream_disconnect(
++                stream,
++                with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT),
++            )
++            .await
++            else {
++                return Ok(Some(DOWNSTREAM_DISCONNECTED.to_string()));
++            };
++            match chunk {
+                 Ok(Some(Ok(bytes))) => {
+                     let forward = observer.push_bytes(&bytes);
+                     if !forward.is_empty() {
+@@ -2830,7 +2916,15 @@ async fn forward_protocol_proxy_stream(
+         .map(crate::protocol_proxy::ChatSseToResponsesConverter::with_request)
+         .unwrap_or_default();
+     loop {
+-        match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT).await {
++        let Some(chunk) = await_upstream_or_downstream_disconnect(
++            stream,
++            with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT),
++        )
++        .await
++        else {
++            return Ok(Some(DOWNSTREAM_DISCONNECTED.to_string()));
++        };
++        match chunk {
+             Ok(Some(Ok(bytes))) => {
+                 let converted = converter.push_bytes(&bytes);
+                 stream.write_all(&converted).await?;
+@@ -5283,6 +5377,179 @@ mod tests {
+         assert!(response.contains("未知后端路径"));
+     }
+ 
++    struct CancellationSettingsRestore(Option<PathBuf>);
++
++    impl Drop for CancellationSettingsRestore {
++        fn drop(&mut self) {
++            crate::paths::set_settings_path_for_tests(self.0.take());
++        }
++    }
++
++    fn install_cancellation_relay(settings_path: &Path, upstream_addr: SocketAddr) {
++        let settings = serde_json::json!({
++            "relayProfilesEnabled": true,
++            "relayProfiles": [{
++                "id": "cancellation-fixture",
++                "name": "Cancellation Fixture",
++                "baseUrl": format!("http://{upstream_addr}/v1"),
++                "upstreamBaseUrl": format!("http://{upstream_addr}/v1"),
++                "apiKey": "fixture-key",
++                "protocol": "responses",
++                "relayMode": "pureApi"
++            }],
++            "activeRelayId": "cancellation-fixture"
++        });
++        std::fs::write(settings_path, serde_json::to_vec_pretty(&settings).unwrap()).unwrap();
++    }
++
++    async fn cancellation_helper_client(
++        streaming: bool,
++    ) -> (tokio::net::TcpStream, tokio::task::JoinHandle<()>) {
++        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let address = listener.local_addr().unwrap();
++        let helper = tokio::spawn(async move {
++            let (stream, remote_addr) = listener.accept().await.unwrap();
++            handle_helper_connection(stream, Some(remote_addr))
++                .await
++                .unwrap();
++        });
++        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
++        let body = serde_json::to_vec(&serde_json::json!({
++            "model": "fixture-model",
++            "input": "probe",
++            "stream": streaming
++        }))
++        .unwrap();
++        let headers = format!(
++            "POST /v1/responses HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++            body.len()
++        );
++        client.write_all(headers.as_bytes()).await.unwrap();
++        client.write_all(&body).await.unwrap();
++        (client, helper)
++    }
++
++    async fn wait_for_helper_response_headers(client: &mut tokio::net::TcpStream) {
++        let mut response = Vec::new();
++        let mut byte = [0_u8; 1];
++        while !response.ends_with(b"\r\n\r\n") {
++            let read = client.read(&mut byte).await.unwrap();
++            assert!(read > 0, "helper closed before writing response headers");
++            response.extend_from_slice(&byte[..read]);
++        }
++        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
++    }
++
++    async fn wait_for_cancelled_tasks(
++        helper: tokio::task::JoinHandle<()>,
++        upstream: tokio::task::JoinHandle<usize>,
++    ) {
++        tokio::time::timeout(std::time::Duration::from_secs(2), helper)
++            .await
++            .expect("helper must stop promptly after downstream disconnect")
++            .unwrap();
++        let upstream_read = tokio::time::timeout(std::time::Duration::from_secs(2), upstream)
++            .await
++            .expect("dropping the upstream future must release its socket")
++            .unwrap();
++        assert_eq!(upstream_read, 0, "upstream socket must observe EOF");
++    }
++
++    #[tokio::test]
++    async fn downstream_disconnect_cancels_upstream_while_waiting_for_response_headers() {
++        let _settings_guard = crate::paths::settings_path_test_guard();
++        let temp = tempfile::tempdir().unwrap();
++        let settings_path = temp.path().join("settings.json");
++        let _restore = CancellationSettingsRestore(crate::paths::set_settings_path_for_tests(
++            Some(settings_path.clone()),
++        ));
++        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        install_cancellation_relay(&settings_path, upstream_listener.local_addr().unwrap());
++        let (request_seen_tx, request_seen_rx) = tokio::sync::oneshot::channel();
++        let upstream = tokio::spawn(async move {
++            let (mut socket, _) = upstream_listener.accept().await.unwrap();
++            read_http_request(&mut socket).await.unwrap();
++            request_seen_tx.send(()).unwrap();
++            let mut probe = [0_u8; 1];
++            socket.read(&mut probe).await.unwrap()
++        });
++        let (client, helper) = cancellation_helper_client(true).await;
++        tokio::time::timeout(std::time::Duration::from_secs(2), request_seen_rx)
++            .await
++            .expect("upstream must receive the request")
++            .unwrap();
++        drop(client);
++
++        wait_for_cancelled_tasks(helper, upstream).await;
++    }
++
++    #[tokio::test]
++    async fn downstream_disconnect_cancels_silent_upstream_stream_after_response_headers() {
++        let _settings_guard = crate::paths::settings_path_test_guard();
++        let temp = tempfile::tempdir().unwrap();
++        let settings_path = temp.path().join("settings.json");
++        let _restore = CancellationSettingsRestore(crate::paths::set_settings_path_for_tests(
++            Some(settings_path.clone()),
++        ));
++        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        install_cancellation_relay(&settings_path, upstream_listener.local_addr().unwrap());
++        let upstream = tokio::spawn(async move {
++            let (mut socket, _) = upstream_listener.accept().await.unwrap();
++            read_http_request(&mut socket).await.unwrap();
++            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n").await.unwrap();
++            let mut probe = [0_u8; 1];
++            socket.read(&mut probe).await.unwrap()
++        });
++        let (mut client, helper) = cancellation_helper_client(true).await;
++        tokio::time::timeout(
++            std::time::Duration::from_secs(2),
++            wait_for_helper_response_headers(&mut client),
++        )
++        .await
++        .expect("helper must forward upstream response headers");
++        drop(client);
++
++        wait_for_cancelled_tasks(helper, upstream).await;
++    }
++
++    #[tokio::test]
++    async fn downstream_disconnect_cancels_silent_non_streaming_response_body() {
++        let _settings_guard = crate::paths::settings_path_test_guard();
++        let temp = tempfile::tempdir().unwrap();
++        let settings_path = temp.path().join("settings.json");
++        let _restore = CancellationSettingsRestore(crate::paths::set_settings_path_for_tests(
++            Some(settings_path.clone()),
++        ));
++        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        install_cancellation_relay(&settings_path, upstream_listener.local_addr().unwrap());
++        let (body_started_tx, body_started_rx) = tokio::sync::oneshot::channel();
++        let upstream = tokio::spawn(async move {
++            let (mut socket, _) = upstream_listener.accept().await.unwrap();
++            read_http_request(&mut socket).await.unwrap();
++            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n5\r\nhello\r\n").await.unwrap();
++            body_started_tx.send(()).unwrap();
++            let mut probe = [0_u8; 1];
++            socket.read(&mut probe).await.unwrap()
++        });
++        let (client, helper) = cancellation_helper_client(false).await;
++        tokio::time::timeout(std::time::Duration::from_secs(2), body_started_rx)
++            .await
++            .expect("upstream must start the non-streaming body")
++            .unwrap();
++        tokio::task::yield_now().await;
++        drop(client);
++
++        wait_for_cancelled_tasks(helper, upstream).await;
++    }
++
+     #[tokio::test]
+     async fn streamed_payment_required_becomes_terminal_quota_event() {
+         let _settings_guard = crate::paths::settings_path_test_guard();

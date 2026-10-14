@@ -16,10 +16,19 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { readCodexPlusPlusPatchManifest } from "./codexplusplus-patch-manifest.helper.mjs";
+import {
+  readCodexPlusPlusAcceptedSource,
+  readCodexPlusPlusPatchManifest,
+} from "./codexplusplus-patch-manifest.helper.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const codexPlusPlusPatches = readCodexPlusPlusPatchManifest(root);
+const codexPlusPlusSource = readCodexPlusPlusAcceptedSource(root, codexPlusPlusPatches.metadata);
+const acceptedProtocolProxySource = codexPlusPlusSource.read("crates/codex-plus-core/src/protocol_proxy.rs");
+const acceptedProtocolProxyTests = codexPlusPlusSource.read("crates/codex-plus-core/tests/protocol_proxy.rs");
+const acceptedLauncherSource = codexPlusPlusSource.read("crates/codex-plus-core/src/launcher.rs");
+const acceptedLoopbackHttpSource = codexPlusPlusSource.read("crates/codex-plus-core/src/loopback_http.rs");
+const acceptedNativeInspectorSource = codexPlusPlusSource.read("assets/native-browser/inspect-service.mjs");
 const installerSource = resolve(root, "scripts", "install-codexplusplus-component.ps1");
 const trustedBinary = Buffer.from("trusted CodexPlusPlus release binary\n", "utf8");
 const candidateInputFiles = {
@@ -761,20 +770,15 @@ test("Anti-Codex routing patch follows native model slots without overriding ord
 });
 
 test("native compaction routing consumes the current Codex HTTP metadata header", () => {
-  const patch = codexPlusPlusPatches.text;
-  assert.match(patch, /x-codex-turn-metadata/);
-  assert.match(patch, /request_turn_metadata/);
-  assert.match(patch, /header_value_from_headers\(\s*&request_headers,[\s\S]*CODEX_TURN_METADATA_KEY/);
-  assert.match(patch, /header_marked_compaction_uses_current_third_party_selection/);
-  assert.match(patch, /ordinary_turn_header_does_not_follow_a_different_live_selection/);
+  assert.match(acceptedNativeInspectorSource, /x-codex-turn-metadata/);
+  assert.match(acceptedNativeInspectorSource, /codex_browser_use_agent_request_header/);
+  assert.match(acceptedProtocolProxySource, /pub const CODEX_TURN_METADATA_KEY: &str = "x-codex-turn-metadata"/);
   assert.match(
-    patch,
-    /try_handle_cancel_aware_protocol_proxy_stream\([\s\S]*request_turn_metadata: Option<&str>[\s\S]*\+\s+request_turn_metadata,/,
+    acceptedProtocolProxySource,
+    /fn request_is_codex_compaction\([\s\S]{0,180}turn_metadata\.is_some_and\(serialized_metadata_marks_codex_compaction\)/,
   );
-  assert.match(
-    patch,
-    /open_cancel_aware_loopback_responses_proxy_request\([\s\S]*turn_metadata: Option<&str>/,
-  );
+  assert.match(acceptedProtocolProxySource, /fn header_marked_compaction_uses_current_third_party_selection/);
+  assert.match(acceptedProtocolProxySource, /fn ordinary_turn_header_does_not_follow_a_different_live_selection/);
 });
 
 test("native compaction routing follows the current task model without restart", () => {
@@ -821,22 +825,55 @@ test("structured patch guidance tells chat providers to avoid Windows shell wrap
 });
 
 test("late reasoning patch preserves one active streamed output item", () => {
-  const patch = codexPlusPlusPatches.text;
-  const hunk = patchWindow("if self.text.added");
-  assert.match(patch, /if self\.text\.added/);
-  assert.match(patch, /chat_sse_does_not_interleave_late_reasoning_with_started_text/);
-  assert.match(patch, /matches\("event: response\.output_item\.added"\)/);
-  assert.doesNotMatch(hunk, /previous_response_id|session reset|retry policy|task control/i);
+  assert.match(
+    acceptedProtocolProxySource,
+    /fn push_reasoning_delta_into\([\s\S]{0,180}if self\.text\.added \{\s*return;/,
+  );
+  const testStart = acceptedProtocolProxyTests.indexOf(
+    "fn chat_sse_does_not_interleave_late_reasoning_with_started_text",
+  );
+  const testEnd = acceptedProtocolProxyTests.indexOf("\n#[test]", testStart + 1);
+  const focusedTest = acceptedProtocolProxyTests.slice(testStart, testEnd);
+  assert.ok(testStart >= 0 && testEnd > testStart);
+  assert.match(focusedTest, /matches\("event: response\.output_item\.added"\)[\s\S]*\.count\(\),\s*1/);
+  assert.match(focusedTest, /Starting work\. Continuing now\./);
+  assert.match(focusedTest, /assert!\(!converted\.contains\("This arrived after visible text\."\)\)/);
 });
 
 test("loopback cancellation transport preserves graceful normal completion", () => {
-  const patch = codexPlusPlusPatches.text;
-  const hunk = patchWindow("wait_for_downstream_disconnect");
-  assert.match(patch, /wait_for_downstream_disconnect/);
-  assert.match(patch, /pool_max_idle_per_host\(0\)/);
-  assert.match(patch, /cancel_aware_loopback/);
-  assert.doesNotMatch(hunk, /set_zero_linger/);
-  assert.doesNotMatch(hunk, /"abortive_loopback"/);
+  assert.match(acceptedLoopbackHttpSource, /pool_max_idle_per_host\(0\)/);
+  assert.match(acceptedProtocolProxySource, /open_cancel_aware_loopback_responses_proxy_request/);
+  assert.match(acceptedProtocolProxySource, /open_cancel_aware_loopback_chat_completions_proxy_request/);
+  assert.match(
+    acceptedProtocolProxyTests,
+    /open_cancel_aware_loopback_responses_proxy_request\([\s\S]{0,500}assert_eq!\(upstream\.status_code, 200\)/,
+  );
+  const forwardStart = acceptedLauncherSource.indexOf("async fn forward_protocol_proxy_stream");
+  const forwardEnd = acceptedLauncherSource.indexOf("\nfn persist_response_history", forwardStart);
+  const productionForwarder = acceptedLauncherSource.slice(forwardStart, forwardEnd);
+  assert.ok(forwardStart >= 0 && forwardEnd > forwardStart);
+  const raceStart = acceptedLauncherSource.indexOf("async fn await_upstream_or_downstream_disconnect");
+  const raceEnd = acceptedLauncherSource.indexOf("\nasync fn handle_protocol_proxy_connection", raceStart);
+  const cancellationRace = acceptedLauncherSource.slice(raceStart, raceEnd);
+  assert.ok(raceStart >= 0 && raceEnd > raceStart);
+  assert.ok(
+    /tokio::select!/.test(cancellationRace) && /wait_for_downstream_disconnect/.test(cancellationRace),
+    "the shared upstream wait must race upstream reads with downstream disconnects",
+  );
+  assert.equal(
+    (productionForwarder.match(/await_upstream_or_downstream_disconnect\(/g) ?? []).length,
+    3,
+    "native passthrough, native history and Chat forwarding must all use the cancellation race",
+  );
+  assert.ok(acceptedLauncherSource.includes("await_upstream_or_downstream_disconnect(stream, open_upstream)"));
+  assert.match(acceptedLauncherSource, /async fn successful_native_passthrough_and_chat_completion_are_preserved/);
+  assert.match(acceptedLauncherSource, /async fn chat_eof_and_error_events_are_not_completed_or_replayed/);
+  assert.match(
+    acceptedLauncherSource,
+    /async fn native_responses_clean_http_eof_without_completed_is_diagnosed_without_replay/,
+  );
+  const transportSource = `${acceptedLoopbackHttpSource}\n${acceptedProtocolProxySource}\n${acceptedLauncherSource}`;
+  assert.doesNotMatch(transportSource, /set_zero_linger|"abortive_loopback"/);
 });
 
 test("update check reports CodexPlusPlus drift as part of the same release", () => {
