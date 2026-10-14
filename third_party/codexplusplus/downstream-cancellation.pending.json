@@ -1,5 +1,5 @@
 {
-  "status": "candidate_validated_install_pending",
+  "status": "installed_and_live_verified",
   "component": "CodexPlusPlus",
   "version": "1.7.1",
   "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
@@ -17,6 +17,9 @@
     "rustTests": "236 passed; zero failures",
     "windowsBuild": "passed; binary sha256 cf6ba9449eb68849d2c1990524ce58b42e1e5f7f94c3c117721315dd3821ee7d",
     "windowsBlackBoxes": "26 passed: history 19, authentication 2, cancellation and normal completion 5",
-    "installed": false
+    "sourcePreflight": "1200 passed; zero failures",
+    "installed": true,
+    "runtimeTransaction": "20261014T103847181Z-496c4768c9b84ae89b39558d826b0689",
+    "liveVerification": "same-model and cross-model bare ID continuation passed with two requests each; native Gemini image and same-thread Claude command execution passed"
   }
 }

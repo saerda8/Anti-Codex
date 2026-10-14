@@ -1,5 +1,5 @@
 {
-  "status": "accepted_candidate_pending_source_gate_and_installation",
+  "status": "superseded_by_downstream_cancellation_candidate",
   "component": "CodexPlusPlus",
   "version": "1.7.1",
   "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
