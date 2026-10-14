@@ -16,15 +16,25 @@ const patchManifest = readCodexPlusPlusPatchManifest(root);
 test("current promotion targets the reviewed upstream tag and manifest patch set", () => {
   const accepted = patchManifest.metadata;
 
-  assert.equal(accepted.version, "1.5.0");
-  assert.equal(accepted.tag, "v1.5.0");
-  assert.equal(accepted.upstreamCommit, "23ed5515e69431794cbef363a886d974abcc6179");
-  assert.match(accepted.patchCommit, /^[0-9a-f]{40}$/);
-  assert.equal(accepted.patches.length, 1);
-  assert.equal(
-    accepted.patches[0].file,
-    "patches/0001-isolation-scope-Anti-Codex-companion-runtime.patch",
-  );
+  assert.equal(accepted.version, "1.7.1");
+  assert.equal(accepted.tag, "v1.7.1");
+  assert.equal(accepted.upstreamCommit, "5fe25892eb312abbc091512565a8dc2621a8c999");
+  assert.equal(accepted.patchCommit, "841e4900830b9c18f690b6fe12bc2761dc4479be");
+  assert.deepEqual(accepted.patches.map(({ file }) => file), [
+    "patches/0001-v171-app-path-isolation.patch",
+    "patches/0002-v171-state-dir-isolation.patch",
+    "patches/0003-v171-launcher-isolation-check.patch",
+    "patches/0004-v171-bridge-quota-gate.patch",
+    "patches/0005-v171-protocol-compatibility-merge.patch",
+    "patches/0006-v171-isolation-blockers.patch",
+    "patches/0007-v171-final-isolation-and-session-headers.patch",
+    "patches/0008-v171-rustfmt-normalization.patch",
+    "patches/0009-v171-isolation-audit-contract-marker.patch",
+    "patches/0010-v171-native-contracts.patch",
+    "patches/0011-v171-bytes-dependency.patch",
+    "patches/0012-v171-lockfile-bytes.patch",
+    "patches/0013-v171-response-history.patch",
+  ]);
   assert.equal(patchManifest.patches.length, accepted.patches.length);
   for (const patch of patchManifest.patches) {
     assert.match(patch.file, /^patches[\\/]/);
@@ -34,7 +44,9 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
       patch.file,
     );
   }
-  assert.match(accepted.verification.patchReplay, /v1\.5|cumulative|patch/i);
+  assert.match(accepted.verification.patchReplay, /13 project patches/);
+  assert.match(accepted.verification.patchReplay, new RegExp(accepted.patchCommit));
+  assert.match(accepted.verification.patchReplay, /tree [0-9a-f]{40}$/);
   assert.match(accepted.verification.launcherReleaseBuild, /^sha256:[0-9a-f]{64}$/);
 });
 

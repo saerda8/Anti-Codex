@@ -38,6 +38,7 @@ const candidateBuildCommands = [
   responseHistoryBuildCommand,
   "test --locked -p codex-plus-core --lib response_history -- --test-threads=1",
   "test --locked -p codex-plus-core --lib proxy_stream_tests -- --test-threads=1",
+    "test --locked -p codex-plus-core --lib launcher::tests:: -- --test-threads=1",
   "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
   "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
   "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher",
@@ -181,7 +182,7 @@ function writePreparedCandidate(
       lockedDependencies: true,
       commands: metadata.patches.some((patch) => patch?.file === responseHistoryPatchFile)
         ? candidateBuildCommands
-        : candidateBuildCommands.filter((command) => !command.includes("response_history") && !command.includes("proxy_stream_tests")),
+        : candidateBuildCommands.filter((command) => !command.includes("response_history") && !command.includes("proxy_stream_tests") && !command.includes("launcher::tests::")),
     },
   });
 }

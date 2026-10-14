@@ -162,6 +162,7 @@ if ($SourceBinary) {
                     $expectedBuildCommands += "test --locked -p codex-plus-core --test response_history -- --test-threads=2"
                     $expectedBuildCommands += "test --locked -p codex-plus-core --lib response_history -- --test-threads=1"
                     $expectedBuildCommands += "test --locked -p codex-plus-core --lib proxy_stream_tests -- --test-threads=1"
+                    $expectedBuildCommands += "test --locked -p codex-plus-core --lib launcher::tests:: -- --test-threads=1"
                 }
                 $expectedBuildCommands += @(
                     "test --locked -p codex-plus-core --test watcher -- --test-threads=2",

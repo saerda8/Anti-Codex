@@ -622,7 +622,9 @@ function Test-TranslatorRegression {
         return [pscustomobject]@{ ok = $false; testFiles = 0 }
     }
     $translatorTimeout = [Math]::Max(600, $TranslatorTimeoutSec)
-    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=2") + $testFiles) -TimeoutSec $translatorTimeout
+    New-Item -ItemType Directory -Path $ReportRoot -Force | Out-Null
+    $regressionLog = Join-Path $ReportRoot "translator-regression.tap.log"
+    $result = Invoke-SourceProcess -Name "translator source regression" -FilePath $node -Arguments (@("--test", "--test-concurrency=2", "--test-reporter=tap", "--test-reporter-destination=stdout", "--test-reporter=tap", "--test-reporter-destination=$regressionLog") + $testFiles) -TimeoutSec $translatorTimeout
     if (-not $result.ok) { Add-Failure "Translator source regression failed" }
     $summary = ($result.stdoutTail + $result.stderrTail) -join "`n"
     return [pscustomobject]@{
@@ -631,6 +633,7 @@ function Test-TranslatorRegression {
         timedOut = $result.timedOut
         durationMs = $result.durationMs
         testFiles = $testFiles.Count
+        log = $regressionLog
         tail = $result.stdoutTail
         tests = ([regex]::Match($summary, 'tests\s+(\d+)').Groups[1].Value)
         pass = ([regex]::Match($summary, 'pass\s+(\d+)').Groups[1].Value)

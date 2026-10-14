@@ -1,8 +1,124 @@
+diff --git a/apps/codex-plus-manager/src-tauri/src/commands.rs b/apps/codex-plus-manager/src-tauri/src/commands.rs
+index b4ae071..0b420a4 100644
+--- a/apps/codex-plus-manager/src-tauri/src/commands.rs
++++ b/apps/codex-plus-manager/src-tauri/src/commands.rs
+@@ -889,16 +889,42 @@ fn validate_isolated_launch_app_path(request: &LaunchRequest) -> anyhow::Result<
+     Ok((!raw.is_empty()).then(|| PathBuf::from(raw)))
+ }
+ 
++#[derive(Debug, PartialEq, Eq)]
++struct RestartTargets {
++    app_path: Option<PathBuf>,
++    launcher_path: PathBuf,
++}
++
++fn resolve_restart_targets<Validate, ResolveLauncher>(
++    validate_app_path: Validate,
++    resolve_launcher_path: ResolveLauncher,
++) -> anyhow::Result<RestartTargets>
++where
++    Validate: FnOnce() -> anyhow::Result<Option<PathBuf>>,
++    ResolveLauncher: FnOnce() -> PathBuf,
++{
++    let app_path = validate_app_path()?;
++    Ok(RestartTargets {
++        app_path,
++        launcher_path: resolve_launcher_path(),
++    })
++}
++
+ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+     let _launch_guard = match try_acquire_launch_guard() {
+         Ok(guard) => guard,
+         Err(message) => return failed(message, json!({})),
+     };
+     let request = normalize_launch_request(request);
+-    let target_app_path = match validate_isolated_launch_app_path(&request) {
+-        Ok(path) => path,
++    let restart_targets = match resolve_restart_targets(
++        || validate_isolated_launch_app_path(&request),
++        || codex_plus_core::install::companion_binary_path(SILENT_BINARY),
++    ) {
++        Ok(targets) => targets,
+         Err(error) => return failed(&error.to_string(), json!({})),
+     };
++    let target_app_path = restart_targets.app_path;
++    let launcher_path = restart_targets.launcher_path;
+     // macOS scopes by debug port; other platforms detect all Codex desktop processes.
+     let app_running = target_app_path.as_deref().map_or_else(
+         || {
+@@ -938,9 +964,9 @@ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+         Err(message) => return failed(&message, json!({})),
+     };
+     #[cfg(windows)]
+-    let launchers = match codex_plus_core::watcher::LauncherExitSnapshot::capture_for_path(
+-        target_app_path.as_deref(),
+-    ) {
++    let launchers = match codex_plus_core::watcher::LauncherExitSnapshot::capture_for_path(Some(
++        &launcher_path,
++    )) {
+         Ok(snapshot) => snapshot,
+         Err(error) => {
+             return failed(
+@@ -1011,11 +1037,7 @@ fn restart_codex_plus_blocking(request: LaunchRequest) -> CommandResult<Value> {
+                 forced_launcher_process_ids.set(outcome.forced_process_ids);
+             }
+             #[cfg(not(windows))]
+-            if let Some(path) = target_app_path.as_deref() {
+-                codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(path);
+-            } else {
+-                codex_plus_core::watcher::stop_launcher_processes_and_wait();
+-            }
++            codex_plus_core::watcher::stop_launcher_processes_and_wait_for_path(&launcher_path);
+             Ok(())
+         },
+     ) {
+@@ -7747,6 +7769,40 @@ base_url = "https://example.invalid/v1"
+         );
+     }
+ 
++    #[test]
++    fn invalid_restart_target_does_not_resolve_a_launcher() {
++        use std::sync::atomic::{AtomicUsize, Ordering};
++
++        let resolutions = AtomicUsize::new(0);
++        let result = resolve_restart_targets(
++            || anyhow::bail!("not the configured copied app"),
++            || {
++                resolutions.fetch_add(1, Ordering::SeqCst);
++                PathBuf::from("must-not-be-resolved")
++            },
++        );
++
++        assert!(result.is_err());
++        assert_eq!(resolutions.load(Ordering::SeqCst), 0);
++    }
++
++    #[test]
++    fn restart_targets_use_the_companion_launcher_and_scoped_app() {
++        let expected_app = PathBuf::from(r"C:\Anti-Codex\app");
++
++        let targets = resolve_restart_targets(
++            || Ok(Some(expected_app.clone())),
++            || codex_plus_core::install::companion_binary_path(SILENT_BINARY),
++        )
++        .unwrap();
++
++        assert_eq!(
++            targets.launcher_path,
++            codex_plus_core::install::companion_binary_path(SILENT_BINARY)
++        );
++        assert_eq!(targets.app_path, Some(expected_app));
++    }
++
+     #[test]
+     fn restart_stops_codex_then_waits_for_native_cleanup_before_launcher() {
+         let events = std::cell::RefCell::new(Vec::new());
 diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
-index 531dd49..145d196 100644
+index 531dd49..aaca38a 100644
 --- a/crates/codex-plus-core/src/launcher.rs
 +++ b/crates/codex-plus-core/src/launcher.rs
-@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
+@@ -11,10 +11,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
  use anyhow::Context;
  use async_trait::async_trait;
  use futures_util::StreamExt;
@@ -10,8 +126,129 @@ index 531dd49..145d196 100644
 +use serde_json::{Value, json};
  use tokio::io::{AsyncReadExt, AsyncWriteExt};
  use tokio::process::{Child, Command};
- use tokio::sync::Mutex;
-@@ -1438,6 +1438,7 @@ async fn handle_helper_connection(
+-use tokio::sync::Mutex;
++use tokio::sync::{Mutex, Semaphore};
+ 
+ use crate::settings::{BackendSettings, SettingsStore, normalize_codex_extra_args};
+ use crate::status::{LaunchStatus, StatusStore};
+@@ -85,6 +85,11 @@ impl BridgeReinjectBackoff {
+ }
+ const MACOS_DEBUG_TAKEOVER_WAIT_MS: u64 = 5_000;
+ const MACOS_DEBUG_TAKEOVER_INTERVAL_MS: u64 = 100;
++const LOCAL_HELPER_BIND_HOST: &str = "127.0.0.1";
++const MAX_HELPER_CONNECTIONS: usize = 32;
++const HELPER_HEADER_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
++const HELPER_BODY_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
++const UPSTREAM_STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+ 
+ /// 协议代理的端口写死在 `config.toml` 的 `base_url = "http://127.0.0.1:57321/v1"` 里，
+ /// 不能像普通 helper 端口那样临时换一个空闲的，否则 Codex CLI 会连到没人监听的地址。
+@@ -859,12 +864,8 @@ impl DefaultLaunchHooks {
+     }
+ }
+ 
+-fn helper_bind_host() -> String {
+-    std::env::var("CODEX_PLUS_HELPER_BIND")
+-        .ok()
+-        .map(|value| value.trim().to_string())
+-        .filter(|value| !value.is_empty())
+-        .unwrap_or_else(|| "127.0.0.1".to_string())
++fn helper_connection_limiter() -> Arc<Semaphore> {
++    Arc::new(Semaphore::new(MAX_HELPER_CONNECTIONS))
+ }
+ 
+ #[async_trait(?Send)]
+@@ -976,8 +977,8 @@ impl LaunchHooks for DefaultLaunchHooks {
+     }
+ 
+     async fn start_helper(&self, helper_port: u16) -> anyhow::Result<()> {
+-        let bind_host = helper_bind_host();
+-        let listener = tokio::net::TcpListener::bind((bind_host.as_str(), helper_port))
++        let bind_host = LOCAL_HELPER_BIND_HOST;
++        let listener = tokio::net::TcpListener::bind((bind_host, helper_port))
+             .await
+             .with_context(|| {
+                 format!("failed to bind helper runtime on {bind_host}:{helper_port}")
+@@ -991,15 +992,34 @@ impl LaunchHooks for DefaultLaunchHooks {
+             }),
+         );
+         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
++        let connection_limiter = helper_connection_limiter();
+         let task = tokio::spawn(async move {
+             loop {
+                 tokio::select! {
+                     _ = &mut shutdown_rx => break,
+                     accepted = listener.accept() => {
+-                        if let Ok((stream, addr)) = accepted {
+-                            tokio::spawn(async move {
+-                                let _ = handle_helper_connection(stream, Some(addr)).await;
+-                            });
++                        if let Ok((mut stream, addr)) = accepted {
++                            match Arc::clone(&connection_limiter).try_acquire_owned() {
++                                Ok(permit) => {
++                                    tokio::spawn(async move {
++                                        let _permit = permit;
++                                        let _ = handle_helper_connection(stream, Some(addr)).await;
++                                    });
++                                }
++                                Err(_) => {
++                                    tokio::spawn(async move {
++                                        let body = br#"{"status":"failed","message":"helper connection limit reached"}"#;
++                                        let _ = write_http_response(
++                                            &mut stream,
++                                            "503 Service Unavailable",
++                                            "application/json; charset=utf-8",
++                                            body,
++                                        )
++                                        .await;
++                                        let _ = stream.shutdown().await;
++                                    });
++                                }
++                            }
+                         }
+                     }
+                 }
+@@ -1410,34 +1430,32 @@ impl LaunchHooks for DefaultLaunchHooks {
+ }
+ 
+ async fn handle_helper_connection(
++    stream: tokio::net::TcpStream,
++    remote_addr: Option<SocketAddr>,
++) -> anyhow::Result<()> {
++    handle_helper_connection_with_proxy_token(stream, remote_addr, None).await
++}
++
++async fn handle_helper_connection_with_proxy_token(
+     mut stream: tokio::net::TcpStream,
+     remote_addr: Option<SocketAddr>,
++    proxy_token_override: Option<&str>,
+ ) -> anyhow::Result<()> {
+-    let request = match read_http_request(&mut stream).await {
+-        Ok(request) => request,
++    let request_head = match read_http_request_headers(&mut stream).await {
++        Ok(request_head) => request_head,
+         Err(error) => {
+-            let body = serde_json::to_vec(&serde_json::json!({
+-                "status": "failed",
+-                "message": error.to_string()
+-            }))?;
+-            write_http_response(
+-                &mut stream,
+-                error.status(),
+-                "application/json; charset=utf-8",
+-                &body,
+-            )
+-            .await?;
+-            stream.shutdown().await?;
++            reject_http_request(&mut stream, &error).await?;
+             return Ok(());
+         }
+     };
+-    let request_headers = String::from_utf8_lossy(&request.headers);
++    let request_headers = String::from_utf8_lossy(&request_head.headers).into_owned();
+     let request_line = request_headers.lines().next().unwrap_or_default();
+     let mut parts = request_line.split_whitespace();
+     let method = parts.next().unwrap_or_default();
      let raw_path = parts.next().unwrap_or_default();
      let path = raw_path.split('?').next().unwrap_or(raw_path);
      let request_user_agent = header_value_from_headers(&request_headers, "user-agent");
@@ -19,7 +256,55 @@ index 531dd49..145d196 100644
      let request_beta_features =
          header_value_from_headers(&request_headers, "x-codex-beta-features");
      let request_session_id = header_value_from_headers(&request_headers, "session-id");
-@@ -1571,6 +1572,7 @@ async fn handle_helper_connection(
+@@ -1448,6 +1466,47 @@ async fn handle_helper_connection(
+     let request_content_encoding = header_value_from_headers(&request_headers, "content-encoding");
+     let remote_addr_text = remote_addr.map(|addr| addr.to_string());
+ 
++    if (crate::paths::isolated_instance_mode() || proxy_token_override.is_some())
++        && is_local_proxy_path(path)
++    {
++        if method == "OPTIONS" {
++            write_http_response(&mut stream, "204 No Content", "text/plain", &[]).await?;
++            stream.shutdown().await?;
++            return Ok(());
++        }
++        let expected_token = match proxy_token_override {
++            Some(token) => token.to_string(),
++            None => local_proxy_bearer_token()?,
++        };
++        if let Err(status) = authorize_local_proxy_request(&request_headers, &expected_token) {
++            let body = serde_json::to_vec(&serde_json::json!({
++                "status": "failed",
++                "message": if status == "401 Unauthorized" {
++                    "local proxy bearer token is required"
++                } else {
++                    "local proxy bearer token is invalid"
++                }
++            }))?;
++            write_http_response(
++                &mut stream,
++                status,
++                "application/json; charset=utf-8",
++                &body,
++            )
++            .await?;
++            stream.shutdown().await?;
++            return Ok(());
++        }
++    }
++
++    let request = match read_http_request_body(&mut stream, request_head).await {
++        Ok(request) => request,
++        Err(error) => {
++            reject_http_request(&mut stream, &error).await?;
++            return Ok(());
++        }
++    };
++
+     let _ = crate::diagnostic_log::append_diagnostic_log(
+         "helper.request",
+         serde_json::json!({
+@@ -1571,6 +1630,7 @@ async fn handle_helper_connection(
                  session_id: request_session_id.as_deref(),
                  thread_id: request_thread_id.as_deref(),
                  opencode_session: request_opencode_session.as_deref(),
@@ -27,7 +312,57 @@ index 531dd49..145d196 100644
              },
              method,
              path,
-@@ -1932,14 +1934,19 @@ async fn handle_protocol_proxy_connection(
+@@ -1704,6 +1764,25 @@ async fn handle_helper_connection(
+     Ok(())
+ }
+ 
++async fn reject_http_request(
++    stream: &mut tokio::net::TcpStream,
++    error: &HttpRequestReadError,
++) -> anyhow::Result<()> {
++    let body = serde_json::to_vec(&serde_json::json!({
++        "status": "failed",
++        "message": error.to_string()
++    }))?;
++    write_http_response(
++        stream,
++        error.status(),
++        "application/json; charset=utf-8",
++        &body,
++    )
++    .await?;
++    stream.shutdown().await?;
++    Ok(())
++}
++
+ fn decode_protocol_proxy_request_body(
+     body: &[u8],
+     content_encoding: Option<&str>,
+@@ -1907,6 +1986,23 @@ async fn handle_models_proxy_connection(
+     stream.shutdown().await?;
+     Ok(())
+ }
++async fn with_upstream_stream_idle_timeout<F>(
++    future: F,
++    idle_timeout: std::time::Duration,
++) -> Result<F::Output, tokio::time::error::Elapsed>
++where
++    F: Future,
++{
++    tokio::time::timeout(idle_timeout, future).await
++}
++
++fn upstream_stream_timeout_message() -> String {
++    format!(
++        "Upstream stream timed out after {} seconds without data",
++        UPSTREAM_STREAM_IDLE_TIMEOUT.as_secs()
++    )
++}
++
+ async fn handle_protocol_proxy_connection(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &str,
+@@ -1932,14 +2028,19 @@ async fn handle_protocol_proxy_connection(
              Err(error) => {
                  let unsupported =
                      error.downcast_ref::<crate::protocol_proxy::UnsupportedEncryptedAgentContent>();
@@ -50,7 +385,38 @@ index 531dd49..145d196 100644
                          .unwrap_or_else(
                              || serde_json::json!({"status":"failed","message":error.to_string()}),
                          ),
-@@ -1978,6 +1985,11 @@ async fn handle_protocol_proxy_connection(
+@@ -1959,10 +2060,29 @@ async fn handle_protocol_proxy_connection(
+         };
+     if !upstream.is_success() {
+         let status = upstream.status();
++        let status_code = upstream.status_code;
+         let upstream_content_type = upstream.content_type.clone();
+         let upstream_body = upstream.response.bytes().await?.to_vec();
++        if let Some(body) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
++            request_json.as_ref(),
++            status_code,
++            &upstream_content_type,
++            &upstream_body,
++        ) {
++            write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
++            stream.write_all(&body).await?;
++            log_helper_response(
++                "helper.protocol_proxy_upstream_error",
++                method,
++                path,
++                &status,
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(());
++        }
+         let error = crate::protocol_proxy::responses_error_from_upstream(
+-            upstream.status_code,
++            status_code,
+             &upstream_content_type,
+             &upstream_body,
+         );
+@@ -1978,6 +2098,11 @@ async fn handle_protocol_proxy_connection(
          stream.shutdown().await?;
          return Ok(());
      }
@@ -62,7 +428,45 @@ index 531dd49..145d196 100644
      if upstream.is_stream {
          write_http_stream_headers(stream, "200 OK", "text/event-stream; charset=utf-8").await?;
          if upstream.compaction {
-@@ -2020,7 +2032,8 @@ async fn handle_protocol_proxy_connection(
+@@ -1995,13 +2120,33 @@ async fn handle_protocol_proxy_connection(
+                 converter = converter.with_chat_upstream();
+             }
+             let mut bytes_stream = upstream.response.bytes_stream();
+-            while let Some(chunk) = bytes_stream.next().await {
+-                match chunk {
+-                    Ok(bytes) => converter.push_upstream_bytes(&bytes),
+-                    Err(error) => {
++            loop {
++                match with_upstream_stream_idle_timeout(
++                    bytes_stream.next(),
++                    UPSTREAM_STREAM_IDLE_TIMEOUT,
++                )
++                .await
++                {
++                    Ok(Some(Ok(bytes))) => converter.push_upstream_bytes(&bytes),
++                    Ok(Some(Err(error))) => {
+                         converter.fail(format!("Stream error: {error}"), None);
+                         break;
+                     }
++                    Ok(None) => break,
++                    Err(_) => {
++                        converter.fail(
++                            upstream_stream_timeout_message(),
++                            Some("stream_timeout".to_string()),
++                        );
++                        log_helper_response(
++                            "helper.protocol_proxy_stream_timeout",
++                            method,
++                            path,
++                            "504 Gateway Timeout",
++                            remote_addr_text.clone(),
++                        );
++                        break;
++                    }
+                 }
+             }
+             let payload = converter.finish();
+@@ -2020,7 +2165,8 @@ async fn handle_protocol_proxy_connection(
              stream,
              upstream.response,
              upstream.wire_api,
@@ -72,7 +476,7 @@ index 531dd49..145d196 100644
          )
          .await?;
          if let Some(reason) = failure {
-@@ -2072,6 +2085,21 @@ async fn handle_protocol_proxy_connection(
+@@ -2072,6 +2218,21 @@ async fn handle_protocol_proxy_connection(
          return Ok(());
      }
      if upstream.wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
@@ -94,7 +498,7 @@ index 531dd49..145d196 100644
          write_http_response(
              stream,
              "200 OK",
-@@ -2080,7 +2108,7 @@ async fn handle_protocol_proxy_connection(
+@@ -2080,7 +2241,7 @@ async fn handle_protocol_proxy_connection(
              } else {
                  &upstream.content_type
              },
@@ -103,7 +507,7 @@ index 531dd49..145d196 100644
          )
          .await?;
          log_helper_response(
-@@ -2094,11 +2122,24 @@ async fn handle_protocol_proxy_connection(
+@@ -2094,11 +2255,24 @@ async fn handle_protocol_proxy_connection(
          return Ok(());
      }
      let chat_json: serde_json::Value = serde_json::from_slice(&upstream_body)?;
@@ -129,7 +533,38 @@ index 531dd49..145d196 100644
      let body = serde_json::to_vec(&response_json)?;
      write_http_response(stream, "200 OK", "application/json; charset=utf-8", &body).await?;
      log_helper_response(
-@@ -2550,20 +2591,79 @@ async fn forward_protocol_proxy_stream(
+@@ -2487,8 +2661,28 @@ async fn handle_chat_completions_proxy_connection(
+     if upstream.is_stream && is_success {
+         write_http_stream_headers(stream, &status, &content_type).await?;
+         let mut bytes_stream = upstream.response.bytes_stream();
+-        while let Some(chunk) = bytes_stream.next().await {
+-            stream.write_all(&chunk?).await?;
++        loop {
++            match with_upstream_stream_idle_timeout(
++                bytes_stream.next(),
++                UPSTREAM_STREAM_IDLE_TIMEOUT,
++            )
++            .await
++            {
++                Ok(Some(Ok(chunk))) => stream.write_all(&chunk).await?,
++                Ok(Some(Err(error))) => return Err(error.into()),
++                Ok(None) => break,
++                Err(_) => {
++                    log_helper_response(
++                        "helper.chat_completions_proxy_stream_timeout",
++                        method,
++                        path,
++                        "504 Gateway Timeout",
++                        remote_addr_text,
++                    );
++                    stream.shutdown().await?;
++                    return Ok(());
++                }
++            }
+         }
+         log_helper_response(
+             "helper.chat_completions_proxy_stream_ok",
+@@ -2550,34 +2744,101 @@ async fn forward_protocol_proxy_stream(
      response: reqwest::Response,
      wire_api: crate::protocol_proxy::UpstreamWireApi,
      request: Option<&Value>,
@@ -138,6 +573,11 @@ index 531dd49..145d196 100644
      let mut chunks = response.bytes_stream();
      if wire_api == crate::protocol_proxy::UpstreamWireApi::Responses {
 -        let mut observer = crate::protocol_proxy::NativeResponsesSseObserver::default();
+-        while let Some(chunk) = chunks.next().await {
+-            match chunk {
+-                Ok(bytes) => {
+-                    stream.write_all(&bytes).await?;
+-                    observer.push_bytes(&bytes);
 +        let persist_history = response_history.is_some_and(|history| {
 +            history.complete_chain
 +                && history
@@ -149,30 +589,37 @@ index 531dd49..145d196 100644
 +        let restore_parent = response_history.is_some_and(|history| history.locally_resolved);
 +        if !persist_history && !restore_parent {
 +            let mut observer = crate::protocol_proxy::NativeResponsesSseObserver::passthrough();
-+            while let Some(chunk) = chunks.next().await {
-+                match chunk {
-+                    Ok(bytes) => {
++            loop {
++                match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT)
++                    .await
++                {
++                    Ok(Some(Ok(bytes))) => {
 +                        stream.write_all(&bytes).await?;
 +                        let _ = observer.push_bytes(&bytes);
 +                    }
-+                    Err(error) => return Ok(Some(error.without_url().to_string())),
++                    Ok(Some(Err(error))) => return Ok(Some(error.without_url().to_string())),
++                    Ok(None) => break,
++                    Err(_) => return Ok(Some(upstream_stream_timeout_message())),
 +                }
 +            }
 +            return Ok(observer.finish_passthrough().failure);
 +        }
 +        let mut observer =
 +            crate::protocol_proxy::NativeResponsesSseObserver::for_history_capture(persist_history);
-         while let Some(chunk) = chunks.next().await {
-             match chunk {
-                 Ok(bytes) => {
--                    stream.write_all(&bytes).await?;
--                    observer.push_bytes(&bytes);
++        loop {
++            match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT)
++                .await
++            {
++                Ok(Some(Ok(bytes))) => {
 +                    let forward = observer.push_bytes(&bytes);
 +                    if !forward.is_empty() {
 +                        stream.write_all(&forward).await?;
 +                    }
                  }
-                 Err(error) => return Ok(Some(error.without_url().to_string())),
+-                Err(error) => return Ok(Some(error.without_url().to_string())),
++                Ok(Some(Err(error))) => return Ok(Some(error.without_url().to_string())),
++                Ok(None) => break,
++                Err(_) => return Ok(Some(upstream_stream_timeout_message())),
              }
          }
 -        return Ok(observer.finish());
@@ -213,7 +660,39 @@ index 531dd49..145d196 100644
      }
      let mut converter = request
          .map(crate::protocol_proxy::ChatSseToResponsesConverter::with_request)
-@@ -2596,10 +2696,99 @@ async fn forward_protocol_proxy_stream(
+         .unwrap_or_default();
+-    while let Some(chunk) = chunks.next().await {
+-        match chunk {
+-            Ok(bytes) => {
++    loop {
++        match with_upstream_stream_idle_timeout(chunks.next(), UPSTREAM_STREAM_IDLE_TIMEOUT).await {
++            Ok(Some(Ok(bytes))) => {
+                 let converted = converter.push_bytes(&bytes);
+                 stream.write_all(&converted).await?;
+                 if converter.has_failed() {
+                     return Ok(Some("上游返回了流式错误事件".to_string()));
+                 }
+             }
+-            Err(error) => {
++            Ok(Some(Err(error))) => {
+                 let failed = converter.fail(
+                     "上游响应流读取失败".to_string(),
+                     Some("stream_error".to_string()),
+@@ -2585,6 +2846,13 @@ async fn forward_protocol_proxy_stream(
+                 stream.write_all(&failed).await?;
+                 return Ok(Some(error.without_url().to_string()));
+             }
++            Ok(None) => break,
++            Err(_) => {
++                let reason = upstream_stream_timeout_message();
++                let failed = converter.fail(reason.clone(), Some("stream_timeout".to_string()));
++                stream.write_all(&failed).await?;
++                return Ok(Some(reason));
++            }
+         }
+     }
+     // EOF 不是 Chat 协议的完成事件；已发出的文本和工具增量不能自动重放。
+@@ -2596,10 +2864,99 @@ async fn forward_protocol_proxy_stream(
          stream.write_all(&failed).await?;
          return Ok(Some("上游缺少完成事件".to_string()));
      }
@@ -314,7 +793,418 @@ index 531dd49..145d196 100644
  fn log_helper_response(
      event: &str,
      method: &str,
-@@ -5171,7 +5360,7 @@ mod proxy_stream_tests {
+@@ -2677,6 +3034,54 @@ mod computer_use_tests {
+     }
+ }
+ 
++fn is_local_proxy_path(path: &str) -> bool {
++    crate::protocol_proxy::is_audio_transcriptions_proxy_path(path)
++        || crate::protocol_proxy::is_responses_proxy_path(path)
++        || crate::protocol_proxy::is_chat_completions_proxy_path(path)
++        || crate::protocol_proxy::is_models_proxy_path(path)
++}
++
++fn local_proxy_bearer_token() -> anyhow::Result<String> {
++    let config_path = crate::relay_config::default_codex_home_dir().join("config.toml");
++    let config = std::fs::read_to_string(&config_path).with_context(|| {
++        format!(
++            "failed to read local proxy config {}",
++            config_path.display()
++        )
++    })?;
++    crate::relay_config::provider_string_from_config(&config, "experimental_bearer_token")
++        .ok_or_else(|| anyhow::anyhow!("local proxy bearer token is missing"))
++}
++
++fn authorize_local_proxy_request(headers: &str, expected_token: &str) -> Result<(), &'static str> {
++    let Some(authorization) = header_value_from_headers(headers, "authorization") else {
++        return Err("401 Unauthorized");
++    };
++    let Some((scheme, token)) = authorization.split_once(' ') else {
++        return Err("403 Forbidden");
++    };
++    if !scheme.eq_ignore_ascii_case("bearer")
++        || !constant_time_token_eq(token.trim(), expected_token)
++    {
++        return Err("403 Forbidden");
++    }
++    Ok(())
++}
++
++fn constant_time_token_eq(actual: &str, expected: &str) -> bool {
++    if actual.len() != expected.len() {
++        return false;
++    }
++    actual
++        .as_bytes()
++        .iter()
++        .zip(expected.as_bytes())
++        .fold(0_u8, |difference, (left, right)| {
++            difference | (left ^ right)
++        })
++        == 0
++}
++
+ const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
+ const MAX_HTTP_BODY_BYTES: usize = 32 * 1024 * 1024;
+ const MAX_HTTP_ENCODED_BODY_BYTES: usize = 64 * 1024 * 1024;
+@@ -2686,6 +3091,12 @@ struct HttpRequest {
+     body: Vec<u8>,
+ }
+ 
++struct HttpRequestHead {
++    headers: Vec<u8>,
++    framing: HttpBodyFraming,
++    buffered_body: Vec<u8>,
++}
++
+ #[derive(Debug)]
+ struct HttpRequestReadError {
+     status: &'static str,
+@@ -2707,6 +3118,13 @@ impl HttpRequestReadError {
+         }
+     }
+ 
++    fn request_timeout(message: impl Into<String>) -> Self {
++        Self {
++            status: "408 Request Timeout",
++            message: message.into(),
++        }
++    }
++
+     fn status(&self) -> &'static str {
+         self.status
+     }
+@@ -2824,65 +3242,97 @@ impl ChunkedScanState {
+     }
+ }
+ 
+-async fn read_http_request(
++async fn read_http_request_headers(
+     stream: &mut tokio::net::TcpStream,
+-) -> Result<HttpRequest, HttpRequestReadError> {
++) -> Result<HttpRequestHead, HttpRequestReadError> {
+     let mut buffer = Vec::new();
+     let mut chunk = vec![0_u8; 4096];
+-    let mut header_end = None;
+-    let mut framing = HttpBodyFraming::Empty;
+-    let mut chunked_scan = ChunkedScanState::default();
+ 
+     loop {
+-        let read = stream.read(&mut chunk).await?;
++        let read = tokio::time::timeout(HELPER_HEADER_IDLE_TIMEOUT, stream.read(&mut chunk))
++            .await
++            .map_err(|_| {
++                HttpRequestReadError::request_timeout("HTTP request header idle timeout")
++            })??;
+         if read == 0 {
+             break;
+         }
+         buffer.extend_from_slice(&chunk[..read]);
+-        if header_end.is_none() {
+-            header_end = find_header_end(&buffer);
+-            if let Some(end) = header_end {
+-                if end > MAX_HTTP_HEADER_BYTES {
+-                    return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
+-                }
+-                framing = http_body_framing(&buffer[..end])?;
+-            } else if buffer.len() > MAX_HTTP_HEADER_BYTES {
++        if let Some(header_end) = find_header_end(&buffer) {
++            if header_end > MAX_HTTP_HEADER_BYTES {
+                 return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
+             }
+-        }
+-        if let Some(end) = header_end {
+-            let body = &buffer[end + 4..];
+-            if body.len() > MAX_HTTP_ENCODED_BODY_BYTES {
++            let framing = http_body_framing(&buffer[..header_end])?;
++            if matches!(&framing, HttpBodyFraming::ContentLength(length) if *length > MAX_HTTP_BODY_BYTES)
++            {
+                 return Err(HttpRequestReadError::payload_too_large());
+             }
+-            match framing {
+-                HttpBodyFraming::Empty => break,
+-                HttpBodyFraming::ContentLength(content_length) => {
+-                    if content_length > MAX_HTTP_BODY_BYTES {
+-                        return Err(HttpRequestReadError::payload_too_large());
+-                    }
+-                    if body.len() >= content_length {
+-                        break;
+-                    }
+-                }
+-                HttpBodyFraming::Chunked => match chunked_scan.advance(body)? {
+-                    ChunkedBodyScan::Incomplete => {}
+-                    ChunkedBodyScan::Complete => break,
+-                },
++            let buffered_body = buffer[header_end + 4..].to_vec();
++            if buffered_body.len() > MAX_HTTP_ENCODED_BODY_BYTES {
++                return Err(HttpRequestReadError::payload_too_large());
+             }
++            return Ok(HttpRequestHead {
++                headers: buffer[..header_end].to_vec(),
++                framing,
++                buffered_body,
++            });
++        }
++        if buffer.len() > MAX_HTTP_HEADER_BYTES {
++            return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
++        }
++    }
++
++    Err(HttpRequestReadError::bad_request("HTTP 请求头不完整"))
++}
++
++async fn read_http_request_body(
++    stream: &mut tokio::net::TcpStream,
++    request_head: HttpRequestHead,
++) -> Result<HttpRequest, HttpRequestReadError> {
++    let HttpRequestHead {
++        headers,
++        framing,
++        mut buffered_body,
++    } = request_head;
++    let mut chunk = vec![0_u8; 4096];
++    let mut chunked_scan = ChunkedScanState::default();
++
++    loop {
++        let complete = match &framing {
++            HttpBodyFraming::Empty => true,
++            HttpBodyFraming::ContentLength(content_length) => {
++                buffered_body.len() >= *content_length
++            }
++            HttpBodyFraming::Chunked => {
++                matches!(
++                    chunked_scan.advance(&buffered_body)?,
++                    ChunkedBodyScan::Complete
++                )
++            }
++        };
++        if complete {
++            break;
++        }
++        let read = tokio::time::timeout(HELPER_BODY_IDLE_TIMEOUT, stream.read(&mut chunk))
++            .await
++            .map_err(|_| {
++                HttpRequestReadError::request_timeout("HTTP request body idle timeout")
++            })??;
++        if read == 0 {
++            break;
++        }
++        buffered_body.extend_from_slice(&chunk[..read]);
++        if buffered_body.len() > MAX_HTTP_ENCODED_BODY_BYTES {
++            return Err(HttpRequestReadError::payload_too_large());
+         }
+     }
+ 
+-    let header_end =
+-        header_end.ok_or_else(|| HttpRequestReadError::bad_request("HTTP 请求头不完整"))?;
+-    let headers = buffer[..header_end].to_vec();
+-    let encoded_body = &buffer[header_end + 4..];
+     let body = match framing {
+         HttpBodyFraming::Empty => Vec::new(),
+         HttpBodyFraming::ContentLength(content_length) => {
+-            content_length_body(encoded_body, content_length)?
++            content_length_body(&buffered_body, content_length)?
+         }
+-        HttpBodyFraming::Chunked => match decode_chunked_body(encoded_body)? {
++        HttpBodyFraming::Chunked => match decode_chunked_body(&buffered_body)? {
+             ChunkedBody::Complete(body) => body,
+             ChunkedBody::Incomplete => {
+                 return Err(HttpRequestReadError::bad_request(
+@@ -2895,6 +3345,13 @@ async fn read_http_request(
+     Ok(HttpRequest { headers, body })
+ }
+ 
++async fn read_http_request(
++    stream: &mut tokio::net::TcpStream,
++) -> Result<HttpRequest, HttpRequestReadError> {
++    let head = read_http_request_headers(stream).await?;
++    read_http_request_body(stream, head).await
++}
++
+ fn find_header_end(buffer: &[u8]) -> Option<usize> {
+     buffer.windows(4).position(|window| window == b"\r\n\r\n")
+ }
+@@ -4097,6 +4554,75 @@ mod tests {
+         })
+     }
+ 
++    #[tokio::test]
++    async fn upstream_stream_idle_timeout_rejects_a_pending_item() {
++        let result = with_upstream_stream_idle_timeout(
++            std::future::pending::<()>(),
++            std::time::Duration::from_millis(5),
++        )
++        .await;
++
++        assert!(result.is_err());
++    }
++
++    #[tokio::test]
++    async fn upstream_stream_idle_timeout_accepts_a_ready_item() {
++        let result = with_upstream_stream_idle_timeout(
++            std::future::ready("ready"),
++            std::time::Duration::from_secs(1),
++        )
++        .await;
++
++        assert_eq!(result.unwrap(), "ready");
++    }
++
++    #[test]
++    fn helper_runtime_is_loopback_only_and_connection_bounded() {
++        assert_eq!(LOCAL_HELPER_BIND_HOST, "127.0.0.1");
++        let limiter = helper_connection_limiter();
++        let permits = (0..MAX_HELPER_CONNECTIONS)
++            .map(|_| limiter.clone().try_acquire_owned().unwrap())
++            .collect::<Vec<_>>();
++        assert!(limiter.clone().try_acquire_owned().is_err());
++        drop(permits);
++        assert!(limiter.try_acquire_owned().is_ok());
++    }
++
++    #[tokio::test]
++    async fn unauthorized_proxy_headers_are_rejected_before_large_body_is_read() {
++        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let address = listener.local_addr().unwrap();
++        let helper = tokio::spawn(async move {
++            let (stream, remote_addr) = listener.accept().await.unwrap();
++            handle_helper_connection_with_proxy_token(
++                stream,
++                Some(remote_addr),
++                Some("expected-token"),
++            )
++            .await
++            .unwrap();
++        });
++        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
++        client
++            .write_all(
++                b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer wrong-token\r\nContent-Length: 1048576\r\nConnection: close\r\n\r\n",
++            )
++            .await
++            .unwrap();
++        let mut response = Vec::new();
++        tokio::time::timeout(
++            std::time::Duration::from_secs(1),
++            client.read_to_end(&mut response),
++        )
++        .await
++        .expect("authorization must complete before the declared body arrives")
++        .unwrap();
++        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 403 Forbidden"));
++        helper.await.unwrap();
++    }
++
+     #[test]
+     fn owned_launcher_exit_follows_its_debug_port_not_other_codex_processes() {
+         assert!(owned_launcher_target_alive(false, true));
+@@ -4757,6 +5283,102 @@ mod tests {
+         assert!(response.contains("未知后端路径"));
+     }
+ 
++    #[tokio::test]
++    async fn streamed_payment_required_becomes_terminal_quota_event() {
++        let _settings_guard = crate::paths::settings_path_test_guard();
++        let temp = tempfile::tempdir().unwrap();
++        let settings_path = temp.path().join("settings.json");
++        let previous_settings_path =
++            crate::paths::set_settings_path_for_tests(Some(settings_path.clone()));
++        let upstream_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let upstream_addr = upstream_listener.local_addr().unwrap();
++        let settings = serde_json::json!({
++            "relayProfilesEnabled": true,
++            "relayProfiles": [{
++                "id": "payment-fixture",
++                "name": "Payment Fixture",
++                "baseUrl": format!("http://{upstream_addr}/v1"),
++                "upstreamBaseUrl": format!("http://{upstream_addr}/v1"),
++                "apiKey": "fixture-key",
++                "protocol": "chatCompletions",
++                "relayMode": "pureApi"
++            }],
++            "activeRelayId": "payment-fixture"
++        });
++        std::fs::write(settings_path, serde_json::to_vec_pretty(&settings).unwrap()).unwrap();
++
++        let upstream = tokio::spawn(async move {
++            let (mut stream, _) = upstream_listener.accept().await.unwrap();
++            let mut request = Vec::new();
++            let mut buffer = [0_u8; 4096];
++            let mut expected_len = None;
++            loop {
++                let read = stream.read(&mut buffer).await.unwrap();
++                assert!(read > 0, "upstream request ended before body completed");
++                request.extend_from_slice(&buffer[..read]);
++                if expected_len.is_none()
++                    && let Some(header_end) = find_header_end(&request)
++                {
++                    let headers = String::from_utf8_lossy(&request[..header_end]);
++                    let content_length = header_value_from_headers(&headers, "content-length")
++                        .unwrap()
++                        .parse::<usize>()
++                        .unwrap();
++                    expected_len = Some(header_end + 4 + content_length);
++                }
++                if expected_len.is_some_and(|length| request.len() >= length) {
++                    break;
++                }
++            }
++
++            let response_body = br#"{"error":{"message":"Insufficient account balance","type":"payment_required","code":"insufficient_quota"}}"#;
++            let response = format!(
++                "HTTP/1.1 402 Payment Required\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++                response_body.len()
++            );
++            stream.write_all(response.as_bytes()).await.unwrap();
++            stream.write_all(response_body).await.unwrap();
++        });
++
++        let request_body = br#"{"model":"fixture-model","input":"probe","stream":true}"#;
++        let helper_listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let helper_addr = helper_listener.local_addr().unwrap();
++        let helper = tokio::spawn(async move {
++            let (stream, remote_addr) = helper_listener.accept().await.unwrap();
++            handle_helper_connection(stream, Some(remote_addr))
++                .await
++                .unwrap();
++        });
++        let mut client = tokio::net::TcpStream::connect(helper_addr).await.unwrap();
++        let headers = format!(
++            "POST /v1/responses HTTP/1.1\r\nHost: {helper_addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++            request_body.len()
++        );
++        client.write_all(headers.as_bytes()).await.unwrap();
++        client.write_all(request_body).await.unwrap();
++        let mut response = Vec::new();
++        client.read_to_end(&mut response).await.unwrap();
++
++        helper.await.unwrap();
++        upstream.await.unwrap();
++        crate::paths::set_settings_path_for_tests(previous_settings_path);
++
++        let response = String::from_utf8_lossy(&response);
++        assert!(response.starts_with("HTTP/1.1 200 OK"));
++        assert!(
++            response
++                .to_ascii_lowercase()
++                .contains("content-type: text/event-stream")
++        );
++        assert!(response.contains("event: response.failed"));
++        assert!(response.contains("\"code\":\"insufficient_quota\""));
++        assert!(response.contains("Insufficient account balance"));
++    }
++
+     #[tokio::test]
+     async fn helper_proxies_image_generation_upstream_error_response() {
+         let _settings_guard = crate::paths::settings_path_test_guard();
+@@ -5171,7 +5793,7 @@ mod proxy_stream_tests {
              .unwrap();
          let (mut writer, _) = downstream.accept().await.unwrap();
          let forwarded = tokio::spawn(async move {
@@ -956,6 +1846,19 @@ index c1ceeb5..2a302a1 100644
      }
  }
  
+diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
+index 4962770..f69ec6d 100644
+--- a/crates/codex-plus-core/src/relay_config.rs
++++ b/crates/codex-plus-core/src/relay_config.rs
+@@ -4648,7 +4648,7 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
+             .unwrap_or(false)
+ }
+ 
+-fn provider_string_from_config(config_contents: &str, key: &str) -> Option<String> {
++pub(crate) fn provider_string_from_config(config_contents: &str, key: &str) -> Option<String> {
+     let doc = parse_toml_document(config_contents).ok()?;
+     let active = active_provider_id(&doc);
+     if let Some(provider_id) = active.as_deref() {
 diff --git a/crates/codex-plus-core/src/response_history.rs b/crates/codex-plus-core/src/response_history.rs
 new file mode 100644
 index 0000000..f4e58ec

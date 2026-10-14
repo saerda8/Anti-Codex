@@ -5,29 +5,77 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  patchAddedLinesContaining,
-  patchSectionContaining,
+  readCodexPlusPlusAcceptedSource,
   readCodexPlusPlusPatchManifest,
 } from "./codexplusplus-patch-manifest.helper.mjs";
 
 const root = join(import.meta.dirname, "..", "..");
 const patchManifest = readCodexPlusPlusPatchManifest(root);
+const acceptedSource = readCodexPlusPlusAcceptedSource(root, patchManifest.metadata);
+const launcherSource = acceptedSource.read("crates/codex-plus-core/src/launcher.rs");
+const protocolProxySource = acceptedSource.read("crates/codex-plus-core/src/protocol_proxy.rs");
+const managerCommandsSource = acceptedSource.read("apps/codex-plus-manager/src-tauri/src/commands.rs");
+const launcherProductionSource = launcherSource.split("\n#[cfg(test)]\nmod tests")[0];
 const patchBundle = patchManifest.text;
 const patch1 = patchBundle;
 const patch2 = patchBundle;
 const patch10 = patchBundle;
 const patch11 = patchBundle;
-const patch13 = patchBundle;
 const patch14 = patchBundle;
 const patch15 = patchBundle;
 const patch16 = patchBundle;
 const patch18 = patchBundle;
 const patch19 = patchBundle;
 const patch23 = patchBundle;
-const patch1ManagerSection = patchSectionContaining(patchManifest, "stop_validated_restart_targets");
-const patch1ManagerAddedLines = patchAddedLinesContaining(patchManifest, "stop_validated_restart_targets");
-const patch2HelperAddedLines = patchAddedLinesContaining(patchManifest, "LOCAL_HELPER_BIND_HOST");
-const patch19AddedHunkLines = patchAddedLinesContaining(patchManifest, "with_upstream_stream_idle_timeout");
+const historicalV1246DreamSkinPatch = readFileSync(join(
+  root,
+  "docs",
+  "audits",
+  "codexplusplus",
+  "v1.2.46-source-replay",
+  "patches",
+  "0013-fix-format-dreamskin-installer-test.patch",
+), "utf8");
+const paymentProxySource = sourceSection(
+  launcherSource,
+  "async fn handle_protocol_proxy_connection",
+  "async fn handle_dictation_connection",
+);
+const chatProxySource = sourceSection(
+  launcherSource,
+  "async fn handle_chat_completions_proxy_connection",
+  "async fn write_http_response",
+);
+const isolatedAppValidatorSource = sourceSection(
+  managerCommandsSource,
+  "fn validate_isolated_launch_app_path",
+  "fn restart_codex_plus_blocking",
+);
+const restartTargetResolverSource = sourceSection(
+  managerCommandsSource,
+  "fn resolve_restart_targets",
+  "fn restart_codex_plus_blocking",
+);
+const managerRestartSource = sourceSection(
+  managerCommandsSource,
+  "fn restart_codex_plus_blocking",
+  "fn stop_codex_plus_for_restart",
+);
+const restartStopOrderSource = sourceSection(
+  managerCommandsSource,
+  "fn stop_codex_plus_for_restart",
+  "enum RestartStopError",
+);
+const helperEntrypointSource = sourceSection(
+  launcherSource,
+  "async fn handle_helper_connection(",
+  "async fn handle_helper_connection_with_proxy_token",
+);
+const helperAuthFlowSource = sourceSection(
+  launcherSource,
+  "async fn handle_helper_connection_with_proxy_token",
+  "async fn reject_http_request",
+);
 
 test("accepted CodexPlusPlus metadata pins the manifest-defined patch set", () => {
   const componentRoot = join(root, "third_party", "codexplusplus");
@@ -51,15 +99,25 @@ test("accepted CodexPlusPlus metadata pins the manifest-defined patch set", () =
 });
 
 test("streamed payment failures become one terminal quota event", () => {
-  assert.match(patch23, /status_code != 402/);
-  assert.match(patch23, /value\.get\("stream"\)/);
-  assert.match(patch23, /Some\(true\)/);
-  assert.match(patch23, /insufficient_quota/);
-  assert.match(patch23, /streamed_payment_required_becomes_terminal_quota_event/);
-  assert.ok(
-    (patch23.match(/responses_terminal_failure_sse_from_upstream\(/g) ?? []).length >= 3,
-    "the helper definition and both streamed proxy branches must be present",
+  assert.match(protocolProxySource, /status_code != 402/);
+  assert.match(protocolProxySource, /value\.get\("stream"\)/);
+  assert.match(protocolProxySource, /Some\(true\)/);
+  assert.match(protocolProxySource, /insufficient_quota/);
+  assert.match(launcherSource, /streamed_payment_required_becomes_terminal_quota_event/);
+  assert.equal(
+    (protocolProxySource.match(/responses_terminal_failure_sse_from_upstream\(/g) ?? []).length,
+    1,
+    "the shared terminal-failure helper must have one definition",
   );
+  assert.equal(
+    (paymentProxySource.match(/responses_terminal_failure_sse_from_upstream\(/g) ?? []).length,
+    1,
+    "the common non-success path must call the helper once before wire-specific conversion",
+  );
+  const sharedFailure = paymentProxySource.indexOf("responses_terminal_failure_sse_from_upstream(");
+  const responsesBranch = paymentProxySource.indexOf("if upstream.wire_api == crate::protocol_proxy::UpstreamWireApi::Responses");
+  const chatConversion = paymentProxySource.indexOf("chat_completion_to_response");
+  assert.ok(sharedFailure >= 0 && responsesBranch > sharedFailure && chatConversion > sharedFailure);
 });
 
 test("streamed provider errors preserve their non-retryable error code", () => {
@@ -70,24 +128,34 @@ test("streamed provider errors preserve their non-retryable error code", () => {
 });
 
 test("upstream stream inactivity terminates every helper streaming path without a false success", () => {
-  assert.match(patch19, /UPSTREAM_STREAM_IDLE_TIMEOUT/);
-  assert.match(patch19, /Duration::from_secs\(120\)/);
-  assert.match(patch19, /with_upstream_stream_idle_timeout/);
-  assert.match(patch19, /upstream_stream_idle_timeout_rejects_a_pending_item/);
-  assert.match(patch19, /upstream_stream_idle_timeout_accepts_a_ready_item/);
-  assert.match(patch19, /stream_timeout/);
-  assert.match(patch19, /helper\.protocol_proxy_stream_timeout/);
-  assert.match(patch19, /helper\.chat_completions_proxy_stream_timeout/);
-  assert.ok(
-    (patch19.match(/with_upstream_stream_idle_timeout\(/g) ?? []).length >= 8,
-    "all cancel-aware and fallback streaming reads must be bounded",
+  assert.match(launcherSource, /UPSTREAM_STREAM_IDLE_TIMEOUT/);
+  assert.match(launcherSource, /Duration::from_secs\(120\)/);
+  assert.match(launcherSource, /upstream_stream_idle_timeout_rejects_a_pending_item/);
+  assert.match(launcherSource, /upstream_stream_idle_timeout_accepts_a_ready_item/);
+  assert.equal(
+    (launcherProductionSource.match(/with_upstream_stream_idle_timeout\(/g) ?? []).length,
+    5,
+    "all five production stream-read paths must share the idle timeout wrapper",
   );
-  for (const successEvent of ["helper.protocol_proxy_stream_ok", "helper.chat_completions_proxy_stream_ok"]) {
-    const timeoutIndex = patch19AddedHunkLines.indexOf("stream_timeout");
-    const successIndex = patch19AddedHunkLines.indexOf(successEvent);
-    assert.ok(timeoutIndex >= 0 && successIndex > timeoutIndex);
-    assert.match(patch19AddedHunkLines.slice(timeoutIndex, successIndex), /return Ok\(true\)/);
-  }
+  assert.equal(
+    (launcherSource.match(/with_upstream_stream_idle_timeout\(/g) ?? []).length,
+    7,
+    "five production calls plus two focused wrapper tests must remain present",
+  );
+  const protocolFailure = paymentProxySource.indexOf("let failure = forward_protocol_proxy_stream(");
+  const protocolFailureBranch = paymentProxySource.indexOf("if let Some(reason) = failure", protocolFailure);
+  const protocolSuccess = paymentProxySource.indexOf("helper.protocol_proxy_stream_ok", protocolFailureBranch);
+  assert.ok(protocolFailure >= 0 && protocolFailureBranch > protocolFailure);
+  assert.ok(protocolSuccess > protocolFailureBranch, "stream success must be confined to the no-failure else branch");
+  assert.match(
+    paymentProxySource.slice(protocolFailureBranch, protocolSuccess + 80),
+    /if let Some\(reason\) = failure[\s\S]*\} else \{[\s\S]*helper\.protocol_proxy_stream_ok/,
+  );
+  const chatTimeout = chatProxySource.indexOf("helper.chat_completions_proxy_stream_timeout");
+  const chatTimeoutReturn = chatProxySource.indexOf("return Ok(())", chatTimeout);
+  const chatSuccess = chatProxySource.indexOf("helper.chat_completions_proxy_stream_ok", chatTimeout);
+  assert.ok(chatTimeout >= 0 && chatTimeoutReturn > chatTimeout);
+  assert.ok(chatSuccess > chatTimeoutReturn, "Chat timeout must return before the success event");
 });
 
 test("current task model selection is bounded, thread-scoped, and compaction-only", () => {
@@ -149,9 +217,9 @@ test("Anti-Codex command safety binds one deterministic container name to the cu
 });
 
 test("v1.2.46 DreamSkin rustfmt compatibility patch changes formatting only", () => {
-  assert.match(patch13, /tests\/installers\.rs/);
-  assert.match(patch13, /DreamSkin|dream_skin/i);
-  assert.match(patch13, /assert_eq!|assert!\(/);
+  assert.match(historicalV1246DreamSkinPatch, /tests\/installers\.rs/);
+  assert.match(historicalV1246DreamSkinPatch, /DreamSkin|dream_skin/i);
+  assert.match(historicalV1246DreamSkinPatch, /assert_eq!|assert!\(/);
 });
 
 test("v1.2.47 DreamSkin rustfmt compatibility patch changes formatting only", () => {
@@ -195,49 +263,84 @@ test("isolated restart validates the exact configured copied app before any stop
   assert.match(patch1, /validate_isolated_copied_app_dir/);
   assert.match(patch1, /CODEX_PLUS_APP_EXECUTABLE/);
   assert.match(patch1, /symlink_metadata/);
-  assert.match(patch1, /stop_validated_restart_targets/);
-  assert.match(patch1, /native_or_outside_restart_path_performs_zero_stops/);
+  assert.match(isolatedAppValidatorSource, /isolated_instance_mode\(\)/);
+  assert.match(isolatedAppValidatorSource, /validate_isolated_copied_app_dir\(&path\)/);
+  const validateTarget = restartTargetResolverSource.indexOf("validate_app_path()?");
+  const resolveLauncher = restartTargetResolverSource.indexOf("resolve_launcher_path()");
+  assert.ok(validateTarget >= 0, "the production resolver must validate the app path");
+  assert.ok(resolveLauncher > validateTarget, "app validation must finish before launcher resolution");
+  const resolveTargets = managerRestartSource.indexOf("let restart_targets = match resolve_restart_targets(");
+  const captureLauncher = managerRestartSource.indexOf("LauncherExitSnapshot::capture_for_path", resolveTargets);
+  const stopTargets = managerRestartSource.indexOf("stop_codex_plus_for_restart(", captureLauncher);
+  assert.ok(resolveTargets >= 0, "restart_codex_plus_blocking must call the production target resolver");
+  assert.ok(captureLauncher > resolveTargets, "restart targets must validate before launcher capture");
+  assert.ok(stopTargets > captureLauncher, "validated launcher capture must finish before any stop");
 });
 
 test("non-isolated Manager restart targets only its companion launcher and debug port", () => {
-  const launcherPath = patch1ManagerSection.indexOf("companion_binary_path(SILENT_BINARY)");
-  const launcherStop = patch1ManagerSection.indexOf("stop_launcher_processes_and_wait_for_path(&launcher_path)", launcherPath);
-  const codexStop = patch1ManagerSection.search(/stop_codex_processes_(?:for_debug_port_and_wait|and_wait_for_app_path)/);
-
-  assert.ok(launcherPath >= 0, "the Manager must resolve its own companion launcher path");
-  assert.ok(launcherStop >= 0, "the Manager must stop only that exact launcher path");
-  assert.ok(codexStop >= 0, "the restart must retain a scoped Codex stop");
-  assert.doesNotMatch(patch1ManagerAddedLines, /stop_launcher_processes_and_wait\(\)/);
+  assert.match(managerRestartSource, /companion_binary_path\(SILENT_BINARY\)/);
+  assert.match(managerRestartSource, /LauncherExitSnapshot::capture_for_path\(Some\(/);
+  assert.match(managerRestartSource, /stop_launcher_processes_and_wait_for_path\(&launcher_path\)/);
+  assert.match(managerRestartSource, /stop_codex_processes_(?:for_debug_port_and_wait|and_wait_for_app_path)/);
+  assert.doesNotMatch(managerRestartSource, /stop_launcher_processes_and_wait\(\)/);
+  const stopCodex = restartStopOrderSource.indexOf("stop_codex().map_err(RestartStopError::Codex)?");
+  const waitNative = restartStopOrderSource.indexOf("wait_native().map_err(RestartStopError::NativeBrowser)?");
+  const stopLauncher = restartStopOrderSource.indexOf("stop_launcher().map_err(RestartStopError::Launcher)?");
+  assert.ok(stopCodex >= 0, "the production restart must stop the scoped Codex app first");
+  assert.ok(waitNative > stopCodex, "native browser cleanup must follow the app stop");
+  assert.ok(stopLauncher > waitNative, "the captured companion launcher must stop last");
 });
 
 test("local protocol proxy is loopback-only, authenticated, bounded, and timeout-aware", () => {
-  assert.doesNotMatch(patch2HelperAddedLines, /CODEX_PLUS_HELPER_BIND/);
-  assert.match(patch2HelperAddedLines, /LOCAL_HELPER_BIND_HOST[^\n]*127\.0\.0\.1/);
-  assert.match(patch2, /authorize_local_proxy_request/);
-  assert.match(patch2, /experimental_bearer_token/);
-  assert.match(patch2, /401 Unauthorized/);
-  assert.match(patch2, /403 Forbidden/);
-  assert.match(patch2, /MAX_HELPER_CONNECTIONS/);
-  assert.match(patch2, /Semaphore/);
-  assert.match(patch2, /HELPER_HEADER_IDLE_TIMEOUT/);
-  assert.match(patch2, /HELPER_BODY_IDLE_TIMEOUT/);
-  assert.match(patch2, /send_upstream_request_for_responses/);
-  assert.match(patch2, /unauthorized_proxy_request_never_reaches_upstream/);
-  assert.match(patch2, /no_auth_proxy_endpoints_omit_authorization_header/);
-  assert.match(patch2, /bearer_token: Option<&str>/);
+  assert.doesNotMatch(launcherSource, /CODEX_PLUS_HELPER_BIND/);
+  assert.match(launcherSource, /const LOCAL_HELPER_BIND_HOST: &str = "127\.0\.0\.1"/);
+  assert.match(launcherSource, /authorize_local_proxy_request/);
+  assert.match(launcherSource, /experimental_bearer_token/);
+  assert.match(launcherSource, /401 Unauthorized/);
+  assert.match(launcherSource, /403 Forbidden/);
+  assert.match(launcherSource, /MAX_HELPER_CONNECTIONS/);
+  assert.match(launcherSource, /Semaphore/);
+  assert.match(launcherSource, /HELPER_HEADER_IDLE_TIMEOUT/);
+  assert.match(launcherSource, /HELPER_BODY_IDLE_TIMEOUT/);
+  assert.match(protocolProxySource, /send_upstream_request_for_responses/);
+  assert.match(launcherSource, /unauthorized_proxy_headers_are_rejected_before_large_body_is_read/);
+  assert.ok(
+    (protocolProxySource.match(/\(!relay\.uses_no_auth\(\)\)\.then_some\(relay\.api_key\.trim\(\)\)/g) ?? []).length >= 2,
+    "every no-auth upstream request builder must omit the Authorization token",
+  );
+  assert.match(protocolProxySource, /fn with_relay_auth\(/);
+  assert.match(protocolProxySource, /crate::relay_headers::apply\(request, relay\)/);
 });
 
 test("proxy bearer auth is enforced after bounded headers but before any body read", () => {
-  const headerRead = patch2.indexOf("read_http_request_headers(&mut stream)");
-  const authorization = patch2.indexOf("authorize_local_proxy_request(&request_headers, &expected_token)");
-  const bodyRead = patch2.indexOf("read_http_request_body(&mut stream, request_head)");
+  assert.match(
+    helperEntrypointSource,
+    /handle_helper_connection_with_proxy_token\(stream, remote_addr, None\)\.await/,
+  );
+  const headerRead = helperAuthFlowSource.indexOf("read_http_request_headers(&mut stream)");
+  const authorization = helperAuthFlowSource.indexOf("authorize_local_proxy_request(&request_headers, &expected_token)");
+  const bodyRead = helperAuthFlowSource.indexOf("read_http_request_body(&mut stream, request_head)");
 
   assert.ok(headerRead >= 0, "the helper must read only a bounded header first");
   assert.ok(authorization > headerRead, "the helper must authorize the parsed proxy route");
   assert.ok(bodyRead > authorization, "the helper must not read a proxy body before bearer auth");
-  assert.match(patch2, /MAX_HTTP_HEADER_BYTES: usize = 64 \* 1024/);
-  assert.match(patch2, /if buffer\.len\(\) > MAX_HTTP_HEADER_BYTES/);
-  assert.match(patch2, /ContentLength\(length\) if \*length > MAX_HTTP_BODY_BYTES/);
-  assert.match(patch2, /unauthorized_proxy_headers_are_rejected_before_large_body_is_read/);
-  assert.match(patch2, /concurrent_unauthorized_slow_bodies_release_all_helper_permits/);
+  assert.match(launcherSource, /MAX_HTTP_HEADER_BYTES: usize = 64 \* 1024/);
+  assert.match(launcherSource, /if buffer\.len\(\) > MAX_HTTP_HEADER_BYTES/);
+  assert.match(launcherSource, /ContentLength\(length\) if \*length > MAX_HTTP_BODY_BYTES/);
+  assert.match(launcherSource, /unauthorized_proxy_headers_are_rejected_before_large_body_is_read/);
+  assert.match(
+    launcherSource,
+    /let _permit = permit;[\s\S]{0,160}handle_helper_connection\(stream, Some\(addr\)\)\.await/,
+  );
+  assert.match(
+    launcherSource,
+    /drop\(permits\);[\s\S]{0,100}limiter\.try_acquire_owned\(\)\.is_ok\(\)/,
+  );
 });
+
+function sourceSection(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  if (start < 0) return "";
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  return source.slice(start, end > start ? end : undefined);
+}

@@ -1,5 +1,5 @@
 {
-  "status": "source_ready_build_requested",
+  "status": "accepted_candidate_pending_source_gate_and_installation",
   "component": "CodexPlusPlus",
   "version": "1.7.1",
   "upstreamCommit": "5fe25892eb312abbc091512565a8dc2621a8c999",
@@ -7,15 +7,15 @@
   "acceptedMetadataSha256": "680aa072a3be9736cbd0acca8a5df9219f57b687b7f748b4d1cb4a42319b8b40",
   "patch": {
     "file": "patches/0013-v171-response-history.patch",
-    "sha256": "c6ebb2d49370c349029f6b7f2d2730c34556192c180020ee6f68eb68e649dc25",
-    "scope": "user-approved isolated bounded persistent Responses history, credential-scoped previous_response_id reconstruction, native-provider compatibility, successful completion capture, and Windows extended-length atomic writes"
+    "sha256": "6b6cd02f6df460fec63c6ad6d6c9d2d478410f217faf966479b721f818e52c99",
+    "scope": "user-approved bounded persistent Responses history, credential isolation, native continuation, Windows extended-length atomic writes, and restoration of local proxy authentication, stream failure and scoped restart safeguards"
   },
-  "expectedPatchCommit": "8eb0adba4d09000b4974a8ab940fb732cd8de875",
-  "expectedPatchTree": "ea5ef1b7d1800ff6716ee30eb41951109935096e",
+  "expectedPatchCommit": "841e4900830b9c18f690b6fe12bc2761dc4479be",
+  "expectedPatchTree": "b21defe034d2ddaa26bcdebb07513b03b981afbf",
   "verification": {
     "patchReplay": "passed",
     "rustfmt": "passed",
-    "rustTests": "pending_full_candidate_after_windows_long_path_fix",
+    "rustTests": "233 passed: protocol 156, storage 7, history library 5, stream forwarding 5, launcher/helper 47, watcher 13",
     "isolatedRustTests": {
       "storePassed": 7,
       "protocolFunctionsPassed": 5,
@@ -25,12 +25,14 @@
       "scope": "Linux micro crate; launcher, TCP, full component and Windows runtime remain unverified",
       "sourcePatchSha256": "1d3bdc3cb27729ef1936ea2cebb307754df859d1010fedd775f4c3940664deb4"
     },
-    "windowsBuild": "pending_after_windows_long_path_fix",
+    "windowsBuild": "passed: Manager Windows check, launcher release build and Windows process creation",
+    "candidateBinarySha256": "ac2b65fc3e1dbec78399c5f4cb34e299275e7a01badd20a33c7fbe6e26c86a86",
+    "blackBoxes": "21 passed: Chat 10, native Responses 9, authentication before body 2; owned test processes exited",
     "windowsIsolatedTests": {
       "passed": 10,
       "failed": 0,
       "settingsSha256": "d8978285f836bec58815650fc98d09f9df2fb7ed2f0357e25daf3fa463f65b43",
-      "scope": "Actual Windows long-path storage and path semantics; final full candidate remains pending"
+      "scope": "Actual Windows long-path storage and path semantics on byte-identical settings code"
     },
     "installed": false
   }

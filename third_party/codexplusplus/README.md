@@ -108,6 +108,8 @@ Run `scripts\prepare-codexplusplus-candidate.ps1 -Tag vX.Y.Z` from the Anti-Code
 
 The candidate contains clean patched source, the release launcher, `candidate.json` and `upstream.proposed.json`. It never changes the project patches or `upstream.json`, never installs or activates a component, and never stops or restarts Anti-Codex. A patch conflict therefore requires an explicit patch review and project commit. After that commit, the component installer accepts only the candidate whose version, upstream commit, patch commit and binary hash exactly match the committed metadata; the existing guarded sync remains the sole activation and rollback path.
 
+The security-boundary integration test reads the accepted version from that content-addressed source cache. Before running it, prepare the accepted tag with the command above. The test verifies that the cached repository has the exact accepted patch commit and replay tree and that its worktree is clean; it fails with a prepare-first message when the cache is absent.
+
 `docs/audits/codexplusplus/v1.2.46-source-replay/source-replay.json` is the historical source-replay record that preceded the managed build. It remains immutable and truthfully says that its own run did not build, publish, install or activate anything. Runtime synchronization trusts only the promoted `upstream.json` identity and its content-addressed managed candidate.
 
 ## Current Verification Boundary
