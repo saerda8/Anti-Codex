@@ -15,7 +15,15 @@
   "verification": {
     "patchReplay": "passed",
     "rustfmt": "passed",
-    "rustTests": "not_run",
+    "rustTests": "full_component_not_run",
+    "isolatedRustTests": {
+      "storePassed": 7,
+      "protocolFunctionsPassed": 5,
+      "failed": 0,
+      "actualSourceBytesVerified": true,
+      "directDependencyVersionsMatchProduction": true,
+      "scope": "Linux micro crate; launcher, TCP, full component and Windows runtime remain unverified"
+    },
     "windowsBuild": "not_run",
     "installed": false
   }
