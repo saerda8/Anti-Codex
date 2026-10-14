@@ -651,6 +651,12 @@ test("owned-process shutdown waits for every unique process and reports survivor
 });
 
 test("a transient termination failure is not a shutdown error after exact scans prove zero survivors", () => {
+  const neverStarted = fixedRoute.stopOwnedProcess(null, null);
+  assert.deepEqual(neverStarted, { stopped: false, processId: null, reason: "not_started" });
+  assert.equal(
+    ownedClientStopError({ ok: true }, { ok: true }, [neverStarted], []),
+    null,
+  );
   const transientFailure = [{ stopped: false, processId: 17172, reason: "kill_failed" }];
   assert.equal(
     ownedClientStopError({ ok: true }, { ok: true }, transientFailure, []),

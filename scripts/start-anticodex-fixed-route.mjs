@@ -2557,7 +2557,7 @@ async function waitFor(check, options = {}) {
 
 export function stopOwnedProcess(child, identity, options = {}) {
   const processId = Number(child?.pid);
-  if (!child) return { stopped: false, processId: null, reason: "missing_process" };
+  if (!child) return { stopped: false, processId: null, reason: "not_started" };
   if (child.exitCode !== null || child.signalCode !== null) {
     return { stopped: false, processId, reason: "already_exited" };
   }
@@ -2668,6 +2668,7 @@ export function ownedClientStopError(beforeStop, afterStop, stopResults = [], su
   const identityFailures = stopResults.filter((result) => (
     !result.stopped
     && result.reason !== "already_exited"
+    && result.reason !== "not_started"
     && result.reason !== "kill_failed"
   ));
   if (beforeStop?.ok && afterStop?.ok && survivors.length === 0 && identityFailures.length === 0) return null;
@@ -2675,7 +2676,7 @@ export function ownedClientStopError(beforeStop, afterStop, stopResults = [], su
     beforeStop?.error,
     afterStop?.error,
     ...stopResults
-      .filter((result) => !result.stopped && result.reason !== "already_exited")
+      .filter((result) => !result.stopped && !["already_exited", "not_started"].includes(result.reason))
       .map((result) => `${result.processId || "unknown PID"}: ${result.reason}`),
   ].filter(Boolean).join("; ") || "process termination could not be proven safe";
 }

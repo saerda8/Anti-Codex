@@ -427,6 +427,30 @@ test("verified process handle terminates only a disposable process through the b
   }
 });
 
+test("a bound handle accepts a query race only after the same handle proves natural exit", () => {
+  const classMatch = syncSource.match(/Add-Type -TypeDefinition @'\r?\n([\s\S]*?)\r?\n'@/);
+  assert.ok(classMatch, "missing VerifiedProcessHandle type source");
+  const native = classMatch[1];
+  const queryFailure = native.indexOf("if (!QueryFullProcessImageName");
+  const capturedQueryError = native.indexOf("int queryError = Marshal.GetLastWin32Error();", queryFailure);
+  const exitedFallback = native.indexOf("if (BoundProcessHasExited(value))", queryFailure);
+  const liveFailure = native.indexOf("Could not query the executable through the bound handle.", queryFailure);
+  assert.ok(queryFailure >= 0
+    && capturedQueryError > queryFailure
+    && exitedFallback > capturedQueryError
+    && liveFailure > exitedFallback);
+  assert.match(native.slice(exitedFallback, liveFailure + 100), /new Win32Exception\(queryError,/);
+
+  for (const functionName of ["Stop-AntiCodexVerifiedScriptProcess", "Stop-AntiCodexRuntimeReleaseProcesses"]) {
+    const source = functionSource(functionName);
+    const opened = source.indexOf("VerifiedProcessHandle]::Open");
+    const exited = source.indexOf(".HasExited", opened);
+    const executable = source.indexOf(".ExecutablePath", opened);
+    assert.ok(opened >= 0 && exited > opened && executable > exited, `${functionName} must check the bound exit state before executable identity`);
+  }
+  assert.doesNotMatch(native, /Could not query the executable[\s\S]*NativeErrorCode|message.*exited/i);
+});
+
 test("runtime sync rejects a concurrent global host sync before touching active", async () => {
   const fixture = createFixture();
   const holder = await holdSyncMutex();

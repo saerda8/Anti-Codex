@@ -108,11 +108,16 @@ namespace AntiCodex.Native
         {
             get
             {
-                uint result = WaitForSingleObject(handle, 0);
-                if (result == WaitObject0) return true;
-                if (result == WaitTimeout) return false;
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the bound process handle.");
+                return BoundProcessHasExited(handle);
             }
+        }
+
+        private static bool BoundProcessHasExited(IntPtr value)
+        {
+            uint result = WaitForSingleObject(value, 0);
+            if (result == WaitObject0) return true;
+            if (result == WaitTimeout) return false;
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the bound process handle.");
         }
 
         public static VerifiedProcessHandle Open(int processId)
@@ -131,10 +136,25 @@ namespace AntiCodex.Native
                 FileTime user;
                 if (!GetProcessTimes(value, out creation, out exit, out kernel, out user))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query process creation time through the bound handle.");
+                if (BoundProcessHasExited(value))
+                {
+                    VerifiedProcessHandle exited = new VerifiedProcessHandle(value, processId, creation.ToInt64(), string.Empty);
+                    value = IntPtr.Zero;
+                    return exited;
+                }
                 StringBuilder executablePath = new StringBuilder(32768);
                 int size = executablePath.Capacity;
                 if (!QueryFullProcessImageName(value, 0, executablePath, ref size))
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not query the executable through the bound handle.");
+                {
+                    int queryError = Marshal.GetLastWin32Error();
+                    if (BoundProcessHasExited(value))
+                    {
+                        VerifiedProcessHandle exited = new VerifiedProcessHandle(value, processId, creation.ToInt64(), string.Empty);
+                        value = IntPtr.Zero;
+                        return exited;
+                    }
+                    throw new Win32Exception(queryError, "Could not query the executable through the bound handle.");
+                }
                 VerifiedProcessHandle result = new VerifiedProcessHandle(
                     value,
                     processId,
@@ -1199,6 +1219,7 @@ function Stop-AntiCodexVerifiedScriptProcess {
             if ($_.Exception.NativeErrorCode -in @(87, 1168)) { return $true }
             throw
         }
+        if ($processHandle.HasExited) { return $true }
         $liveExecutablePath = [IO.Path]::GetFullPath([string]$processHandle.ExecutablePath)
         if ([long]$processHandle.CreationFileTimeUtcTicks -ne $expectedCreationFileTimeUtcTicks -or
             -not $liveExecutablePath.Equals($expectedExecutablePath, [StringComparison]::OrdinalIgnoreCase) -or
@@ -1329,6 +1350,7 @@ function Stop-AntiCodexRuntimeReleaseProcesses {
             $handle = $null
             try {
                 $handle = [AntiCodex.Native.VerifiedProcessHandle]::Open($processId)
+                if ($handle.HasExited) { continue }
                 $liveExecutablePath = [IO.Path]::GetFullPath([string]$handle.ExecutablePath)
                 if ([long]$handle.CreationFileTimeUtcTicks -ne $expectedCreationFileTimeUtcTicks -or
                     -not $liveExecutablePath.Equals($expectedExecutablePath, [StringComparison]::OrdinalIgnoreCase) -or
