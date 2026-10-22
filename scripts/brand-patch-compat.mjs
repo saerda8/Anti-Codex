@@ -969,6 +969,34 @@ export function patchConfigWriteHandler(text) {
   if (source.includes('"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(`config/batchWrite`,e)')) {
     return source;
   }
+  const modernStart = /"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.exec(source);
+  const modernEnd = modernStart ? source.indexOf('"git-merge-base":', modernStart.index) : -1;
+  if (modernStart && modernEnd > modernStart.index &&
+      source.slice(modernStart.index, modernEnd).includes('"settings-read":async') &&
+      source.slice(modernStart.index, modernEnd).includes('"settings-write":async')) {
+    const modernRegionLength = modernEnd - modernStart.index;
+    const modernTick = String.fromCharCode(96);
+    let modernRegion = source.slice(modernStart.index, modernEnd);
+    modernRegion = modernRegion.replace(/"get-configuration":async\(\{key:e\}\)=>\(\{value:this\.getConfigurationValue\(e\)\}\)/, '"get-configuration":e=>({value:this.getConfigurationValue(e.key)}),"batch-write-config-value":e=>this.getRequestAppServerClient(e.hostId).sendAppServerRequest(' + modernTick + 'config/batchWrite' + modernTick + ',e)');
+    modernRegion = modernRegion.replace(/"set-configuration":async\(\{key:e,value:t\}\)=>\{[\s\S]*?\},/, '"set-configuration":e=>{if(eL.has(e.key))throw Error(' + modernTick + 'Direct writes are not allowed' + modernTick + ');return this.setConfigurationValue(e.key,e.value),{success:!0}},');
+    modernRegion = modernRegion.replace(/"get-setting":async\(\{key:e\}\)=>\(\{value:await this\.getSettingValue\(e\)\}\)/, '"get-setting":async e=>({value:await this.getSettingValue(e.key)})');
+    modernRegion = modernRegion.replace(/"set-setting":async\(\{key:e,value:t\}\)=>\(await this\.setSettingValue\(e,t\),\{success:!0\}\)/, '"set-setting":async e=>(await this.setSettingValue(e.key,e.value),{success:!0})');
+    modernRegion = modernRegion.replace(/"settings-read":async\(\)=>\{[\s\S]*?return this\.settings\.readForAgent\(\)\}/, '"settings-read":()=>this.settings.readForAgent()');
+    modernRegion = modernRegion.replace(/"settings-write":async\(\{settings:e\}\)=>\{[\s\S]*?return this\.settings\.writeForAgent\(e\)\}/, '"settings-write":e=>this.settings.writeForAgent(e.settings)');
+    if (!modernRegion.includes('"batch-write-config-value"') || modernRegion.length > modernRegionLength) {
+      throw new Error("Modern desktop config handler patch did not fit");
+    }
+    const modernSource = source.slice(modernEnd, Math.min(source.length, modernEnd + 320));
+    const modernOriginal = source.slice(modernStart.index, modernEnd) + modernSource;
+    const modernReplacement = modernRegion + modernSource;
+    if (modernReplacement.length > modernOriginal.length) {
+      throw new Error("Modern desktop config handler patch did not fit");
+    }
+    return source.slice(0, modernStart.index)
+      + modernReplacement
+      + " ".repeat(modernOriginal.length - modernReplacement.length)
+      + source.slice(modernStart.index + modernOriginal.length);
+  }
   const startMatch = /"get-configuration":async\(\{key:[\w$]+\}\)=>\(\{value:this\.getConfigurationValue\([\w$]+\)\}\),/.exec(source);
   const start = startMatch?.index ?? -1;
   const end = start < 0 ? -1 : source.indexOf('"apply-patch":', start);

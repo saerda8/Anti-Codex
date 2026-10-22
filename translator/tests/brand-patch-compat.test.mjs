@@ -13,6 +13,7 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const modernSettingsDefinitionFixture = "function Mi(){ki=Ut({account:{id:`settings.nav.chatSettings`,defaultMessage:`Account`,description:`Account navigation item that opens ChatGPT settings in the browser`},securitySettings:{id:`settings.nav.securitySettings`,defaultMessage:`Security Settings`,description:`Settings navigation item that opens ChatGPT security settings in the browser`}}),ji={account:{href:`https://chatgpt.com/#settings`,icon:qt,message:ki.account},securitySettings:{href:`https://chatgpt.com/open-security-settings`,icon:ni,message:ki.securitySettings}}}";
 const modernSettingsRenderFixture = "function Or(e){return(0,Q.jsx)(kr,{...e,securitySettingsEnabled:n})}function kr(e){let{securitySettingsEnabled:y}=e;return[...e.sections,...y&&rn(i,k)>0?[{href:hn.securitySettings.href,id:`external:security-settings`,kind:`external`,label:i}]:[]]}";
 const modernModelDataFixture = "function buildModelData(e){return{modelUpgrades:e.model_upgrades,defaultSliderUpgrades:e.default_slider_upgrades}}";
+const codex8622ConfigHandlerFixture = readFileSync(new URL("./fixtures/config-handler-8622.txt", import.meta.url), "utf8");
 
 test("brands Codex and ChatGPT webview titles without changing HTML size", () => {
   for (const title of ["Codex", "ChatGPT"]) {
@@ -684,6 +685,14 @@ test("preserves the 26.727 settings contract while adding the native batch confi
   assert.match(patched, /definitions:n\.Ii/);
   assert.match(patched, /n\.Ni\(e\)/);
   assert.match(patched, /n\.Pi\(r\.key\)\.parse\(t\)/);
+  assert.equal(brandPatchCompat.patchConfigWriteHandler(patched), patched);
+});
+
+test("adds the native batch config bridge to the Codex 8622 settings service shape", () => {
+  const patched = brandPatchCompat.patchConfigWriteHandler(codex8622ConfigHandlerFixture);
+
+  assert.equal(patched.length, codex8622ConfigHandlerFixture.length);
+  assert.match(patched, /"batch-write-config-value":e=>this\.getRequestAppServerClient\(e\.hostId\)\.sendAppServerRequest\(`config\/batchWrite`,e\)/);
   assert.equal(brandPatchCompat.patchConfigWriteHandler(patched), patched);
 });
 
