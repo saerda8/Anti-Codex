@@ -454,6 +454,14 @@ test("injects managed approval and sandbox session flags into only the native ap
   );
 });
 
+test("repairs a padded signal identifier left by an older managed-session patch", () => {
+  const patched = brandPatchCompat.patchAppServerManagedSessionFlags(appServerSpawnFixture());
+  const broken = patched.replace("this.proc", "s      ignal;this.proc");
+  const repaired = brandPatchCompat.repairSplitSignalIdentifier(broken);
+  assert.match(repaired, /\bsignal\s*;this\.proc/);
+  assert.doesNotMatch(repaired, /\bs\s+ignal\b/);
+});
+
 test("brands and narrows the 26.825 crash recovery page without changing bundle length", () => {
   const patched = brandPatchCompat.patchCrashRecoveryPage(latestCrashRecoveryBundle);
 

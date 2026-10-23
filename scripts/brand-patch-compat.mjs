@@ -817,6 +817,10 @@ function allMatches(source, pattern) {
   return [...source.matchAll(new RegExp(pattern.source, pattern.flags))];
 }
 
+export function repairSplitSignalIdentifier(source) {
+  return source.replace(/\bs(?<padding>\s{2,})ignal\b/g, (_match, padding) => `signal${padding}`);
+}
+
 export function hasSettingsExternalNavigationPatch(text) {
   const source = String(text ?? "");
   return allMatches(source, SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN).length === 1
@@ -891,7 +895,7 @@ export function patchAppServerManagedSessionFlags(text) {
   const wslResolvedOriginal = allMatches(source, APP_SERVER_WSL_RESOLVED_NATIVE_SPAWN_PATTERN);
   const original = [...inlineOriginal, ...resolvedOriginal, ...wslResolvedOriginal];
   const patched = allMatches(source, APP_SERVER_MANAGED_SESSION_FLAGS_PATTERN);
-  if (original.length === 0 && patched.length === 1) return source;
+  if (original.length === 0 && patched.length === 1) return repairSplitSignalIdentifier(source);
   if (original.length !== 1 || patched.length !== 0) {
     throw new Error("Expected exactly one supported native app-server spawn");
   }
@@ -938,10 +942,10 @@ export function patchAppServerManagedSessionFlags(text) {
   if (replacement.length > target.length) {
     throw new Error(`Managed app-server session flags patch did not fit in place: ${replacement.length} > ${target.length}`);
   }
-  return source.slice(0, match.index)
+  return repairSplitSignalIdentifier(source.slice(0, match.index)
     + replacement
     + " ".repeat(target.length - replacement.length)
-    + source.slice(match.index + target.length);
+    + source.slice(match.index + target.length));
 }
 
 export function hasStartupMcpConfigReload(text) {

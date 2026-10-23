@@ -26,6 +26,7 @@ import {
   patchSettingsExternalNavigationRender,
   patchWebviewHtmlTitle,
   patchWindowsTrayIconSelection,
+  repairSplitSignalIdentifier,
   selectCrashRecoveryBundleCandidate,
 } from "./brand-patch-compat.mjs";
 import { patchCompiledProfileDropdownSettings } from "./brand-profile-dropdown.mjs";
@@ -1095,7 +1096,7 @@ for (const [name, findPatch] of selectedPatchSpecs) {
       const entry = walkToEntry(header, rel);
       const { buf, offset } = readFileFromAsar(fd, entry, dataOffset);
       const before = buf.toString("utf8");
-      const after = patch(before);
+      const after = repairSplitSignalIdentifier(patch(before));
       const afterBuf = Buffer.from(after, "utf8");
       if (afterBuf.length !== buf.length) {
         throw new Error(`${rel} size changed: ${afterBuf.length} !== ${buf.length}`);
