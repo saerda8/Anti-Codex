@@ -1481,6 +1481,8 @@ export function buildCopiedClientEnvironment(plan, baseEnvironment = process.env
   for (const name of [
     // Codex 26.1016+ treats this as an explicit external CLI override; the copied host must use its bundled CLI.
     "CODEX_CLI_PATH",
+    "CODEX_APP_TOOLS_PIPE_PATH",
+    "CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY",
     "CODEX_PLUS_STATE_DIR",
     "CODEX_PLUS_APP_EXECUTABLE",
     "CODEX_PLUS_PROTOCOL_PROXY_PORT",

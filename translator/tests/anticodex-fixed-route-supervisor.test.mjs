@@ -1221,6 +1221,8 @@ test("copied client environment removes original Codex pointers and provider sec
     ANTHROPIC_API_KEY: "ANTHROPIC_SECRET",
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
     CODEX_CLI_PATH: "C:\\Users\\XD\\AppData\\Local\\OpenAI\\Codex\\bin\\codex.exe",
+    CODEX_APP_TOOLS_PIPE_PATH: "\\\\.\\pipe\\codex-app-tools-test",
+    CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY: "TEST_IDENTITY",
     Path: "C:\\Windows\\System32",
   });
   assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
@@ -1244,6 +1246,8 @@ test("copied client environment removes original Codex pointers and provider sec
     "CODEX_ELECTRON_DEV_PARENT_PID",
     "CODEX_ELECTRON_DEV_WEBVIEW_PID",
     "CODEX_CLI_PATH",
+    "CODEX_APP_TOOLS_PIPE_PATH",
+    "CODEX_TASK_WORKSPACE_VERIFYING_IDENTITY",
     "CODEX_PLUS_STATE_DIR",
     "CODEX_PLUS_APP_EXECUTABLE",
     "CODEX_PLUS_PROTOCOL_PROXY_PORT",
