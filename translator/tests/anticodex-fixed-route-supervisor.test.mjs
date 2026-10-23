@@ -1220,6 +1220,7 @@ test("copied client environment removes original Codex pointers and provider sec
     OPENAI_API_KEY: "OPENAI_SECRET",
     ANTHROPIC_API_KEY: "ANTHROPIC_SECRET",
     UPSTREAM_API_KEY: "THIRD_PARTY_SECRET",
+    CODEX_CLI_PATH: "C:\\Users\\XD\\AppData\\Local\\OpenAI\\Codex\\bin\\codex.exe",
     Path: "C:\\Windows\\System32",
   });
   assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
@@ -1242,6 +1243,7 @@ test("copied client environment removes original Codex pointers and provider sec
     "DEEPCODEX_SHARED_CODEX_HOME",
     "CODEX_ELECTRON_DEV_PARENT_PID",
     "CODEX_ELECTRON_DEV_WEBVIEW_PID",
+    "CODEX_CLI_PATH",
     "CODEX_PLUS_STATE_DIR",
     "CODEX_PLUS_APP_EXECUTABLE",
     "CODEX_PLUS_PROTOCOL_PROXY_PORT",
