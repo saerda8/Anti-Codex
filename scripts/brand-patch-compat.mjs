@@ -901,12 +901,18 @@ export function patchAppServerManagedSessionFlags(text) {
   const wslResolvedVariant = wslResolvedOriginal.length === 1;
   const resolvedVariant = resolvedOriginal.length === 1 || wslResolvedVariant;
   const logger = `this.logger.info(\`stdio_transport_spawned\`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:${proc}.pid},sensitive:{}}),`;
-  const target = resolvedVariant ? match[0] : match[0] + logger;
-  if (!source.startsWith(target, match.index)) {
+  const targetStart = match.index;
+  const targetMatch = resolvedVariant ? match[0] : match[0] + logger;
+  let targetEnd = targetStart + targetMatch.length;
+  if (/[A-Za-z0-9_$]/.test(source[targetEnd - 1] ?? "")) {
+    while (/[A-Za-z0-9_$]/.test(source[targetEnd] ?? "")) targetEnd += 1;
+  }
+  const target = source.slice(targetStart, targetEnd);
+  if (!source.startsWith(targetMatch, targetStart)) {
     throw new Error("Expected exactly one supported native app-server spawn");
   }
-  const methodTailEnd = source.indexOf("onProcessError=", match.index + target.length);
-  const methodTail = source.slice(match.index + target.length, methodTailEnd < 0 ? match.index + target.length : methodTailEnd);
+  const methodTailEnd = source.indexOf("onProcessError=", targetEnd);
+  const methodTail = source.slice(targetEnd, methodTailEnd < 0 ? targetEnd : methodTailEnd);
   const reserved = new Set([
     command,
     proc,
