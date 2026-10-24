@@ -23,7 +23,7 @@ if (-not $BaseUrl) {
 
 $startedAt = [DateTime]::UtcNow
 $failures = New-Object System.Collections.Generic.List[string]
-$model = if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.5-flash-low" }
+$model = if ($env:ANTICODEX_TEST_MODEL) { $env:ANTICODEX_TEST_MODEL } else { "gemini-3.8-flash-low" }
 $authPath = Join-Path $StateRoot "codex-home-deepseek-app\auth.json"
 $authToken = ""
 if (Test-Path -LiteralPath $authPath -PathType Leaf) {
