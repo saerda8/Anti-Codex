@@ -2,20 +2,24 @@
   "component": "CodexPlusPlus",
   "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
   "license": "AGPL-3.0-only",
-  "version": "1.11.1",
-  "tag": "v1.11.1",
-  "upstreamCommit": "bb6749c0ec96e1b90ab30d04930275d38bb2851c",
-  "isolationPatchCommit": "pending-candidate",
-  "patchCommit": "7b949fd7e7d052f25ed08f2735eb57aa2dde3c32",
+  "version": "1.11.2",
+  "tag": "v1.11.2",
+  "upstreamCommit": "35c682058ba82083c75aecd04529d08780e33918",
+  "isolationPatchCommit": "4e3106d198496a13b3089e56eecd0bc8c7abbc4c",
+  "patchCommit": "4e3106d198496a13b3089e56eecd0bc8c7abbc4c",
   "patches": [
     {
-      "file": "patches/0015-v1111-port.patch",
-      "sha256": "0b55ed4a4900bfe69e49c8264216cf5b5b5c9cfbf4e559e25c844de648de9812",
-      "scope": "ported Anti-Codex isolation, protocol compatibility, response history, cancellation, and launcher fixes onto CodexPlusPlus v1.11.1"
+      "file": "patches/0016-v112-integration.patch",
+      "sha256": "52d435b04f5f45b4286a2a3b94f0d8a8a7cdd9d070d6c64576a4196641f0d325",
+      "scope": "Anti-Codex isolation and protocol compatibility on v1.11.2, standalone headless launcher, Windows long-path atomic writes, and complete response-history propagation"
     }
   ],
   "verification": {
-    "launcherReleaseBuild": "sha256:6a1107d1df1d174e763aafdfcc1c39772ef047395603ea50e2bff65260d94e17",
-    "runtimeIsolation": "candidate only; not activated"
+    "launcherReleaseBuild": "sha256:b8ceedd750ba1252a7fdbf8c3ca01c058f99e61096e50948ae806cd633ea0462",
+    "cargoFmt": "passed",
+    "protocolProxyTests": "204/204 on Windows with isolated state, home, and SQLite directories",
+    "responseHistoryBlackbox": "Chat 10/10 and native Responses 9/9, including helper restart and completed/interrupted streams",
+    "windowsAtomicWrite": "passed: create and replace history files beyond MAX_PATH",
+    "runtimeIsolation": "10/10 source compatibility checks; standalone helper runs without a window"
   }
 }
