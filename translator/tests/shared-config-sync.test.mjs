@@ -357,6 +357,16 @@ test("MCP verifier keeps development workers opt-in", () => {
   assert.match(verifier, /developmentWorkersAllowed/);
 });
 
+test("MCP verifier probes only enabled local servers and preserves shared names", () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+  const localMcpNames = verifier.match(/\$mcpNames = @\(Get-McpServerNamesFromToml \$configText \| Where-Object \{[\s\S]*?\}\)/)?.[0] ?? "";
+
+  assert.match(localMcpNames, /Get-McpSectionText \$configText \$_/);
+  assert.match(localMcpNames, /Get-TomlFieldRaw[\s\S]*?"enabled"[\s\S]*?-notmatch[\s\S]*?false/);
+  assert.match(verifier, /\$sharedMcpNamesAll = @\(Get-McpServerNamesFromToml \$sharedConfigText\)/);
+  assert.match(verifier, /MCP '\$mcpName' real stdio tools\/list failed:/);
+});
+
 test("development worker opt-in migrates out of native config and survives refresh", () => {
   for (const enabled of [true, false]) {
     const dir = tempDir();

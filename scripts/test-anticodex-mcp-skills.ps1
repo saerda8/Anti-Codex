@@ -1034,7 +1034,10 @@ if (-not (Test-Path -LiteralPath $appToolsCachePath -PathType Container)) {
 
 $mcpNames = @()
 if ($configText) {
-    $mcpNames = @(Get-McpServerNamesFromToml $configText | Where-Object { $_ -ne "cua_repl" })
+    $mcpNames = @(Get-McpServerNamesFromToml $configText | Where-Object {
+        $_ -ne "cua_repl" -and
+        (Get-TomlFieldRaw (Get-McpSectionText $configText $_) "enabled") -notmatch '^false(?:\s|$)'
+    })
     $sharedConfigText = ""
     if (Test-Path -LiteralPath $sharedConfigPath -PathType Leaf) {
         try {
