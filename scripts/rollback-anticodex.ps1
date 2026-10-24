@@ -613,7 +613,11 @@ function Test-AntiCodexAsarPatches {
         }
     }
     $configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
-    if ([regex]::Matches($text, $configWriteBridgePattern).Count -ne $ExpectedConfigWriteBridgeCount) {
+    $legacyConfigWriteBridgeCount = [regex]::Matches($text, $configWriteBridgePattern).Count
+    $modernConfigWriteBridgeValid = [regex]::Matches($text, 'configWriteTarget').Count -eq 1 -and
+        [regex]::Matches($text, 'config/batchWrite').Count -ge 1 -and
+        [regex]::Matches($text, 'reloadUserConfig').Count -ge 1
+    if ($legacyConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -and -not $modernConfigWriteBridgeValid) {
         throw "Anti-Codex host app.asar native config write bridge count is invalid."
     }
     $codexTraySelectorCount = [regex]::Matches($text, 'codex-tray\.ico').Count

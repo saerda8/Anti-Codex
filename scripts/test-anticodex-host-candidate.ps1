@@ -498,7 +498,11 @@ if ([regex]::Matches($asarText, $settingsDefinitionPattern).Count -ne 1 -or
 }
 Test-AntiCodexCrashRecoveryPage -Text $asarText | Out-Null
 $configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
-if ([regex]::Matches($asarText, $configWriteBridgePattern).Count -ne 1) {
+$legacyConfigWriteBridgeCount = [regex]::Matches($asarText, $configWriteBridgePattern).Count
+$modernConfigWriteBridgeValid = [regex]::Matches($asarText, 'configWriteTarget').Count -eq 1 -and
+    [regex]::Matches($asarText, 'config/batchWrite').Count -ge 1 -and
+    [regex]::Matches($asarText, 'reloadUserConfig').Count -ge 1
+if ($legacyConfigWriteBridgeCount -ne 1 -and -not $modernConfigWriteBridgeValid) {
     throw "Anti-Codex candidate native config write bridge count is invalid."
 }
 $codexTraySelectorCount = [regex]::Matches($asarText, 'codex-tray\.ico').Count
