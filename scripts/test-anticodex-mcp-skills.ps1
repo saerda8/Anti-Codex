@@ -464,6 +464,7 @@ function Normalize-McpEnvForCompare {
                     "NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS",
                     "NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER",
                     "NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME",
+                    "NODE_REPL_INSTRUCTIONS_USE_CASE_COMPUTER_USE",
                     "NODE_REPL_TRUSTED_SERVICES",
                     "NODE_REPL_UNTRUSTED_ENV_ALLOWLIST",
                     "SKY_CUA_NATIVE_PIPE",

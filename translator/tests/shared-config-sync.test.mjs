@@ -245,6 +245,48 @@ test("MCP verification accepts only isolated node_repl trusted roots", {
   });
 });
 
+test("MCP env comparison ignores generated node_repl instructions but detects other env changes", {
+  skip: process.platform !== "win32",
+}, () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+  const start = verifier.indexOf("function Normalize-McpEnvForCompare");
+  const end = verifier.indexOf("\nfunction ", start + 10);
+  assert.ok(start >= 0 && end > start, "MCP env normalizer must be independently testable");
+  const normalize = verifier.slice(start, end);
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  const shared = [
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = ""',
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = ""',
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_COMPUTER_USE = ""',
+    'CUSTOM_ENV = "same"',
+  ].join("\n");
+  const local = [
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "generated browser instruction"',
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "generated Chrome instruction"',
+    'NODE_REPL_INSTRUCTIONS_USE_CASE_COMPUTER_USE = "generated computer-use instruction"',
+    'CUSTOM_ENV = "same"',
+  ].join("\n");
+  const script = [
+    normalize,
+    "$result = [ordered]@{",
+    `  runtimeInstructionDifferencesIgnored = (Normalize-McpEnvForCompare -ServerName ${quote("node_repl")} -Text ${quote(shared)}) -eq (Normalize-McpEnvForCompare -ServerName ${quote("node_repl")} -Text ${quote(local)})`,
+    `  ordinaryEnvDifferencesDetected = (Normalize-McpEnvForCompare -ServerName ${quote("node_repl")} -Text ${quote('CUSTOM_ENV = "shared"')}) -ne (Normalize-McpEnvForCompare -ServerName ${quote("node_repl")} -Text ${quote('CUSTOM_ENV = "local"')})`,
+    "}",
+    "$result | ConvertTo-Json -Compress",
+  ].join("\n");
+  const powershell = path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const encodedCommand = Buffer.from(script, "utf16le").toString("base64");
+  const result = spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), {
+    runtimeInstructionDifferencesIgnored: true,
+    ordinaryEnvDifferencesDetected: true,
+  });
+});
+
 test("shared config sync excludes Anti-Codex development workers by default", () => {
   const dir = tempDir();
   const source = path.join(dir, "global.toml");
