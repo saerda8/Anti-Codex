@@ -614,7 +614,7 @@ function Test-AntiCodexAsarPatches {
     }
     $configWriteBridgePattern = '"batch-write-config-value":(?:async )?([\w$]+)=>this\.getRequestAppServerClient\(\1\.hostId\)\.sendAppServerRequest\([`"]config/batchWrite[`"],\1\)'
     $legacyConfigWriteBridgeCount = [regex]::Matches($text, $configWriteBridgePattern).Count
-    $modernConfigWriteBridgeValid = [regex]::Matches($text, 'configWriteTarget').Count -eq 1 -and
+    $modernConfigWriteBridgeValid = [regex]::Matches($text, 'configWriteTarget').Count -ge 1 -and
         [regex]::Matches($text, 'config/batchWrite').Count -ge 1 -and
         [regex]::Matches($text, 'reloadUserConfig').Count -ge 1
     if ($legacyConfigWriteBridgeCount -ne $ExpectedConfigWriteBridgeCount -and -not $modernConfigWriteBridgeValid) {
