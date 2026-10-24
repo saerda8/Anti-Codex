@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = "native-panel-v119";
+  const VERSION = "native-panel-v120";
   const SUMMARY_VERSION = "latest-reports-evidence-v5";
   const MANAGER_ID = "anticodex-manager-overlay";
   const LEGACY_BUTTON_ID = "anticodex-manager-button";
@@ -1885,37 +1885,37 @@
     const tabs = el("div", { role: "tablist", "aria-label": "管理页面", style: "display:flex;gap:6px;flex-wrap:wrap" }, [statusTabButton, accountSettingsButton, promptSettingsButton]);
     const head = el("div", { className: "anticodex-head" }, [title, el("div", { className: "anticodex-head-tools" }, [tabs, close])]);
     style.textContent += `
-      [data-anticodex-manager-view=accounts] .anticodex-panel{width:min(1500px,98vw);height:min(1040px,97vh);display:flex;flex-direction:column;overflow:hidden;padding:0 8px 6px}
+      [data-anticodex-manager-view=accounts] .anticodex-panel{width:min(1500px,98vw);height:min(1040px,97vh);display:flex;flex-direction:column;overflow:hidden;padding:0 12px 12px}
       [data-anticodex-manager-view=accounts] .anticodex-head{padding:14px 0 12px;margin:0;flex-shrink:0}
       [data-anticodex-manager-view=accounts] .anticodex-grid{display:block;overflow:auto;min-height:0;flex:1}
       [data-anticodex-manager-view=accounts] .anticodex-result-card{display:none}
-      .anticodex-account-list{grid-column:1/-1;display:grid;gap:0}
-      .anticodex-account-list h2{font-size:13px;margin:0 0 4px}
-      .anticodex-account-toolbar{display:flex;gap:0;flex-wrap:wrap;align-items:center;margin-bottom:1px}
-      .anticodex-account-toolbar button{min-height:19px;padding:0 2px;font-size:8.6px}
-      .anticodex-account-row{display:grid;grid-template-columns:minmax(80px,.58fr) minmax(100px,1fr) minmax(100px,1fr) 100px;gap:3px;padding:2px 2px;border-top:1px solid var(--ac-line);align-items:start}
+      .anticodex-account-list,.anticodex-account-list *{box-sizing:border-box}
+      .anticodex-account-list{grid-column:1/-1;display:grid;gap:12px;min-width:0;font-size:14px}
+      .anticodex-account-list h2{font-size:16px;margin:0;line-height:1.35}
+      .anticodex-account-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:0}
+      .anticodex-account-toolbar input{min-height:32px;font-size:14px}
+      .anticodex-account-toolbar button{min-height:32px;padding:6px 12px;font-size:14px;line-height:1.25}
+      .anticodex-account-row{display:grid;grid-template-columns:minmax(180px,1.2fr) minmax(220px,1fr) minmax(220px,1fr) minmax(220px,1.1fr);gap:12px 16px;padding:12px 8px;border-top:1px solid var(--ac-line);align-items:start;min-width:0}
       .anticodex-account-row[data-active=true]{background:color-mix(in srgb,#71c59a 7%,transparent)}
       .anticodex-account-row[data-pending=true]{background:var(--ac-raised)}
-      .anticodex-account-identity{overflow-wrap:anywhere;font-size:11px}.anticodex-account-identity strong{display:block;margin-bottom:2px}
-      .anticodex-account-meta{font-size:8px;color:var(--ac-muted);line-height:1.1;overflow-wrap:anywhere}
-      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:0 4px;border-radius:4px;margin:1px 0 0;font-size:8.2px}
-      .anticodex-account-group{display:grid;gap:2px;align-content:start}.anticodex-account-group h3{font-size:11px;margin:0}
-      .anticodex-quota-title{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;max-width:96px}
-      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,40px) auto;column-gap:7px;align-items:center}
-      .anticodex-quota-bucket .anticodex-quota-track{grid-row:2;grid-column:1}
-      .anticodex-quota-bucket .anticodex-account-meta{grid-row:1;grid-column:2;font-size:10px;white-space:nowrap}
-      .anticodex-quota-track{height:4px;width:100%;max-width:34px;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:2px 0}
+      .anticodex-account-identity{min-width:0;overflow-wrap:anywhere;font-size:14px;line-height:1.4}.anticodex-account-identity strong{display:block;margin-bottom:4px}
+      .anticodex-account-meta{min-width:0;font-size:12px;color:var(--ac-muted);line-height:1.35;overflow-wrap:anywhere}
+      .anticodex-account-badge{display:inline-block;border:1px solid #71c59a;color:#71c59a;padding:2px 6px;border-radius:4px;margin:2px 0 0;font-size:12px;line-height:1.2}
+      .anticodex-account-group{display:grid;gap:8px;align-content:start;min-width:0}.anticodex-account-group h3{font-size:14px;line-height:1.3;margin:0;overflow-wrap:anywhere}
+      .anticodex-quota-title{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;min-width:0;max-width:none;font-size:12px;line-height:1.3;white-space:nowrap}
+      .anticodex-quota-bucket{display:grid;grid-template-columns:minmax(0,1fr);row-gap:4px;min-width:0}
+      .anticodex-quota-bucket .anticodex-account-meta{font-size:12px;white-space:normal}
+      .anticodex-quota-track{height:6px;width:100%;max-width:none;min-width:0;border-radius:3px;background:var(--ac-line);overflow:hidden;margin:2px 0}
       .anticodex-quota-fill{height:100%;background:#71c59a}.anticodex-quota-low{background:#e98773}
-      .anticodex-account-controls{display:grid;grid-template-columns:1fr 1fr;gap:2px;align-content:start}.anticodex-account-controls button{min-height:19px;padding:0 2px;font-size:8.1px}
-      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:2px 3px;font-size:8.7px;min-height:19px;line-height:1.1;border-bottom:1px solid var(--ac-line)}
-      .anticodex-account-inline-status{grid-column:1/-1;font-size:8.4px;line-height:1.12;color:var(--ac-muted)}
+      .anticodex-account-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start;min-width:0}.anticodex-account-controls button{min-height:32px;padding:6px 8px;font-size:12px;line-height:1.3;white-space:normal}
+      .anticodex-account-feedback{position:sticky;top:0;z-index:2;background:var(--ac-bg);padding:8px 10px;font-size:12px;min-height:32px;line-height:1.35;border-bottom:1px solid var(--ac-line)}
+      .anticodex-account-inline-status{grid-column:1/-1;font-size:12px;line-height:1.35;color:var(--ac-muted)}
       .anticodex-account-feedback[aria-busy=true]::before{content:'◌';display:inline-block;margin-right:6px;animation:anticodex-account-spin 1s linear infinite}
       @keyframes anticodex-account-spin{to{transform:rotate(360deg)}}
       @media(prefers-reduced-motion:reduce){.anticodex-account-feedback[aria-busy=true]::before{animation:none}}
       .anticodex-head [role=tab][aria-selected=true]{border-color:#71c59a;color:#71c59a}
-      @media(max-width:1000px){.anticodex-account-row{gap:3px;grid-template-columns:minmax(80px,.58fr) minmax(100px,1fr) minmax(100px,1fr) 100px;padding:2px 2px}}
-      @media(max-width:1000px){.anticodex-quota-bucket{display:block}}
-      @media(max-width:680px){.anticodex-account-row{grid-template-columns:1fr 1fr}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}.anticodex-account-controls{display:flex;flex-wrap:wrap}}
+      @media(max-width:1040px){.anticodex-account-row{grid-template-columns:repeat(2,minmax(0,1fr))}.anticodex-account-identity,.anticodex-account-controls{grid-column:1/-1}}
+      @media(max-width:680px){[data-anticodex-manager-view=accounts] .anticodex-head{display:block}[data-anticodex-manager-view=accounts] .anticodex-head-tools{margin-top:12px;justify-content:space-between}.anticodex-account-row{grid-template-columns:minmax(0,1fr);gap:12px;padding:12px 4px}.anticodex-account-identity,.anticodex-account-controls{grid-column:1}.anticodex-account-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.anticodex-account-toolbar{align-items:stretch}.anticodex-account-toolbar input,.anticodex-account-toolbar button{max-width:100%}}
     `;
     const actions = el("div", { className: "anticodex-actions" });
     const grid = el("div", { className: "anticodex-grid" });
@@ -2257,7 +2257,7 @@
         item.onclick = handler;
         return item;
       };
-      const label = el("input", { type: "text", maxlength: "80", placeholder: "账号备注（可选）", "aria-label": "账号备注", style: "width:160px;padding:6px 8px;border:1px solid var(--ac-line);border-radius:5px;background:var(--ac-raised);color:var(--ac-text);font-size:12px" });
+      const label = el("input", { type: "text", maxlength: "80", placeholder: "账号备注（可选）", "aria-label": "账号备注", style: "width:160px;padding:6px 8px;border:1px solid var(--ac-line);border-radius:5px;background:var(--ac-raised);color:var(--ac-text);font-size:14px" });
       const toolbar = el("div", { className: "anticodex-account-toolbar" }, [
         label,
         button("添加 / 登录账号", (event) => accountOperation("login", { label: label.value }, true, event.currentTarget)),
@@ -2314,7 +2314,7 @@
           button("修改备注", (event) => {
             if (renameField) { accountOperation("rename", { id: account.id, label: renameField.value }); return; }
             const editButton = event.currentTarget;
-            renameField = el("input", { type: "text", maxlength: "80", value: account.label || "", "aria-label": `修改 ${account.maskedEmail} 的备注`, style: "box-sizing:border-box;width:100%;margin-top:8px;padding:8px;background:var(--ac-raised);color:var(--ac-text);border:1px solid var(--ac-line);border-radius:5px" });
+            renameField = el("input", { type: "text", maxlength: "80", value: account.label || "", "aria-label": `修改 ${account.maskedEmail} 的备注`, style: "box-sizing:border-box;width:100%;margin-top:8px;padding:8px;background:var(--ac-raised);color:var(--ac-text);border:1px solid var(--ac-line);border-radius:5px;font-size:14px" });
             identity.append(renameField);
             editButton.textContent = "保存备注";
             renameField.onkeydown = (keyEvent) => {

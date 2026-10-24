@@ -15,7 +15,24 @@ import { createAntiCodexManagerService } from "../../scripts/anticodex-manager-s
     assert.deepEqual(Array.from(ordered, (bucket) => bucket.window), ["5h", "7d", "daily"]);
     assert.equal(ordered[1].window, "7d");
     assert.deepEqual(group.buckets.map((bucket) => bucket.window), ["7d", "5h", "weekly", "daily"]);
-    assert.ok(/\.anticodex-quota-track\{[^}]*max-width:[1-4]\dpx/.test(ui), "Quota tracks must stay compact, including narrow layouts");
+});
+
+test("account pane stays readable on desktop and stacks without overflow on small screens", () => {
+  const ui = fs.readFileSync(new URL("../../scripts/anticodex-manager-inject.js", import.meta.url), "utf8");
+  const accountStyles = ui.slice(ui.indexOf(".anticodex-account-list{"), ui.indexOf("const actions =", ui.indexOf(".anticodex-account-list{")));
+  assert.match(accountStyles, /\.anticodex-account-list\{[^}]*font-size:14px/);
+  assert.match(accountStyles, /\.anticodex-account-meta\{[^}]*font-size:12px/);
+  assert.match(accountStyles, /\.anticodex-account-row\{[^}]*grid-template-columns:minmax\(180px,1\.2fr\) minmax\(220px,1fr\) minmax\(220px,1fr\) minmax\(220px,1\.1fr\)/);
+  assert.match(accountStyles, /\.anticodex-account-row\{[^}]*gap:12px 16px/);
+  assert.match(accountStyles, /\.anticodex-quota-title\{[^}]*white-space:nowrap/);
+  assert.match(accountStyles, /\.anticodex-quota-title\{[^}]*max-width:none/);
+  assert.match(accountStyles, /\.anticodex-quota-bucket\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(accountStyles, /\.anticodex-quota-track\{[^}]*width:100%[^}]*max-width:none/);
+  assert.match(accountStyles, /\.anticodex-account-toolbar button\{[^}]*min-height:32px/);
+  assert.match(accountStyles, /\.anticodex-account-controls\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*gap:8px/);
+  assert.match(accountStyles, /\.anticodex-account-controls button\{[^}]*min-height:32px/);
+  assert.match(accountStyles, /@media\(max-width:1040px\)[\s\S]*?\.anticodex-account-row\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(accountStyles, /@media\(max-width:680px\)[\s\S]*?\.anticodex-account-row\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
 });
 
 test("account manager endpoints protect account data and serialize background changes", async (t) => {
