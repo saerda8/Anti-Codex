@@ -68,7 +68,9 @@ test("revision 7 candidate validation requires the official no-repaint tracker",
   assert.match(candidateValidator, /"app-server-managed-session-flags"/);
   assert.match(candidateValidator, /"settings-external-links"/);
   assert.match(candidateValidator, /configWriteBridgePattern/);
-  assert.match(candidateValidator, /\$configWriteBridgePattern\)\.Count -ne 1/);
+  assert.match(candidateValidator, /\$legacyConfigWriteBridgeCount\s*=\s*\[regex\]::Matches\(\$asarText,\s*\$configWriteBridgePattern\)\.Count/);
+  assert.match(candidateValidator, /\$modernConfigWriteBridgeValid\s*=\s*\[regex\]::Matches\(\$asarText,\s*'configWriteTarget'\)\.Count\s+-ge\s+1\s+-and\s+\[regex\]::Matches\(\$asarText,\s*'config\/batchWrite'\)\.Count\s+-ge\s+1\s+-and\s+\[regex\]::Matches\(\$asarText,\s*'reloadUserConfig'\)\.Count\s+-ge\s+1/);
+  assert.match(candidateValidator, /if\s*\(\$legacyConfigWriteBridgeCount\s+-ne\s+1\s+-and\s+-not\s+\$modernConfigWriteBridgeValid\)/);
   assert.match(candidateValidator, /primaryDeferredRestoreRepaintPattern/);
   assert.match(candidateValidator, /\[regex\]::Matches\(\$asarText,\s*\$primaryDeferredRestoreRepaintPattern\)\.Count -ne 0/);
   assert.match(candidateValidator, /primaryFocusRestoreRepaintPattern/);

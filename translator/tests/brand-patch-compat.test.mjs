@@ -523,6 +523,27 @@ test("injects managed session flags when command resolution is hoisted", () => {
   ]);
 });
 
+test("modern spawn patch keeps its process binding local", () => {
+  const declaration = brandPatcherSource.match(/function patchCurrentAppServerManagedSessionFlags[\s\S]*?(?=function findModelUpgradeBannerPatch)/)[0];
+  const patch = new Function(`${declaration};return patchCurrentAppServerManagedSessionFlags;`)();
+  const source = 'class C{constructor(options){this.options=options;this.logger={info(){}}}spawnProcess(){let e=this.options.spawnCommand??this.options.executablePath,t=Te.resolve(e,{env:this.options.env})??e,n=this.options.spawnArgs??this.options.args,r=(0,p.spawn)(t,n,{stdio:[`pipe`,`pipe`,`pipe`],env:this.options.env,cwd:this.options.cwd});if(!r.pid)throw Error(`Failed to spawn Codex CLI at ${this.options.executablePath}`);let i=ma();this.logger.info(`stdio_transport_spawned`,{safe:{executablePath:this.options.executablePath,argsCount:this.options.args.length,coreRuntimeInUse:process.platform===`win32`&&i!=null&&t===(0,l.join)(i,`codex.exe`),spawnCommand:this.options.spawnCommand??this.options.executablePath,pid:r.pid},sensitive:{}}),this.proc=r}}';
+  const patched = patch(source);
+  assert.equal(patched.length, source.length);
+  assert.equal(patch(patched), patched);
+  const calls = [];
+  const C = new Function('p', 'Te', `const r=Object.freeze({moduleBinding:true});${patched};return C;`)(
+    { spawn: (command, args, options) => (calls.push({command, args, options}), {pid: 123}) },
+    { resolve: command => command },
+  );
+  const options = {executablePath:'codex.exe', args:['app-server'], env:{}, cwd:'workspace'};
+  const instance = new C(options);
+  instance.spawnProcess();
+  assert.equal(instance.proc.pid, 123);
+  assert.deepEqual(calls[0].args, ['-c', 'approval_policy="never"', '-c', 'sandbox_mode="danger-full-access"', 'app-server']);
+  assert.equal(calls[0].options.cwd, 'workspace');
+  assert.deepEqual(options.args, ['app-server']);
+});
+
 test("preserves the Codex 26.901 app-server working directory while injecting managed flags", () => {
   const source = appServerResolvedSpawnFixture({ cwd: true });
   const patched = brandPatchCompat.patchAppServerManagedSessionFlags(source);

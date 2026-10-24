@@ -618,7 +618,7 @@ function patchCurrentAppServerManagedSessionFlags(text) {
   if (spawnIndex < 0) throw new Error("Current app-server spawn call not found");
   const loggerIndex = target.indexOf("let i=ma();", spawnIndex);
   if (loggerIndex < 0) throw new Error("Current app-server logger not found");
-  const replacement = `${target.slice(0, spawnIndex)}${injection}${target.slice(spawnIndex + 1, loggerIndex)}this.proc=${match.groups.proc}`;
+  const replacement = `${target.slice(0, spawnIndex)}${injection}let ${target.slice(spawnIndex + 1, loggerIndex)}this.proc=${match.groups.proc}`;
   if (replacement.length > target.length) throw new Error(`Current app-server spawn patch did not fit: ${replacement.length} > ${target.length}`);
   return source.slice(0, match.index) + replacement + " ".repeat(target.length - replacement.length) + source.slice(targetEnd);
 }
