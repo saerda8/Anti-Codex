@@ -17,7 +17,11 @@ import {
   patchAppRouteGate,
   patchComputerUseLegacyNotifyOptOut,
   patchConfigWriteHandler as patchCurrentConfigWriteHandler,
+  hasModernNativeConfigBatchWrite,
+  patchModernNativeConfigBatchWrite,
   patchCrashRecoveryPage,
+  patchCrashRecoveryTitle,
+  patchCrashRecoveryRuntime,
   patchElectronProductName,
   patchLocalModelAvailability,
   patchProductNameDrivenSessionTitle,
@@ -584,14 +588,39 @@ function findMainSessionPatch(fd, header, dataOffset) {
 
 function findModelSwitchWarningPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith("webview/assets/app-primary-") || !rel.endsWith(".js")) continue;
+    if ((!rel.startsWith("webview/assets/app-primary-") && !rel.startsWith("webview/assets/composer-content-")) || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("composer.modelChangeDuringConversationWarning.toast")) {
+    if (text.includes("composer.modelChangeDuringConversationWarning.toast") ||
+        text.includes("anticodex-hide-model-switch-warning")) {
       return [rel, patchModelSwitchWarning];
     }
   }
   throw new Error("Could not find model switch warning bundle");
+}
+
+function patchCurrentAppServerManagedSessionFlags(text) {
+  const source = String(text ?? "");
+  const marker = "/*anticodex-app-server-managed-session-flags-v4*/";
+  if (source.includes(marker) ||
+      (source.includes("spawnProcess(){") && source.includes('approval_policy="never"') && source.includes('sandbox_mode="danger-full-access"'))) return source;
+  const head = /spawnProcess\(\)\{let (?<command>[A-Za-z_$][\w$]*)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[A-Za-z_$][\w$]*)=(?<resolver>[A-Za-z_$][\w$]*)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<args>[A-Za-z_$][\w$]*)=this\.options\.spawnArgs\?\?this\.options\.args,(?<proc>[A-Za-z_$][\w$]*)=(?<spawn>\(0,[A-Za-z_$][\w$]*\.spawn\)|[A-Za-z_$][\w$]*\.spawn)\(\k<resolved>,\k<args>,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?:,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/;
+  const match = head.exec(source);
+  if (!match) throw new Error("Current app-server spawn shape not found");
+  const procEnd = source.indexOf(`this.proc=${match.groups.proc}`, match.index);
+  if (procEnd < 0) throw new Error("Current app-server process assignment not found");
+  const targetEnd = procEnd + `this.proc=${match.groups.proc}`.length;
+  const target = source.slice(match.index, targetEnd);
+  const args = match.groups.args;
+  const injection = `;if(!this.options.spawnArgs&&${args}.indexOf(\`app-server\`)<0)throw Error\`Missing app-server arg\`;${args}=this.options.spawnArgs?${args}:${args}.toSpliced(${args}.indexOf(\`app-server\`),0,\`-c\`,\`approval_policy=\"never\"\`,\`-c\`,\`sandbox_mode=\"danger-full-access\"\`);`;
+  const spawnNeedle = `,${match.groups.proc}=${match.groups.spawn}(`;
+  const spawnIndex = target.indexOf(spawnNeedle);
+  if (spawnIndex < 0) throw new Error("Current app-server spawn call not found");
+  const loggerIndex = target.indexOf("let i=ma();", spawnIndex);
+  if (loggerIndex < 0) throw new Error("Current app-server logger not found");
+  const replacement = `${target.slice(0, spawnIndex)}${injection}${target.slice(spawnIndex + 1, loggerIndex)}this.proc=${match.groups.proc}`;
+  if (replacement.length > target.length) throw new Error(`Current app-server spawn patch did not fit: ${replacement.length} > ${target.length}`);
+  return source.slice(0, match.index) + replacement + " ".repeat(target.length - replacement.length) + source.slice(targetEnd);
 }
 
 function findModelUpgradeBannerPatch(fd, header, dataOffset) {
@@ -642,13 +671,16 @@ function findLocaleInfoPatch(fd, header, dataOffset) {
 
 function findConfigWriteHandlerPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
+    if ((!rel.startsWith(".vite/build/") && !rel.startsWith("webview/assets/app-primary-")) || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     try {
       patchConfigWriteHandler(text);
       return [rel, patchConfigWriteHandler];
     } catch {}
+    if (rel.startsWith("webview/assets/app-primary-") && hasModernNativeConfigBatchWrite(text)) {
+      return [rel, patchModernNativeConfigBatchWrite];
+    }
   }
   throw new Error("Could not find Electron config write handler table");
 }
@@ -671,10 +703,18 @@ function findAppServerManagedSessionFlagsPatch(fd, header, dataOffset) {
     if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if ((!text.includes("Failed to spawn Codex CLI at") || !text.includes("spawnArgs??this.options.args")) &&
-        !hasAppServerManagedSessionFlags(text)) continue;
-    patchAppServerManagedSessionFlags(text);
-    candidates.push([rel, patchAppServerManagedSessionFlags]);
+    try {
+      if ((text.includes("Failed to spawn Codex CLI at") && text.includes("spawnArgs??this.options.args")) ||
+          hasAppServerManagedSessionFlags(text)) {
+        patchAppServerManagedSessionFlags(text);
+        candidates.push([rel, patchAppServerManagedSessionFlags]);
+        continue;
+      }
+    } catch {}
+    try {
+      patchCurrentAppServerManagedSessionFlags(text);
+      candidates.push([rel, patchCurrentAppServerManagedSessionFlags]);
+    } catch {}
   }
   if (candidates.length !== 1) {
     throw new Error(`Expected exactly one native app-server spawn bundle, found ${candidates.length}`);
@@ -877,16 +917,30 @@ function findSettingsExternalLinksPatch(fd, header, dataOffset) {
 }
 
 function findCrashRecoveryPagePatch(fd, header, dataOffset) {
+  let titleTarget = null;
+  let runtimeTarget = null;
   const bundles = [];
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
+    if (text.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`") ||
+        text.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`")) {
+      titleTarget = [rel, patchCrashRecoveryTitle];
+    }
+    if (text.includes("id:`appServerCrash.configurationRecoveryDescription`") &&
+        text.includes("id:`appServerCrash.recoveryDescription`") &&
+        (text.includes("ChatGPT couldn't load your configuration") || text.includes("Anti-Codex couldn't load your configuration"))) {
+      runtimeTarget = [rel, patchCrashRecoveryRuntime];
+    }
     if (text.includes("id:`appServerCrash.recoveryTitle`") &&
         !rel.startsWith("webview/assets/app-initial-")) continue;
     if (hasCrashRecoveryPageSignature(text)) {
       bundles.push({ rel, text });
     }
+  }
+  if (titleTarget && runtimeTarget && titleTarget[0] !== runtimeTarget[0]) {
+    return [titleTarget, runtimeTarget];
   }
   const selected = selectCrashRecoveryBundleCandidate(bundles);
   return [selected.rel, patchCrashRecoveryPage];

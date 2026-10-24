@@ -1043,6 +1043,63 @@ export function patchConfigWriteHandler(text) {
     + source.slice(end);
 }
 
+// Newer shells perform config writes directly through the native batchWrite
+// bridge and expose configWriteTarget. There is no old Electron handler table
+// to rewrite in this layout; treat the native bridge as the compatibility
+// contract and keep the bytes unchanged.
+export function hasModernNativeConfigBatchWrite(text) {
+  const source = String(text ?? "");
+  return source.includes("configWriteTarget")
+    && source.includes("config/batchWrite")
+    && source.includes("reloadUserConfig");
+}
+
+export function patchModernNativeConfigBatchWrite(text) {
+  const source = String(text ?? "");
+  if (!hasModernNativeConfigBatchWrite(source)) {
+    throw new Error("Modern native config batchWrite bridge not found");
+  }
+  return source;
+}
+
+export function patchCrashRecoveryTitle(text) {
+  const source = String(text ?? "");
+  if (source.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`")) return source;
+  const pattern = /id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`/;
+  const match = pattern.exec(source);
+  if (!match) throw new Error("Crash recovery title was not found");
+  const replacement = "id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`";
+  return source.slice(0, match.index) + padReplacement(match[0], replacement) + source.slice(match.index + match[0].length);
+}
+
+export function patchCrashRecoveryRuntime(text) {
+  let source = String(text ?? "");
+  const replacements = [
+    [
+      /id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn't load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`/,
+      "id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn't load your configuration. Review it, then restart to try again.`",
+    ],
+    [
+      /id:`appServerCrash\.recoveryDescription`,defaultMessage:`Try again or update ChatGPT if this keeps happening`,description:`[^`]+`/,
+      "id:`appServerCrash.recoveryDescription`,defaultMessage:`Try again or update Anti-Codex if this keeps happening`",
+    ],
+    [
+      /id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`/,
+      "id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart Anti-Codex`",
+    ],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    if (source.includes(replacement)) continue;
+    const match = pattern.exec(source);
+    if (!match) {
+      if (pattern.source.includes("restartChatGPT") && source.includes("id:`appServerCrash.restartChatGPT`,defaultMessage:`Try again`")) continue;
+      throw new Error(`Crash recovery runtime text was not found: ${pattern}`);
+    }
+    source = source.slice(0, match.index) + padReplacement(match[0], replacement) + source.slice(match.index + match[0].length);
+  }
+  return source;
+}
+
 function originalPrimaryWindowTracker(windowAlias) {
   return `trackPrimaryWindow(${windowAlias}){this.primaryWindows.add(${windowAlias}),${windowAlias}.isFocused()?(this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())):this.lastActivePrimaryWindow??=${windowAlias},this.emitPrimaryWindowChangeIfNeeded(),${windowAlias}.on(\`focus\`,()=>{this.lastActivePrimaryWindow=${windowAlias},this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),${windowAlias}.on(\`blur\`,()=>{this.primaryWindowLastActiveAtMs.set(${windowAlias},Date.now())})}`;
 }
