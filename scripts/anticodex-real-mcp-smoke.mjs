@@ -166,7 +166,10 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
       signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    if (!response.ok || (id === undefined && response.status !== 200 && response.status !== 202)) {
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    }
+    if (id === undefined) return;
     const payload = parseMcpHttpPayload(text);
     if (payload?.error) throw new Error(String(payload.error.message || "MCP JSON-RPC error"));
     return {
@@ -180,6 +183,7 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
     clientInfo: { name: "anticodex-mcp-smoke", version: "1.0.0" },
   });
   sessionId = initialized.sessionId;
+  await request(undefined, "notifications/initialized");
   const result = await request(2, "tools/list", {});
   const resultPayload = result.payload?.result ?? result.payload;
   return {

@@ -1034,9 +1034,10 @@ if (-not (Test-Path -LiteralPath $appToolsCachePath -PathType Container)) {
 }
 
 $mcpNames = @()
+$mcpNamesAll = @()
 if ($configText) {
-    $mcpNames = @(Get-McpServerNamesFromToml $configText | Where-Object {
-        $_ -ne "cua_repl" -and
+    $mcpNamesAll = @(Get-McpServerNamesFromToml $configText | Where-Object { $_ -ne "cua_repl" })
+    $mcpNames = @($mcpNamesAll | Where-Object {
         (Get-TomlFieldRaw (Get-McpSectionText $configText $_) "enabled") -notmatch '^false(?:\s|$)'
     })
     $sharedConfigText = ""
@@ -1046,8 +1047,8 @@ if ($configText) {
             $sharedMcpNamesAll = @(Get-McpServerNamesFromToml $sharedConfigText)
             $excludedSharedDevelopmentMcpNames = if ($developmentWorkersAllowed) { @() } else { @(Get-WorkerMcpNamesFromToml $sharedConfigText -AllowGeneratedHttp) }
             $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $excludedSharedDevelopmentMcpNames -notcontains $_ })
-            $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNames -notcontains $_ })
-            $extraLocalMcpNames = @($mcpNames | Where-Object { $sharedMcpNames -notcontains $_ })
+            $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNamesAll -notcontains $_ })
+            $extraLocalMcpNames = @($mcpNamesAll | Where-Object { $sharedMcpNames -notcontains $_ })
             $unexpectedLocalDevelopmentMcpNames = if ($developmentWorkersAllowed) { @() } else { @(Get-WorkerMcpNamesFromToml $configText) }
             $localNodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
             $sharedNodeReplEnv = Get-McpNestedSectionText $sharedConfigText "node_repl" "env"
@@ -1071,10 +1072,13 @@ if ($configText) {
             foreach ($mcpName in $unexpectedLocalDevelopmentMcpNames) {
                 Add-Failure "Anti-Codex local config must not include development MCP worker '$mcpName'"
             }
-            foreach ($mcpName in @($sharedMcpNames | Where-Object { $mcpNames -contains $_ })) {
+            foreach ($mcpName in @($sharedMcpNames | Where-Object { $mcpNamesAll -contains $_ })) {
                 $sharedSection = Get-McpSectionText $sharedConfigText $mcpName
                 $localSection = Get-McpSectionText $configText $mcpName
                 $changedFields = @()
+                $sharedEnabled = (Get-TomlFieldRaw $sharedSection "enabled") -notmatch '^false(?:\s|$)'
+                $localEnabled = (Get-TomlFieldRaw $localSection "enabled") -notmatch '^false(?:\s|$)'
+                if ($sharedEnabled -ne $localEnabled) { $changedFields += "enabled" }
                 $sharedCommand = Normalize-McpCommandCompareValue (Get-TomlQuotedFieldValue $sharedSection "command")
                 $localCommand = Normalize-McpCommandCompareValue (Get-TomlQuotedFieldValue $localSection "command")
                 if ($sharedCommand -ne $localCommand) { $changedFields += "command" }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { createServer } from "node:http";
 import { runMcpStdioCall, runMcpStdioList } from "../../scripts/mcp-stdio-client.mjs";
 
 const SERVER_NAME = "fake-mcp-test-server";
@@ -219,5 +220,61 @@ test("runRealMcpListSmoke reports stdio tools without invoking one", async () =>
     assert.deepEqual(report.toolNames, ["echo"]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("HTTP MCP smoke sends initialized with its session before listing tools and rejects failed notifications", async (t) => {
+  const { runRealMcpListSmoke } = await import("../../scripts/anticodex-real-mcp-smoke.mjs");
+  for (const notificationStatus of [202, 200, 201, 403]) {
+    await t.test(`initialized HTTP ${notificationStatus}`, async (t) => {
+      const messages = [];
+      let initialized = false;
+      const server = createServer(async (request, response) => {
+        let body = "";
+        for await (const chunk of request) body += chunk;
+        const message = JSON.parse(body);
+        messages.push({ ...message, session: request.headers["mcp-session-id"], authorization: request.headers.authorization });
+        response.setHeader("content-type", "application/json");
+        if (request.headers.authorization !== "Bearer fixture-token") {
+          response.writeHead(401).end("fixture authorization required");
+        } else if (message.method === "initialize") {
+          response.setHeader("mcp-session-id", "fixture-session");
+          response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} } } }));
+        } else if (request.headers["mcp-session-id"] !== "fixture-session") {
+          response.writeHead(400).end("fixture session required");
+        } else if (message.method === "notifications/initialized" && message.id === undefined) {
+          initialized = notificationStatus === 200 || notificationStatus === 202;
+          response.writeHead(notificationStatus).end(initialized ? "" : "fixture notification rejected");
+        } else if (message.method === "tools/list") {
+          if (!initialized) response.writeHead(409).end("initialized notification required");
+          else response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "fixture_tool" }] } }));
+        } else {
+          response.writeHead(400).end("unexpected fixture message");
+        }
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      t.after(async () => {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      });
+      const smoke = () => runRealMcpListSmoke({
+        definition: { name: "http-fixture", transport: { type: "streamable_http", url: `http://127.0.0.1:${server.address().port}/mcp`, http_headers: { Authorization: "Bearer fixture-token" } } },
+        timeoutMs: 5000,
+      });
+      if (notificationStatus === 200 || notificationStatus === 202) {
+        const report = await smoke();
+        assert.equal(report.ok, true);
+        assert.deepEqual(report.toolNames, ["fixture_tool"]);
+        assert.deepEqual(messages.map((message) => message.method), ["initialize", "notifications/initialized", "tools/list"]);
+        assert.equal(messages[0].params.protocolVersion, "2024-11-05");
+        assert.equal(messages[1].id, undefined);
+        assert.equal(messages[0].session, undefined);
+        assert.deepEqual(messages.slice(1).map((message) => message.session), ["fixture-session", "fixture-session"]);
+        assert.ok(messages.every((message) => message.authorization === "Bearer fixture-token"));
+      } else {
+        await assert.rejects(smoke, new RegExp(`HTTP ${notificationStatus}: fixture notification rejected`));
+        assert.deepEqual(messages.map((message) => message.method), ["initialize", "notifications/initialized"]);
+      }
+    });
   }
 });

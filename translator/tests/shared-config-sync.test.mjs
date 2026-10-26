@@ -401,12 +401,79 @@ test("MCP verifier keeps development workers opt-in", () => {
 
 test("MCP verifier probes only enabled local servers and preserves shared names", () => {
   const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
-  const localMcpNames = verifier.match(/\$mcpNames = @\(Get-McpServerNamesFromToml \$configText \| Where-Object \{[\s\S]*?\}\)/)?.[0] ?? "";
+  const localMcpNames = verifier.match(/\$mcpNames = @\(\$mcpNamesAll \| Where-Object \{[\s\S]*?\}\)/)?.[0] ?? "";
 
   assert.match(localMcpNames, /Get-McpSectionText \$configText \$_/);
   assert.match(localMcpNames, /Get-TomlFieldRaw[\s\S]*?"enabled"[\s\S]*?-notmatch[\s\S]*?false/);
   assert.match(verifier, /\$sharedMcpNamesAll = @\(Get-McpServerNamesFromToml \$sharedConfigText\)/);
   assert.match(verifier, /MCP '\$mcpName' real stdio tools\/list failed:/);
+});
+
+test("MCP verifier separates disabled registrations from probes and detects missing enabled servers", {
+  skip: process.platform !== "win32",
+}, () => {
+  const verifier = fs.readFileSync(mcpSkillsVerifier, "utf8");
+  const functions = [
+    "Get-McpServerNamesFromToml", "Normalize-McpServerName", "Get-McpTomlKeyPattern",
+    "Get-McpSectionText", "Get-McpNestedSectionText", "Get-TomlFieldRaw",
+    "Get-TomlQuotedFieldValue", "Normalize-McpCommandCompareValue", "Normalize-McpEnvForCompare",
+  ].map((name) => {
+    const start = verifier.indexOf(`function ${name} {`);
+    const end = verifier.indexOf("\nfunction ", start + 10);
+    assert.ok(start >= 0 && end > start, `${name} must be independently testable`);
+    return verifier.slice(start, end);
+  });
+  const start = verifier.indexOf("$mcpNames = @()");
+  const end = verifier.indexOf("\n$expectedMcpToolNames =", start);
+  assert.ok(start >= 0 && end > start, "MCP registration and probe checks must be testable without starting servers");
+  const checks = verifier.slice(start, end);
+  const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+  const server = (name, enabled) => `[mcp_servers.${name}]\ncommand = "${name}.exe"\n${enabled === undefined ? "" : `enabled = ${enabled}\n`}`;
+  const enabled = server("active", true);
+  const disabled = server("inactive", false);
+  const cases = [
+    { name: "sameDisabled", shared: enabled + disabled, local: enabled + disabled },
+    { name: "missingEnabled", shared: enabled + disabled, local: disabled },
+    { name: "disabledLocally", shared: enabled + disabled, local: server("active", false) + disabled },
+    { name: "implicitEnabled", shared: server("active"), local: enabled },
+  ];
+  const script = [
+    ...functions,
+    "function Add-Failure { param([string]$Message) $script:fixtureFailures += $Message }",
+    "function Resolve-McpCommand { param([string]$Command) $script:fixtureResolved += $Command; return $true }",
+    "function Invoke-Fixture { param([string]$configText, [string]$sharedConfigPath)",
+    "$script:fixtureFailures = @(); $script:fixtureResolved = @()",
+    "$developmentWorkersAllowed = $true; $mcpSmokeChecks = @(); $changedSharedMcpNames = @(); $changedSharedMcpDetails = @()",
+    checks,
+    "[ordered]@{ probes = @($mcpNames); resolved = @($script:fixtureResolved); missing = @($missingSharedMcpNames); changed = @($changedSharedMcpDetails); failures = @($script:fixtureFailures) }",
+    "}",
+    "$result = [ordered]@{}",
+    ...cases.map(({ name, shared, local }) => {
+      const sharedPath = path.join(tempDir(), "shared.toml");
+      fs.writeFileSync(sharedPath, shared);
+      return `$result.${name} = Invoke-Fixture -configText ${quote(local)} -sharedConfigPath ${quote(sharedPath)}`;
+    }),
+    "$result | ConvertTo-Json -Depth 8 -Compress",
+  ].join("\n");
+  const powershell = path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const scriptPath = path.join(tempDir(), "verify-mcp-fixtures.ps1");
+  fs.writeFileSync(scriptPath, `\uFEFF${script}`);
+  const result = spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath], {
+    encoding: "utf8", windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
+  const actual = JSON.parse(result.stdout.trim());
+  assert.deepEqual(actual.sameDisabled, { probes: ["active"], resolved: ["active.exe"], missing: [], changed: [], failures: [] });
+  assert.deepEqual(actual.missingEnabled.probes, []);
+  assert.deepEqual(actual.missingEnabled.resolved, []);
+  assert.deepEqual(actual.missingEnabled.missing, ["active"]);
+  assert.match(actual.missingEnabled.failures.join("\n"), /server 'active'.*missing it/);
+  assert.deepEqual(actual.disabledLocally.probes, []);
+  assert.deepEqual(actual.disabledLocally.resolved, []);
+  assert.deepEqual(actual.disabledLocally.missing, []);
+  assert.deepEqual(actual.disabledLocally.changed, [{ name: "active", fields: ["enabled"] }]);
+  assert.match(actual.disabledLocally.failures.join("\n"), /server 'active'.*differs.*enabled/);
+  assert.deepEqual(actual.implicitEnabled, { probes: ["active"], resolved: ["active.exe"], missing: [], changed: [], failures: [] });
 });
 
 test("development worker opt-in migrates out of native config and survives refresh", () => {
