@@ -181,6 +181,8 @@ function Select-LightFileSystemItem {
 }
 
 $configPath = Join-Path $CodexHome "config.toml"
+$mcpHttpConfigPython = Join-Path $InstallRoot "shared-mcp\.venv\Scripts\python.exe"
+$mcpProxyScript = Join-Path $InstallRoot "shared-mcp\anticodex_shared_mcp_proxy.py"
 $sharedConfigPath = Join-Path $SharedCodexHome "config.toml"
 $skillsPath = Join-Path $CodexHome "skills"
 $sharedSkillsPath = Join-Path $SharedCodexHome "skills"
@@ -300,7 +302,7 @@ function Get-McpServerNamesFromToml {
     if (-not $Text) { return @() }
     return @([regex]::Matches($Text, "(?m)^\s*\[mcp_servers\.([^\]]+)\]") |
         ForEach-Object { Normalize-McpServerName $_.Groups[1].Value } |
-        Where-Object { $_ -notmatch "\.env$" -and $_ -notmatch "\.tools\." } |
+        Where-Object { $_ -notmatch "\.(?:env|http_headers|env_http_headers)$" -and $_ -notmatch "\.tools\." } |
         Sort-Object -Unique)
 }
 
@@ -474,6 +476,82 @@ function Normalize-McpEnvForCompare {
             Sort-Object))
     }
     return [string]::Join("`n", @($lines | Sort-Object))
+}
+
+function Get-McpHttpConfigDifferences {
+    param([string]$PythonPath, [string]$ProxyScript, [string]$ConfigPath, [string]$SharedConfigPath, [string]$StateRoot)
+    $code = @'
+import importlib.util, json, os, re, sys, tomllib
+from pathlib import Path
+
+def read_toml(path):
+    return tomllib.loads(Path(path).read_text(encoding='utf-8-sig')).get('mcp_servers', {})
+
+def headers(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or any(not isinstance(v, str) for v in value.values()):
+        raise ValueError()
+    result = {}
+    for key, value in value.items():
+        key = key.lower()
+        if key in result:
+            raise ValueError()
+        result[key] = value
+    return result
+
+try:
+    config_path, shared_path, state_root, proxy_script = sys.argv[1:]
+    local, shared = read_toml(config_path), read_toml(shared_path)
+    managed = None
+    try:
+        state = Path(state_root) / 'shared-mcp'
+        manifest = json.loads((state / 'manifest.json').read_text(encoding='utf-8-sig'))
+        spec = importlib.util.spec_from_file_location('anticodex_mcp_verifier_proxy', proxy_script)
+        proxy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(proxy)
+        runtime = proxy._load_runtime(json.loads((state / 'servers.json').read_text(encoding='utf-8-sig')))
+        names = manifest.get('worker_names', [])
+        generation = manifest.get('generated_sha256', '')
+        if (runtime and manifest.get('schema') == proxy.MANIFEST_SCHEMA
+                and os.path.normcase(str(Path(manifest.get('config_path', '')).resolve())) == os.path.normcase(str(Path(config_path).resolve()))
+                and isinstance(generation, str) and re.fullmatch('[0-9a-f]{64}', generation)
+                and generation == runtime.get('generated_sha256')
+                and isinstance(names, list) and len(names) == len(set(names))
+                and set(names) == set(runtime['mcpServers'])):
+            managed = runtime
+    except Exception:
+        pass
+    differences = {}
+    for name in shared.keys() & local.keys():
+        expected, actual = shared[name], local[name]
+        if managed and name in managed['mcpServers']:
+            expected = {
+                'url': f'http://127.0.0.1:{managed["server_ports"][name]}/servers/{name}/mcp',
+                'http_headers': {'Authorization': 'Bearer ' + managed['token']},
+            }
+        fields = []
+        for field in ('url', 'bearer_token_env_var', 'http_headers', 'env_http_headers'):
+            before, after = expected.get(field), actual.get(field)
+            if field.endswith('http_headers'):
+                before, after = headers(before), headers(after)
+            if before != after:
+                fields.append(field)
+        if fields:
+            differences[name] = fields
+    print(json.dumps(differences))
+except Exception:
+    print(json.dumps({'error': 'MCP HTTP transport comparison failed'}))
+    sys.exit(1)
+'@
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($code))
+    try {
+        $output = & $PythonPath -B -c "import base64;exec(base64.b64decode('$encoded'))" $ConfigPath $SharedConfigPath $StateRoot $ProxyScript 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "MCP HTTP transport comparison failed" }
+        return ($output | ConvertFrom-Json -ErrorAction Stop)
+    } catch {
+        throw "MCP HTTP transport comparison failed"
+    }
 }
 
 function Get-DirectoryContentFingerprint {
@@ -1049,6 +1127,7 @@ if ($configText) {
             $sharedMcpNames = @($sharedMcpNamesAll | Where-Object { $excludedSharedDevelopmentMcpNames -notcontains $_ })
             $missingSharedMcpNames = @($sharedMcpNames | Where-Object { $mcpNamesAll -notcontains $_ })
             $extraLocalMcpNames = @($mcpNamesAll | Where-Object { $sharedMcpNames -notcontains $_ })
+            $httpConfigDifferences = Get-McpHttpConfigDifferences -PythonPath $mcpHttpConfigPython -ProxyScript $mcpProxyScript -ConfigPath $configPath -SharedConfigPath $sharedConfigPath -StateRoot $StateRoot
             $unexpectedLocalDevelopmentMcpNames = if ($developmentWorkersAllowed) { @() } else { @(Get-WorkerMcpNamesFromToml $configText) }
             $localNodeReplEnv = Get-McpNestedSectionText $configText "node_repl" "env"
             $sharedNodeReplEnv = Get-McpNestedSectionText $sharedConfigText "node_repl" "env"
@@ -1076,6 +1155,8 @@ if ($configText) {
                 $sharedSection = Get-McpSectionText $sharedConfigText $mcpName
                 $localSection = Get-McpSectionText $configText $mcpName
                 $changedFields = @()
+                $httpDifference = $httpConfigDifferences.PSObject.Properties[$mcpName]
+                if ($httpDifference) { $changedFields += @($httpDifference.Value) }
                 $sharedEnabled = (Get-TomlFieldRaw $sharedSection "enabled") -notmatch '^false(?:\s|$)'
                 $localEnabled = (Get-TomlFieldRaw $localSection "enabled") -notmatch '^false(?:\s|$)'
                 if ($sharedEnabled -ne $localEnabled) { $changedFields += "enabled" }

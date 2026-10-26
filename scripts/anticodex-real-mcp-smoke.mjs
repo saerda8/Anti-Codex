@@ -165,6 +165,7 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (method === "initialize") sessionId = response.headers.get("mcp-session-id") || "";
     const text = await response.text();
     if (!response.ok || (id === undefined && response.status !== 200 && response.status !== 202)) {
       throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
@@ -174,22 +175,35 @@ async function runMcpStreamableHttpList({ definition, timeoutMs }) {
     if (payload?.error) throw new Error(String(payload.error.message || "MCP JSON-RPC error"));
     return {
       payload,
-      sessionId: response.headers.get("mcp-session-id") || "",
     };
   };
-  const initialized = await request(1, "initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: {},
-    clientInfo: { name: "anticodex-mcp-smoke", version: "1.0.0" },
-  });
-  sessionId = initialized.sessionId;
-  await request(undefined, "notifications/initialized");
-  const result = await request(2, "tools/list", {});
-  const resultPayload = result.payload?.result ?? result.payload;
-  return {
-    tools: Array.isArray(resultPayload?.tools) ? resultPayload.tools : [],
-    serverInfo: resultPayload?.serverInfo ?? null,
-  };
+  try {
+    await request(1, "initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "anticodex-mcp-smoke", version: "1.0.0" },
+    });
+    await request(undefined, "notifications/initialized");
+    const result = await request(2, "tools/list", {});
+    const resultPayload = result.payload?.result ?? result.payload;
+    return {
+      tools: Array.isArray(resultPayload?.tools) ? resultPayload.tools : [],
+      serverInfo: resultPayload?.serverInfo ?? null,
+    };
+  } finally {
+    if (sessionId) {
+      try {
+        const cleanupHeaders = new Headers(headers);
+        cleanupHeaders.set("Mcp-Session-Id", sessionId);
+        const response = await fetch(definition.transport.url, {
+          method: "DELETE",
+          headers: cleanupHeaders,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        await response.body?.cancel();
+      } catch {}
+    }
+  }
 }
 
 function parseMcpHttpPayload(text) {

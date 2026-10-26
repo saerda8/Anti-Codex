@@ -416,7 +416,7 @@ test("MCP verifier separates disabled registrations from probes and detects miss
   const functions = [
     "Get-McpServerNamesFromToml", "Normalize-McpServerName", "Get-McpTomlKeyPattern",
     "Get-McpSectionText", "Get-McpNestedSectionText", "Get-TomlFieldRaw",
-    "Get-TomlQuotedFieldValue", "Normalize-McpCommandCompareValue", "Normalize-McpEnvForCompare",
+    "Get-TomlQuotedFieldValue", "Normalize-McpCommandCompareValue", "Normalize-McpEnvForCompare", "Get-McpHttpConfigDifferences",
   ].map((name) => {
     const start = verifier.indexOf(`function ${name} {`);
     const end = verifier.indexOf("\nfunction ", start + 10);
@@ -431,27 +431,61 @@ test("MCP verifier separates disabled registrations from probes and detects miss
   const server = (name, enabled) => `[mcp_servers.${name}]\ncommand = "${name}.exe"\n${enabled === undefined ? "" : `enabled = ${enabled}\n`}`;
   const enabled = server("active", true);
   const disabled = server("inactive", false);
+  const http = (url, headers, auth = "") => `[mcp_servers.remote_fixture]\nenabled = false\nurl = "${url}"\nhttp_headers = ${headers}\n${auth}`;
+  const httpUrl = "https://fixture.invalid/mcp";
+  const httpHeaders = '{ Authorization = "HeaderFixtureSecretA", "X-Trace" = "same" }';
+  const sharedHttp = http(httpUrl, httpHeaders);
+  const privateUrl = "http://127.0.0.1:47631/servers/remote_fixture/mcp";
+  const privateToken = "fixture_private_token_A_1234567890123456";
+  const privateHeaders = `{ Authorization = "Bearer ${privateToken}" }`;
   const cases = [
     { name: "sameDisabled", shared: enabled + disabled, local: enabled + disabled },
     { name: "missingEnabled", shared: enabled + disabled, local: disabled },
     { name: "disabledLocally", shared: enabled + disabled, local: server("active", false) + disabled },
     { name: "implicitEnabled", shared: server("active"), local: enabled },
+    { name: "httpSame", shared: sharedHttp, local: sharedHttp },
+    { name: "httpEquivalent", shared: sharedHttp, local: http(httpUrl, '{ "x-trace" = \'same\', "authorization" = \'HeaderFixtureSecretA\' }') },
+    { name: "httpUrlChanged", shared: sharedHttp, local: http("https://fixture.invalid/other", httpHeaders) },
+    { name: "httpHeadersChanged", shared: sharedHttp, local: http(httpUrl, httpHeaders.replace("SecretA", "SecretB")) },
+    { name: "httpBearerChanged", shared: http(httpUrl, httpHeaders, 'bearer_token_env_var = "FIXTURE_TOKEN_A"\n'), local: http(httpUrl, httpHeaders, 'bearer_token_env_var = "FIXTURE_TOKEN_B"\n') },
+    { name: "httpEnvHeadersChanged", shared: http(httpUrl, httpHeaders, 'env_http_headers = { Authorization = "FIXTURE_ENV_A" }\n'), local: http(httpUrl, httpHeaders, 'env_http_headers = { Authorization = "FIXTURE_ENV_B" }\n') },
+    { name: "httpNestedEquivalent", shared: sharedHttp, local: `[mcp_servers.remote_fixture]\nenabled = false\nurl = '${httpUrl}'\n[mcp_servers.remote_fixture.http_headers]\nx-trace = 'same'\nauthorization = 'HeaderFixtureSecretA'\n` },
+    { name: "httpEnvEquivalent", shared: http(httpUrl, httpHeaders, 'env_http_headers = { "X-Env" = "FIXTURE_ENV_A", Authorization = "FIXTURE_ENV_B" }\n'), local: http(httpUrl, httpHeaders, 'env_http_headers = { authorization = \'FIXTURE_ENV_B\', x-env = \'FIXTURE_ENV_A\' }\n') },
+    { name: "managedExpected", shared: sharedHttp, local: http(privateUrl, privateHeaders), managed: true },
+    { name: "managedUrlChanged", shared: sharedHttp, local: http(privateUrl + "/stale", privateHeaders), managed: true },
+    { name: "managedHeadersChanged", shared: sharedHttp, local: http(privateUrl, privateHeaders.replace("token_A", "token_a")), managed: true },
+    { name: "managedOldAuth", shared: sharedHttp, local: http(privateUrl, privateHeaders, 'bearer_token_env_var = "FIXTURE_TOKEN_A"\nenv_http_headers = { Authorization = "FIXTURE_ENV_A" }\n'), managed: true },
+    { name: "managedInvalidMetadata", shared: sharedHttp, local: http(privateUrl, privateHeaders), managed: true, invalidMetadata: true },
+    { name: "managedDuplicateHeader", shared: sharedHttp, local: http(privateUrl, `{ Authorization = "Bearer ${privateToken}", authorization = "Bearer ${privateToken}" }`), managed: true },
   ];
+  const python = execFileSync("python", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
   const script = [
     ...functions,
+    `$mcpHttpConfigPython = ${quote(python)}`,
+    `$mcpProxyScript = ${quote(path.join(repoRoot, "scripts", "anticodex_shared_mcp_proxy.py"))}`,
     "function Add-Failure { param([string]$Message) $script:fixtureFailures += $Message }",
     "function Resolve-McpCommand { param([string]$Command) $script:fixtureResolved += $Command; return $true }",
-    "function Invoke-Fixture { param([string]$configText, [string]$sharedConfigPath)",
+    "function Invoke-Fixture { param([string]$configText, [string]$configPath, [string]$sharedConfigPath, [string]$StateRoot)",
     "$script:fixtureFailures = @(); $script:fixtureResolved = @()",
     "$developmentWorkersAllowed = $true; $mcpSmokeChecks = @(); $changedSharedMcpNames = @(); $changedSharedMcpDetails = @()",
     checks,
     "[ordered]@{ probes = @($mcpNames); resolved = @($script:fixtureResolved); missing = @($missingSharedMcpNames); changed = @($changedSharedMcpDetails); failures = @($script:fixtureFailures) }",
     "}",
     "$result = [ordered]@{}",
-    ...cases.map(({ name, shared, local }) => {
-      const sharedPath = path.join(tempDir(), "shared.toml");
+    ...cases.map(({ name, shared, local, managed, invalidMetadata }) => {
+      const stateRoot = tempDir();
+      const sharedPath = path.join(stateRoot, "shared.toml");
+      const localPath = path.join(stateRoot, "config.toml");
       fs.writeFileSync(sharedPath, shared);
-      return `$result.${name} = Invoke-Fixture -configText ${quote(local)} -sharedConfigPath ${quote(sharedPath)}`;
+      fs.writeFileSync(localPath, local);
+      if (managed) {
+        const state = path.join(stateRoot, "shared-mcp");
+        fs.mkdirSync(state);
+        const generated = "a".repeat(64);
+        fs.writeFileSync(path.join(state, "manifest.json"), JSON.stringify({ schema: "anticodex-shared-mcp-manifest-v1", config_path: localPath, generated_sha256: invalidMetadata ? "b".repeat(64) : generated, worker_names: ["remote_fixture"] }));
+        fs.writeFileSync(path.join(state, "servers.json"), JSON.stringify({ schema: "anticodex-shared-mcp-runtime-v1", host: "127.0.0.1", port: 47631, server_ports: { remote_fixture: 47631 }, token: privateToken, generated_sha256: generated, mcpServers: { remote_fixture: { command: "fixture-worker.exe", args: [], env: {} } } }));
+      }
+      return `$result.${name} = Invoke-Fixture -configText ${quote(local)} -configPath ${quote(localPath)} -sharedConfigPath ${quote(sharedPath)} -StateRoot ${quote(stateRoot)}`;
     }),
     "$result | ConvertTo-Json -Depth 8 -Compress",
   ].join("\n");
@@ -474,6 +508,21 @@ test("MCP verifier separates disabled registrations from probes and detects miss
   assert.deepEqual(actual.disabledLocally.changed, [{ name: "active", fields: ["enabled"] }]);
   assert.match(actual.disabledLocally.failures.join("\n"), /server 'active'.*differs.*enabled/);
   assert.deepEqual(actual.implicitEnabled, { probes: ["active"], resolved: ["active.exe"], missing: [], changed: [], failures: [] });
+  for (const name of ["httpSame", "httpEquivalent", "httpNestedEquivalent", "httpEnvEquivalent", "managedExpected"]) {
+    assert.deepEqual(actual[name], { probes: [], resolved: [], missing: [], changed: [], failures: [] });
+  }
+  for (const [name, field] of [["httpUrlChanged", "url"], ["httpHeadersChanged", "http_headers"], ["httpBearerChanged", "bearer_token_env_var"], ["httpEnvHeadersChanged", "env_http_headers"], ["managedUrlChanged", "url"], ["managedHeadersChanged", "http_headers"]]) {
+    assert.deepEqual(actual[name].probes, []);
+    assert.deepEqual(actual[name].resolved, []);
+    assert.deepEqual(actual[name].changed, [{ name: "remote_fixture", fields: [field] }]);
+    assert.match(actual[name].failures.join("\n"), new RegExp(`server 'remote_fixture'.*differs.*${field}`));
+    assert.doesNotMatch(JSON.stringify(actual[name]), /HeaderFixtureSecret|FIXTURE_TOKEN|FIXTURE_ENV|fixture_private_token/);
+  }
+  assert.deepEqual(actual.managedOldAuth.changed, [{ name: "remote_fixture", fields: ["bearer_token_env_var", "env_http_headers"] }]);
+  assert.deepEqual(actual.managedInvalidMetadata.changed, [{ name: "remote_fixture", fields: ["url", "http_headers"] }]);
+  assert.match(actual.managedDuplicateHeader.failures.join("\n"), /MCP HTTP transport comparison failed/);
+  assert.deepEqual(actual.managedDuplicateHeader.probes, []);
+  assert.doesNotMatch(JSON.stringify([actual.managedOldAuth, actual.managedInvalidMetadata, actual.managedDuplicateHeader]), /HeaderFixtureSecret|FIXTURE_TOKEN|FIXTURE_ENV|fixture_private_token/);
 });
 
 test("development worker opt-in migrates out of native config and survives refresh", () => {

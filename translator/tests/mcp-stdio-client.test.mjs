@@ -230,6 +230,10 @@ test("HTTP MCP smoke sends initialized with its session before listing tools and
       const messages = [];
       let initialized = false;
       const server = createServer(async (request, response) => {
+        if (request.method === "DELETE") {
+          response.writeHead(204).end();
+          return;
+        }
         let body = "";
         for await (const chunk of request) body += chunk;
         const message = JSON.parse(body);
@@ -275,6 +279,72 @@ test("HTTP MCP smoke sends initialized with its session before listing tools and
         await assert.rejects(smoke, new RegExp(`HTTP ${notificationStatus}: fixture notification rejected`));
         assert.deepEqual(messages.map((message) => message.method), ["initialize", "notifications/initialized"]);
       }
+    });
+  }
+});
+
+test("HTTP MCP smoke releases its session without replacing the main result or error", async (t) => {
+  const { runRealMcpListSmoke } = await import("../../scripts/anticodex-real-mcp-smoke.mjs");
+  const cases = [
+    { name: "success", cleanup: 204 },
+    { name: "unsupported cleanup", cleanup: 405 },
+    { name: "expired session", cleanup: 404 },
+    { name: "cleanup HTTP error", cleanup: 503 },
+    { name: "cleanup connection error", cleanup: "disconnect" },
+    { name: "cleanup timeout", cleanup: "hang" },
+    { name: "list failure", cleanup: 204, listStatus: 403, error: /HTTP 403: original list failure/ },
+    { name: "notification failure survives cleanup error", cleanup: "disconnect", notificationStatus: 403, error: /HTTP 403: original notification failure/ },
+    { name: "invalid initialization payload", cleanup: 204, invalidInitialize: true, error: /invalid JSON\/SSE/ },
+    { name: "notification body timeout", cleanup: 204, notificationHang: true, error: /abort|timeout/i },
+    { name: "stateless server", cleanup: 204, noSession: true },
+  ];
+  for (const fixture of cases) {
+    await t.test(fixture.name, async (t) => {
+      const deletes = [];
+      let activeSessions = 0;
+      const server = createServer(async (request, response) => {
+        let body = "";
+        for await (const chunk of request) body += chunk;
+        if (request.method === "DELETE") {
+          deletes.push({ url: request.url, session: request.headers["mcp-session-id"], authorization: request.headers.authorization, body });
+          if (fixture.cleanup === "disconnect") request.socket.destroy();
+          else if (fixture.cleanup !== "hang") {
+            if (fixture.cleanup === 204) activeSessions -= 1;
+            response.writeHead(fixture.cleanup).end();
+          }
+          return;
+        }
+        const message = JSON.parse(body);
+        response.setHeader("content-type", "application/json");
+        if (message.method === "initialize") {
+          if (!fixture.noSession) {
+            activeSessions += 1;
+            response.setHeader("mcp-session-id", "fixture-session");
+          }
+          response.end(fixture.invalidInitialize ? "invalid fixture payload" : JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} } } }));
+        } else if (message.method === "notifications/initialized") {
+          if (fixture.notificationHang) {
+            response.writeHead(200);
+            response.flushHeaders();
+          } else response.writeHead(fixture.notificationStatus || 202).end(fixture.notificationStatus ? "original notification failure" : "");
+        } else {
+          response.writeHead(fixture.listStatus || 200).end(fixture.listStatus ? "original list failure" : JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "fixture_tool" }] } }));
+        }
+      });
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      t.after(async () => {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      });
+      const smoke = () => runRealMcpListSmoke({
+        definition: { name: "http-fixture", transport: { type: "streamable_http", url: `http://127.0.0.1:${server.address().port}/mcp`, http_headers: { Authorization: "Bearer fixture-token" } } },
+        timeoutMs: 150,
+      });
+      if (fixture.error) await assert.rejects(smoke, fixture.error);
+      else assert.equal((await smoke()).ok, true);
+      assert.equal(deletes.length, fixture.noSession ? 0 : 1);
+      if (!fixture.noSession) assert.deepEqual(deletes[0], { url: "/mcp", session: "fixture-session", authorization: "Bearer fixture-token", body: "" });
+      if (fixture.cleanup === 204) assert.equal(activeSessions, 0);
     });
   }
 });
