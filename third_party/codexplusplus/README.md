@@ -5,8 +5,8 @@ This directory pins the separately licensed CodexPlusPlus component and carries 
 ## Upstream
 
 - Repository: `https://github.com/BigPizzaV3/CodexPlusPlus`
-- Accepted version: `v1.7.1`
-- Accepted commit: `5fe25892eb312abbc091512565a8dc2621a8c999`
+- Accepted version: `v1.12.1`
+- Accepted commit: `ca1b212db8c2baca87fc2bd5b7fad460c437159c`
 - License: `AGPL-3.0-only`
 
 The cloned/built component and this derived patch remain under the upstream AGPL license. Anti-Codex keeps this component at a separate source/build boundary.

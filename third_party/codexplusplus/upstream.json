@@ -1,25 +1,27 @@
 {
-  "component": "CodexPlusPlus",
-  "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
-  "license": "AGPL-3.0-only",
-  "version": "1.11.2",
-  "tag": "v1.11.2",
-  "upstreamCommit": "35c682058ba82083c75aecd04529d08780e33918",
-  "isolationPatchCommit": "4e3106d198496a13b3089e56eecd0bc8c7abbc4c",
-  "patchCommit": "4e3106d198496a13b3089e56eecd0bc8c7abbc4c",
-  "patches": [
-    {
-      "file": "patches/0016-v112-integration.patch",
-      "sha256": "52d435b04f5f45b4286a2a3b94f0d8a8a7cdd9d070d6c64576a4196641f0d325",
-      "scope": "Anti-Codex isolation and protocol compatibility on v1.11.2, standalone headless launcher, Windows long-path atomic writes, and complete response-history propagation"
-    }
-  ],
-  "verification": {
-    "launcherReleaseBuild": "sha256:b8ceedd750ba1252a7fdbf8c3ca01c058f99e61096e50948ae806cd633ea0462",
-    "cargoFmt": "passed",
-    "protocolProxyTests": "204/204 on Windows with isolated state, home, and SQLite directories",
-    "responseHistoryBlackbox": "Chat 10/10 and native Responses 9/9, including helper restart and completed/interrupted streams",
-    "windowsAtomicWrite": "passed: create and replace history files beyond MAX_PATH",
-    "runtimeIsolation": "10/10 source compatibility checks; standalone helper runs without a window"
-  }
+    "component":  "CodexPlusPlus",
+    "repository":  "https://github.com/BigPizzaV3/CodexPlusPlus.git",
+    "license":  "AGPL-3.0-only",
+    "version":  "1.12.1",
+    "tag":  "v1.12.1",
+    "upstreamCommit":  "ca1b212db8c2baca87fc2bd5b7fad460c437159c",
+    "isolationPatchCommit":  "c9a608921a57583c019aaeb176ff58a082ada345",
+    "patchCommit":  "c9a608921a57583c019aaeb176ff58a082ada345",
+    "patches":  [
+                    {
+                        "file":  "patches/0017-v121-integration.patch",
+                        "sha256":  "a14692b96f5f358e5b01f0a247cfb331dc94cfff0d38dc196f4276892f491948",
+                        "scope":  "Anti-Codex isolation, protocol compatibility, response history, Windows safety and launcher integration migrated to CodexPlusPlus v1.12.1"
+                    }
+                ],
+    "verification":  {
+                         "patchReplay":  "1 project patches replayed without automatic conflict resolution; head c9a608921a57583c019aaeb176ff58a082ada345; tree b8269c50746f19172cd2dd267c4cb068d67543ee",
+                         "sourceIsolationAudit":  "passed",
+                         "auditRegressionTests":  "Candidate-local format, protocol proxy and watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
+                         "cargoFmt":  "passed",
+                         "cargoCheck":  "protocol proxy and watcher tests passed; Windows x64 Manager check passed",
+                         "windowsNativeTests":  "Windows x64 release launcher build passed through the managed project runner",
+                         "launcherReleaseBuild":  "sha256:af63baace61d7e26103ae921880409a2eb9184a2b69d74843bde6414289dda65",
+                         "runtimeIsolation":  "10/10 source compatibility checks; standalone helper runs without a window"
+                     }
 }
