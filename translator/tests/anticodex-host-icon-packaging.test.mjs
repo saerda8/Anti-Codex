@@ -8,6 +8,7 @@ import test from "node:test";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
+const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
 const brandPatcher = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const candidateValidator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
@@ -48,6 +49,14 @@ test("host packaging preserves the copied source host and patches only the isola
   assert.match(installer, /Copy-Item\s+-LiteralPath\s+\$icon\s+-Destination\s+\$appRootIcon\s+-Force/);
   assert.doesNotMatch(installer, /patch-exe-icon\.ps1|PATCH_EXE_ICON_SCRIPT|&\s+\$PATCH_EXE_ICON_SCRIPT/);
   assert.match(runtimeSync, /scripts\\electron-asar-integrity-host\.mjs/);
+});
+
+test("launcher applies the isolated external icon to the taskbar window", () => {
+  assert.match(startScript, /class WindowIcon/);
+  assert.match(startScript, /WindowMessageSetIcon/);
+  assert.match(startScript, /resources\\icon\.ico/);
+  assert.match(startScript, /AntiCodexWindowIcon/);
+  assert.match(startScript, /WindowIcon\]::Set/);
 });
 
 test("host gates require the local node_repl runtime and sandbox helper", () => {

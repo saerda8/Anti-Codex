@@ -153,6 +153,53 @@ namespace AntiCodex.Native
 '@
 }
 
+if (-not ("AntiCodex.Native.WindowIcon" -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace AntiCodex.Native
+{
+    public static class WindowIcon
+    {
+        private const uint ImageIcon = 1;
+        private const uint LoadFromFile = 0x00000010;
+        private const uint DefaultSize = 0x00000040;
+        private const uint WindowMessageSetIcon = 0x0080;
+        private const int IconSmall = 0;
+        private const int IconBig = 1;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr LoadImage(
+            IntPtr instance,
+            string name,
+            uint type,
+            int width,
+            int height,
+            uint flags);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(
+            IntPtr window,
+            uint message,
+            IntPtr wParam,
+            IntPtr lParam);
+
+        public static bool Set(IntPtr window, string iconPath)
+        {
+            if (window == IntPtr.Zero || string.IsNullOrWhiteSpace(iconPath)) return false;
+            IntPtr big = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 32, 32, LoadFromFile | DefaultSize);
+            IntPtr small = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 16, 16, LoadFromFile | DefaultSize);
+            if (big == IntPtr.Zero && small == IntPtr.Zero) return false;
+            if (big != IntPtr.Zero) SendMessage(window, WindowMessageSetIcon, new IntPtr(IconBig), big);
+            if (small != IntPtr.Zero) SendMessage(window, WindowMessageSetIcon, new IntPtr(IconSmall), small);
+            return true;
+        }
+    }
+}
+'@
+}
+
 $FIXED_ROUTE_HEALTH_PORT = 18487
 $FIXED_ROUTE_HEALTH_URL = "http://127.0.0.1:$FIXED_ROUTE_HEALTH_PORT/anticodex/fixed-route/health"
 $FIXED_ROUTE_HEALTH_TIMEOUT_MS = if ($env:ANTICODEX_FIXED_ROUTE_HEALTH_TIMEOUT_MS) {
@@ -391,6 +438,11 @@ function Get-RunningFixedRouteSupervisor {
 
 function Activate-AntiCodexWindow {
     param($Process)
+    try {
+        if ($Process -and [int64]$Process.MainWindowHandle -ne 0 -and $script:AntiCodexWindowIcon) {
+            [AntiCodex.Native.WindowIcon]::Set([IntPtr]$Process.MainWindowHandle, $script:AntiCodexWindowIcon) | Out-Null
+        }
+    } catch {}
     try {
         $shell = New-Object -ComObject WScript.Shell
         [void]$shell.AppActivate([int]$Process.ProcessId)
@@ -761,6 +813,7 @@ $stateRoot = if ($StateRootPath) {
     Join-Path $env:APPDATA "anticodex"
 }
 $mainExecutable = [IO.Path]::GetFullPath((Join-Path $installRoot "codex-patched-app\Anti-Codex.exe"))
+$script:AntiCodexWindowIcon = Join-Path $installRoot "codex-patched-app\resources\icon.ico"
 $supervisorScript = Join-Path $PSScriptRoot "start-anticodex-fixed-route.mjs"
 $componentManifest = Join-Path $installRoot "components\codexplusplus\component-manifest.json"
 $launcherStatePath = Join-Path $stateRoot "launcher-state.json"
