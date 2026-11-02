@@ -473,6 +473,10 @@ function patchProfileDropdownSettings(text) {
 
 function patchBrowserWindowIcon(text) {
   let next = text;
+  const modernSearch = '...u.windowIcon.isEmpty()?{}:{icon:u.windowIcon},';
+  const modernReplacement = '...{icon:`icon.ico`},';
+  if (next.includes(modernSearch)) next = replacePadded(next, modernSearch, modernReplacement);
+  const currentModernSearch = '..."win32"===process.platform||"linux"===process.platform?{autoHideMenuBar:!0}:{} ,';
   const currentSearch = '...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{},';
   const currentReplacement = '...process.platform===`win32`?{icon:`icon.ico`,autoHideMenuBar:!0}:{},';
   if (next.includes(currentSearch)) next = replacePadded(next, currentSearch, currentReplacement);
@@ -604,7 +608,7 @@ function patchCurrentAppServerManagedSessionFlags(text) {
   const marker = "/*anticodex-app-server-managed-session-flags-v4*/";
   if (source.includes(marker) ||
       (source.includes("spawnProcess(){") && source.includes('approval_policy="never"') && source.includes('sandbox_mode="danger-full-access"'))) return source;
-  const head = /spawnProcess\(\)\{let (?<command>[A-Za-z_$][\w$]*)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[A-Za-z_$][\w$]*)=(?<resolver>[A-Za-z_$][\w$]*)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<args>[A-Za-z_$][\w$]*)=this\.options\.spawnArgs\?\?this\.options\.args,(?<proc>[A-Za-z_$][\w$]*)=(?<spawn>\(0,[A-Za-z_$][\w$]*\.spawn\)|[A-Za-z_$][\w$]*\.spawn)\(\k<resolved>,\k<args>,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?:,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/;
+  const head = /spawnProcess\(\)\{let (?<command>[A-Za-z_$][\w$]*)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<resolved>[A-Za-z_$][\w$]*)=(?<resolver>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,(?<args>[A-Za-z_$][\w$]*)=this\.options\.spawnArgs\?\?this\.options\.args,(?<proc>[A-Za-z_$][\w$]*)=(?<spawn>\(0,[A-Za-z_$][\w$]*\.spawn\)|[A-Za-z_$][\w$]*\.spawn)\(\k<resolved>,\k<args>,\{stdio:\[(?:`pipe`|\"pipe\"),(?:`pipe`|\"pipe\"),(?:`pipe`|\"pipe\")\],env:this\.options\.env(?:,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\((?:`[^`]*`|\"[^\"]*\")\);/;
   const match = head.exec(source);
   if (!match) throw new Error("Current app-server spawn shape not found");
   const procEnd = source.indexOf(`this.proc=${match.groups.proc}`, match.index);
@@ -616,7 +620,9 @@ function patchCurrentAppServerManagedSessionFlags(text) {
   const spawnNeedle = `,${match.groups.proc}=${match.groups.spawn}(`;
   const spawnIndex = target.indexOf(spawnNeedle);
   if (spawnIndex < 0) throw new Error("Current app-server spawn call not found");
-  const loggerIndex = target.indexOf("let i=ma();", spawnIndex);
+  const loggerCallIndex = target.indexOf("this.logger.info", spawnIndex);
+  const loggerDeclarationIndex = loggerCallIndex < 0 ? -1 : target.lastIndexOf("let ", loggerCallIndex);
+  const loggerIndex = loggerDeclarationIndex >= spawnIndex ? loggerDeclarationIndex : loggerCallIndex;
   if (loggerIndex < 0) throw new Error("Current app-server logger not found");
   const replacement = `${target.slice(0, spawnIndex)}${injection}let ${target.slice(spawnIndex + 1, loggerIndex)}this.proc=${match.groups.proc}`;
   if (replacement.length > target.length) throw new Error(`Current app-server spawn patch did not fit: ${replacement.length} > ${target.length}`);
@@ -678,7 +684,7 @@ function findConfigWriteHandlerPatch(fd, header, dataOffset) {
       patchConfigWriteHandler(text);
       return [rel, patchConfigWriteHandler];
     } catch {}
-    if (rel.startsWith("webview/assets/app-primary-") && hasModernNativeConfigBatchWrite(text)) {
+    if (hasModernNativeConfigBatchWrite(text)) {
       return [rel, patchModernNativeConfigBatchWrite];
     }
   }
@@ -878,16 +884,17 @@ function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
 
 function findBrowserWindowIconPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
-    if (!rel.startsWith(".vite/build/main-") || !rel.endsWith(".js")) continue;
+    if (!rel.startsWith(".vite/build/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("...process.platform===`win32`?{autoHideMenuBar:!0}:{}") ||
+    if (text.includes("...u.windowIcon.isEmpty()?{}:{icon:u.windowIcon}") ||
+        text.includes("...process.platform===`win32`?{autoHideMenuBar:!0}:{}") ||
         text.includes("...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{}") ||
         text.includes("icon:`icon.ico`")) {
       return [rel, patchBrowserWindowIcon];
     }
   }
-  throw new Error("Could not find BrowserWindow options under .vite/build/main-*.js");
+  throw new Error("Could not find BrowserWindow options under .vite/build/*.js");
 }
 
 function findSettingsExternalLinksPatch(fd, header, dataOffset) {

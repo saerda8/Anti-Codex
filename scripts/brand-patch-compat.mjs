@@ -9,11 +9,21 @@ const WINDOWS_TRAY_BRAND_ICONS = [
   "`chatgpt-tray-dark.ico`",
   "`chatgpt-tray-light.ico`",
 ];
+const WINDOWS_TRAY_BRAND_ICON_VALUES = [
+  ...WINDOWS_TRAY_BRAND_ICONS,
+  ...WINDOWS_TRAY_BRAND_ICONS.map((icon) => `"${icon.slice(1, -1)}"`),
+];
+const ANTI_CODEX_TRAY_ICONS = [
+  ANTI_CODEX_TRAY_ICON,
+  '"codex-tray.ico"',
+];
 
 const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
   /await [\w$]+\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+\([\w$]+\),expectedVersion:null,filePath:null,reloadUserConfig:!(?<reload>[01])\}\)/;
 const STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN =
   /async function [\w$]+\(\{(?=[^{}]{0,1600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,1600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,1600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+,expectedVersion:null,filePath:null,reloadUserConfig:\k<reload>\}\)/;
+const STARTUP_MCP_CONFIG_RELOAD_LATEST_PATTERN =
+  /async function [\w$]+\(\{(?=[^{}]{0,2600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,2600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,2600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\((?<quote>[`\"])config\/batchWrite\k<quote>,\{[\s\S]{0,2200}?reloadUserConfig:\k<reload>\}\)/;
 const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
   /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:(?<accountIcon>[\w$]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:(?<securityIcon>[\w$]+),message:\k<messages>\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
@@ -951,7 +961,8 @@ export function patchAppServerManagedSessionFlags(text) {
 export function hasStartupMcpConfigReload(text) {
   const source = String(text ?? "");
   return STARTUP_MCP_CONFIG_RELOAD_PATTERN.test(source)
-    || STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.test(source);
+    || STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.test(source)
+    || STARTUP_MCP_CONFIG_RELOAD_LATEST_PATTERN.test(source);
 }
 
 export function patchStartupMcpConfigReload(text) {
@@ -963,7 +974,8 @@ export function patchStartupMcpConfigReload(text) {
     return source.slice(0, match.index) + patched + source.slice(match.index + match[0].length);
   }
 
-  const latest = STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.exec(source);
+  const latest = STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN.exec(source)
+    ?? STARTUP_MCP_CONFIG_RELOAD_LATEST_PATTERN.exec(source);
   if (!latest?.groups) throw new Error("Startup MCP config reload pattern not found");
   if (latest.groups.value === "1") return source;
   const marker = `reloadUserConfig:${latest.groups.reload}=!0`;
@@ -1049,7 +1061,7 @@ export function patchConfigWriteHandler(text) {
 // contract and keep the bytes unchanged.
 export function hasModernNativeConfigBatchWrite(text) {
   const source = String(text ?? "");
-  return source.includes("configWriteTarget")
+  return (source.includes("configWriteTarget") || source.includes("sendAppServerRequest"))
     && source.includes("config/batchWrite")
     && source.includes("reloadUserConfig");
 }
@@ -1258,7 +1270,7 @@ export function patchProductNameDrivenSessionTitle(text) {
 }
 
 function findWindowsTrayIconSelector(text) {
-  for (const iconAnchor of [ANTI_CODEX_TRAY_ICON, ...WINDOWS_TRAY_BRAND_ICONS]) {
+  for (const iconAnchor of [...ANTI_CODEX_TRAY_ICONS, ...WINDOWS_TRAY_BRAND_ICON_VALUES]) {
     let anchor = text.indexOf(iconAnchor);
     while (anchor >= 0) {
       const start = text.lastIndexOf("function ", anchor);
@@ -1266,8 +1278,11 @@ function findWindowsTrayIconSelector(text) {
       const end = nextFunction >= 0 ? nextFunction : text.length;
       if (start >= 0 && end - start <= 2000) {
         const selector = text.slice(start, end);
-        const codexIconCount = selector.split(ANTI_CODEX_TRAY_ICON).length - 1;
-        const alternateIconCount = WINDOWS_TRAY_BRAND_ICONS.reduce(
+         const codexIconCount = ANTI_CODEX_TRAY_ICONS.reduce(
+          (count, icon) => count + selector.split(icon).length - 1,
+          0,
+        );
+        const alternateIconCount = WINDOWS_TRAY_BRAND_ICON_VALUES.reduce(
           (count, icon) => count + selector.split(icon).length - 1,
           0,
         );
@@ -1300,9 +1315,9 @@ export function patchWindowsTrayIconSelection(text) {
   if (match.alternateIconCount === 0 && match.codexIconCount >= 4 && patchedIdentity) return source;
 
   let selector = match.selector;
-  for (const icon of WINDOWS_TRAY_BRAND_ICONS) {
-    const replacement =
-      ANTI_CODEX_TRAY_ICON + " ".repeat(icon.length - ANTI_CODEX_TRAY_ICON.length);
+  for (const icon of WINDOWS_TRAY_BRAND_ICON_VALUES) {
+    const replacementIcon = icon.startsWith("`") ? ANTI_CODEX_TRAY_ICON : '"codex-tray.ico"';
+    const replacement = replacementIcon + " ".repeat(icon.length - replacementIcon.length);
     selector = selector.replaceAll(icon, replacement);
   }
   let next = source.slice(0, match.start) + selector + source.slice(match.end);
