@@ -519,7 +519,10 @@ $legacyPrimaryRestoreRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{let ([\w$
 $anyPrimaryWindowRepaintPattern = 'trackPrimaryWindow\(([\w$]+)\)\{.{0,700}?\1\.webContents\.invalidate(?:\?\.)?\(\)'
 $officialPrimaryWindowTrackerPattern = 'trackPrimaryWindow\(([\w$]+)\)\{this\.primaryWindows\.add\(\1\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\):this\.lastActivePrimaryWindow\?\?=\1,this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\(\)=>\{this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\}\)\}'
 $officialPrimaryWindowTrackerWithBadgePattern = $officialPrimaryWindowTrackerPattern.Replace('\1\.isFocused', '(?:this\.refreshAppBadgeCount\(\),)?\1\.isFocused')
-if ([regex]::Matches($asarText, $officialPrimaryWindowTrackerPattern).Count -ne 1 -and [regex]::Matches($asarText, $officialPrimaryWindowTrackerWithBadgePattern).Count -ne 1) {
+$officialPrimaryWindowTrackerModernPattern = 'trackPrimaryWindow\(([\w$]+)\)\{this\.primaryWindows\.add\(\1\),this\.refreshAppBadgeCount\(\),\1\.isFocused\(\)\?\(this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\):null==this\.lastActivePrimaryWindow&&\(this\.lastActivePrimaryWindow=\1\),this\.emitPrimaryWindowChangeIfNeeded\(\),\1\.on\(`focus`,\(\)=>\{this\.lastActivePrimaryWindow=\1,this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\),this\.emitPrimaryWindowChangeIfNeeded\(\)\}\),\1\.on\(`blur`,\(\)=>\{this\.primaryWindowLastActiveAtMs\.set\(\1,Date\.now\(\)\)\}\)\}'
+if ([regex]::Matches($asarText, $officialPrimaryWindowTrackerPattern).Count -ne 1 -and
+    [regex]::Matches($asarText, $officialPrimaryWindowTrackerWithBadgePattern).Count -ne 1 -and
+    [regex]::Matches($asarText, $officialPrimaryWindowTrackerModernPattern).Count -ne 1) {
     throw "Anti-Codex candidate does not preserve the official primary-window tracker."
 }
 if ([regex]::Matches($asarText, $primaryDeferredRestoreRepaintPattern).Count -ne 0) {
