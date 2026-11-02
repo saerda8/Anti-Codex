@@ -361,10 +361,16 @@ test("release process snapshots use native creation identity instead of lossy CI
 
 test("runtime generation use checks bind exact paths and exclude official Codex executables", () => {
   const snapshot = functionSource("Get-AntiCodexRuntimeVersionProcessSnapshot");
+  const releaseSnapshot = functionSource("Get-AntiCodexRuntimeProcessSnapshot");
   const inUse = functionSource("Test-AntiCodexRuntimeVersionInUse");
   assert.match(snapshot, /Test-AntiCodexNativeCodexPath/);
   assert.match(inUse, /Test-AntiCodexPathInsideRoot/);
   assert.match(inUse, /Test-AntiCodexCommandLineReferencesPathRoot/);
+  assert.match(releaseSnapshot, /isRuntimeSyncControlProcess/);
+  assert.match(releaseSnapshot, /sync-anticodex-runtime\\.ps1/);
+  assert.match(releaseSnapshot, /TargetRuntime\(\?:\[\\s/);
+  assert.match(releaseSnapshot, /powershell\|pwsh\|rtk/);
+  assert.doesNotMatch(snapshot, /isRuntimeSyncControlProcess/);
   assert.doesNotMatch(`${snapshot}\n${inUse}`, /Name[^\r\n]*Anti-Codex|Anti-Codex[^\r\n]*Name/i);
 });
 

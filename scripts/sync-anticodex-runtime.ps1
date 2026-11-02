@@ -711,6 +711,11 @@ function Get-AntiCodexRuntimeProcessSnapshot {
         if ($executablePath -and (Test-AntiCodexNativeCodexPath -Path $executablePath)) { return }
 
         $commandLine = [string]$_.CommandLine
+        $isRuntimeSyncControlProcess = (
+            [string]$_.Name -match '^(?:powershell|pwsh|rtk)(?:\.exe)?$' -and
+            $commandLine -match '(?i)(?:sync-anticodex-runtime\.ps1|(?:^|[\s"''])-TargetRuntime(?:[\s=]|$))'
+        )
+        if ($isRuntimeSyncControlProcess) { return }
         $underInstallRoot = $executablePath -and (Test-AntiCodexPathInsideRoot -Path $executablePath -Root $installRootFull)
         $usesActiveRuntime = $commandLine.IndexOf($targetRuntimeFull, [StringComparison]::OrdinalIgnoreCase) -ge 0
         if (-not $underInstallRoot -and -not $usesActiveRuntime) { return }
