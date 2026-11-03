@@ -47,10 +47,50 @@ const DEFAULT_SHARED_MCP_PORT = 47_631;
 const CLIENT_EXIT_GRACE_MS = 10_000;
 const CLIENT_RECOVERY_BACKOFF_MS = 1_000;
 const OWNED_PROCESS_STOP_WAIT_MS = 5_000;
+const WINDOW_ICON_KEEPER_SCRIPT = join(import.meta.dirname, "apply-anticodex-window-icon.ps1");
 const FATAL_CLIENT_HEADING_PATTERN = /^(?:(?:ChatGPT|Anti-Codex)\s*)?(?:已意外停止|unexpectedly\s+(?:stopped|quit|closed)|has\s+unexpectedly\s+(?:stopped|crashed)|(?:quit|stopped|closed)\s+unexpectedly)[.!。！]?$/i;
 const FATAL_CLIENT_RECOVERY_BUTTON_PATTERN = /(?:重试|重新加载|重新启动|重启|再试一次|try again|retry|reload|restart)/i;
 const FATAL_CLIENT_GENERIC_ERROR_PATTERN = /(?:^|\s)(?:糟糕[，,]\s*出错了|Oops,?\s+an error has occurred|Something went wrong)[.!。！]?(?:\s|$)/i;
 const FATAL_CLIENT_MAX_TEXT_LENGTH = 1_600;
+
+function startAntiCodexWindowIconKeeper(plan, client) {
+  if (process.platform !== "win32") return Promise.resolve(null);
+  const iconPath = join(plan.paths.appDir, "resources", "icon.ico");
+  if (!existsSync(WINDOW_ICON_KEEPER_SCRIPT) || !existsSync(iconPath)) {
+    throw new Error("Anti-Codex taskbar icon keeper is incomplete.");
+  }
+  const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR ?? "C:\\Windows";
+  const powershell = join(windowsRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const keeper = spawn(powershell, [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+    "-WindowStyle", "Hidden", "-File", WINDOW_ICON_KEEPER_SCRIPT,
+    "-TargetProcessId", String(client.pid), "-IconPath", iconPath,
+  ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let stdout = "";
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { keeper.kill(); } catch {}
+      reject(new Error("Anti-Codex taskbar icon was not applied before startup timeout."));
+    }, 30_000);
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error); else resolve(keeper);
+    };
+    keeper.stdout.on("data", (chunk) => {
+      stdout = `${stdout}${chunk.toString("utf8")}`.slice(-4096);
+      if (stdout.includes('"ok":true')) finish();
+    });
+    keeper.once("error", (error) => finish(error));
+    keeper.once("exit", (code) => {
+      if (!settled) finish(new Error(`Anti-Codex taskbar icon keeper exited before applying the icon: ${code}`));
+    });
+  });
+}
 const WINDOWS_EXACT_PROCESS_TERMINATOR = String.raw`
 $ErrorActionPreference = "Stop"
 $source = @'
@@ -1017,6 +1057,7 @@ async function runSupervisor(plan) {
       ownedClients.add(child.pid);
       status.processes.copiedClient = [child.pid];
       writeStatus(plan.paths.statusFile, status);
+      await startAntiCodexWindowIconKeeper(plan, child);
       return child;
     };
 

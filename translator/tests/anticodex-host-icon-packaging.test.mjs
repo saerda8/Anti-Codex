@@ -9,6 +9,9 @@ import test from "node:test";
 const root = resolve(import.meta.dirname, "..", "..");
 const installer = readFileSync(resolve(root, "scripts", "install-anticodex.ps1"), "utf8");
 const startScript = readFileSync(resolve(root, "scripts", "start-anticodex.ps1"), "utf8");
+const fixedRoute = readFileSync(resolve(root, "scripts", "start-anticodex-fixed-route.mjs"), "utf8");
+const windowIconScriptPath = resolve(root, "scripts", "apply-anticodex-window-icon.ps1");
+const windowIconScript = existsSync(windowIconScriptPath) ? readFileSync(windowIconScriptPath, "utf8") : "";
 const brandPatcher = readFileSync(resolve(root, "scripts", "brand-patched-asar.mjs"), "utf8");
 const shortcutRepair = readFileSync(resolve(root, "scripts", "repair-anticodex-shortcuts.ps1"), "utf8");
 const candidateValidator = readFileSync(resolve(root, "scripts", "test-anticodex-host-candidate.ps1"), "utf8");
@@ -57,6 +60,15 @@ test("launcher applies the isolated external icon to the taskbar window", () => 
   assert.match(startScript, /resources\\icon\.ico/);
   assert.match(startScript, /AntiCodexWindowIcon/);
   assert.match(startScript, /WindowIcon\]::Set/);
+});
+
+test("the real Node route applies the isolated icon after every client launch", () => {
+  assert.match(fixedRoute, /apply-anticodex-window-icon\.ps1/);
+  assert.match(fixedRoute, /TargetProcessId/);
+  assert.match(fixedRoute, /resources/);
+  assert.match(fixedRoute, /icon\.ico/);
+  assert.match(windowIconScript, /WindowMessageSetIcon/);
+  assert.match(windowIconScript, /TargetProcessId/);
 });
 
 test("host gates require the local node_repl runtime and sandbox helper", () => {
