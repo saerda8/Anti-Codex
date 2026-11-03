@@ -614,7 +614,7 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.doesNotMatch(asarValidator, /legacyRequiredMarkers|authMethod:`apikey`|requiresAuth:!1|marketplaces:\[\]/);
   assert.match(asarValidator, /fixed shell host contains a retired feature patch/i);
   assert.match(asarValidator, /configWriteBridgePattern/);
-  assert.match(asarValidator, /\$configWriteBridgePattern\)\.Count -ne \$ExpectedConfigWriteBridgeCount/);
+  assert.match(asarValidator, /\$legacyConfigWriteBridgeCount -ne \$ExpectedConfigWriteBridgeCount/);
   for (const patchName of [
     "package-json",
     "webview-html-title",
@@ -722,6 +722,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
     const revision2Hook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now()),n=()=>{try{e.webContents.invalidate()}catch{}};this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded(),n()}),e.on(`blur`,t),e.on(`restore`,()=>setImmediate(n))}";
     const hook = revision2Hook.replace(",n()", "");
     const officialTracker = "trackPrimaryWindow(e){this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}";
+    const modernTracker = "trackPrimaryWindow(e){this.primaryWindows.add(e),this.refreshAppBadgeCount(),e.isFocused()?(this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now())):null==this.lastActivePrimaryWindow&& (this.lastActivePrimaryWindow=e),this.emitPrimaryWindowChangeIfNeeded(),e.on(\"focus\",()=>{this.lastActivePrimaryWindow=e,this.primaryWindowLastActiveAtMs.set(e,Date.now()),this.emitPrimaryWindowChangeIfNeeded()}),e.on(\"blur\",()=>{this.primaryWindowLastActiveAtMs.set(e,Date.now())})}".replace("&& ", "&&");
     const currentV2Base = `${patchedBase.replace(".app.name=`Anti-Codex`", productNameMapper)};${officialTracker};${currentSettingsPatch};${crashRecoveryV2}`;
     const focusOnlyHook = revision2Hook.replace(",e.on(`restore`,()=>setImmediate(n))", "");
     const legacyRestoreOnlyHook = "trackPrimaryWindow(e){let t=()=>this.primaryWindowLastActiveAtMs.set(e,Date.now());this.primaryWindows.add(e),e.isFocused()?(this.lastActivePrimaryWindow=e,t()):this.lastActivePrimaryWindow??=e,this.emitPrimaryWindowChangeIfNeeded(),e.on(`focus`,()=>{this.lastActivePrimaryWindow=e,t(),this.emitPrimaryWindowChangeIfNeeded()}),e.on(`blur`,t),e.on(`restore`,()=>e.webContents.invalidate?.())}";
@@ -764,6 +765,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
       currentRestartThunkDecoy: join(fixture, "current-restart-thunk-decoy.asar"),
       currentGenericRetryThunkDecoy: join(fixture, "current-generic-retry-thunk-decoy.asar"),
       currentV2: join(fixture, "current-v2.asar"),
+      currentModern: join(fixture, "current-modern.asar"),
       currentV2MissingProductName: join(fixture, "current-v2-missing-product-name.asar"),
       currentV2UpdaterDecoy: join(fixture, "current-v2-updater-decoy.asar"),
       currentV2RestartHandlerSwap: join(fixture, "current-v2-restart-handler-swap.asar"),
@@ -809,6 +811,7 @@ test("rollback patch compatibility accepts the current and supported predecessor
     writeFileSync(paths.currentRestartThunkDecoy, `${patchedBase};${officialTracker};${currentSettingsPatch};${crashRecoveryRestartThunkDecoy}`);
     writeFileSync(paths.currentGenericRetryThunkDecoy, `${patchedBase};${officialTracker};${currentSettingsPatch};${genericRetryThunkDecoy}`);
     writeFileSync(paths.currentV2, currentV2Base);
+    writeFileSync(paths.currentModern, `${patchedBase};${modernTracker};${currentSettingsPatch};${crashRecoveryV2}`);
     writeFileSync(paths.currentV2MissingProductName, currentV2Base.replace(productNameMapper, "function yT(e){return `ChatGPT`}"));
     writeFileSync(paths.currentV2UpdaterDecoy, currentV2Base.replace("/*anticodex-crash-recovery-actions-v2*/", "children:[m,h,g,_];/*anticodex-crash-recovery-actions-v2*/"));
     writeFileSync(paths.currentV2RestartHandlerSwap, currentV2Base.replace("onClick:r,children:p", "onClick:U,children:p"));
@@ -874,6 +877,7 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
     currentRestartThunkDecoy = Accept-Asar ${quote(paths.currentRestartThunkDecoy)} 1 0 0 0 7
     currentGenericRetryThunkDecoy = Accept-Asar ${quote(paths.currentGenericRetryThunkDecoy)} 1 0 0 0 7
     currentV2 = Accept-Asar ${quote(paths.currentV2)} 1 0 0 0 7
+    currentModern = Accept-Asar ${quote(paths.currentModern)} 1 0 0 0 7
     currentV2Error = Get-AsarError ${quote(paths.currentV2)} 1 0 0 0 7
     currentV2MissingProductName = Accept-Asar ${quote(paths.currentV2MissingProductName)} 1 0 0 0 7
     currentV2UpdaterDecoy = Accept-Asar ${quote(paths.currentV2UpdaterDecoy)} 1 0 0 0 7
@@ -940,6 +944,7 @@ $legacyWithoutConfigWrite = @($revision4 | Where-Object { $_ -notin @("app-serve
       currentRestartThunkDecoy: false,
       currentGenericRetryThunkDecoy: false,
       currentV2: true,
+      currentModern: true,
       currentV2Error: "",
       currentV2MissingProductName: false,
       currentV2UpdaterDecoy: false,
