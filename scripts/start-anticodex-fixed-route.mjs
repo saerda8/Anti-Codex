@@ -985,7 +985,7 @@ async function runSupervisor(plan) {
       const [proxyReady, selectedModelReady] = await Promise.all([
         tcpReady(plan.ports.proxy),
         plan.provider === "antigravity"
-          ? proxyModelCatalogReady(plan.ports.proxy, plan.route.localProxyKey, antigravityCatalog.models.find((entry) => entry.slug === plan.model && String(entry?.visibility || "").toLowerCase() !== "hide")?.slug ?? antigravityCatalog.models.find((entry) => String(entry?.visibility || "").toLowerCase() !== "hide")?.slug ?? plan.model)
+          ? proxyModelCatalogReady(plan.ports.proxy, plan.route.localProxyKey, antigravityProbeModel(antigravityCatalog, plan.model))
           : Promise.resolve(true),
       ]);
       return proxyReady && selectedModelReady ? true : null;
@@ -2578,6 +2578,12 @@ export async function cdpPageReady(cdpPort, options = {}) {
   } catch {
     return finish({ ready: false, fatal: false });
   }
+}
+
+// Retired (hidden) models are not served upstream, so probe with a listed one instead.
+export function antigravityProbeModel(catalog, model) {
+  const listed = (catalog?.models ?? []).filter((entry) => String(entry?.visibility || "").toLowerCase() !== "hide");
+  return listed.find((entry) => entry.slug === model)?.slug ?? listed[0]?.slug ?? model;
 }
 
 export async function proxyModelCatalogReady(proxyPort, localProxyKey, model, fetchImpl = fetch) {

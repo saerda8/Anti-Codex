@@ -1265,3 +1265,10 @@ test("copied client environment removes original Codex pointers and provider sec
     assert.equal(Object.hasOwn(child, name), false, `${name} leaked into copied client environment`);
   }
 });
+
+test("antigravity probe model falls back from retired hidden models", () => {
+  const catalog = { models: [{ slug: "claude-sonnet-4-6", visibility: "hide" }, { slug: "gemini-4-argon-high", visibility: "list" }] };
+  assert.equal(fixedRoute.antigravityProbeModel(catalog, "claude-sonnet-4-6"), "gemini-4-argon-high");
+  assert.equal(fixedRoute.antigravityProbeModel(catalog, "gemini-4-argon-high"), "gemini-4-argon-high");
+  assert.equal(fixedRoute.antigravityProbeModel({ models: [] }, "x"), "x");
+});

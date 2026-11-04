@@ -1400,3 +1400,9 @@ test("rollback checkpoint reverses marker then host after component move failure
     rmSync(fixture.fixture, { recursive: true, force: true });
   }
 });
+
+test("rollback identity args keep --brand as one array element", () => {
+  const source = readFileSync(resolve(root, "scripts", "rollback-anticodex.ps1"), "utf8");
+  assert.match(source, /\[string\[\]\]\$identityArgs = @\(if/);
+  assert.doesNotMatch(source, /\{ @\("--brand"\) \} else \{ @\(\) \}/);
+});
