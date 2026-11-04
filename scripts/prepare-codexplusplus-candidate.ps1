@@ -4,14 +4,24 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Tag,
 
-    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Anti-Codex\component-sources\codexplusplus")
+    [string]$StateRoot = (Join-Path $env:LOCALAPPDATA "Anti-Codex\component-sources\codexplusplus"),
+    [string]$CandidateMetadata = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$metadataPath = Join-Path $projectRoot "third_party\codexplusplus\upstream.json"
+$acceptedMetadataPath = Join-Path $projectRoot "third_party\codexplusplus\upstream.json"
+$metadataPath = $acceptedMetadataPath
+if ($CandidateMetadata) {
+    $trustedMetadataRoot = [IO.Path]::GetFullPath((Split-Path -Parent $acceptedMetadataPath)).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $metadataPath = [IO.Path]::GetFullPath($CandidateMetadata)
+    if (-not $metadataPath.StartsWith("$trustedMetadataRoot$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::OrdinalIgnoreCase) -or
+        (Split-Path -Leaf $metadataPath) -ne "upstream.proposed.json") {
+        throw "Candidate metadata must be a separate upstream.proposed.json inside the trusted component source directory."
+    }
+}
 $isolationAuditPath = Join-Path $PSScriptRoot "test-codexplusplus-isolation-compatibility.mjs"
 $managedCargoRunner = Join-Path $PSScriptRoot "invoke-anticodex-cargo-xwin.ps1"
 $hygieneVerifier = Join-Path $PSScriptRoot "test-anticodex-docker-build-hygiene.ps1"
@@ -40,6 +50,22 @@ function Get-TextSha256 {
         return ([BitConverter]::ToString($hasher.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
     } finally {
         $hasher.Dispose()
+    }
+}
+
+function Invoke-CandidateCargoCommand {
+    param([string]$Worktree, [string[]]$CargoArguments)
+
+    $emptyTestSelection = $false
+    & $managedCargoRunner -Worktree $Worktree -CargoArguments $CargoArguments 6>&1 | ForEach-Object {
+        $line = [string]$_
+        if ($CargoArguments[0] -ceq "test" -and $line -match 'test result:\s*ok\.\s*0 passed;\s*0 failed;') {
+            $emptyTestSelection = $true
+        }
+        Write-Host $line
+    }
+    if ($emptyTestSelection) {
+        throw "Native verification selected zero tests: $($CargoArguments -join ' ')"
     }
 }
 
@@ -171,6 +197,8 @@ function Assert-CandidateWindowsLaunchable {
     }
     $probeState = Join-Path (Split-Path -Parent $BinaryPath) ("launch-probe-" + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $probeState -Force | Out-Null
+    $probeCodexHome = Join-Path $probeState "codex-home"
+    New-Item -ItemType Directory -Path $probeCodexHome -Force | Out-Null
     $process = $null
     try {
         $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -181,6 +209,10 @@ function Assert-CandidateWindowsLaunchable {
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
         $startInfo.EnvironmentVariables["CODEX_PLUS_STATE_DIR"] = $probeState
+        $startInfo.EnvironmentVariables["ANTICODEX_ISOLATED_INSTANCE"] = "1"
+        $startInfo.EnvironmentVariables["CODEX_HOME"] = $probeCodexHome
+        $startInfo.EnvironmentVariables["CODEX_HOME_DIR"] = $probeCodexHome
+        $startInfo.EnvironmentVariables["CODEX_SQLITE_HOME"] = $probeCodexHome
         try {
             $process = [Diagnostics.Process]::Start($startInfo)
         } catch {
@@ -231,6 +263,7 @@ function Get-ReusableCandidateReport {
         [Parameter(Mandatory = $true)][string]$SourceMetadataHash,
         [Parameter(Mandatory = $true)][string]$PrepareScriptHash,
         [Parameter(Mandatory = $true)][string]$IsolationAuditHash,
+        [Parameter(Mandatory = $true)][string]$IsolationAuditBundleHash,
         [Parameter(Mandatory = $true)][string]$ManagedCargoRunnerHash,
         [Parameter(Mandatory = $true)][string]$HygieneVerifierHash,
         [Parameter(Mandatory = $true)][string]$RunnerImage,
@@ -294,6 +327,7 @@ function Get-ReusableCandidateReport {
         (Test-ExactString -Value $report.inputs.prepareScript.sha256 -Expected $PrepareScriptHash) -and
         (Test-ExactString -Value $report.inputs.isolationAudit.path -Expected "scripts/test-codexplusplus-isolation-compatibility.mjs") -and
         (Test-ExactString -Value $report.inputs.isolationAudit.sha256 -Expected $IsolationAuditHash) -and
+        (Test-ExactString -Value $report.inputs.isolationAudit.bundleSha256 -Expected $IsolationAuditBundleHash) -and
         (Test-ExactString -Value $report.inputs.managedCargoRunner.path -Expected "scripts/invoke-anticodex-cargo-xwin.ps1") -and
         (Test-ExactString -Value $report.inputs.managedCargoRunner.sha256 -Expected $ManagedCargoRunnerHash) -and
         (Test-ExactString -Value $report.inputs.hygieneVerifier.path -Expected "scripts/test-anticodex-docker-build-hygiene.ps1") -and
@@ -383,8 +417,26 @@ try {
     Copy-Item -LiteralPath $metadataPath -Destination $metadataSnapshot
     $metadataInputHash = Get-Sha256 -Path $metadataSnapshot
     $metadata = [IO.File]::ReadAllText($metadataSnapshot, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    if ($CandidateMetadata) {
+        $acceptedMetadata = [IO.File]::ReadAllText($acceptedMetadataPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+        if (-not (Test-ExactString -Value $metadata.version -Expected $version) -or
+            -not (Test-ExactString -Value $metadata.tag -Expected $Tag) -or
+            -not (Test-ExactString -Value $metadata.repository -Expected ([string]$acceptedMetadata.repository)) -or
+            $metadata.upstreamCommit -isnot [string] -or $metadata.upstreamCommit -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "Candidate metadata must pin the requested tag, version, upstream commit and accepted repository."
+        }
+    }
     $prepareScriptHash = Get-Sha256 -Path $PSCommandPath
-    $isolationAuditHash = Get-Sha256 -Path $isolationAuditPath
+    $isolationAuditEntryHash = Get-Sha256 -Path $isolationAuditPath
+    $isolationAuditHash = $isolationAuditEntryHash
+    $isolationAuditBundleHash = $isolationAuditEntryHash
+    $isolationAuditDependencies = @()
+    $sharedAuditPath = Join-Path $projectRoot "scripts\lib\codexplusplus-isolation-audit.mjs"
+    if (Test-Path -LiteralPath $sharedAuditPath -PathType Leaf) {
+        $sharedAuditHash = Get-Sha256 -Path $sharedAuditPath
+        $isolationAuditDependencies += [ordered]@{ path = "scripts/lib/codexplusplus-isolation-audit.mjs"; sha256 = $sharedAuditHash }
+        $isolationAuditBundleHash = Get-TextSha256 -Value ("$isolationAuditEntryHash`n$sharedAuditHash")
+    }
     $managedCargoRunnerHash = Get-Sha256 -Path $managedCargoRunner
     $hygieneVerifierHash = Get-Sha256 -Path $hygieneVerifier
     $managedCargoRunnerText = [IO.File]::ReadAllText($managedCargoRunner, [Text.Encoding]::UTF8)
@@ -397,12 +449,19 @@ try {
     }
     $runnerImage = $runnerImageMatch.Groups["value"].Value
     $responseHistoryPatchFile = "patches/0013-v171-response-history.patch"
+    # Integrated accepted releases must keep the history gates after patch renames.
     $hasResponseHistoryPatch = @($metadata.patches | Where-Object {
         $_.file -is [string] -and $_.file -ceq $responseHistoryPatchFile
-    }).Count -gt 0
+    }).Count -gt 0 -or ([Version]$version -ge [Version]"1.11.2")
+    $protocolTest = @("test", "--locked", "-p", "codex-plus-core", "--test", "protocol_proxy", "--", "--test-threads=2")
+    $watcherTest = @("test", "--locked", "-p", "codex-plus-core", "--test", "watcher", "--", "--test-threads=2")
+    if ([Version]$version -ge [Version]"2.2.0") {
+        $protocolTest = @("test", "--locked", "-p", "codex-plus-core", "--test", "all", "protocol_proxy::", "--", "--test-threads=2")
+        $watcherTest = @("test", "--locked", "-p", "codex-plus-core", "--test", "all", "watcher::", "--", "--test-threads=2")
+    }
     $commands = @(
         @("fmt", "--all", "--", "--check"),
-        @("test", "--locked", "-p", "codex-plus-core", "--test", "protocol_proxy", "--", "--test-threads=2")
+        $protocolTest
     )
     if ($hasResponseHistoryPatch) {
         $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--test", "response_history", "--", "--test-threads=2")
@@ -410,8 +469,11 @@ try {
         $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--lib", "proxy_stream_tests", "--", "--test-threads=1")
         $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--lib", "launcher::tests::", "--", "--test-threads=1")
     }
+    if ([Version]$version -ge [Version]"2.2.0") {
+        $commands += ,@("test", "--locked", "-p", "codex-plus-core", "--lib", "anticodex_", "--", "--test-threads=1")
+    }
     $commands += @(
-        @("test", "--locked", "-p", "codex-plus-core", "--test", "watcher", "--", "--test-threads=2"),
+        $watcherTest,
         @("xwin", "check", "--locked", "--release", "--target", "x86_64-pc-windows-msvc", "-p", "codex-plus-manager"),
         @("xwin", "build", "--locked", "--release", "--target", "x86_64-pc-windows-msvc", "-p", "codex-plus-launcher")
     )
@@ -517,6 +579,9 @@ try {
     if ($upstreamCommit -notmatch '^[0-9a-f]{40}$') {
         throw "CodexPlusPlus upstream commit identity is invalid: $upstreamCommit"
     }
+    if ($CandidateMetadata -and $upstreamCommit -ine [string]$metadata.upstreamCommit) {
+        throw "The fetched tag does not match the candidate metadata upstream commit."
+    }
 
     $cargoManifestPath = Join-Path $worktree "Cargo.toml"
     Assert-File -Path $cargoManifestPath
@@ -603,6 +668,7 @@ try {
                 -SourceMetadataHash $metadataInputHash `
                 -PrepareScriptHash $prepareScriptHash `
                 -IsolationAuditHash $isolationAuditHash `
+                -IsolationAuditBundleHash $isolationAuditBundleHash `
                 -ManagedCargoRunnerHash $managedCargoRunnerHash `
                 -HygieneVerifierHash $hygieneVerifierHash `
                 -RunnerImage $runnerImage `
@@ -636,13 +702,13 @@ try {
     try {
         foreach ($command in $commands) {
             try {
-                & $managedCargoRunner -Worktree $worktree -CargoArguments $command
+                Invoke-CandidateCargoCommand -Worktree $worktree -CargoArguments $command
             } catch {
                 if ($_.Exception.Message -notmatch 'cargo-xwin container exited with code -1$') {
                     throw
                 }
                 Start-Sleep -Seconds 1
-                [void](& $managedCargoRunner -Worktree $worktree -CargoArguments $command)
+                Invoke-CandidateCargoCommand -Worktree $worktree -CargoArguments $command
             }
         }
     } catch {
@@ -763,6 +829,8 @@ try {
             isolationAudit = [ordered]@{
                 path = "scripts/test-codexplusplus-isolation-compatibility.mjs"
                 sha256 = $isolationAuditHash
+                bundleSha256 = $isolationAuditBundleHash
+                dependencies = @($isolationAuditDependencies)
             }
             managedCargoRunner = [ordered]@{
                 path = "scripts/invoke-anticodex-cargo-xwin.ps1"
@@ -791,6 +859,7 @@ try {
                 "proxy_stream_tests"
                 "launcher_security_library"
             }
+            if ([Version]$version -ge [Version]"2.2.0") { "anticodex_library" }
             "watcher"
             "manager_windows_check"
             "launcher_windows_build"

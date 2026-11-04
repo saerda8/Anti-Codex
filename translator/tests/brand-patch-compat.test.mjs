@@ -15,6 +15,100 @@ const modernSettingsRenderFixture = "function Or(e){return(0,Q.jsx)(kr,{...e,sec
 const modernModelDataFixture = "function buildModelData(e){return{modelUpgrades:e.model_upgrades,defaultSliderUpgrades:e.default_slider_upgrades}}";
 const codex8622ConfigHandlerFixture = readFileSync(new URL("./fixtures/config-handler-8622.txt", import.meta.url), "utf8");
 
+test("webpack API auth defaults and runtime requirements remain local to the copy", () => {
+  const declaration = brandPatcherSource.match(/function patchAuthRequirement[\s\S]*?(?=function patchOnboardingGate)/)[0];
+  const patch = new Function("replacePadded", "hasPatchedAuthRequirement", `${declaration};return patchAuthRequirement;`)(
+    (text, before, after) => text.replace(before, after + " ".repeat(before.length - after.length)), brandPatchCompat.hasPatchedAuthRequirement,
+  );
+  const source = 'function b(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}function derive(d,y){return{openAIAuth:y,authMethod:y,requiresAuth:"copilot"===y||(d.requiresOpenaiAuth??!0),email:d.account?.type==="chatgpt"?d.account.email:null}}';
+  const patched = patch(source);
+  assert.equal(patched.length, source.length);
+  const functions = new Function(`${patched};return {b,derive};`)();
+  assert.equal(functions.b().authMethod, "apikey");
+  assert.equal(functions.b().requiresAuth, false);
+  assert.equal(functions.derive({requiresOpenaiAuth: true}, null).requiresAuth, false);
+  assert.equal(functions.derive({account: {type: "chatgpt", email: "local@example.invalid"}}, "chatgpt").email, "local@example.invalid");
+  assert.equal(patch(patched), patched);
+  assert.equal(brandPatchCompat.hasPatchedAuthRequirement(patched), true);
+});
+
+test("webpack anonymous route gate keeps the surrounding workspace readiness effect", () => {
+  const source = 'let Q=function({auth:e,codexFeatureAccess:t,workspaceRootsIsLoading:h}){return e.isLoading?null:!e.authMethod&&e.requiresAuth?"login":h?null:"welcome"}({auth:a,codexFeatureAccess:I,workspaceRootsIsLoading:H}),Y=waiting;useEffect(()=>{if(!Q||Y)return;dispatch("electron-set-window-mode",{mode:Q})});let route={target:Q,path:J};';
+  const patched = brandPatchCompat.patchAppRouteGate(source);
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /if\(!Q\|\|Y\)return/);
+  const result = new Function("a", "I", "H", "waiting", "useEffect", "dispatch", "J", `${patched};return route;`)({isLoading: false, requiresAuth: true}, {}, false, true, () => {}, () => {}, "/");
+  assert.equal(result.target, "app");
+  assert.equal(brandPatchCompat.patchAppRouteGate(patched), patched);
+});
+
+test("webpack anonymous model filter retains access-program and hidden-model guards", () => {
+  const source = 'function({additionalAvailableModels:e,apiKeyDaybreakSupported:t,authMethod:n,availableModels:r,hasConfiguredModelCatalog:i,isCustomModelProvider:a,model:s,useHiddenModels:o}){let l=s.availableAccessPrograms?.cyber;return("apikey"!==n||!!t||null==l||!(l.length>0)||!!l.includes("standard"))&&(e?.has(s.model)===!0||"codex-auto-review"!==s.model&&(i&&!s.hidden||(o&&!a&&"amazonBedrock"!==n?r.has(s.model)||"apikey"===n&&t&&!s.hidden&&l?.some(e=>"standard"!==e)===!0:!s.hidden)))}';
+  const patched = brandPatchCompat.patchLocalModelAvailability(source);
+  assert.equal(patched.length, source.length);
+  const filter = new Function(`return (${patched})`)();
+  const options = {additionalAvailableModels: new Set(), apiKeyDaybreakSupported: false, authMethod: "apikey", availableModels: new Set(), hasConfiguredModelCatalog: false, isCustomModelProvider: false, model: {model: "custom", hidden: false}, useHiddenModels: true};
+  assert.equal(filter(options), true);
+  assert.equal(filter({...options, model: {...options.model, hidden: true}}), false);
+  assert.equal(filter({...options, model: {...options.model, model: "codex-auto-review"}}), false);
+  assert.equal(filter({...options, model: {...options.model, availableAccessPrograms: {cyber: ["restricted"]}}}), false);
+  assert.equal(brandPatchCompat.hasPatchedLocalModelAvailability(patched), true);
+  assert.equal(brandPatchCompat.patchLocalModelAvailability(patched), patched);
+});
+
+test("webpack model warnings preserve model selection and patch every notice", () => {
+  const start = brandPatcherSource.indexOf("function findBalancedCallEnd(");
+  const end = brandPatcherSource.indexOf("function patchWindowsCloseBehavior(", start);
+  const { patchModelSwitchWarning } = new Function(`${brandPatcherSource.slice(start, end)};return {patchModelSwitchWarning};`)();
+  const source = 'let selected=next;N.get(Q.Id).info((0,j.jsx)(C,{id:"composer.modelChangeDuringConversationWarning.v2.toast",defaultMessage:"Warning"}));N.get(Q.Id).info((0,j.jsx)(C,{id:"composer.modelChangeDuringConversationWarning.toast",defaultMessage:"Warning"}));N.get(Q.Id).info("unrelated");';
+  const patched = patchModelSwitchWarning(source);
+  assert.equal(patched.length, source.length);
+  let count = 0;
+  const selected = new Function("N", "Q", "j", "C", "next", `${patched};return selected;`)({get: () => ({info: () => count++})}, {Id: 1}, {jsx: () => {throw new Error("warning renderer must not execute")}}, null, "custom-model");
+  assert.equal(selected, "custom-model");
+  assert.equal(count, 1);
+  assert.equal(patchModelSwitchWarning(patched), patched);
+});
+
+test("webpack banner discovery skips localization dictionaries with numeric chunk names", () => {
+  const declaration = brandPatcherSource.match(/function findModelUpgradeBannerPatch[\s\S]*?(?=function findWindowsClosePatch)/)[0];
+  const finder = new Function("walkFiles", "readFileFromAsar", "hasModernModelUpgradeDataSurface", "patchModelUpgradeBanner", `${declaration};return findModelUpgradeBannerPatch;`)(
+    (header) => Object.entries(header), (_fd, entry) => ({buf: Buffer.from(entry)}), () => false, (text) => text,
+  );
+  const bundles = {
+    "webview/assets/async/100.locale.js": '{"composer.modelUpgradeBanner.introductionTitle":"Meet {model}"}',
+    "webview/assets/async/200.ui.js": 'function k(e){return jsx(C,{id:"composer.modelUpgradeBanner.introductionTitle",defaultMessage:"Meet {model}"})}',
+  };
+  assert.equal(finder(null, bundles, 0)[0], "webview/assets/async/200.ui.js");
+});
+
+test("webpack settings retain local navigation without ChatGPT account links", () => {
+  const definition = 'let s={account:{href:"https://chatgpt.com/#settings",icon:r.A,message:o.account},securitySettings:{href:"https://chatgpt.com/open-security-settings",icon:i.A,message:o.securitySettings}};';
+  const render = 'function e5(e){return(0,a.jsx)(e8,{...e,securitySettingsEnabled:n})}let m=[...t_&&(0,D.gr)(s,tP)>0?[{href:eh.N.securitySettings.href,id:"external:security-settings",kind:"external",label:s}]:[]];';
+  const patchedDefinition = brandPatchCompat.patchSettingsExternalNavigation(definition);
+  const patchedRender = brandPatchCompat.patchSettingsExternalNavigationRender(render);
+  assert.equal(patchedDefinition.length, definition.length);
+  assert.equal(patchedRender.length, render.length);
+  assert.doesNotMatch(patchedDefinition, /https:\/\/chatgpt\.com/);
+  assert.match(patchedRender, /securitySettingsEnabled:0/);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigation(patchedDefinition), patchedDefinition);
+  assert.equal(brandPatchCompat.patchSettingsExternalNavigationRender(patchedRender), patchedRender);
+});
+
+test("webpack crash recovery text identifies Anti-Codex and preserves retry actions", () => {
+  const title = 'function l({title:e=(0,r.jsx)(s.A,{id:"appServerCrash.recoveryTitle",defaultMessage:"ChatGPT hit a snag",description:"Title on the full-screen app recovery page after an unexpected error"})}){return e}';
+  const runtime = 'let e={id:"appServerCrash.configurationRecoveryDescription",defaultMessage:"ChatGPT couldn\'t load your configuration. Review it, then restart to try again.",description:"Recovery guidance when invalid configuration prevents the app from starting"},t={id:"appServerCrash.recoveryDescription",defaultMessage:"Try again or update ChatGPT if this keeps happening",description:"Recovery guidance after an unexpected error"},r={id:"appServerCrash.restartChatGPT",defaultMessage:"Try again",description:"Retry action"};';
+  const patchedTitle = brandPatchCompat.patchCrashRecoveryTitle(title);
+  const patchedRuntime = brandPatchCompat.patchCrashRecoveryRuntime(runtime);
+  assert.equal(patchedTitle.length, title.length);
+  assert.equal(patchedRuntime.length, runtime.length);
+  assert.match(patchedTitle, /Anti-Codex hit a snag/);
+  assert.match(patchedRuntime, /Anti-Codex couldn't load your configuration/);
+  assert.match(patchedRuntime, /defaultMessage:"Try again"/);
+  assert.equal(brandPatchCompat.patchCrashRecoveryTitle(patchedTitle), patchedTitle);
+  assert.equal(brandPatchCompat.patchCrashRecoveryRuntime(patchedRuntime), patchedRuntime);
+});
+
 test("brands Codex and ChatGPT webview titles without changing HTML size", () => {
   for (const title of ["Codex", "ChatGPT"]) {
     const source = `<!doctype html>\n  <head>\n    <title>${title}</title>\n  </head>\n`;
@@ -270,7 +364,6 @@ test("finds settings and model patches in Codex's consolidated app-initial bundl
 test("hides both model-switch notices without replacing the model-selection path", () => {
   const switchPatch = brandPatcherSource.match(/function patchModelSwitchWarning[\s\S]*?(?=function patchWindowsCloseBehavior)/)?.[0] ?? "";
   const upgradePatch = brandPatcherSource.match(/function patchModelUpgradeBanner[\s\S]*?(?=function patchWindowsCloseBehavior)/)?.[0] ?? "";
-  assert.match(switchPatch, /composer\.modelChangeDuringConversationWarning\.toast/);
   assert.match(switchPatch, /anticodex-hide-model-switch-warning/);
   assert.match(switchPatch, /findBalancedCallEnd/);
   assert.match(upgradePatch, /composer\.modelUpgradeBanner\.introductionTitle/);

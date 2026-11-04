@@ -428,10 +428,10 @@ test("update check clears stale running operation when active host is already sy
     const stateRoot = resolve(tempDir, "state");
     const activeRoot = resolve(installRoot, "codex-patched-app");
     const fileContents = {
-      antiCodexExe: "same-host",
+      antiCodexExe: fs.readFileSync(resolve(process.env.SystemRoot, "System32", "where.exe")),
       appAsar: "patched-asar",
       codexCli: "same-cli",
-      hostIcon: "fake-icon",
+      hostIcon: fs.readFileSync(resolve(projectRoot, "assets", "anticodex.ico")),
       trayIcon: "fake-tray-icon",
       appRootIcon: "fake-root-icon",
       sandboxHelper: "fake-sandbox-helper",
@@ -456,6 +456,16 @@ test("update check clears stale running operation when active host is already sy
     fs.writeFileSync(resolve(activeRoot, "resources", "codex-tray.ico"), fileContents.trayIcon);
     fs.writeFileSync(resolve(activeRoot, "resources", "app.asar.unpacked", "runtime.js"), fileContents.unpackedRuntime);
     fs.writeFileSync(resolve(activeRoot, "icon.ico"), fileContents.appRootIcon);
+    const nodePath = resolve(activeRoot, "resources", "cua_node", "bin", "node.exe");
+    fs.copyFileSync(process.execPath, nodePath);
+    fileContents.nodeRuntime = fs.readFileSync(nodePath);
+    const sourceHost = resolve(activeRoot, "Codex.exe");
+    const activeHost = resolve(activeRoot, "Anti-Codex.exe");
+    const headerHash = "0".repeat(64);
+    const branded = spawnSync(process.execPath, [resolve(projectRoot, "scripts", "electron-asar-integrity-host.mjs"),
+      "--patch", sourceHost, activeHost, headerHash, headerHash, "--brand"], { encoding: "utf8", windowsHide: true });
+    assert.equal(branded.status, 0, branded.stderr || branded.stdout);
+    const brandedExe = fs.readFileSync(activeHost);
     const markerPath = resolve(installRoot, "codex-patched-app.ok");
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
@@ -464,11 +474,12 @@ test("update check clears stale running operation when active host is already sy
       source: {
         packageName: "explicit",
         packageVersion: "test-version",
+        desktopHostName: "Codex.exe",
         codexHost: sha256(fileContents.antiCodexExe),
         codexCli: sha256(fileContents.codexCli),
       },
       files: {
-        antiCodexExe: sha256(fileContents.antiCodexExe),
+        antiCodexExe: sha256(brandedExe),
         appAsar: sha256(fileContents.appAsar),
         codexCli: sha256(fileContents.codexCli),
         sandboxHelper: sha256(fileContents.sandboxHelper),
@@ -483,6 +494,7 @@ test("update check clears stale running operation when active host is already sy
         sha256: sha256(fileContents.unpackedRuntime),
         size: Buffer.byteLength(fileContents.unpackedRuntime),
       }],
+      asarIntegrity: { originalHeaderHash: headerHash, patchedHeaderHash: headerHash, executableIdentityRevision: 1 },
     };
     fs.writeFileSync(markerPath, JSON.stringify(validManifest));
     fs.writeFileSync(resolve(stateRoot, "update-status.json"), JSON.stringify({
@@ -511,6 +523,27 @@ test("update check clears stale running operation when active host is already sy
     assert.equal(parsed.operation?.stage, "complete");
     assert.equal(persisted.operation?.state, "succeeded");
     assert.equal(persisted.operation?.stage, "complete");
+
+    const check = () => {
+      const run = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", updateChecker,
+        "-InstallRoot", installRoot, "-SourceRoot", sourceRoot, "-StateRoot", stateRoot, "-NoPersist"],
+      { encoding: "utf8", timeout: POWERSHELL_TIMEOUT_MS, windowsHide: true });
+      assert.equal(run.status, 0, run.stderr || run.stdout);
+      return JSON.parse(run.stdout.trim());
+    };
+    delete validManifest.asarIntegrity.executableIdentityRevision;
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
+    const legacy = check();
+    assert.equal(legacy.updateNeeded, true);
+    assert.ok(legacy.guardrails.failures.includes("active host executable identity requires an update"));
+
+    validManifest.asarIntegrity.executableIdentityRevision = 1;
+    validManifest.files.antiCodexExe = validManifest.source.codexHost;
+    fs.copyFileSync(sourceHost, activeHost);
+    fs.writeFileSync(markerPath, JSON.stringify(validManifest));
+    const forged = check();
+    assert.equal(forged.updateNeeded, true);
+    assert.ok(forged.guardrails.failures.includes("active host executable identity patch is missing"));
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -586,10 +619,10 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     const activeRoot = resolve(installRoot, "codex-patched-app");
     const unpackedRoot = resolve(activeRoot, "resources", "app.asar.unpacked");
     const fileContents = {
-      antiCodexExe: "same-host",
+      antiCodexExe: fs.readFileSync(resolve(process.env.SystemRoot, "System32", "where.exe")),
       appAsar: "patched-asar",
       codexCli: "same-cli",
-      hostIcon: "fake-icon",
+      hostIcon: fs.readFileSync(resolve(projectRoot, "assets", "anticodex.ico")),
       trayIcon: "fake-tray-icon",
       appRootIcon: "fake-root-icon",
       sandboxHelper: "fake-sandbox-helper",
@@ -621,6 +654,15 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
     for (const [name, content] of Object.entries(unpackedContents)) {
       fs.writeFileSync(resolve(unpackedRoot, name), content);
     }
+    const nodePath = resolve(activeRoot, "resources", "cua_node", "bin", "node.exe");
+    fs.copyFileSync(process.execPath, nodePath);
+    fileContents.nodeRuntime = fs.readFileSync(nodePath);
+    const headerHash = "0".repeat(64);
+    const activeHost = resolve(activeRoot, "Anti-Codex.exe");
+    const branded = spawnSync(process.execPath, [resolve(projectRoot, "scripts", "electron-asar-integrity-host.mjs"),
+      "--patch", resolve(activeRoot, "Codex.exe"), activeHost, headerHash, headerHash, "--brand"], { encoding: "utf8", windowsHide: true });
+    assert.equal(branded.status, 0, branded.stderr || branded.stdout);
+    const brandedExe = fs.readFileSync(activeHost);
     const markerPath = resolve(installRoot, "codex-patched-app.ok");
     const validManifest = {
       schema: "anticodex-host-manifest-v2",
@@ -628,11 +670,12 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
       hostPatchRevision: 7,
       source: {
         packageName: "explicit",
+        desktopHostName: "Codex.exe",
         codexHost: sha256(fileContents.antiCodexExe),
         codexCli: sha256(fileContents.codexCli),
       },
       files: {
-        antiCodexExe: sha256(fileContents.antiCodexExe),
+        antiCodexExe: sha256(brandedExe),
         appAsar: sha256(fileContents.appAsar),
         codexCli: sha256(fileContents.codexCli),
         sandboxHelper: sha256(fileContents.sandboxHelper),
@@ -647,6 +690,7 @@ test("update guardrail rejects missing non-node companion files from app.asar.un
         sha256: sha256(content),
         size: Buffer.byteLength(content),
       })),
+      asarIntegrity: { originalHeaderHash: headerHash, patchedHeaderHash: headerHash, executableIdentityRevision: 1 },
     };
     fs.writeFileSync(markerPath, JSON.stringify(validManifest));
 
@@ -840,7 +884,7 @@ test("RED: cached up-to-date update check still depends on active manifest, bran
     "originalHeaderHash",
     "patchedHeaderHash",
     "--verify",
-    "differs outside the isolated ASAR integrity hash",
+    "differs outside the approved ASAR and identity patches",
     "hostIcon",
     "trayIcon",
     "appRootIcon",

@@ -394,8 +394,8 @@ function Test-AntiCodexModernCrashRecovery {
     param([Parameter(Mandatory = $true)][string]$Text)
 
     return [regex]::Matches($Text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\s*\})').Count -eq 1 -and
-        [regex]::Matches($Text, 'id:`appServerCrash\.feedbackGuidance`,defaultMessage:`Send feedback to help us make the app better\.`,description:`[^`]+`').Count -eq 1 -and
-        [regex]::Matches($Text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`').Count -eq 0
+        [regex]::Matches($Text, 'id:[`"]appServerCrash\.feedbackGuidance[`"],defaultMessage:[`"]Send feedback to help us make the app better\.[`"],description:[`"][^`"]+[`"]').Count -eq 1 -and
+        [regex]::Matches($Text, 'id:[`"]appServerCrash\.recoveryTitle[`"],defaultMessage:[`"]ChatGPT hit a snag[`"]').Count -eq 0
 }
 
 function Test-AntiCodexAsarPatches {
@@ -428,8 +428,8 @@ function Test-AntiCodexAsarPatches {
         throw "Anti-Codex host app.asar product-name patch is missing or ambiguous."
     }
     if ($ExpectedHostPatchRevision -in @(2, 3, 4, 5, 6, 7)) {
-        $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
-        $settingsModernSecurityItemPattern = '\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}'
+        $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$.]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$.]+,message:\k<messages>\.securitySettings\}'
+        $settingsModernSecurityItemPattern = '\{href:[\w$.]+\.securitySettings\.href,id:[`"]external:security-settings[`"],kind:[`"]external[`"],label:[\w$]+\}'
         $settingsHiddenAccountCount = [regex]::Matches($text, '/\*anticodex-hide-external-account\*/null').Count
         $settingsSupportedRender = $settingsHiddenAccountCount -eq 1 -or
             ($settingsHiddenAccountCount -eq 0 -and [regex]::Matches($text, $settingsModernSecurityItemPattern).Count -eq 1)
@@ -566,8 +566,8 @@ function Test-AntiCodexAsarPatches {
     if ($ExpectedHostPatchRevision -in @(5, 6, 7)) {
         $v3CrashPatchValid = Test-AntiCodexCrashRecoveryV3 -Text $text
         $modernCrashPatchValid = [regex]::Matches($text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`(?=\s*\})').Count -eq 1 -and
-            [regex]::Matches($text, 'id:`appServerCrash\.feedbackGuidance`,defaultMessage:`Send feedback to help us make the app better\.`,description:`[^`]+`').Count -eq 1 -and
-            [regex]::Matches($text, 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`').Count -eq 0
+            [regex]::Matches($text, 'id:[`"]appServerCrash\.feedbackGuidance[`"],defaultMessage:[`"]Send feedback to help us make the app better\.[`"],description:[`"][^`"]+[`"]').Count -eq 1 -and
+            [regex]::Matches($text, 'id:[`"]appServerCrash\.recoveryTitle[`"],defaultMessage:[`"]ChatGPT hit a snag[`"]').Count -eq 0
         $legacyCrashPatchValid = $crashTitleOriginalCount -eq 0 -and $crashDescriptionOriginalCount -eq 0 -and
             $crashTitlePatchedCount -eq 1 -and $crashDescriptionPatchedCount -eq 1 -and $crashRecoveryMarkerCount -eq 1 -and
             $appCrashConfigBindingValid -and $appCrashHandlerBindingValid -and
@@ -956,16 +956,21 @@ function Test-AntiCodexHost {
     if ([string]$manifest.source.codexCli -ne [string](Get-AntiCodexSha256 -Path $required.codexCli)) {
         throw "Anti-Codex host source fingerprint mismatch: codexCli"
     }
-    if ([string](Get-AntiCodexSha256 -Path $required.antiCodexExe) -ne [string](Get-AntiCodexSha256 -Path $required.codexHost)) {
-        $integrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
-        $integrity = if ($integrityProperty) { $integrityProperty.Value } else { $null }
+    $integrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
+    $integrity = if ($integrityProperty) { $integrityProperty.Value } else { $null }
+    $identityRevision = if ($integrity) { $integrity.PSObject.Properties["executableIdentityRevision"] } else { $null }
+    if ($identityRevision -and [string]$identityRevision.Value -ne "1") {
+        throw "Anti-Codex host executable identity revision is invalid."
+    }
+    if ($identityRevision -or [string](Get-AntiCodexSha256 -Path $required.antiCodexExe) -ne [string](Get-AntiCodexSha256 -Path $required.codexHost)) {
         $helper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
         if (-not $integrity -or -not (Test-Path -LiteralPath $helper -PathType Leaf)) {
             throw "Anti-Codex host ASAR integrity provenance is incomplete."
         }
-        & $required.nodeRuntime $helper --verify $required.codexHost $required.antiCodexExe ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
+        [string[]]$identityArgs = @(if ($identityRevision -and [string]$identityRevision.Value -eq "1") { "--brand" })
+        & $required.nodeRuntime $helper --verify $required.codexHost $required.antiCodexExe ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) @identityArgs *> $null
         if ($LASTEXITCODE -ne 0) {
-            throw "Anti-Codex host differs outside the isolated ASAR integrity hash."
+            throw "Anti-Codex host differs outside the approved ASAR and identity patches."
         }
     }
     foreach ($iconPath in @($required.hostIcon, $required.trayIcon, $required.appRootIcon)) {
@@ -1417,7 +1422,9 @@ function Repair-LegacyRollbackHostBinaryManifest {
     $integrity = if ($integrityProperty) { $integrityProperty.Value } else { $null }
     $integrityHelper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
     if ($integrity -and [string]$originalBinaryHash -ne [string]$sourceHash) {
-        & node.exe $integrityHelper --verify $sourceHost $antiCodexHost ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
+        $identityRevision = $integrity.PSObject.Properties["executableIdentityRevision"]
+        [string[]]$identityArgs = @(if ($identityRevision -and [string]$identityRevision.Value -eq "1") { "--brand" })
+        & node.exe $integrityHelper --verify $sourceHost $antiCodexHost ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) @identityArgs *> $null
         if ($LASTEXITCODE -ne 0) { throw "Rollback ASAR integrity patch is invalid." }
         return
     }

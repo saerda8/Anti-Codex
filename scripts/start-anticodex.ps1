@@ -255,10 +255,87 @@ function Enter-AntiCodexHostSyncBarrier {
 function Exit-AntiCodexHostSyncBarrier {
     param($Barrier)
     if (-not $Barrier) { return }
-    if ($Barrier.LocalAcquired) { $Barrier.LocalMutex.ReleaseMutex() }
-    if ($Barrier.GlobalAcquired) { $Barrier.GlobalMutex.ReleaseMutex() }
+    if ($Barrier.LocalAcquired) { $Barrier.LocalMutex.ReleaseMutex(); $Barrier.LocalAcquired = $false }
+    if ($Barrier.GlobalAcquired) { $Barrier.GlobalMutex.ReleaseMutex(); $Barrier.GlobalAcquired = $false }
     $Barrier.LocalMutex.Dispose()
     $Barrier.GlobalMutex.Dispose()
+}
+
+function ConvertTo-AntiCodexProcessArgument {
+    param([AllowEmptyString()][string]$Value)
+    if ($Value.Length -gt 0 -and $Value -notmatch '[\s"]') { return $Value }
+    $quoted = [Text.StringBuilder]::new()
+    [void]$quoted.Append('"')
+    $slashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq '\') { $slashes++; continue }
+        if ($character -eq '"') {
+            [void]$quoted.Append(('\' * (2 * $slashes + 1)))
+        } elseif ($slashes -gt 0) {
+            [void]$quoted.Append(('\' * $slashes))
+        }
+        [void]$quoted.Append($character)
+        $slashes = 0
+    }
+    if ($slashes -gt 0) { [void]$quoted.Append(('\' * (2 * $slashes))) }
+    [void]$quoted.Append('"')
+    return $quoted.ToString()
+}
+
+function Invoke-AntiCodexInlineSupervisor {
+    param(
+        [string]$NodeExecutable,
+        [string[]]$Arguments,
+        [string]$StdoutLog,
+        [string]$StderrLog,
+        [string]$StateRoot,
+        [ref]$Barrier
+    )
+    $process = $null
+    $stdout = $null
+    $stderr = $null
+    $started = $false
+    try {
+        $stdout = [IO.File]::Open($StdoutLog, [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $stderr = [IO.File]::Open($StderrLog, [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $NodeExecutable
+        $startInfo.Arguments = (($Arguments | ForEach-Object { ConvertTo-AntiCodexProcessArgument -Value $_ }) -join ' ')
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) { throw 'Failed to start the Anti-Codex supervisor.' }
+        $started = $true
+        $stdoutCopy = $process.StandardOutput.BaseStream.CopyToAsync($stdout)
+        $stderrCopy = $process.StandardError.BaseStream.CopyToAsync($stderr)
+        Exit-AntiCodexHostSyncBarrier $Barrier.Value
+        $Barrier.Value = $null
+        while (-not $process.WaitForExit(200)) {
+            if ($stdoutCopy.IsFaulted -or $stdoutCopy.IsCanceled) { [void]$stdoutCopy.GetAwaiter().GetResult() }
+            if ($stderrCopy.IsFaulted -or $stderrCopy.IsCanceled) { [void]$stderrCopy.GetAwaiter().GetResult() }
+        }
+        [void]$stdoutCopy.GetAwaiter().GetResult()
+        [void]$stderrCopy.GetAwaiter().GetResult()
+        return [int]$process.ExitCode
+    } catch {
+        if ($started -and $process -and -not $process.HasExited) {
+            try { $null = Invoke-AntiCodexFixedRouteShutdown -StateRoot $StateRoot } catch {}
+            try {
+                if (-not $process.WaitForExit(5000)) {
+                    $process.Kill()
+                    $null = $process.WaitForExit(5000)
+                }
+            } catch {}
+        }
+        throw
+    } finally {
+        if ($stdout) { $stdout.Dispose() }
+        if ($stderr) { $stderr.Dispose() }
+        if ($process) { $process.Dispose() }
+    }
 }
 
 function Invoke-InstalledAntiCodexLauncherIfAvailable {
@@ -273,7 +350,7 @@ function Invoke-InstalledAntiCodexLauncherIfAvailable {
     $forwardArgs = @{}
     if ($SkipUpdateCheck) { $forwardArgs.SkipUpdateCheck = $true }
     if ($InlineSupervisor) { $forwardArgs.InlineSupervisor = $true }
-    $forwardArgs.SkipSyncBarrier = $true
+    if ($SkipSyncBarrier) { $forwardArgs.SkipSyncBarrier = $true }
     if ($StateRootPath) { $forwardArgs.StateRootPath = $StateRootPath }
     if ($NodeExecutablePath) { $forwardArgs.NodeExecutablePath = $NodeExecutablePath }
     if ($UserProfilePath) { $forwardArgs.UserProfilePath = $UserProfilePath }
@@ -801,10 +878,10 @@ public static class AntiCodexLaunchBoundary
 
 $hostSyncBarrier = $null
 try {
+Invoke-InstalledAntiCodexLauncherIfAvailable
 if (-not $SkipSyncBarrier) {
     $hostSyncBarrier = Enter-AntiCodexHostSyncBarrier
 }
-Invoke-InstalledAntiCodexLauncherIfAvailable
 
 $installRoot = Resolve-AntiCodexInstallRoot
 $stateRoot = if ($StateRootPath) {
@@ -1003,7 +1080,9 @@ try {
 
 $launcherOutLog = Join-Path $stateRoot "anticodex-fixed-route.out.log"
 $launcherErrLog = Join-Path $stateRoot "anticodex-fixed-route.err.log"
-Remove-Item -LiteralPath $launcherOutLog, $launcherErrLog -Force -ErrorAction SilentlyContinue
+if (-not $InlineSupervisor) {
+    Remove-Item -LiteralPath $launcherOutLog, $launcherErrLog -Force -ErrorAction SilentlyContinue
+}
 $supervisorArgs = @(
     "`"$supervisorScript`"",
     "--install-root", "`"$installRoot`"",
@@ -1025,19 +1104,13 @@ if ($InlineSupervisor) {
     )
     if ($disableGpu) { $inlineSupervisorArgs += "--disable-gpu" }
     Write-AntiCodexLauncherState -Stage "supervising-fixed-route"
-    $savedErrorActionPreference = $ErrorActionPreference
-    $inlineExitCode = -1
-    try {
-        # Windows PowerShell promotes native stderr to a terminating error when
-        # ErrorActionPreference is Stop, even while the Node process is healthy.
-        $ErrorActionPreference = "Continue"
-        & $nodeExecutable @inlineSupervisorArgs 1>> $launcherOutLog 2>> $launcherErrLog
-        $inlineExitCode = [int]$LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $savedErrorActionPreference
-    }
+    $inlineExitCode = Invoke-AntiCodexInlineSupervisor `
+        -NodeExecutable $nodeExecutable -Arguments $inlineSupervisorArgs `
+        -StdoutLog $launcherOutLog -StderrLog $launcherErrLog -StateRoot $stateRoot `
+        -Barrier ([ref]$hostSyncBarrier)
     if ($inlineExitCode -ne 0) {
-        throw "Anti-Codex fixed-route supervisor exited with code $inlineExitCode."
+        Write-AntiCodexLauncherState -Stage "failed" -Status "error" -Message "Anti-Codex fixed-route supervisor exited with code $inlineExitCode."
+        exit $inlineExitCode
     }
     Write-AntiCodexLauncherState -Stage "closed" -Status "stopped"
     exit 0
@@ -1050,6 +1123,21 @@ $supervisorProcess = Start-Process -FilePath $nodeExecutable `
     -RedirectStandardError $launcherErrLog `
     -WindowStyle Hidden `
     -PassThru
+try {
+    Exit-AntiCodexHostSyncBarrier $hostSyncBarrier
+    $hostSyncBarrier = $null
+} catch {
+    if (-not $supervisorProcess.HasExited) {
+        try { $null = Invoke-AntiCodexFixedRouteShutdown -StateRoot $stateRoot } catch {}
+        try {
+            if (-not $supervisorProcess.WaitForExit(5000)) {
+                $supervisorProcess.Kill()
+                $null = $supervisorProcess.WaitForExit(5000)
+            }
+        } catch {}
+    }
+    throw
+}
 $supervisorSnapshot = Get-AntiCodexScriptProcessSnapshot `
     -ProcessId $supervisorProcess.Id `
     -ExpectedScriptPath $supervisorScript `

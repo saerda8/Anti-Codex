@@ -985,7 +985,7 @@ async function runSupervisor(plan) {
       const [proxyReady, selectedModelReady] = await Promise.all([
         tcpReady(plan.ports.proxy),
         plan.provider === "antigravity"
-          ? proxyModelCatalogReady(plan.ports.proxy, plan.route.localProxyKey, plan.model)
+          ? proxyModelCatalogReady(plan.ports.proxy, plan.route.localProxyKey, antigravityCatalog.models.find((entry) => entry.slug === plan.model && String(entry?.visibility || "").toLowerCase() !== "hide")?.slug ?? antigravityCatalog.models.find((entry) => String(entry?.visibility || "").toLowerCase() !== "hide")?.slug ?? plan.model)
           : Promise.resolve(true),
       ]);
       return proxyReady && selectedModelReady ? true : null;
@@ -1453,6 +1453,7 @@ function publicChildEnvironment(plan) {
     CODEX_PLUS_MANAGER_GUARD_PORT: String(plan.ports.managerGuard),
     CODEX_HOME: plan.paths.codexHome,
     CODEX_HOME_DIR: plan.paths.codexHome,
+    CODEX_SQLITE_HOME: plan.paths.codexHome,
     APPDATA: plan.paths.isolatedAppData,
     LOCALAPPDATA: plan.paths.isolatedLocalAppData,
     TEMP: plan.paths.temp,
@@ -1474,6 +1475,8 @@ export function buildSupervisorChildEnvironment(plan, baseEnvironment = process.
   }
   const environment = {
     ...baseEnvironment,
+    ANTICODEX_ISOLATED_INSTANCE: "1",
+    CODEX_SQLITE_HOME: plan.paths.codexHome,
     CODEX_PLUS_STATE_DIR: plan.paths.codexPlusPlusState,
     CODEX_PLUS_APP_EXECUTABLE: plan.paths.appExecutable,
     CODEX_PLUS_PROTOCOL_PROXY_PORT: String(plan.ports.proxy),
@@ -1530,6 +1533,7 @@ export function buildCopiedClientEnvironment(plan, baseEnvironment = process.env
     "CODEX_PLUS_LAUNCHER_GUARD_PORT",
     "CODEX_PLUS_MANAGER_GUARD_PORT",
     "ANTICODEX_PROMPT_POLICY_PATH",
+    "ANTICODEX_ISOLATED_INSTANCE",
   ]) delete environment[name];
   return environment;
 }

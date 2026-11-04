@@ -210,23 +210,27 @@ function findBalancedCallEnd(text, openParenIndex) {
 
 function patchModelSwitchWarning(text) {
   const marker = "/*anticodex-hide-model-switch-warning*/";
-  if (text.includes(marker)) return text;
-  const warningIndex = text.indexOf("composer.modelChangeDuringConversationWarning.toast");
-  if (warningIndex < 0) throw new Error("Model switch warning message was not found");
-  const infoPattern = /[A-Za-z_$][\w$]*\.get\([A-Za-z_$][\w$]*\)\.info\(/g;
-  let match = null;
-  for (const candidate of text.slice(0, warningIndex).matchAll(infoPattern)) {
-    match = candidate;
+  const calls = [];
+  const infoPattern = /[A-Za-z_$][\w$]*\.get\([\w$.]+\)\.info\(/g;
+  for (const match of text.matchAll(infoPattern)) {
+    const start = match.index;
+    const end = findBalancedCallEnd(text, start + match[0].length - 1);
+    if (end < 0) continue;
+    const original = text.slice(start, end);
+    if (/id:[`"]composer\.modelChangeDuringConversationWarning\.(?:v2\.)?toast[`"]/.test(original)) {
+      calls.push({ start, end, original });
+    }
   }
-  if (!match) throw new Error("Model switch warning toast call was not found");
-  const start = match.index;
-  const openParen = start + match[0].length - 1;
-  const end = findBalancedCallEnd(text, openParen);
-  if (end < 0) throw new Error("Model switch warning toast call was not balanced");
-  const original = text.slice(start, end);
+  if (!calls.length) {
+    if (text.includes(marker)) return text;
+    throw new Error("Model switch warning toast call was not found");
+  }
   const replacement = `${marker}void 0`;
-  if (replacement.length > original.length) throw new Error("Model switch warning replacement grew");
-  return text.slice(0, start) + replacement + " ".repeat(original.length - replacement.length) + text.slice(end);
+  for (const { start, end, original } of calls.reverse()) {
+    if (replacement.length > original.length) throw new Error("Model switch warning replacement grew");
+    text = text.slice(0, start) + replacement + " ".repeat(original.length - replacement.length) + text.slice(end);
+  }
+  return text;
 }
 
 function patchModelUpgradeBanner(text) {
@@ -338,6 +342,17 @@ function patchI18nLoadingGate(text) {
 
 function patchAuthRequirement(text) {
   let next = text;
+  const webpackRequirement = /requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/g;
+  const webpackRequirements = [...next.matchAll(webpackRequirement)];
+  if (webpackRequirements.length) {
+    const initial = /function (?<name>[\w$]+)\(\)\{return\{openAIAuth:null,authMethod:null,requiresAuth:!0,/g;
+    const defaults = [...next.matchAll(initial)];
+    if (webpackRequirements.length !== 1 || defaults.length !== 1) {
+      throw new Error("Expected one default and one runtime API auth state");
+    }
+    next = replacePadded(next, webpackRequirements[0][0], "requiresAuth:!1");
+    next = replacePadded(next, defaults[0][0], `function ${defaults[0].groups.name}(){return{authMethod:\`apikey\`,requiresAuth:!1,`);
+  }
   if (next.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}")) {
     next = replacePadded(
       next,
@@ -591,15 +606,17 @@ function findMainSessionPatch(fd, header, dataOffset) {
 }
 
 function findModelSwitchWarningPatch(fd, header, dataOffset) {
+  const candidates = [];
   for (const [rel, entry] of walkFiles(header)) {
-    if ((!rel.startsWith("webview/assets/app-primary-") && !rel.startsWith("webview/assets/composer-content-")) || !rel.endsWith(".js")) continue;
+    if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("composer.modelChangeDuringConversationWarning.toast") ||
+    if (/id:[`"]composer\.modelChangeDuringConversationWarning\.(?:v2\.)?toast[`"]/.test(text) ||
         text.includes("anticodex-hide-model-switch-warning")) {
-      return [rel, patchModelSwitchWarning];
+      candidates.push([rel, patchModelSwitchWarning]);
     }
   }
+  if (candidates.length) return candidates.length === 1 ? candidates[0] : candidates;
   throw new Error("Could not find model switch warning bundle");
 }
 
@@ -638,6 +655,7 @@ function findModelUpgradeBannerPatch(fd, header, dataOffset) {
     if (/\/[a-z]{2,3}(?:-[A-Za-z0-9]{2,4})?-[a-f0-9]+\.js$/.test(rel)) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
+    if (/[`"]composer\.modelUpgradeBanner\.introductionTitle[`"]:/.test(text)) continue;
     if (text.includes("composer.modelUpgradeBanner.introductionTitle")) {
       return [rel, patchModelUpgradeBanner];
     }
@@ -769,6 +787,9 @@ function findAuthRequirementPatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
+    if (/requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/.test(text)) {
+      return [rel, patchAuthRequirement];
+    }
     if (text.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
         text.includes("function _(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:null}}") ||
         text.includes("requiresAuth:!0 ,email:e.account?.type===`chatgpt`?e.account.email:null") ||
@@ -868,13 +889,14 @@ function findProfileDropdownSettingsPatch(fd, header, dataOffset) {
      if ((!rel.startsWith("webview/assets/profile-dropdown-") &&
           !rel.startsWith("webview/assets/profile-dropdown-items-") &&
          !rel.startsWith("webview/assets/app-initial-") &&
-         !rel.startsWith("webview/assets/app-primary-")) ||
+         !rel.startsWith("webview/assets/app-primary-") &&
+         !rel.startsWith("webview/assets/async/")) ||
         !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (text.includes(",Mt=xt,Nt=p(Se,`settings`)") ||
         text.includes(",Mt=!0,Nt=p(Se,`settings`)") ||
-        text.includes("codex.profileDropdown.settingsPage") ||
+        /id:[`"]codex\.profileDropdown\.settingsPage[`"]/.test(text) ||
         text.includes("anticodex-manager")) {
       return [rel, patchProfileDropdownSettings];
     }
@@ -931,12 +953,11 @@ function findCrashRecoveryPagePatch(fd, header, dataOffset) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (text.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`") ||
-        text.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`")) {
+    if (/id:[`"]appServerCrash\.recoveryTitle[`"],defaultMessage:[`"](?:ChatGPT|Anti-Codex) hit a snag[`"]/.test(text)) {
       titleTarget = [rel, patchCrashRecoveryTitle];
     }
-    if (text.includes("id:`appServerCrash.configurationRecoveryDescription`") &&
-        text.includes("id:`appServerCrash.recoveryDescription`") &&
+    if (/id:[`"]appServerCrash\.configurationRecoveryDescription[`"]/.test(text) &&
+        /id:[`"]appServerCrash\.recoveryDescription[`"]/.test(text) &&
         (text.includes("ChatGPT couldn't load your configuration") || text.includes("Anti-Codex couldn't load your configuration"))) {
       runtimeTarget = [rel, patchCrashRecoveryRuntime];
     }
@@ -958,7 +979,8 @@ function findLocalModelAvailabilityPatch(fd, header, dataOffset) {
   for (const [rel, entry] of walkFiles(header)) {
     if ((!rel.startsWith("webview/assets/model-list-filter-") &&
          !rel.startsWith("webview/assets/models-and-reasoning-efforts-") &&
-         !rel.startsWith("webview/assets/app-initial-")) ||
+         !rel.startsWith("webview/assets/app-initial-") &&
+         !rel.startsWith("webview/assets/async/")) ||
         !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");

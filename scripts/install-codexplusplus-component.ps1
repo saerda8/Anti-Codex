@@ -151,12 +151,20 @@ if ($SourceBinary) {
                     throw "Prepared-candidate runner has no fixed image identity."
                 }
                 $responseHistoryPatchFile = "patches/0013-v171-response-history.patch"
+                $parsedCandidateVersion = $null
+                $hasNumericVersion = [Version]::TryParse([string]$metadata.version, [ref]$parsedCandidateVersion)
                 $hasResponseHistoryPatch = @($metadata.patches | Where-Object {
                     $_.file -is [string] -and $_.file -ceq $responseHistoryPatchFile
-                }).Count -gt 0
+                }).Count -gt 0 -or ($hasNumericVersion -and $parsedCandidateVersion -ge [Version]"1.11.2")
+                $protocolTest = "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2"
+                $watcherTest = "test --locked -p codex-plus-core --test watcher -- --test-threads=2"
+                if ($hasNumericVersion -and $parsedCandidateVersion -ge [Version]"2.2.0") {
+                    $protocolTest = "test --locked -p codex-plus-core --test all protocol_proxy:: -- --test-threads=2"
+                    $watcherTest = "test --locked -p codex-plus-core --test all watcher:: -- --test-threads=2"
+                }
                 $expectedBuildCommands = @(
                     "fmt --all -- --check",
-                    "test --locked -p codex-plus-core --test protocol_proxy -- --test-threads=2"
+                    $protocolTest
                 )
                 if ($hasResponseHistoryPatch) {
                     $expectedBuildCommands += "test --locked -p codex-plus-core --test response_history -- --test-threads=2"
@@ -164,8 +172,11 @@ if ($SourceBinary) {
                     $expectedBuildCommands += "test --locked -p codex-plus-core --lib proxy_stream_tests -- --test-threads=1"
                     $expectedBuildCommands += "test --locked -p codex-plus-core --lib launcher::tests:: -- --test-threads=1"
                 }
+                if ($hasNumericVersion -and $parsedCandidateVersion -ge [Version]"2.2.0") {
+                    $expectedBuildCommands += "test --locked -p codex-plus-core --lib anticodex_ -- --test-threads=1"
+                }
                 $expectedBuildCommands += @(
-                    "test --locked -p codex-plus-core --test watcher -- --test-threads=2",
+                    $watcherTest,
                     "xwin check --locked --release --target x86_64-pc-windows-msvc -p codex-plus-manager",
                     "xwin build --locked --release --target x86_64-pc-windows-msvc -p codex-plus-launcher"
                 )
@@ -192,6 +203,22 @@ if ($SourceBinary) {
                         }
                     }
                 }
+                $auditEntryHash = (Get-AntiCodexSha256 -Path $isolationAudit).ToLowerInvariant()
+                $auditBundleMatches = $false
+                $auditBundle = $candidateReport.inputs.isolationAudit.PSObject.Properties["bundleSha256"]
+                if ($auditBundle) {
+                    $expectedAuditBundle = $auditEntryHash
+                    $auditDependency = Join-Path $PSScriptRoot "lib\codexplusplus-isolation-audit.mjs"
+                    if (Test-Path -LiteralPath $auditDependency -PathType Leaf) {
+                        $dependencyHash = (Get-AntiCodexSha256 -Path $auditDependency).ToLowerInvariant()
+                        $bundleHasher = [Security.Cryptography.SHA256]::Create()
+                        try {
+                            $bundleBytes = [Text.Encoding]::UTF8.GetBytes("$auditEntryHash`n$dependencyHash")
+                            $expectedAuditBundle = [BitConverter]::ToString($bundleHasher.ComputeHash($bundleBytes)).Replace("-", "").ToLowerInvariant()
+                        } finally { $bundleHasher.Dispose() }
+                    }
+                    $auditBundleMatches = Test-ExactJsonString -Value $auditBundle.Value -Expected $expectedAuditBundle
+                }
                 $identityMatches = (
                     (Test-ExactJsonString -Value $proposed.component -Expected $metadata.component) -and
                     (Test-ExactJsonString -Value $proposed.repository -Expected $metadata.repository) -and
@@ -217,7 +244,8 @@ if ($SourceBinary) {
                     (Test-ExactJsonString -Value $candidateReport.inputs.prepareScript.path -Expected "scripts/prepare-codexplusplus-candidate.ps1") -and
                     (Test-ExactJsonString -Value $candidateReport.inputs.prepareScript.sha256 -Expected (Get-AntiCodexSha256 -Path $prepareCandidateScript).ToLowerInvariant()) -and
                     (Test-ExactJsonString -Value $candidateReport.inputs.isolationAudit.path -Expected "scripts/test-codexplusplus-isolation-compatibility.mjs") -and
-                    (Test-ExactJsonString -Value $candidateReport.inputs.isolationAudit.sha256 -Expected (Get-AntiCodexSha256 -Path $isolationAudit).ToLowerInvariant()) -and
+                    (Test-ExactJsonString -Value $candidateReport.inputs.isolationAudit.sha256 -Expected $auditEntryHash) -and
+                    $auditBundleMatches -and
                     (Test-ExactJsonString -Value $candidateReport.inputs.managedCargoRunner.path -Expected "scripts/invoke-anticodex-cargo-xwin.ps1") -and
                     (Test-ExactJsonString -Value $candidateReport.inputs.managedCargoRunner.sha256 -Expected (Get-AntiCodexSha256 -Path $managedCargoRunner).ToLowerInvariant()) -and
                     (Test-ExactJsonString -Value $candidateReport.inputs.hygieneVerifier.path -Expected "scripts/test-anticodex-docker-build-hygiene.ps1") -and

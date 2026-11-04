@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 export function readCodexPlusPlusPatchManifest(root) {
@@ -94,7 +94,7 @@ function sourceIdentityPart(metadata, field, pattern = /^[A-Za-z0-9._-]+$/) {
 }
 
 function runGit(sourceRoot, args) {
-  const result = spawnSync("git", ["-C", sourceRoot, ...args], {
+  const result = spawnSync("git", ["-c", "core.longpaths=true", "-C", realpathSync(sourceRoot), ...args], {
     encoding: "utf8",
     windowsHide: true,
   });

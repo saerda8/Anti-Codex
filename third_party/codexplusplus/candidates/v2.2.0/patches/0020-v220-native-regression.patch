@@ -1,0 +1,1850 @@
+diff --git a/crates/codex-plus-core/src/anthropic_bridge.rs b/crates/codex-plus-core/src/anthropic_bridge.rs
+index 2911bc6..abd3871 100644
+--- a/crates/codex-plus-core/src/anthropic_bridge.rs
++++ b/crates/codex-plus-core/src/anthropic_bridge.rs
+@@ -1585,6 +1585,10 @@ pub struct AnthropicSseToResponsesConverter {
+ }
+ 
+ impl AnthropicSseToResponsesConverter {
++    pub(crate) fn has_completed(&self) -> bool {
++        self.chat.has_completed()
++    }
++
+     pub fn with_request(request: &Value) -> Self {
+         Self {
+             bridge: AnthropicSseToChatSse::default(),
+diff --git a/crates/codex-plus-core/src/launcher.rs b/crates/codex-plus-core/src/launcher.rs
+index 6974900..6e159d4 100644
+--- a/crates/codex-plus-core/src/launcher.rs
++++ b/crates/codex-plus-core/src/launcher.rs
+@@ -1281,12 +1281,33 @@ impl DefaultLaunchHooks {
+     }
+ }
+ 
+-fn helper_bind_host() -> String {
+-    std::env::var("CODEX_PLUS_HELPER_BIND")
++fn helper_bind_host() -> anyhow::Result<String> {
++    let host = std::env::var("CODEX_PLUS_HELPER_BIND")
+         .ok()
+         .map(|value| value.trim().to_string())
+         .filter(|value| !value.is_empty())
+-        .unwrap_or_else(|| "127.0.0.1".to_string())
++        .unwrap_or_else(|| "127.0.0.1".to_string());
++    validate_helper_bind_host(&host, crate::paths::isolated_instance_mode())?;
++    Ok(host)
++}
++
++fn validate_helper_bind_host(host: &str, isolated: bool) -> anyhow::Result<()> {
++    if isolated {
++        anyhow::ensure!(
++            host.trim_end_matches('.').eq_ignore_ascii_case("localhost")
++                || host
++                    .parse::<std::net::IpAddr>()
++                    .is_ok_and(|ip| ip.is_loopback()),
++            "isolated helper must bind to a loopback address"
++        );
++    }
++    Ok(())
++}
++
++const MAX_HELPER_CONNECTIONS: usize = 32;
++
++fn isolated_helper_connection_limiter(isolated: bool) -> Option<Arc<tokio::sync::Semaphore>> {
++    isolated.then(|| Arc::new(tokio::sync::Semaphore::new(MAX_HELPER_CONNECTIONS)))
+ }
+ 
+ #[async_trait(?Send)]
+@@ -1409,12 +1430,22 @@ impl LaunchHooks for DefaultLaunchHooks {
+             );
+             return Ok(());
+         }
+-        let bind_host = helper_bind_host();
+-        let listener = tokio::net::TcpListener::bind((bind_host.as_str(), helper_port))
+-            .await
+-            .with_context(|| {
+-                format!("failed to bind helper runtime on {bind_host}:{helper_port}")
+-            })?;
++        let bind_host = helper_bind_host()?;
++        let isolated = crate::paths::isolated_instance_mode();
++        let listener = if isolated {
++            let addresses: Vec<SocketAddr> =
++                tokio::net::lookup_host((bind_host.as_str(), helper_port))
++                    .await?
++                    .collect();
++            anyhow::ensure!(
++                !addresses.is_empty() && addresses.iter().all(|address| address.ip().is_loopback()),
++                "isolated helper resolved outside loopback"
++            );
++            tokio::net::TcpListener::bind(addresses.as_slice()).await
++        } else {
++            tokio::net::TcpListener::bind((bind_host.as_str(), helper_port)).await
++        }
++        .with_context(|| format!("failed to bind helper runtime on {bind_host}:{helper_port}"))?;
+         let _ = crate::diagnostic_log::append_diagnostic_log(
+             "helper.listening",
+             serde_json::json!({
+@@ -1426,13 +1457,23 @@ impl LaunchHooks for DefaultLaunchHooks {
+         // 端口绑定成功后立刻落凭据：Claude 汉化注入的 hook 靠它调用听写路由。
+         write_dictation_helper_receipt(helper_port);
+         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
++        let limiter = isolated_helper_connection_limiter(isolated);
+         let task = tokio::spawn(async move {
+             loop {
+                 tokio::select! {
+                     _ = &mut shutdown_rx => break,
+                     accepted = listener.accept() => {
+                         if let Ok((stream, addr)) = accepted {
++                            let permit = if let Some(limiter) = limiter.as_ref() {
++                                match Arc::clone(limiter).try_acquire_owned() {
++                                    Ok(permit) => Some(permit),
++                                    Err(_) => continue,
++                                }
++                            } else {
++                                None
++                            };
+                             tokio::spawn(async move {
++                                let _permit = permit;
+                                 let _ = handle_helper_connection(stream, Some(addr)).await;
+                             });
+                         }
+@@ -2151,12 +2192,22 @@ async fn handle_helper_connection(
+ }
+ 
+ pub(crate) async fn handle_helper_connection_on(
++    stream: tokio::net::TcpStream,
++    remote_addr: Option<SocketAddr>,
++    listener: HelperListener,
++) -> anyhow::Result<()> {
++    handle_helper_connection_on_with_proxy_token(stream, remote_addr, listener, None).await
++}
++
++async fn handle_helper_connection_on_with_proxy_token(
+     mut stream: tokio::net::TcpStream,
+     remote_addr: Option<SocketAddr>,
+     listener: HelperListener,
++    proxy_token_override: Option<&str>,
+ ) -> anyhow::Result<()> {
+-    let request = match read_http_request(&mut stream).await {
+-        Ok(request) => request,
++    let limits = http_body_limits();
++    let request_head = match read_http_request_head_with_limits(&mut stream, limits).await {
++        Ok(head) => head,
+         Err(error) => {
+             let body = serde_json::to_vec(&serde_json::json!({
+                 "status": "failed",
+@@ -2173,7 +2224,7 @@ pub(crate) async fn handle_helper_connection_on(
+             return Ok(());
+         }
+     };
+-    let request_headers = String::from_utf8_lossy(&request.headers);
++    let request_headers = String::from_utf8_lossy(&request_head.headers).into_owned();
+     let request_line = request_headers.lines().next().unwrap_or_default();
+     let mut parts = request_line.split_whitespace();
+     let method = parts.next().unwrap_or_default();
+@@ -2190,6 +2241,62 @@ pub(crate) async fn handle_helper_connection_on(
+     let request_content_encoding = header_value_from_headers(&request_headers, "content-encoding");
+     let remote_addr_text = remote_addr.map(|addr| addr.to_string());
+ 
++    if listener == HelperListener::Loopback
++        && (crate::paths::isolated_instance_mode() || proxy_token_override.is_some())
++        && is_local_proxy_path(path)
++    {
++        if method == "OPTIONS" {
++            write_http_response(&mut stream, "204 No Content", "text/plain", &[]).await?;
++            stream.shutdown().await?;
++            return Ok(());
++        }
++        let expected = match proxy_token_override {
++            Some(token) => Some(token.to_string()),
++            None => local_proxy_bearer_token().ok(),
++        };
++        let Some(expected) = expected.filter(|token| !token.trim().is_empty()) else {
++            write_http_response(
++                &mut stream,
++                "503 Service Unavailable",
++                "application/json",
++                br#"{"error":"local proxy token unavailable"}"#,
++            )
++            .await?;
++            stream.shutdown().await?;
++            return Ok(());
++        };
++        if let Err(status) = authorize_local_proxy_request(&request_headers, &expected) {
++            write_http_response(
++                &mut stream,
++                status,
++                "application/json",
++                br#"{"error":"local proxy authorization failed"}"#,
++            )
++            .await?;
++            stream.shutdown().await?;
++            return Ok(());
++        }
++    }
++
++    let request = match read_http_request_body_with_limits(&mut stream, request_head, limits).await
++    {
++        Ok(request) => request,
++        Err(error) => {
++            let body = serde_json::to_vec(
++                &serde_json::json!({"status":"failed", "message":error.to_string()}),
++            )?;
++            write_http_response(
++                &mut stream,
++                error.status(),
++                "application/json; charset=utf-8",
++                &body,
++            )
++            .await?;
++            stream.shutdown().await?;
++            return Ok(());
++        }
++    };
++
+     let _ = crate::diagnostic_log::append_diagnostic_log(
+         "helper.request",
+         serde_json::json!({
+@@ -3199,6 +3306,30 @@ pub(crate) async fn handle_protocol_proxy_connection(
+             );
+         }
+         let body = serde_json::to_vec(&error)?;
++        if let Some(terminal) = crate::protocol_proxy::responses_terminal_failure_sse_from_upstream(
++            request_json.as_ref(),
++            upstream.status_code,
++            "application/json",
++            &body,
++        ) {
++            request_log.record_stream(Some("insufficient_quota"), None, None);
++            write_http_response(
++                stream,
++                "200 OK",
++                "text/event-stream; charset=utf-8",
++                &terminal,
++            )
++            .await?;
++            log_helper_response(
++                "helper.protocol_proxy_upstream_error",
++                method,
++                path,
++                &status,
++                remote_addr_text,
++            );
++            stream.shutdown().await?;
++            return Ok(());
++        }
+         write_http_response(stream, &status, "application/json; charset=utf-8", &body).await?;
+         log_helper_response(
+             "helper.protocol_proxy_upstream_error",
+@@ -3317,15 +3448,27 @@ pub(crate) async fn handle_protocol_proxy_connection(
+             let mut anthropic_bridge =
+                 is_anthropic_upstream.then(crate::anthropic_bridge::AnthropicSseToChatSse::default);
+             let mut bytes_stream = upstream.take_response()?.bytes_stream();
++            let mut compaction_timed_out = false;
+             loop {
+                 let chunk = match await_upstream_or_downstream_disconnect(
+                     stream,
+-                    bytes_stream.next(),
++                    with_upstream_stream_idle_timeout(
++                        bytes_stream.next(),
++                        UPSTREAM_STREAM_IDLE_TIMEOUT,
++                    ),
+                 )
+                 .await
+                 {
+-                    Ok(Some(chunk)) => chunk,
+-                    Ok(None) => break,
++                    Ok(Ok(Some(chunk))) => chunk,
++                    Ok(Ok(None)) => break,
++                    Ok(Err(_)) => {
++                        compaction_timed_out = true;
++                        converter.fail(
++                            "upstream stream idle timeout".to_string(),
++                            Some("stream_timeout".to_string()),
++                        );
++                        break;
++                    }
+                     Err(_) => {
+                         request_log.record_stream(Some("downstream disconnected"), None, None);
+                         return Ok(());
+@@ -3350,7 +3493,7 @@ pub(crate) async fn handle_protocol_proxy_connection(
+             if let Some(bridge) = anthropic_bridge.as_mut() {
+                 let tail = bridge.finish();
+                 converter.push_upstream_bytes(&tail);
+-                if !bridge.has_successful_compaction_completion() {
++                if !compaction_timed_out && !bridge.has_successful_compaction_completion() {
+                     converter.fail(
+                         "Anthropic 压缩流缺少正常 message_stop".to_string(),
+                         Some("compaction_incomplete".to_string()),
+@@ -3394,28 +3537,33 @@ pub(crate) async fn handle_protocol_proxy_connection(
+                 crate::extension_gateway::ResponseFilter::start(path, request_json.as_ref()).await;
+             let mut history_sink =
+                 HistoryResponseSink::new(&mut *stream, response_history.as_ref());
++            let mut exec_timed_out = false;
+             loop {
+-                let chunk = match await_upstream_or_downstream_disconnect(
++                let converted = match await_upstream_or_downstream_disconnect(
+                     &mut history_sink,
+-                    bytes_stream.next(),
++                    with_upstream_stream_idle_timeout(
++                        bytes_stream.next(),
++                        UPSTREAM_STREAM_IDLE_TIMEOUT,
++                    ),
+                 )
+                 .await
+                 {
+-                    Ok(Some(chunk)) => chunk,
+-                    Ok(None) => break,
++                    Ok(Ok(Some(Ok(bytes)))) => match converter.push_bytes(&bytes) {
++                        Ok(converted) => converted,
++                        Err(_) => converter.fail(),
++                    },
++                    Ok(Ok(Some(Err(_)))) => converter.fail(),
++                    Ok(Ok(None)) => break,
++                    Ok(Err(_)) => {
++                        exec_timed_out = true;
++                        converter.fail()
++                    }
+                     Err(_) => {
+                         drop(history_sink);
+                         request_log.record_stream(Some("downstream disconnected"), None, None);
+                         return Ok(());
+                     }
+                 };
+-                let converted = match chunk {
+-                    Ok(bytes) => match converter.push_bytes(&bytes) {
+-                        Ok(converted) => converted,
+-                        Err(_) => converter.fail(),
+-                    },
+-                    Err(_) => converter.fail(),
+-                };
+                 let converted = match phase.as_mut() {
+                     Some(phase) => phase.push_bytes(&converted),
+                     None => converted,
+@@ -3449,6 +3597,7 @@ pub(crate) async fn handle_protocol_proxy_connection(
+             request_log.record_stream(
+                 history_failure
+                     .as_deref()
++                    .or(exec_timed_out.then_some("upstream stream idle timeout"))
+                     .or((!exec_succeeded).then_some("exec stream failed")),
+                 None,
+                 None,
+@@ -4077,6 +4226,175 @@ fn is_billable_proxy_path(path: &str) -> bool {
+         || crate::protocol_proxy::is_audio_transcriptions_proxy_path(path)
+ }
+ 
++fn is_local_proxy_path(path: &str) -> bool {
++    crate::protocol_proxy::is_responses_proxy_path(path)
++        || crate::protocol_proxy::is_chat_completions_proxy_path(path)
++        || crate::protocol_proxy::is_models_proxy_path(path)
++        || crate::protocol_proxy::is_audio_transcriptions_proxy_path(path)
++        || crate::protocol_proxy::is_image_generations_proxy_path(path)
++        || crate::protocol_proxy::is_image_edits_proxy_path(path)
++}
++
++fn local_proxy_bearer_token() -> anyhow::Result<String> {
++    let config_path = crate::relay_config::default_codex_home_dir().join("config.toml");
++    let config = std::fs::read_to_string(config_path).context("local proxy config unavailable")?;
++    crate::relay_config::active_provider_string_from_config(&config, "experimental_bearer_token")
++        .ok_or_else(|| anyhow::anyhow!("local proxy bearer token is missing"))
++}
++
++fn authorize_local_proxy_request(headers: &str, expected_token: &str) -> Result<(), &'static str> {
++    if expected_token.trim().is_empty() {
++        return Err("403 Forbidden");
++    }
++    let Some(authorization) = header_value_from_headers(headers, "authorization") else {
++        return Err("401 Unauthorized");
++    };
++    let Some((scheme, token)) = authorization.split_once(' ') else {
++        return Err("403 Forbidden");
++    };
++    let token = token.trim();
++    if !scheme.eq_ignore_ascii_case("bearer")
++        || token.len() != expected_token.len()
++        || token
++            .as_bytes()
++            .iter()
++            .zip(expected_token.as_bytes())
++            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
++            != 0
++    {
++        return Err("403 Forbidden");
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++mod anticodex_helper_security_tests {
++    use super::*;
++
++    #[test]
++    fn isolated_bind_is_loopback_only_and_connection_permits_are_released() {
++        for host in ["127.0.0.1", "127.0.0.2", "::1", "localhost"] {
++            assert!(validate_helper_bind_host(host, true).is_ok());
++        }
++        for host in ["0.0.0.0", "192.0.2.1", "example.invalid"] {
++            assert!(validate_helper_bind_host(host, true).is_err());
++            assert!(validate_helper_bind_host(host, false).is_ok());
++        }
++        assert!(isolated_helper_connection_limiter(false).is_none());
++        let limiter = isolated_helper_connection_limiter(true).unwrap();
++        let mut held = (0..MAX_HELPER_CONNECTIONS)
++            .map(|_| Arc::clone(&limiter).try_acquire_owned().unwrap())
++            .collect::<Vec<_>>();
++        assert!(Arc::clone(&limiter).try_acquire_owned().is_err());
++        drop(held.pop());
++        assert!(Arc::clone(&limiter).try_acquire_owned().is_ok());
++    }
++
++    #[test]
++    fn active_provider_token_never_falls_back_to_another_provider() {
++        let config = "model_provider = 'local'\n[model_providers.local]\nbase_url = 'http://127.0.0.1'\n[model_providers.other]\nexperimental_bearer_token = 'other-fixture'\n";
++        assert!(
++            crate::relay_config::active_provider_string_from_config(
++                config,
++                "experimental_bearer_token"
++            )
++            .is_none()
++        );
++        let config = "model_provider = 'local'\n[model_providers.local]\nexperimental_bearer_token = 'local-fixture'\n";
++        assert_eq!(
++            crate::relay_config::active_provider_string_from_config(
++                config,
++                "experimental_bearer_token"
++            )
++            .as_deref(),
++            Some("local-fixture")
++        );
++        assert!(!is_local_proxy_path("/health"));
++        assert!(!is_local_proxy_path("/gw/test"));
++        assert!(is_local_proxy_path("/v1/responses"));
++        assert!(is_local_proxy_path("/v1/images/generations"));
++    }
++
++    #[tokio::test]
++    async fn isolated_proxy_rejects_invalid_headers_before_waiting_for_body() {
++        for (auth, configured, expected) in [
++            ("", "expected-fixture", "401 Unauthorized"),
++            (
++                "POST /v1/responses HTTP/1.1\r\nAuthorization: Bearer wrong-fixture\r\n",
++                "expected-fixture",
++                "403 Forbidden",
++            ),
++            (
++                "Authorization: Bearer expected-fixture\r\n",
++                "",
++                "503 Service Unavailable",
++            ),
++        ] {
++            let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++                .await
++                .unwrap();
++            let address = listener.local_addr().unwrap();
++            let server = tokio::spawn(async move {
++                let (stream, remote) = listener.accept().await.unwrap();
++                handle_helper_connection_on_with_proxy_token(
++                    stream,
++                    Some(remote),
++                    HelperListener::Loopback,
++                    Some(configured),
++                )
++                .await
++                .unwrap();
++            });
++            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
++            let headers = format!(
++                "POST /v1/responses HTTP/1.1\r\nHost: localhost\r\n{auth}Content-Length: 1048576\r\nConnection: close\r\n\r\n"
++            );
++            client.write_all(headers.as_bytes()).await.unwrap();
++            let mut response = Vec::new();
++            tokio::time::timeout(
++                std::time::Duration::from_secs(2),
++                client.read_to_end(&mut response),
++            )
++            .await
++            .expect("authorization must reject before body arrives")
++            .unwrap();
++            assert!(
++                String::from_utf8_lossy(&response).starts_with(&format!("HTTP/1.1 {expected}"))
++            );
++            server.await.unwrap();
++        }
++    }
++
++    #[test]
++    fn bearer_validation_accepts_only_exact_nonempty_token() {
++        assert_eq!(
++            authorize_local_proxy_request(
++                "POST /v1/responses HTTP/1.1\r\nAuthorization: Bearer expected-fixture\r\n",
++                "expected-fixture"
++            ),
++            Ok(())
++        );
++        assert_eq!(
++            authorize_local_proxy_request(
++                "POST /v1/responses HTTP/1.1\r\nAuthorization: Bearer wrong-fixture\r\n",
++                "expected-fixture"
++            ),
++            Err("403 Forbidden")
++        );
++        assert_eq!(
++            authorize_local_proxy_request("", "expected-fixture"),
++            Err("401 Unauthorized")
++        );
++        assert_eq!(
++            authorize_local_proxy_request(
++                "POST /v1/responses HTTP/1.1\r\nAuthorization: Bearer \r\n",
++                ""
++            ),
++            Err("403 Forbidden")
++        );
++    }
++}
++
+ async fn handle_image_proxy_connection(
+     stream: &mut tokio::net::TcpStream,
+     request_body: &[u8],
+@@ -4212,8 +4530,38 @@ async fn handle_chat_completions_proxy_connection(
+     if upstream.is_stream && is_success {
+         write_http_stream_headers(stream, &status, &content_type).await?;
+         let mut bytes_stream = upstream.take_response()?.bytes_stream();
+-        while let Some(chunk) = bytes_stream.next().await {
+-            stream.write_all(&chunk?).await?;
++        let mut terminal = ChatSseDoneMarker::default();
++        loop {
++            match await_upstream_or_downstream_disconnect(
++                stream,
++                with_upstream_stream_idle_timeout(
++                    bytes_stream.next(),
++                    UPSTREAM_STREAM_IDLE_TIMEOUT,
++                ),
++            )
++            .await
++            {
++                Ok(Ok(Some(Ok(bytes)))) => {
++                    terminal.observe(&bytes);
++                    stream.write_all(&bytes).await?;
++                }
++                Ok(Ok(Some(Err(error)))) => return Err(error.into()),
++                Ok(Ok(None)) => break,
++                Ok(Err(_)) if terminal.done => break,
++                Ok(Err(_)) => {
++                    stream.write_all(b"event: error\ndata: {\"error\":{\"type\":\"stream_timeout\",\"code\":\"stream_timeout\",\"message\":\"upstream stream idle timeout\"}}\n\n").await?;
++                    log_helper_response(
++                        "helper.chat_completions_proxy_stream_timeout",
++                        method,
++                        path,
++                        "504 Gateway Timeout",
++                        remote_addr_text,
++                    );
++                    stream.shutdown().await?;
++                    return Ok(());
++                }
++                Err(_) => return Ok(()),
++            }
+         }
+         log_helper_response(
+             "helper.chat_completions_proxy_stream_ok",
+@@ -4276,11 +4624,52 @@ pub(crate) async fn write_http_stream_headers(
+ pub(crate) trait SseSink {
+     async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()>;
+ 
++    fn completion_is_deferred(&self) -> bool {
++        false
++    }
++
+     async fn wait_for_disconnect(&mut self) {
+         std::future::pending::<()>().await;
+     }
+ }
+ 
++const UPSTREAM_STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
++
++async fn with_upstream_stream_idle_timeout<F: std::future::Future>(
++    future: F,
++    idle_timeout: std::time::Duration,
++) -> Result<F::Output, tokio::time::error::Elapsed> {
++    tokio::time::timeout(idle_timeout, future).await
++}
++
++#[derive(Default)]
++struct ChatSseDoneMarker {
++    line: Vec<u8>,
++    overflow: bool,
++    done: bool,
++}
++
++impl ChatSseDoneMarker {
++    fn observe(&mut self, bytes: &[u8]) {
++        for &byte in bytes {
++            if byte == b'\n' {
++                if !self.overflow {
++                    self.done |= std::str::from_utf8(&self.line)
++                        .ok()
++                        .and_then(|line| line.trim_end_matches('\r').strip_prefix("data:"))
++                        .is_some_and(|value| value.trim() == "[DONE]");
++                }
++                self.line.clear();
++                self.overflow = false;
++            } else if self.line.len() < 64 {
++                self.line.push(byte);
++            } else {
++                self.overflow = true;
++            }
++        }
++    }
++}
++
+ #[derive(Debug)]
+ struct DownstreamDisconnected;
+ 
+@@ -4336,6 +4725,37 @@ where
+ mod anticodex_response_history_delivery_tests {
+     use super::*;
+ 
++    async fn stalled_response(
++        first: &'static str,
++    ) -> (reqwest::Response, tokio::task::JoinHandle<()>) {
++        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
++            .await
++            .unwrap();
++        let address = listener.local_addr().unwrap();
++        let upstream = tokio::spawn(async move {
++            let (mut stream, _) = listener.accept().await.unwrap();
++            let mut head = Vec::new();
++            while !head.ends_with(b"\r\n\r\n") {
++                head.push(stream.read_u8().await.unwrap());
++            }
++            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n").await.unwrap();
++            stream
++                .write_all(format!("{:X}\r\n{}\r\n", first.len(), first).as_bytes())
++                .await
++                .unwrap();
++            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
++        });
++        let response = reqwest::Client::builder()
++            .no_proxy()
++            .build()
++            .unwrap()
++            .get(format!("http://{address}/fixture"))
++            .send()
++            .await
++            .unwrap();
++        (response, upstream)
++    }
++
+     #[derive(Default)]
+     struct MemorySink(
+         Vec<u8>,
+@@ -4375,6 +4795,85 @@ mod anticodex_response_history_delivery_tests {
+         b"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_child\",\"status\":\"completed\",\"output\":[]}}\n\ndata: [DONE]\n\n".to_vec()
+     }
+ 
++    #[tokio::test]
++    async fn idle_timeout_keeps_delivered_completion_but_rejects_deferred_history() {
++        let completed = "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_child\",\"status\":\"completed\",\"output\":[]}}\n\n";
++        for with_history in [false, true] {
++            let temp = tempfile::tempdir().unwrap();
++            let history = context_for(temp.path(), true);
++            let (response, upstream) = stalled_response(completed).await;
++            let mut output = MemorySink::default();
++            let mut sink = HistoryResponseSink::new(&mut output, with_history.then_some(&history));
++            let (failure, _, _, _) = forward_protocol_proxy_stream_with_idle_timeout(
++                &mut sink,
++                &[],
++                response,
++                crate::protocol_proxy::UpstreamWireApi::Responses,
++                None,
++                None,
++                false,
++                None,
++                std::time::Duration::from_millis(50),
++            )
++            .await
++            .unwrap();
++            assert_eq!(failure.is_some(), with_history);
++            assert!(sink.finish(failure.is_none()).await.unwrap().is_none());
++            drop(sink);
++            let text = String::from_utf8(output.0).unwrap();
++            assert_eq!(
++                text.matches("event: response.completed").count(),
++                if with_history { 0 } else { 1 }
++            );
++            assert_eq!(
++                text.matches("event: response.failed").count(),
++                if with_history { 1 } else { 0 }
++            );
++            assert_eq!(history.store.committed_entry_count().unwrap(), 0);
++            upstream.await.unwrap();
++        }
++    }
++
++    #[tokio::test]
++    async fn idle_timeout_emits_one_failure_for_incomplete_native_and_chat() {
++        for (wire, first) in [
++            (
++                crate::protocol_proxy::UpstreamWireApi::Responses,
++                "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n",
++            ),
++            (
++                crate::protocol_proxy::UpstreamWireApi::ChatCompletions,
++                "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
++            ),
++        ] {
++            let (response, upstream) = stalled_response(first).await;
++            let mut output = MemorySink::default();
++            let (failure, _, _, _) = forward_protocol_proxy_stream_with_idle_timeout(
++                &mut output,
++                &[],
++                response,
++                wire,
++                None,
++                None,
++                false,
++                None,
++                std::time::Duration::from_millis(50),
++            )
++            .await
++            .unwrap();
++            assert!(failure.is_some());
++            let text = String::from_utf8(output.0).unwrap();
++            assert_eq!(text.matches("event: response.failed").count(), 1);
++            assert!(!text.contains("event: response.completed"));
++            upstream.await.unwrap();
++        }
++        let mut marker = ChatSseDoneMarker::default();
++        marker.observe(b"data: [DO");
++        assert!(!marker.done);
++        marker.observe(b"NE]\r\n\r\n");
++        assert!(marker.done);
++    }
++
+     #[test]
+     fn restored_parent_id_is_written_only_for_locally_resolved_history() {
+         let temp = tempfile::tempdir().unwrap();
+@@ -4850,6 +5349,10 @@ impl<'a, S: SseSink> HistoryResponseSink<'a, S> {
+ }
+ 
+ impl<S: SseSink> SseSink for HistoryResponseSink<'_, S> {
++    fn completion_is_deferred(&self) -> bool {
++        self.observer.is_some()
++    }
++
+     async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+         match self.observer.as_mut() {
+             Some(observer) => {
+@@ -4966,6 +5469,10 @@ impl<'a, S: SseSink> ExtensionResponseSink<'a, S> {
+ }
+ 
+ impl<S: SseSink> SseSink for ExtensionResponseSink<'_, S> {
++    fn completion_is_deferred(&self) -> bool {
++        self.inner.completion_is_deferred()
++    }
++
+     async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+         match self.filter.as_mut() {
+             Some(filter) => {
+@@ -5048,6 +5555,36 @@ async fn forward_protocol_proxy_stream_for_client_with_live_request<S: SseSink>(
+     Option<crate::request_log::RequestUsage>,
+     Option<String>,
+     Option<u64>,
++)> {
++    forward_protocol_proxy_stream_with_idle_timeout(
++        stream,
++        prefix,
++        response,
++        wire_api,
++        request,
++        thread_id,
++        foreign_client,
++        live_request_id,
++        UPSTREAM_STREAM_IDLE_TIMEOUT,
++    )
++    .await
++}
++
++async fn forward_protocol_proxy_stream_with_idle_timeout<S: SseSink>(
++    stream: &mut S,
++    prefix: &[u8],
++    response: reqwest::Response,
++    wire_api: crate::protocol_proxy::UpstreamWireApi,
++    request: Option<&Value>,
++    thread_id: Option<&str>,
++    foreign_client: bool,
++    live_request_id: Option<&str>,
++    idle_timeout: std::time::Duration,
++) -> anyhow::Result<(
++    Option<String>,
++    Option<crate::request_log::RequestUsage>,
++    Option<String>,
++    Option<u64>,
+ )> {
+     let mut chunks = response.bytes_stream();
+     let mut first_output_at_ms = None;
+@@ -5065,9 +5602,36 @@ async fn forward_protocol_proxy_stream_for_client_with_live_request<S: SseSink>(
+                 return Ok((transformer.finish(), usage, detail, first_output_at_ms));
+             }
+         }
+-        while let Some(chunk) =
+-            await_upstream_or_downstream_disconnect(stream, chunks.next()).await?
+-        {
++        loop {
++            let chunk = match await_upstream_or_downstream_disconnect(
++                stream,
++                with_upstream_stream_idle_timeout(chunks.next(), idle_timeout),
++            )
++            .await?
++            {
++                Ok(Some(chunk)) => chunk,
++                Ok(None) => break,
++                Err(_) if transformer.has_completed() && !stream.completion_is_deferred() => {
++                    let usage = transformer.take_usage();
++                    let detail = transformer.take_failure_detail();
++                    return Ok((None, usage, detail, first_output_at_ms));
++                }
++                Err(_) => {
++                    let message = "upstream stream idle timeout".to_string();
++                    let mut failure = request
++                        .map(crate::protocol_proxy::ChatSseToResponsesConverter::with_request)
++                        .unwrap_or_default();
++                    stream
++                        .send(&failure.fail(message.clone(), Some("stream_timeout".to_string())))
++                        .await?;
++                    return Ok((
++                        Some(message),
++                        transformer.take_usage(),
++                        transformer.take_failure_detail(),
++                        first_output_at_ms,
++                    ));
++                }
++            };
+             match chunk {
+                 Ok(bytes) => {
+                     observe_protocol_proxy_output(&bytes, &mut first_output_at_ms, live_request_id);
+@@ -5111,9 +5675,31 @@ async fn forward_protocol_proxy_stream_for_client_with_live_request<S: SseSink>(
+         let mut converter = request
+             .map(crate::anthropic_bridge::AnthropicSseToResponsesConverter::with_request)
+             .unwrap_or_default();
+-        while let Some(chunk) =
+-            await_upstream_or_downstream_disconnect(stream, chunks.next()).await?
+-        {
++        loop {
++            let chunk = match await_upstream_or_downstream_disconnect(
++                stream,
++                with_upstream_stream_idle_timeout(chunks.next(), idle_timeout),
++            )
++            .await?
++            {
++                Ok(Some(chunk)) => chunk,
++                Ok(None) => break,
++                Err(_) if converter.has_completed() && !stream.completion_is_deferred() => {
++                    return Ok((None, converter.request_usage(), None, first_output_at_ms));
++                }
++                Err(_) => {
++                    let message = "upstream stream idle timeout".to_string();
++                    let failed =
++                        converter.fail(message.clone(), Some("stream_timeout".to_string()));
++                    stream.send(&failed).await?;
++                    return Ok((
++                        Some(message),
++                        converter.request_usage(),
++                        None,
++                        first_output_at_ms,
++                    ));
++                }
++            };
+             match chunk {
+                 Ok(bytes) => {
+                     observe_protocol_proxy_output(&bytes, &mut first_output_at_ms, live_request_id);
+@@ -5166,7 +5752,31 @@ async fn forward_protocol_proxy_stream_for_client_with_live_request<S: SseSink>(
+     let mut converter = request
+         .map(crate::protocol_proxy::ChatSseToResponsesConverter::with_request)
+         .unwrap_or_default();
+-    while let Some(chunk) = await_upstream_or_downstream_disconnect(stream, chunks.next()).await? {
++    loop {
++        let chunk = match await_upstream_or_downstream_disconnect(
++            stream,
++            with_upstream_stream_idle_timeout(chunks.next(), idle_timeout),
++        )
++        .await?
++        {
++            Ok(Some(chunk)) => chunk,
++            Ok(None) => break,
++            Err(_) if converter.has_completed() && !stream.completion_is_deferred() => {
++                record_chat_converter_usage(thread_id, &converter);
++                return Ok((None, converter.request_usage(), None, first_output_at_ms));
++            }
++            Err(_) => {
++                let message = "upstream stream idle timeout".to_string();
++                let failed = converter.fail(message.clone(), Some("stream_timeout".to_string()));
++                stream.send(&failed).await?;
++                return Ok((
++                    Some(message),
++                    converter.request_usage(),
++                    None,
++                    first_output_at_ms,
++                ));
++            }
++        };
+         match chunk {
+             Ok(bytes) => {
+                 observe_protocol_proxy_output(&bytes, &mut first_output_at_ms, live_request_id);
+@@ -5403,6 +6013,12 @@ struct HttpRequest {
+     body: Vec<u8>,
+ }
+ 
++struct HttpRequestHead {
++    headers: Vec<u8>,
++    framing: HttpBodyFraming,
++    buffered_body: Vec<u8>,
++}
++
+ #[derive(Debug)]
+ struct HttpRequestReadError {
+     status: &'static str,
+@@ -5417,6 +6033,13 @@ impl HttpRequestReadError {
+         }
+     }
+ 
++    fn request_timeout(message: impl Into<String>) -> Self {
++        Self {
++            status: "408 Request Timeout",
++            message: message.into(),
++        }
++    }
++
+     fn payload_too_large_with_limit(limit: usize) -> Self {
+         let limit_mib = limit / (1024 * 1024);
+         Self {
+@@ -5563,62 +6186,93 @@ async fn read_http_request_with_limits(
+     stream: &mut tokio::net::TcpStream,
+     limits: HttpBodyLimits,
+ ) -> Result<HttpRequest, HttpRequestReadError> {
++    let head = read_http_request_head_with_limits(stream, limits).await?;
++    read_http_request_body_with_limits(stream, head, limits).await
++}
++
++async fn read_http_request_head_with_limits(
++    stream: &mut tokio::net::TcpStream,
++    limits: HttpBodyLimits,
++) -> Result<HttpRequestHead, HttpRequestReadError> {
+     let mut buffer = Vec::new();
+     let mut chunk = vec![0_u8; 4096];
+-    let mut header_end = None;
+-    let mut framing = HttpBodyFraming::Empty;
+-    let mut chunked_scan = ChunkedScanState::default();
+-
+     loop {
+-        let read = stream.read(&mut chunk).await?;
++        let read =
++            tokio::time::timeout(std::time::Duration::from_secs(10), stream.read(&mut chunk))
++                .await
++                .map_err(|_| {
++                    HttpRequestReadError::request_timeout("HTTP request header idle timeout")
++                })??;
+         if read == 0 {
+             break;
+         }
+         buffer.extend_from_slice(&chunk[..read]);
+-        if header_end.is_none() {
+-            header_end = find_header_end(&buffer);
+-            if let Some(end) = header_end {
+-                if end > MAX_HTTP_HEADER_BYTES {
+-                    return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
+-                }
+-                framing = http_body_framing(&buffer[..end])?;
+-            } else if buffer.len() > MAX_HTTP_HEADER_BYTES {
++        if let Some(end) = find_header_end(&buffer) {
++            if end > MAX_HTTP_HEADER_BYTES {
+                 return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
+             }
+-        }
+-        if let Some(end) = header_end {
+-            let body = &buffer[end + 4..];
+-            if body.len() > limits.encoded {
++            let framing = http_body_framing(&buffer[..end])?;
++            if matches!(&framing, HttpBodyFraming::ContentLength(length) if *length > limits.decoded)
++                || buffer.len() - (end + 4) > limits.encoded
++            {
+                 return Err(HttpRequestReadError::payload_too_large_with_limit(
+                     limits.decoded,
+                 ));
+             }
+-            match framing {
+-                HttpBodyFraming::Empty => break,
+-                HttpBodyFraming::ContentLength(content_length) => {
+-                    if content_length > limits.decoded {
+-                        return Err(HttpRequestReadError::payload_too_large_with_limit(
+-                            limits.decoded,
+-                        ));
+-                    }
+-                    if body.len() >= content_length {
+-                        break;
+-                    }
+-                }
+-                HttpBodyFraming::Chunked => {
+-                    match chunked_scan.advance_with_limit(body, limits.decoded)? {
+-                        ChunkedBodyScan::Incomplete => {}
+-                        ChunkedBodyScan::Complete => break,
+-                    }
+-                }
+-            }
++            return Ok(HttpRequestHead {
++                headers: buffer[..end].to_vec(),
++                framing,
++                buffered_body: buffer[end + 4..].to_vec(),
++            });
++        }
++        if buffer.len() > MAX_HTTP_HEADER_BYTES {
++            return Err(HttpRequestReadError::bad_request("HTTP 请求头过大"));
+         }
+     }
++    Err(HttpRequestReadError::bad_request("HTTP 请求头不完整"))
++}
+ 
+-    let header_end =
+-        header_end.ok_or_else(|| HttpRequestReadError::bad_request("HTTP 请求头不完整"))?;
+-    let headers = buffer[..header_end].to_vec();
+-    let encoded_body = &buffer[header_end + 4..];
++async fn read_http_request_body_with_limits(
++    stream: &mut tokio::net::TcpStream,
++    head: HttpRequestHead,
++    limits: HttpBodyLimits,
++) -> Result<HttpRequest, HttpRequestReadError> {
++    let HttpRequestHead {
++        headers,
++        framing,
++        mut buffered_body,
++    } = head;
++    let mut chunk = vec![0_u8; 4096];
++    let mut chunked_scan = ChunkedScanState::default();
++    loop {
++        let complete = match &framing {
++            HttpBodyFraming::Empty => true,
++            HttpBodyFraming::ContentLength(length) => buffered_body.len() >= *length,
++            HttpBodyFraming::Chunked => matches!(
++                chunked_scan.advance_with_limit(&buffered_body, limits.decoded)?,
++                ChunkedBodyScan::Complete
++            ),
++        };
++        if complete {
++            break;
++        }
++        let read =
++            tokio::time::timeout(std::time::Duration::from_secs(30), stream.read(&mut chunk))
++                .await
++                .map_err(|_| {
++                    HttpRequestReadError::request_timeout("HTTP request body idle timeout")
++                })??;
++        if read == 0 {
++            break;
++        }
++        buffered_body.extend_from_slice(&chunk[..read]);
++        if buffered_body.len() > limits.encoded {
++            return Err(HttpRequestReadError::payload_too_large_with_limit(
++                limits.decoded,
++            ));
++        }
++    }
++    let encoded_body = &buffered_body;
+     let body = match framing {
+         HttpBodyFraming::Empty => Vec::new(),
+         HttpBodyFraming::ContentLength(content_length) => {
+diff --git a/crates/codex-plus-core/src/protocol_proxy.rs b/crates/codex-plus-core/src/protocol_proxy.rs
+index 6ff382c..728d840 100644
+--- a/crates/codex-plus-core/src/protocol_proxy.rs
++++ b/crates/codex-plus-core/src/protocol_proxy.rs
+@@ -3289,6 +3289,10 @@ impl Default for ChatSseToResponsesConverter {
+ }
+ 
+ impl ChatSseToResponsesConverter {
++    pub(crate) fn has_completed(&self) -> bool {
++        self.state.completed && !self.failed
++    }
++
+     pub fn has_failed(&self) -> bool {
+         self.failed
+     }
+@@ -3352,7 +3356,16 @@ impl ChatSseToResponsesConverter {
+ 
+     pub fn fail(&mut self, message: String, error_type: Option<String>) -> Vec<u8> {
+         let mut output = String::new();
+-        self.state.failed_into(&mut output, message, error_type);
++        self.state
++            .failed_into(&mut output, message, error_type, None);
++        self.failed = true;
++        output.into_bytes()
++    }
++
++    pub(crate) fn fail_with_code(&mut self, message: String, error_code: String) -> Vec<u8> {
++        let mut output = String::new();
++        self.state
++            .failed_into(&mut output, message, None, Some(error_code));
+         self.failed = true;
+         output.into_bytes()
+     }
+@@ -3382,8 +3395,9 @@ impl ChatSseToResponsesConverter {
+             return;
+         };
+         if event_name.as_deref() == Some("error") || chunk.get("error").is_some() {
+-            let (message, error_type) = extract_chat_sse_error(&chunk);
+-            self.state.failed_into(output, message, error_type);
++            let (message, error_type, error_code) = extract_chat_sse_error(&chunk);
++            self.state
++                .failed_into(output, message, error_type, error_code);
+             self.failed = true;
+             return;
+         }
+@@ -7519,6 +7533,9 @@ impl ChatSseState {
+         }
+ 
+         let status = response_status(self.finish_reason.as_deref());
++        if status == "completed" && self.latest_usage.is_none() {
++            self.latest_usage = self.estimated_usage();
++        }
+         let mut response = self.base_response(status, self.completed_output_items());
+         if status == "incomplete" {
+             response["incomplete_details"] = json!({ "reason": "max_output_tokens" });
+@@ -7683,12 +7700,21 @@ impl ChatSseState {
+         }
+     }
+ 
+-    fn failed_into(&mut self, output: &mut String, message: String, error_type: Option<String>) {
++    fn failed_into(
++        &mut self,
++        output: &mut String,
++        message: String,
++        error_type: Option<String>,
++        error_code: Option<String>,
++    ) {
+         self.completed = true;
+         let mut error = json!({ "message": message });
+         if let Some(error_type) = error_type.filter(|value| !value.is_empty()) {
+             error["type"] = json!(error_type);
+         }
++        if let Some(error_code) = error_code.filter(|value| !value.is_empty()) {
++            error["code"] = json!(error_code);
++        }
+         let mut response = self.base_response("failed", self.completed_output_items());
+         response["error"] = error;
+         push_sse(
+@@ -7719,6 +7745,30 @@ impl ChatSseState {
+         })
+     }
+ 
++    fn estimated_usage(&self) -> Option<Value> {
++        let request = self.original_request.as_ref()?;
++        let input_tokens = ["instructions", "input", "tools"]
++            .into_iter()
++            .filter_map(|key| request.get(key))
++            .map(estimated_json_tokens)
++            .fold(0_u64, u64::saturating_add)
++            .max(1);
++        let reasoning_tokens = estimated_text_tokens(&self.reasoning.text);
++        let output_tokens = reasoning_tokens
++            .saturating_add(estimated_text_tokens(&self.text.text))
++            .saturating_add(self.tools.values().fold(0_u64, |total, tool| {
++                total
++                    .saturating_add(estimated_text_tokens(&tool.name))
++                    .saturating_add(estimated_text_tokens(&tool.arguments))
++            }))
++            .max(1);
++        Some(
++            json!({"input_tokens":input_tokens, "output_tokens":output_tokens,
++            "total_tokens":input_tokens.saturating_add(output_tokens),
++            "output_tokens_details":{"reasoning_tokens":reasoning_tokens}}),
++        )
++    }
++
+     fn next_output_index(&mut self) -> u32 {
+         let index = self.next_output_index;
+         self.next_output_index += 1;
+@@ -7801,7 +7851,7 @@ fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+     ThinkPrefixDecision::Text
+ }
+ 
+-fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
++fn extract_chat_sse_error(value: &Value) -> (String, Option<String>, Option<String>) {
+     let error = value.get("error").unwrap_or(value);
+     let message = error
+         .as_str()
+@@ -7816,10 +7866,15 @@ fn extract_chat_sse_error(value: &Value) -> (String, Option<String>) {
+         .unwrap_or_else(|| error.to_string());
+     let error_type = error
+         .get("type")
+-        .or_else(|| error.get("code"))
+         .and_then(Value::as_str)
+         .map(ToString::to_string);
+-    (message, error_type)
++    let error_code = error.get("code").and_then(|value| {
++        value
++            .as_str()
++            .map(ToString::to_string)
++            .or_else(|| value.as_i64().map(|number| number.to_string()))
++    });
++    (message, error_type, error_code)
+ }
+ 
+ pub(crate) fn http_status_line(status: u16) -> String {
+@@ -7926,6 +7981,135 @@ pub fn responses_error_from_upstream(status_code: u16, content_type: &str, body:
+     json!({ "error": error })
+ }
+ 
++pub(crate) fn responses_terminal_failure_sse_from_upstream(
++    request: Option<&Value>,
++    status_code: u16,
++    content_type: &str,
++    body: &[u8],
++) -> Option<Vec<u8>> {
++    if status_code != 402
++        || request
++            .and_then(|value| value.get("stream"))
++            .and_then(Value::as_bool)
++            != Some(true)
++    {
++        return None;
++    }
++    let envelope = responses_error_from_upstream(status_code, content_type, body);
++    let message = envelope
++        .pointer("/error/message")
++        .and_then(Value::as_str)
++        .filter(|value| !value.trim().is_empty())
++        .unwrap_or("Payment required")
++        .to_string();
++    let mut converter = request
++        .map(ChatSseToResponsesConverter::with_request)
++        .unwrap_or_default();
++    Some(converter.fail_with_code(message, "insufficient_quota".to_string()))
++}
++
++#[cfg(test)]
++mod anticodex_upstream_failure_and_usage_tests {
++    use super::*;
++
++    fn event_response(bytes: &[u8], event_type: &str) -> Value {
++        String::from_utf8_lossy(bytes)
++            .lines()
++            .filter_map(|line| line.strip_prefix("data:"))
++            .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
++            .find(|value| value["type"] == event_type)
++            .and_then(|value| value.get("response").cloned())
++            .expect("expected response event")
++    }
++
++    #[test]
++    fn streamed_payment_uses_one_quota_failure_and_preserves_nonstream_errors() {
++        let request = json!({"stream": true, "model": "fixture"});
++        let body = br#"{"error":{"message":"balance exhausted","code":"provider_code"}}"#;
++        let output = responses_terminal_failure_sse_from_upstream(
++            Some(&request),
++            402,
++            "application/json",
++            body,
++        )
++        .unwrap();
++        let text = String::from_utf8_lossy(&output);
++        assert_eq!(text.matches("event: response.failed").count(), 1);
++        assert!(!text.contains("event: response.completed"));
++        let response = event_response(&output, "response.failed");
++        assert_eq!(response["error"]["code"], "insufficient_quota");
++        assert_eq!(response["error"]["message"], "balance exhausted");
++        assert!(
++            responses_terminal_failure_sse_from_upstream(
++                Some(&json!({"stream":false})),
++                402,
++                "application/json",
++                body
++            )
++            .is_none()
++        );
++        assert!(
++            responses_terminal_failure_sse_from_upstream(
++                Some(&request),
++                429,
++                "application/json",
++                body
++            )
++            .is_none()
++        );
++    }
++
++    #[test]
++    fn chat_stream_error_preserves_type_and_independent_code() {
++        let mut converter = ChatSseToResponsesConverter::default();
++        let output = converter.push_bytes(b"event: error\ndata: {\"error\":{\"message\":\"bad request\",\"type\":\"invalid_request_error\",\"code\":\"context_length_exceeded\"}}\n\n");
++        let response = event_response(&output, "response.failed");
++        assert_eq!(response["error"]["type"], "invalid_request_error");
++        assert_eq!(response["error"]["code"], "context_length_exceeded");
++        assert!(converter.push_bytes(b"data: [DONE]\n\n").is_empty());
++    }
++
++    #[test]
++    fn usage_estimate_only_applies_to_completed_without_real_usage() {
++        let request = json!({"input":[{"type":"input_image","image_url":format!("data:image/png;base64,{}", "A".repeat(20_000))}]});
++        let mut estimated = ChatSseToResponsesConverter::with_request(&request);
++        let mut output = estimated.push_bytes(b"data: {\"choices\":[{\"delta\":{\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\n\n");
++        output.extend(estimated.push_bytes(b"data: [DONE]\n\n"));
++        let usage = event_response(&output, "response.completed")["usage"].clone();
++        let input = usage["input_tokens"].as_u64().unwrap();
++        assert!(
++            (1_024..5_000).contains(&input),
++            "image data must not be counted as plain text"
++        );
++        assert!(usage["output_tokens"].as_u64().unwrap() > 0);
++        assert!(usage["output_tokens_details"]["reasoning_tokens"].is_number());
++
++        let mut actual = ChatSseToResponsesConverter::with_request(&request);
++        let mut output = actual.push_bytes(b"data: {\"choices\":[{\"delta\":{\"content\":\"hello\"},\"finish_reason\":\"stop\"}]}\n\n");
++        output.extend(actual.push_bytes(
++            b"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}\n\n",
++        ));
++        output.extend(actual.push_bytes(b"data: [DONE]\n\n"));
++        let usage = event_response(&output, "response.completed")["usage"].clone();
++        assert_eq!(usage["input_tokens"], 7);
++        assert_eq!(usage["output_tokens"], 3);
++
++        let mut incomplete = ChatSseToResponsesConverter::with_request(&request);
++        let mut output = incomplete.push_bytes(b"data: {\"choices\":[{\"delta\":{\"content\":\"partial\"},\"finish_reason\":\"length\"}]}\n\n");
++        output.extend(incomplete.push_bytes(b"data: [DONE]\n\n"));
++        let response = event_response(&output, "response.completed");
++        assert_eq!(response["status"], "incomplete");
++        assert_eq!(response["usage"]["input_tokens"], 0);
++        let mut failed = ChatSseToResponsesConverter::with_request(&request);
++        let output =
++            failed.push_bytes(b"event: error\ndata: {\"error\":{\"message\":\"fail\"}}\n\n");
++        assert_eq!(
++            event_response(&output, "response.failed")["usage"]["input_tokens"],
++            0
++        );
++    }
++}
++
+ pub(crate) fn upstream_error_parts(
+     status_code: u16,
+     content_type: &str,
+@@ -10376,6 +10560,9 @@ fn push_tool_call_delta_sse(
+     delta: &str,
+     tool_context: &CodexToolContext,
+ ) {
++    if tool_context.may_enforce_command_policy_for(&state.name) {
++        return;
++    }
+     if tool_context.is_tool_search_proxy(&state.name)
+         || tool_context.is_builtin_web_search_proxy(&state.name)
+     {
+@@ -10415,6 +10602,18 @@ fn push_tool_call_done_sse(
+ ) {
+     let checked_arguments =
+         tool_context.command_policy_checked_arguments(&state.name, &state.arguments);
++    if tool_context.enforces_command_policy_for(&state.name) {
++        push_sse(
++            output,
++            "response.function_call_arguments.delta",
++            json!({
++                "type": "response.function_call_arguments.delta",
++                "item_id": state.item_id,
++                "output_index": output_index,
++                "delta": checked_arguments.clone()
++            }),
++        );
++    }
+     if tool_context.is_tool_search_proxy(&state.name) {
+         push_sse(
+             output,
+@@ -10893,6 +11092,54 @@ fn default_responses_usage() -> Value {
+     })
+ }
+ 
++fn estimated_text_tokens(text: &str) -> u64 {
++    if text.starts_with("data:image/") && text.contains(";base64,") {
++        return 1_024;
++    }
++    let trimmed = text.trim();
++    if (trimmed.starts_with('{') || trimmed.starts_with('['))
++        && let Ok(value) = serde_json::from_str::<Value>(trimmed)
++    {
++        return estimated_json_tokens(&value);
++    }
++    (text.len() as u64).saturating_add(1) / 2
++}
++
++fn estimated_json_tokens(value: &Value) -> u64 {
++    match value {
++        Value::Null | Value::Bool(_) | Value::Number(_) => 1,
++        Value::String(text) => estimated_text_tokens(text),
++        Value::Array(values) => values
++            .iter()
++            .map(estimated_json_tokens)
++            .fold(0_u64, u64::saturating_add),
++        Value::Object(values) => {
++            let image_payload = values
++                .get("type")
++                .and_then(Value::as_str)
++                .is_some_and(|kind| kind.contains("image"))
++                || ["mime_type", "mimeType"]
++                    .into_iter()
++                    .filter_map(|key| values.get(key).and_then(Value::as_str))
++                    .any(|mime| mime.starts_with("image/"));
++            values.iter().fold(
++                if image_payload { 1_024_u64 } else { 0_u64 },
++                |total, (key, value)| {
++                    let value_tokens =
++                        if image_payload && matches!(key.as_str(), "data" | "image_url" | "url") {
++                            0
++                        } else {
++                            estimated_json_tokens(value)
++                        };
++                    total
++                        .saturating_add(estimated_text_tokens(key))
++                        .saturating_add(value_tokens)
++                },
++            )
++        }
++    }
++}
++
+ fn chat_usage_to_responses_usage(usage: Option<&Value>) -> Value {
+     let Some(usage) = usage.filter(|value| value.is_object() && !value.is_null()) else {
+         return default_responses_usage();
+@@ -13160,6 +13407,10 @@ impl ResponsesSseTransformer {
+         self.failed
+     }
+ 
++    pub(crate) fn has_completed(&self) -> bool {
++        self.completed && !self.failed
++    }
++
+     /// 取出 `response.completed` 里捕获的 usage（请求日志用）。
+     pub(crate) fn take_usage(&mut self) -> Option<crate::request_log::RequestUsage> {
+         self.usage.take()
+diff --git a/crates/codex-plus-core/src/protocol_proxy/anticodex.rs b/crates/codex-plus-core/src/protocol_proxy/anticodex.rs
+index 659d47c..7b80799 100644
+--- a/crates/codex-plus-core/src/protocol_proxy/anticodex.rs
++++ b/crates/codex-plus-core/src/protocol_proxy/anticodex.rs
+@@ -327,6 +327,49 @@ mod anticodex_compaction_selection_tests {
+         assert_eq!(request["model"], SELECTED);
+     }
+ 
++    #[test]
++    fn antigravity_thread_selection_overrides_old_third_party_compaction_model() {
++        let temp = tempfile::tempdir().unwrap();
++        let selected = "gemini-3.1-pro-low";
++        let settings = BackendSettings {
++            relay_profiles: vec![
++                RelayProfile {
++                    id: ANTICODEX_THIRD_PARTY_RELAY_ID.to_string(),
++                    ..Default::default()
++                },
++                RelayProfile {
++                    id: ANTICODEX_ANTIGRAVITY_RELAY_ID.to_string(),
++                    model_list: selected.to_string(),
++                    ..Default::default()
++                },
++            ],
++            ..Default::default()
++        };
++        write_rollout(
++            temp.path(),
++            &format!("rollout-{THREAD}_{TURN}.jsonl"),
++            selected,
++        );
++        let mut request = json!({"model": OLD});
++        let mut old_request = request.clone();
++        let old_relay = select_anticodex_relay_for_model(&settings, &mut old_request)
++            .unwrap()
++            .unwrap();
++        assert_eq!(old_relay.id, ANTICODEX_THIRD_PARTY_RELAY_ID);
++        assert!(align_codex_compaction_model_with_live_selection_in(
++            &settings,
++            &mut request,
++            Some(&metadata()),
++            temp.path(),
++        ));
++        assert_eq!(request["model"], selected);
++        let current_relay = select_anticodex_relay_for_model(&settings, &mut request)
++            .unwrap()
++            .unwrap();
++        assert_eq!(current_relay.id, ANTICODEX_ANTIGRAVITY_RELAY_ID);
++        assert_eq!(request["model"], selected);
++    }
++
+     #[test]
+     fn no_valid_thread_evidence_keeps_routable_request_before_global_config() {
+         let temp = tempfile::tempdir().unwrap();
+@@ -460,6 +503,234 @@ pub(crate) fn select_anticodex_relay_for_model(
+     Ok(relay_model_list_contains(&relay, requested_model).then_some(relay))
+ }
+ 
++#[cfg(test)]
++mod anticodex_command_policy_integration_tests {
++    use super::{
++        ChatSseToResponsesConverter, chat_completion_to_response_with_request,
++        responses_to_chat_completions,
++    };
++    use serde_json::{Value, json};
++
++    #[test]
++    fn command_guard_is_applied_only_when_patch_tool_is_available() {
++        for (with_patch, command, blocked) in [
++            (true, "Set-Content -LiteralPath sample.rs -Value x", true),
++            (true, "git status", false),
++            (false, "Set-Content -LiteralPath sample.rs -Value x", false),
++        ] {
++            let mut tools = vec![json!({
++                "type": "function",
++                "name": "exec_command",
++                "parameters": {"type": "object"}
++            })];
++            if with_patch {
++                tools.push(json!({"type": "custom", "name": "apply_patch"}));
++            }
++            let request = json!({"model": "gpt-5-mini", "input": "inspect", "tools": tools});
++            let chat_request = responses_to_chat_completions(request.clone()).unwrap();
++            let command_tool = chat_request["tools"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .find(|tool| tool["function"]["name"] == "exec_command")
++                .unwrap();
++            let description = command_tool["function"]["description"]
++                .as_str()
++                .unwrap_or("");
++            assert_eq!(
++                description.contains("Do not use this command tool for file edits"),
++                with_patch
++            );
++
++            let arguments = json!({"cmd": command, "yield_time_ms": 1000}).to_string();
++            let chat_response = json!({
++                "id": "chatcmpl-fixture",
++                "created": 1,
++                "model": "gpt-5-mini",
++                "choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
++                    "role": "assistant",
++                    "tool_calls": [{"id": "call_exec", "type": "function", "function": {
++                        "name": "exec_command", "arguments": arguments.clone()
++                    }}]
++                }}]
++            });
++            let response =
++                chat_completion_to_response_with_request(chat_response, &request).unwrap();
++            let calls: Vec<&Value> = response["output"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .filter(|item| item["type"] == "function_call" && item["name"] == "exec_command")
++                .collect();
++            assert_eq!(calls.len(), 1);
++            assert_eq!(calls[0]["call_id"], "call_exec");
++            let returned = calls[0]["arguments"].as_str().unwrap();
++            let returned_json: Value = serde_json::from_str(returned).unwrap();
++            assert_eq!(returned_json["yield_time_ms"], 1000);
++            if blocked {
++                let rewritten = returned_json["cmd"].as_str().unwrap();
++                assert!(rewritten.contains("Anti-Codex command policy blocked"));
++                assert!(rewritten.contains("exit 125"));
++                assert!(!rewritten.contains(command));
++            } else {
++                assert_eq!(returned, arguments);
++            }
++        }
++    }
++
++    #[test]
++    fn command_policy_blocks_docker_python_git_pipeline_and_container_variants() {
++        for blocked in [
++            "docker run --rm alpine echo unsafe",
++            "docker --context desktop-linux run --rm alpine echo unsafe",
++            "docker run --name cv_test --label com.anticodex.task-id=not-a-task alpine",
++            "docker stop cv_check",
++            "docker rm -f cv_check cv_test_final",
++            "docker container rm --force cv_check",
++            "docker container prune -f",
++        ] {
++            let reason = super::command_policy_violation(blocked).expect(blocked);
++            assert!(
++                reason.contains("docker run/create")
++                    || reason.contains("stopping or force-removing a Docker container is forbidden; wait for it to exit")
++                    || reason.contains("global Docker cleanup is forbidden")
++            );
++        }
++        for allowed in ["docker wait cv_check", "docker rm cv_check"] {
++            assert!(
++                super::command_policy_violation(allowed).is_none(),
++                "{allowed}"
++            );
++        }
++    }
++
++    #[test]
++    fn python_stdin_source_writer_is_blocked() {
++        let writer =
++            "echo \"from pathlib import Path; Path('src/lib.rs').write_text('x')\" | python -";
++        assert_eq!(
++            super::command_policy_violation(writer),
++            Some("interpreter stdin source edits must use apply_patch")
++        );
++    }
++
++    #[test]
++    fn python_stdin_source_reader_is_allowed() {
++        let reader =
++            "echo \"from pathlib import Path; print(Path('src/lib.rs').read_text())\" | python -";
++        assert!(super::command_policy_violation(reader).is_none());
++    }
++
++    #[test]
++    fn git_checkout_source_writer_is_blocked() {
++        for blocked in [
++            "git checkout -- src/lib.rs",
++            "git restore src/lib.rs",
++            "git reset --hard HEAD",
++            "git clean -fd",
++            "git apply fix.patch",
++        ] {
++            assert_eq!(
++                super::command_policy_violation(blocked),
++                Some("git worktree edits must not bypass apply_patch")
++            );
++        }
++    }
++
++    #[test]
++    fn git_apply_check_is_allowed() {
++        for allowed in ["git apply --check fix.patch", "git diff -- src/lib.rs"] {
++            assert!(super::command_policy_violation(allowed).is_none());
++        }
++    }
++
++    #[test]
++    fn masked_test_pipeline_is_blocked() {
++        assert_eq!(
++            super::command_policy_violation("bash -c \"cargo test 2>&1 | tee test.log\""),
++            Some("test pipelines must preserve the producer exit status")
++        );
++    }
++
++    #[test]
++    fn pipefail_test_pipeline_is_allowed() {
++        assert!(
++            super::command_policy_violation(
++                "bash -o pipefail -c \"cargo test 2>&1 | tee test.log\""
++            )
++            .is_none()
++        );
++    }
++
++    #[test]
++    fn randomized_task_container_name_is_blocked() {
++        let blocked = "docker run --rm --name cv_retry_2 --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo unsafe";
++        assert_eq!(
++            super::command_policy_violation(blocked),
++            Some(
++                "docker run/create container name and ownership label must identify the same current task; use --name anticodex-<current task id>"
++            )
++        );
++        let allowed = "docker run --rm --name anticodex-019ffc57-6a72-7f81-8ce8-8796485ca06d --label com.anticodex.task-id=019ffc57-6a72-7f81-8ce8-8796485ca06d alpine echo ok";
++        assert!(super::command_policy_violation(allowed).is_none());
++    }
++
++    #[test]
++    fn chat_sse_command_policy_never_streams_an_unsafe_command() {
++        for (with_patch, command, blocked) in [
++            (true, "Set-Content -LiteralPath sample.rs -Value x", true),
++            (true, "git status", false),
++            (false, "Set-Content -LiteralPath sample.rs -Value x", false),
++        ] {
++            let mut tools = vec![
++                json!({"type":"function", "name":"exec_command", "parameters":{"type":"object"}}),
++            ];
++            if with_patch {
++                tools.push(json!({"type":"custom", "name":"apply_patch"}));
++            }
++            let request = json!({"model":"fixture", "input":"inspect", "tools":tools});
++            let args = json!({"cmd":command}).to_string();
++            let split = args.len() / 2;
++            let chunk = |name: &str, part: &str| {
++                format!(
++                    "data: {}\n\n",
++                    json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_exec","type":"function","function":{"name":name,"arguments":part}}]}}]})
++                )
++            };
++            let mut converter = ChatSseToResponsesConverter::with_request(&request);
++            let first = converter.push_bytes(chunk("exec", &args[..split]).as_bytes());
++            let second = converter.push_bytes(chunk("exec_command", &args[split..]).as_bytes());
++            let mut before_done = first;
++            before_done.extend(second);
++            let early = String::from_utf8_lossy(&before_done);
++            if with_patch {
++                assert!(!early.contains("response.function_call_arguments.delta"));
++                assert!(!early.contains("Set-Content"));
++            } else {
++                assert!(early.contains("response.function_call_arguments.delta"));
++            }
++            let terminal = converter.push_bytes(b"data: [DONE]\n\n");
++            let text = String::from_utf8_lossy(&terminal);
++            if with_patch {
++                assert!(text.contains("response.function_call_arguments.delta"));
++            }
++            assert!(text.contains("response.function_call_arguments.done"));
++            if blocked {
++                assert!(text.contains("Anti-Codex command policy blocked"));
++                assert!(!text.contains("Set-Content"));
++            } else {
++                let done = text
++                    .lines()
++                    .filter_map(|line| line.strip_prefix("data:"))
++                    .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
++                    .find(|event| event["type"] == "response.function_call_arguments.done")
++                    .unwrap();
++                assert_eq!(done["arguments"], args);
++            }
++        }
++    }
++}
++
+ #[cfg(test)]
+ mod anticodex_prompt_policy_tests {
+     use std::fs;
+@@ -1575,6 +1846,21 @@ pub(crate) fn guide_command_tools_away_from_file_edits(tools: &mut [Value]) {
+ }
+ 
+ impl CodexToolContext {
++    pub(super) fn may_enforce_command_policy_for(&self, upstream_name: &str) -> bool {
++        if !self
++            .custom_tools
++            .values()
++            .any(|spec| spec.kind == CodexCustomToolKind::ApplyPatch)
++        {
++            return false;
++        }
++        let (name, namespace) = self.openai_name_for_function_tool(upstream_name);
++        namespace.is_empty()
++            && ["exec_command", "shell_command"]
++                .iter()
++                .any(|target| target.starts_with(name.as_str()))
++    }
++
+     pub(super) fn enforces_command_policy_for(&self, upstream_name: &str) -> bool {
+         if !self
+             .custom_tools
+diff --git a/crates/codex-plus-core/src/relay_config.rs b/crates/codex-plus-core/src/relay_config.rs
+index 082ffd0..17a059b 100644
+--- a/crates/codex-plus-core/src/relay_config.rs
++++ b/crates/codex-plus-core/src/relay_config.rs
+@@ -6752,6 +6752,23 @@ fn auth_contents_looks_like_chatgpt_auth(contents: &str) -> bool {
+             .unwrap_or(false)
+ }
+ 
++pub(crate) fn active_provider_string_from_config(
++    config_contents: &str,
++    key: &str,
++) -> Option<String> {
++    let doc = parse_toml_document(config_contents).ok()?;
++    let provider_id = active_provider_id(&doc)?;
++    doc.get("model_providers")
++        .and_then(Item::as_table)
++        .and_then(|providers| providers.get(&provider_id))
++        .and_then(Item::as_table)
++        .and_then(|provider| provider.get(key))
++        .and_then(Item::as_str)
++        .map(str::trim)
++        .filter(|value| !value.is_empty())
++        .map(ToString::to_string)
++}
++
+ fn provider_string_from_config(config_contents: &str, key: &str) -> Option<String> {
+     let doc = parse_toml_document(config_contents).ok()?;
+     let active = active_provider_id(&doc);
+diff --git a/crates/codex-plus-core/tests/all/protocol_proxy.rs b/crates/codex-plus-core/tests/all/protocol_proxy.rs
+index 8f9a6b8..76a6192 100644
+--- a/crates/codex-plus-core/tests/all/protocol_proxy.rs
++++ b/crates/codex-plus-core/tests/all/protocol_proxy.rs
+@@ -3662,6 +3662,38 @@ fn responses_input_downgrades_orphan_tool_outputs_to_user_messages() {
+     );
+ }
+ 
++fn replayed_apply_patch_call<'a>(converted: &'a Value, expected_id: &str) -> &'a Value {
++    let messages = converted["messages"].as_array().unwrap();
++    assert_eq!(
++        messages
++            .iter()
++            .filter(|message| {
++                message["role"] == "system"
++                    && message["content"].as_str().is_some_and(|content| {
++                        content.contains("When editing files, call the provided apply_patch structured function tool directly.")
++                    })
++            })
++            .count(),
++        1,
++        "the patch tool guidance must be preserved"
++    );
++    let calls: Vec<&Value> = messages
++        .iter()
++        .filter(|message| message["role"] == "assistant")
++        .flat_map(|message| message["tool_calls"].as_array().into_iter().flatten())
++        .collect();
++    assert_eq!(
++        calls.len(),
++        1,
++        "exactly one assistant tool call must be replayed"
++    );
++    let call = calls[0];
++    assert_eq!(call["id"], expected_id);
++    assert_eq!(call["type"], "function");
++    assert_eq!(call["function"]["name"], "apply_patch");
++    call
++}
++
+ #[test]
+ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+     let converted = responses_to_chat_completions(json!({
+@@ -3678,12 +3710,9 @@ fn responses_input_replays_apply_patch_custom_history_as_proxy_tool() {
+     }))
+     .unwrap();
+ 
++    let call = replayed_apply_patch_call(&converted, "call_patch");
+     assert_eq!(
+-        converted["messages"][0]["tool_calls"][0]["function"]["name"],
+-        "apply_patch"
+-    );
+-    assert_eq!(
+-        converted["messages"][0]["tool_calls"][0]["function"]["arguments"],
++        call["function"]["arguments"],
+         "{\"input\":\"*** Begin Patch\\n*** Add File: docs/test.md\\n+# Test\\n*** End Patch\"}"
+     );
+ }
+@@ -3712,15 +3741,10 @@ fn responses_input_migrates_legacy_apply_patch_proxy_history() {
+         }))
+         .unwrap();
+ 
+-        assert_eq!(
+-            converted["messages"][0]["tool_calls"][0]["function"]["name"],
+-            "apply_patch"
+-        );
+-        let arguments = converted["messages"][0]["tool_calls"][0]["function"]["arguments"]
+-            .as_str()
+-            .unwrap();
++        let call = replayed_apply_patch_call(&converted, "call_legacy_patch");
++        let arguments = call["function"]["arguments"].as_str().unwrap();
+         let arguments: Value = serde_json::from_str(arguments).unwrap();
+-        assert_eq!(arguments["input"], raw_patch);
++        assert_eq!(arguments, json!({"input": raw_patch}));
+     }
+ }
+ 
+@@ -3740,12 +3764,9 @@ fn responses_input_replays_same_path_delete_add_patch_as_apply_patch() {
+     }))
+     .unwrap();
+ 
++    let call = replayed_apply_patch_call(&converted, "call_patch");
+     assert_eq!(
+-        converted["messages"][0]["tool_calls"][0]["function"]["name"],
+-        "apply_patch"
+-    );
+-    assert_eq!(
+-        converted["messages"][0]["tool_calls"][0]["function"]["arguments"],
++        call["function"]["arguments"],
+         "{\"input\":\"*** Begin Patch\\n*** Delete File: docs/test.md\\n*** Add File: docs/test.md\\n+hello\\n*** End Patch\"}"
+     );
+ }

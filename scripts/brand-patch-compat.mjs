@@ -25,9 +25,9 @@ const STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN =
 const STARTUP_MCP_CONFIG_RELOAD_LATEST_PATTERN =
   /async function [\w$]+\(\{(?=[^{}]{0,2600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,2600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,2600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\((?<quote>[`\"])config\/batchWrite\k<quote>,\{[\s\S]{0,2200}?reloadUserConfig:\k<reload>\}\)/;
 const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
-  /(?<binding>[\w$]+)=\{account:\{href:`https:\/\/chatgpt\.com\/#settings`,icon:(?<accountIcon>[\w$]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`https:\/\/chatgpt\.com\/open-security-settings`,icon:(?<securityIcon>[\w$]+),message:\k<messages>\.securitySettings\}\}/g;
+  /(?<binding>[\w$]+)=\{account:\{href:(?<quote>[`\"])https:\/\/chatgpt\.com\/#settings\k<quote>,icon:(?<accountIcon>[\w$.]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:\k<quote>https:\/\/chatgpt\.com\/open-security-settings\k<quote>,icon:(?<securityIcon>[\w$.]+),message:\k<messages>\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
-  /[\w$]+=\{\/\*anticodex-local-settings-only\*\/account:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:[\w$]+\.securitySettings\}\}/g;
+  /[\w$]+=\{\/\*anticodex-local-settings-only\*\/account:\{href:`about:blank`,icon:[\w$.]+,message:[\w$]+\.account\},securitySettings:\{href:`about:blank`,icon:[\w$.]+,message:[\w$]+\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN =
   /[\w$]+\.key===\([\w$]+\?`personal`:`settings`\)\?\(0,[\w$]+\.jsx\)\([\w$]+,\{canCollapse:[\w$]+,externalTooltip:[\w$]+,hideLabels:[\w$]+\}\):null/g;
 const SETTINGS_SECURITY_ENABLED_PATTERN =
@@ -36,7 +36,7 @@ const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
   /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN =
-  /\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}/g;
+  /\{href:[\w$.]+\.securitySettings\.href,id:(?<quote>[`\"])external:security-settings\k<quote>,kind:\k<quote>external\k<quote>,label:[\w$]+\}/g;
 const APP_SERVER_NATIVE_SPAWN_PATTERN =
   /spawnProcess\(\)\{let (?<command>[\w$]+)=this\.options\.spawnCommand\?\?this\.options\.executablePath,(?<proc>[\w$]+)=(?<spawn>(?:\(0,[\w$]+\.spawn\)|[\w$]+\.spawn))\((?<resolver>[\w$]+)\.resolve\(\k<command>,\{env:this\.options\.env\}\)\?\?\k<command>,this\.options\.spawnArgs\?\?this\.options\.args,\{stdio:\[`pipe`,`pipe`,`pipe`\],env:this\.options\.env(?<cwd>,cwd:this\.options\.cwd)?\}\);if\(!\k<proc>\.pid\)throw Error\(`Failed to spawn Codex CLI at \$\{this\.options\.executablePath\}`\);/g;
 const APP_SERVER_RESOLVED_NATIVE_SPAWN_PATTERN =
@@ -137,6 +137,20 @@ function padReplacement(match, replacement) {
 export function patchAppRouteGate(text) {
   const source = String(text ?? "");
   if (source.includes("/*anticodex-app-route*/")) return source;
+
+  const anonymousGate = /function\(\{auth:[\w$]+,codexFeatureAccess:[^{}]{1,1800}?workspaceRootsIsLoading:[^{}]{1,200}\}\)\{(?<body>return[^{}]{1,2800})\}/g;
+  const anonymousMatches = allMatches(source, anonymousGate);
+  if (anonymousMatches.length) {
+    if (anonymousMatches.length !== 1 || !source.includes("electron-set-window-mode") ||
+        !/requiresAuth/.test(anonymousMatches[0].groups.body)) {
+      throw new Error("Expected exactly one supported anonymous webview app route gate");
+    }
+    const match = anonymousMatches[0];
+    const offset = match.index + match[0].indexOf("{return") + 1;
+    return source.slice(0, offset)
+      + padReplacement(match.groups.body, "/*anticodex-app-route*/return`app`")
+      + source.slice(offset + match.groups.body.length);
+  }
 
   const currentRouteState = /(?:let|,)(?<target>[A-Za-z_$][\w$]*)=oMa\([\s\S]{0,8000}?\);(?<effect>\(0,[A-Za-z_$][\w$]*\.useEffect\)\(\(\)=>\{if\(!\k<target>\)return;)/;
   const currentRouteMatch = currentRouteState.exec(source);
@@ -1076,8 +1090,8 @@ export function patchModernNativeConfigBatchWrite(text) {
 
 export function patchCrashRecoveryTitle(text) {
   const source = String(text ?? "");
-  if (source.includes("id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`")) return source;
-  const pattern = /id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`/;
+  if (/id:[`"]appServerCrash\.recoveryTitle[`"],defaultMessage:[`"]Anti-Codex hit a snag[`"]/.test(source)) return source;
+  const pattern = /id:(?<quote>[`\"])appServerCrash\.recoveryTitle\k<quote>,defaultMessage:\k<quote>ChatGPT hit a snag\k<quote>,description:\k<quote>[^`"]+\k<quote>/;
   const match = pattern.exec(source);
   if (!match) throw new Error("Crash recovery title was not found");
   const replacement = "id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`";
@@ -1088,15 +1102,15 @@ export function patchCrashRecoveryRuntime(text) {
   let source = String(text ?? "");
   const replacements = [
     [
-      /id:`appServerCrash\.configurationRecoveryDescription`,defaultMessage:`ChatGPT couldn't load your configuration\. Review it, then restart to try again\.`,description:`[^`]+`/,
+      /id:(?<quote>[`\"])appServerCrash\.configurationRecoveryDescription\k<quote>,defaultMessage:\k<quote>ChatGPT couldn't load your configuration\. Review it, then restart to try again\.\k<quote>,description:\k<quote>[^`"]+\k<quote>/,
       "id:`appServerCrash.configurationRecoveryDescription`,defaultMessage:`Anti-Codex couldn't load your configuration. Review it, then restart to try again.`",
     ],
     [
-      /id:`appServerCrash\.recoveryDescription`,defaultMessage:`Try again or update ChatGPT if this keeps happening`,description:`[^`]+`/,
+      /id:(?<quote>[`\"])appServerCrash\.recoveryDescription\k<quote>,defaultMessage:\k<quote>Try again or update ChatGPT if this keeps happening\k<quote>,description:\k<quote>[^`"]+\k<quote>/,
       "id:`appServerCrash.recoveryDescription`,defaultMessage:`Try again or update Anti-Codex if this keeps happening`",
     ],
     [
-      /id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart ChatGPT`,description:`[^`]+`/,
+      /id:(?<quote>[`\"])appServerCrash\.restartChatGPT\k<quote>,defaultMessage:\k<quote>Restart ChatGPT\k<quote>,description:\k<quote>[^`"]+\k<quote>/,
       "id:`appServerCrash.restartChatGPT`,defaultMessage:`Restart Anti-Codex`",
     ],
   ];
@@ -1104,7 +1118,7 @@ export function patchCrashRecoveryRuntime(text) {
     if (source.includes(replacement)) continue;
     const match = pattern.exec(source);
     if (!match) {
-      if (pattern.source.includes("restartChatGPT") && source.includes("id:`appServerCrash.restartChatGPT`,defaultMessage:`Try again`")) continue;
+      if (pattern.source.includes("restartChatGPT") && /id:[`"]appServerCrash\.restartChatGPT[`"],defaultMessage:[`"]Try again[`"]/.test(source)) continue;
       throw new Error(`Crash recovery runtime text was not found: ${pattern}`);
     }
     source = source.slice(0, match.index) + padReplacement(match[0], replacement) + source.slice(match.index + match[0].length);
@@ -1158,15 +1172,18 @@ export function patchPrimaryWindowRestoreRepaint(text) {
 }
 
 export function hasPatchedAuthRequirement(text) {
-  return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===`chatgpt`\?\1\.account\.email:null/.test(
+  return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===[`"]chatgpt[`"]\?\1\.account\.email:null/.test(
     String(text ?? ""),
   );
 }
 
 const MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),apiKeyDaybreakSupported:(?<daybreak>[\w$]+)(?:=!1)?,authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:(?<catalog>[\w$]+),isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{let (?<cyber>[\w$]+)=\k<model>\.availableAccessPrograms\?\.cyber;return \k<auth>===`apikey`&&!\k<daybreak>&&\k<cyber>!=null&&\k<cyber>\.length>0&&!\k<cyber>\.includes\(`standard`\)\?!1:\k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<catalog>&&!\k<model>\.hidden\|\|\((?<gate>\k<hidden>&&!\k<custom>&&\k<auth>!==`amazonBedrock`|!1\s*)\?\k<available>\.has\(\k<model>\.model\)\|\|\k<auth>===`apikey`&&\k<daybreak>&&!\k<model>\.hidden&&\k<cyber>\?\.some\((?<item>[\w$]+)=>\k<item>!==`standard`\)===!0:!\k<model>\.hidden\)\)\}/;
 
+const WEBPACK_LOCAL_MODEL_AVAILABILITY_PATTERN = /function\(\{additionalAvailableModels:[\w$]+,apiKeyDaybreakSupported:[\w$]+,authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:[\w$]+,isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{let [\w$]+=\k<model>\.availableAccessPrograms\?\.cyber;return(?=[^;{}]{0,700}"standard")(?=[^;{}]{0,700}"codex-auto-review")[^;{}]{1,700}?\((?<gate>\k<hidden>&&!\k<custom>&&"amazonBedrock"!==\k<auth>|!1\s*)\?\k<available>\.has\(\k<model>\.model\)/;
+
 export function hasPatchedLocalModelAvailability(text) {
   const source = String(text ?? "");
+  if (WEBPACK_LOCAL_MODEL_AVAILABILITY_PATTERN.exec(source)?.groups.gate.trim() === "!1") return true;
   if (MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN.exec(source)?.groups.gate.trim() === "!1") return true;
   return /function [\w$]+\(\{[^{}]*models:(?<models>[\w$]+),useHiddenModels:[\w$]+\}\)\{let [\w$]+=\[\],[\w$]+=null,[\w$]+=!1\s*,[\w$]+=\k<models>\.some\([\w$]+=>[\w$]+\.supportedReasoningEfforts\.some/.test(source) ||
     /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),authMethod:[\w$]+,availableModels:(?<available>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:[\w$]+\}\)\{return \k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\(!1\s*\?\k<available>\.has\(\k<model>\.model\):!\k<model>\.hidden\)\}/.test(source) ||
@@ -1176,6 +1193,13 @@ export function hasPatchedLocalModelAvailability(text) {
 
 export function patchLocalModelAvailability(text) {
   const source = String(text ?? "");
+  const webpack = WEBPACK_LOCAL_MODEL_AVAILABILITY_PATTERN.exec(source);
+  if (webpack) {
+    const gate = webpack.groups.gate;
+    if (gate.trim() === "!1") return source;
+    const offset = webpack.index + webpack[0].lastIndexOf(gate);
+    return source.slice(0, offset) + padReplacement(gate, "!1") + source.slice(offset + gate.length);
+  }
   const legacy = /let ([\w$]+)=\[\],([\w$]+)=null,([\w$]+)=([\w$]+)&&([\w$]+)!==`amazonBedrock`(?=[,;])/.exec(source);
   if (legacy) {
     const replacement = `let ${legacy[1]}=[],${legacy[2]}=null,${legacy[3]}=!1`;

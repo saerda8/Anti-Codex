@@ -649,6 +649,8 @@ function Test-AntiCodexComponentLaunchability {
         throw "Refusing an unsafe CodexPlusPlus launch-probe state path."
     }
     New-Item -ItemType Directory -Path $probeState -Force | Out-Null
+    $probeCodexHome = Join-Path $probeState "codex-home"
+    New-Item -ItemType Directory -Path $probeCodexHome -Force | Out-Null
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $binaryPath
     $startInfo.Arguments = "--helper-only --helper-port 0"
@@ -657,6 +659,10 @@ function Test-AntiCodexComponentLaunchability {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.EnvironmentVariables["CODEX_PLUS_STATE_DIR"] = $probeState
+    $startInfo.EnvironmentVariables["ANTICODEX_ISOLATED_INSTANCE"] = "1"
+    $startInfo.EnvironmentVariables["CODEX_HOME"] = $probeCodexHome
+    $startInfo.EnvironmentVariables["CODEX_HOME_DIR"] = $probeCodexHome
+    $startInfo.EnvironmentVariables["CODEX_SQLITE_HOME"] = $probeCodexHome
     $process = $null
     try {
         try {
@@ -1537,11 +1543,27 @@ if ($syncCompleted -and (-not $postSyncReady -or $postSyncAcceptance.ok -ne $tru
             Remove-Item -LiteralPath $hostSyncMarker -Force -ErrorAction SilentlyContinue
             $restoredReady = $true
             if (-not $NoRestart) {
-                Start-AntiCodexAfterSync -StartScript $startAntiCodex
-                $restoredReady = Wait-AntiCodexPostSyncReady `
-                    -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC `
-                    -StableSeconds 10 `
-                    -OriginalCodexBefore $originalCodexBeforeSync
+                $restoredMarkerSha256 = Get-AntiCodexSha256 -Path $activeMarker
+                $syncMutex.ReleaseMutex()
+                $syncMutexAcquired = $false
+                try {
+                    Start-AntiCodexAfterSync -StartScript $startAntiCodex
+                    $restoredReady = Wait-AntiCodexPostSyncReady `
+                        -TimeoutSeconds $ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC `
+                        -StableSeconds 10 `
+                        -OriginalCodexBefore $originalCodexBeforeSync
+                } finally {
+                    try {
+                        $syncMutexAcquired = $syncMutex.WaitOne(300000)
+                    } catch [Threading.AbandonedMutexException] {
+                        $syncMutexAcquired = $true
+                    }
+                    if (-not $syncMutexAcquired -or
+                        (Get-AntiCodexSha256 -Path $activeMarker) -ine $restoredMarkerSha256) {
+                        $supersededByAnotherSync = $true
+                        throw "The restored release changed during recovery startup."
+                    }
+                }
             }
             if (-not $restoredReady) {
                 throw "The immediate previous Anti-Codex release was restored but did not become ready."

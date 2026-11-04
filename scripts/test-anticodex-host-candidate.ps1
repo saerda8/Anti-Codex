@@ -118,11 +118,11 @@ function Test-AntiCodexCrashRecoveryPage {
     $v2DescriptionPatched = 'id:`appServerCrash\.recoveryDescription`,defaultMessage:`Something went wrong\. Restart Anti-Codex to try again\.`(?=\})'
     $v2RestartPatched = 'id:`appServerCrash\.restartChatGPT`,defaultMessage:`Restart Anti-Codex`(?=\})'
     $v3MarkerPattern = "/\*anticodex-crash-recovery-actions-v3\*/children:\[(?<restart>$identifier),(?<feedback>$identifier),(?<config>$identifier)\]"
-    $modernTitleOriginal = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`ChatGPT hit a snag`,description:`[^`]+`'
+    $modernTitleOriginal = 'id:[`"]appServerCrash\.recoveryTitle[`"],defaultMessage:[`"]ChatGPT hit a snag[`"],description:[`"][^`"]+[`"]'
     $modernTitlePatched = 'id:`appServerCrash\.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`'
     if ([regex]::Matches($Text, $modernTitlePatched).Count -eq 1 -and
         [regex]::Matches($Text, $modernTitleOriginal).Count -eq 0 -and
-        [regex]::Matches($Text, 'id:`appServerCrash\.feedbackGuidance`').Count -eq 1) {
+        [regex]::Matches($Text, 'id:[`"]appServerCrash\.feedbackGuidance[`"]').Count -eq 1) {
         return $true
     }
     if ([regex]::Matches($Text, $v3MarkerPattern).Count -gt 0) {
@@ -480,9 +480,9 @@ $hostIconPalette = Test-AntiCodexIconPalette -Path $hostIcon
 $trayIconPalette = Test-AntiCodexIconPalette -Path $trayIcon
 $appRootIconPalette = Test-AntiCodexIconPalette -Path $appRootIcon
 $asarText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($asarPath))
-$settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$]+,message:\k<messages>\.securitySettings\}'
+$settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:`about:blank`,icon:[\w$.]+,message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:`about:blank`,icon:[\w$.]+,message:\k<messages>\.securitySettings\}'
 $settingsAccountHiddenPattern = '/\*anticodex-hide-external-account\*/null'
-$settingsModernSecurityItemPattern = '\{href:[\w$]+\.securitySettings\.href,id:`external:security-settings`,kind:`external`,label:[\w$]+\}'
+$settingsModernSecurityItemPattern = '\{href:[\w$.]+\.securitySettings\.href,id:[`"]external:security-settings[`"],kind:[`"]external[`"],label:[\w$]+\}'
 $settingsHiddenAccountCount = [regex]::Matches($asarText, $settingsAccountHiddenPattern).Count
 $settingsSupportedRender = $settingsHiddenAccountCount -eq 1 -or
     ($settingsHiddenAccountCount -eq 0 -and [regex]::Matches($asarText, $settingsModernSecurityItemPattern).Count -eq 1)
@@ -592,19 +592,21 @@ $asarIntegrityProperty = $manifest.PSObject.Properties["asarIntegrity"]
 $asarIntegrity = if ($asarIntegrityProperty) { $asarIntegrityProperty.Value } else { $null }
 if (-not $asarIntegrity -or
     [string]$asarIntegrity.originalHeaderHash -notmatch '^[a-fA-F0-9]{64}$' -or
-    [string]$asarIntegrity.patchedHeaderHash -notmatch '^[a-fA-F0-9]{64}$') {
+    [string]$asarIntegrity.patchedHeaderHash -notmatch '^[a-fA-F0-9]{64}$' -or
+    -not $asarIntegrity.PSObject.Properties["executableIdentityRevision"] -or
+    [string]$asarIntegrity.executableIdentityRevision -ne "1") {
     throw "Anti-Codex candidate marker is missing Electron ASAR integrity provenance."
 }
 $asarIntegrityHostScript = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
 if (-not (Test-Path -LiteralPath $asarIntegrityHostScript -PathType Leaf)) {
     throw "Anti-Codex candidate Electron ASAR integrity verifier is missing."
 }
-$asarIntegrityOutput = @(& $nodeRuntime $asarIntegrityHostScript --verify $copiedSourceHost $antiCodex ([string]$asarIntegrity.originalHeaderHash) ([string]$asarIntegrity.patchedHeaderHash) 2>&1)
+$asarIntegrityOutput = @(& $nodeRuntime $asarIntegrityHostScript --verify $copiedSourceHost $antiCodex ([string]$asarIntegrity.originalHeaderHash) ([string]$asarIntegrity.patchedHeaderHash) --brand 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "Anti-Codex candidate isolated launcher ASAR integrity patch is invalid."
 }
 $asarIntegrityResult = try { (($asarIntegrityOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex candidate ASAR integrity verification receipt is invalid." }
-if ($asarIntegrityResult.ok -ne $true -or [bool]$asarIntegrityResult.patched -ne [bool]$asarIntegrity.executablePatched) {
+if ($asarIntegrityResult.ok -ne $true -or $asarIntegrityResult.branded -ne $true -or [bool]$asarIntegrityResult.patched -ne [bool]$asarIntegrity.executablePatched) {
     throw "Anti-Codex candidate ASAR integrity verification does not match its marker."
 }
 

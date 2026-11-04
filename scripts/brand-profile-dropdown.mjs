@@ -1,6 +1,19 @@
 export function patchCompiledProfileDropdownSettings(text) {
-  if (!text.includes("id:`codex.profileDropdown.settingsPage`")) return text;
+  if (!/id:[`"]codex\.profileDropdown\.settingsPage[`"]/.test(text)) return text;
   if (text.includes("anticodex-manager") && text.includes("__ANTICODEX_OPEN_MANAGER__")) return text;
+
+  const webpack = /(?<cache>[\w$]+)\[\d+\]===Symbol\.for\("react\.memo_cache_sentinel"\)\?\((?<label>[\w$]+)=\(0,(?<jsx>[\w$]+)\.jsx\)\((?<message>[\w$.]+),\{id:"codex\.profileDropdown\.settingsPage",defaultMessage:"Settings",description:"Menu item to open Codex settings page"\}\),\k<cache>\[\d+\]=\k<label>\):\k<label>=\k<cache>\[\d+\],\k<cache>\[\d+\]!==(?<open>[\w$]+)\|\|\k<cache>\[\d+\]!==(?<shortcut>[\w$]+)\?\((?<item>[\w$]+)=\(0,\k<jsx>\.jsx\)\((?<component>[\w$.]+),\{leftIcon:(?<icon>[\w$]+),keyboardShortcut:\k<shortcut>,onClick:\k<open>,children:\k<label>\}\),\k<cache>\[\d+\]=\k<open>,\k<cache>\[\d+\]=\k<shortcut>,\k<cache>\[\d+\]=\k<item>\):\k<item>=\k<cache>\[\d+\]/g;
+  if (webpack.test(text)) {
+    webpack.lastIndex = 0;
+    return text.replace(webpack, (...args) => {
+      const original = args[0];
+      const { label, jsx, message, item, component, icon, shortcut, open } = args.at(-1);
+      const manager = `(0,${jsx}.jsx)(${component},{leftIcon:${icon},onClick:()=>globalThis.__ANTICODEX_OPEN_MANAGER__?.(),children:\`\\u7ba1\\u7406\`},\`anticodex-manager\`)`;
+      const replacement = `${label}=(0,${jsx}.jsx)(${message},{id:"codex.profileDropdown.settingsPage",defaultMessage:"Settings"}),${item}=[(0,${jsx}.jsx)(${component},{leftIcon:${icon},keyboardShortcut:${shortcut},onClick:${open},children:${label}}),${manager}]`;
+      if (replacement.length > original.length) throw new Error("Webpack profile dropdown replacement grew");
+      return replacement + " ".repeat(original.length - replacement.length);
+    });
+  }
 
   const codex2636 = /let (?<item>[A-Za-z_$][\w$]*);[\s\S]{0,420}?\k<item>=\(0,(?<jsx>[A-Za-z_$][\w$]*)\.jsx\)\((?<component>[A-Za-z_$][\w$]*),\{leftIcon:(?<icon>[A-Za-z_$][\w$]*),keyboardShortcut:(?<shortcut>[A-Za-z_$][\w$]*),onClick:(?<open>[A-Za-z_$][\w$]*),children:(?<label>[A-Za-z_$][\w$]*)\}\)[\s\S]{0,360}?let (?<separator>[A-Za-z_$][\w$]*);[\s\S]{0,420}?let (?<account>[A-Za-z_$][\w$]*);[\s\S]{0,260}?let (?<logout>[A-Za-z_$][\w$]*);/;
   const codex2636Match = codex2636.exec(text);

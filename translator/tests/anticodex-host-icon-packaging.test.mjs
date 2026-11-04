@@ -38,10 +38,15 @@ function quotePowerShell(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-test("host packaging preserves the copied source host and patches only the isolated launcher ASAR hash", () => {
+test("host packaging preserves the copied source and validates the isolated launcher identity", () => {
   assert.doesNotMatch(installer, /rcedit|Update-ExeVersionInfo/);
   assert.match(installer, /electron-asar-integrity-host\.mjs/);
   assert.match(installer, /--patch\s+\$sourceDesktopHostPath\s+\$antiCodexHost/);
+  assert.match(installer, /executableIdentityRevision\s*=\s*1/);
+  assert.match(installer, /\$brandResult\.newHeaderHash\)\s+--brand/);
+  assert.match(candidateValidator, /executableIdentityRevision/);
+  assert.match(updateChecker, /executableIdentityRevision/);
+  assert.match(runtimeSync, /scripts\\patch-exe-identity\.ps1/);
   assert.match(candidateValidator, /--verify\s+\$copiedSourceHost\s+\$antiCodex/);
   assert.match(rollback, /--verify\s+\$required\.codexHost\s+\$required\.antiCodexExe/);
   assert.match(updateChecker, /--verify\s+\$sourceHostPath\s+\$required\.antiCodexExe/);
@@ -387,6 +392,28 @@ test("candidate and rollback validators require both preserved Settings messages
   }
 });
 
+test("candidate and rollback recognize webpack recovery messages without accepting duplicate titles", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "anticodex-webpack-recovery-"));
+  const valid = 'id:`appServerCrash.recoveryTitle`,defaultMessage:`Anti-Codex hit a snag`};id:"appServerCrash.feedbackGuidance",defaultMessage:"Send feedback to help us make the app better.",description:"Feedback guidance on the recovery page"}';
+  try {
+    const harness = join(fixture, "recovery.ps1");
+    writeFileSync(harness, `$ErrorActionPreference = "Stop"
+${extractFunction(candidateValidator, "Test-AntiCodexCrashRecoveryPage")}
+${extractFunction(rollback, "Test-AntiCodexModernCrashRecovery")}
+function Accept-Candidate([string]$Text) { try { return Test-AntiCodexCrashRecoveryPage -Text $Text } catch { return $false } }
+[pscustomobject]@{
+ candidate = Accept-Candidate ${quotePowerShell(valid)}
+ rollback = Test-AntiCodexModernCrashRecovery ${quotePowerShell(valid)}
+ candidateDuplicate = Accept-Candidate ${quotePowerShell(valid + valid)}
+ rollbackDuplicate = Test-AntiCodexModernCrashRecovery ${quotePowerShell(valid + valid)}
+} | ConvertTo-Json -Compress
+`, "utf8");
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness], {cwd: root, encoding: "utf8", windowsHide: true, timeout: 15_000});
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), {candidate: true, rollback: true, candidateDuplicate: false, rollbackDuplicate: false});
+  } finally { rmSync(fixture, {recursive: true, force: true}); }
+});
+
 test("candidate and rollback accept v1002 Settings and reject incomplete or ambiguous patches", () => {
   const fixture = mkdtempSync(join(tmpdir(), "anticodex-settings-v1002-"));
   const definition = "/*anticodex-local-settings-only*/account:{href:`about:blank`,icon:q,message:k.account},securitySettings:{href:`about:blank`,icon:n,message:k.securitySettings}";
@@ -406,6 +433,7 @@ function Accept-Settings([string]$text) {
 }
 [pscustomobject]@{
   modern = Accept-Settings ${quotePowerShell(modern)}
+  webpack = Accept-Settings ${quotePowerShell(definition.replace("icon:q", "icon:q.A").replace("icon:n", "icon:n.A") + security + item.replace("href:hn.", "href:hn.N.").replaceAll("`", '"'))}
   legacy = Accept-Settings ${quotePowerShell(legacy)}
   legacySecurityItem = Accept-Settings ${quotePowerShell(legacy + item)}
   unpatched = Accept-Settings ${quotePowerShell(modern.replace("securitySettingsEnabled:0", "securitySettingsEnabled:n"))}
@@ -416,7 +444,7 @@ function Accept-Settings([string]$text) {
 `, "utf8");
       const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", harness], {cwd: root, encoding: "utf8", timeout: 15_000, windowsHide: true});
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.deepEqual(JSON.parse(result.stdout.trim()), {modern: true, legacy: true, legacySecurityItem: true, unpatched: false, ambiguous: false, duplicate: false, noMessages: false});
+      assert.deepEqual(JSON.parse(result.stdout.trim()), {modern: true, webpack: true, legacy: true, legacySecurityItem: true, unpatched: false, ambiguous: false, duplicate: false, noMessages: false});
     }
   } finally { rmSync(fixture, {recursive: true, force: true}); }
 });

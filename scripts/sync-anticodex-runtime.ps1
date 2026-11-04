@@ -313,6 +313,7 @@ $requiredSourceFiles = @(
     "scripts\anticodex-update-status.psm1",
     "scripts\brand-profile-dropdown.mjs",
     "scripts\electron-asar-integrity-host.mjs",
+    "scripts\patch-exe-identity.ps1",
     "scripts\sync-anticodex.ps1",
     "scripts\sync-anticodex-launcher.ps1",
     "scripts\rollback-anticodex.ps1",
@@ -419,7 +420,7 @@ $manifestPatchFiles = @(
         $relativePatch = ([string]$patch.file).Replace("/", "\")
         if ([string]::IsNullOrWhiteSpace($relativePatch) -or
             [IO.Path]::IsPathRooted($relativePatch) -or
-            -not $relativePatch.StartsWith("patches\", [StringComparison]::OrdinalIgnoreCase)) {
+            -not ($relativePatch.StartsWith("patches\", [StringComparison]::OrdinalIgnoreCase) -or $relativePatch.StartsWith("candidates\v", [StringComparison]::OrdinalIgnoreCase))) {
             throw "CodexPlusPlus manifest contains an invalid patch path: $relativePatch"
         }
         "third_party\codexplusplus\$relativePatch"

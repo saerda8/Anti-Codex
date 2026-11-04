@@ -354,6 +354,10 @@ function Test-ActiveHostGuardrails {
     }
     $manifestFiles = Get-ObjectPropertyValue -InputObject $Manifest -Name "files"
     $manifestSource = Get-ObjectPropertyValue -InputObject $Manifest -Name "source"
+    $identityIntegrity = Get-ObjectPropertyValue -InputObject $Manifest -Name "asarIntegrity"
+    if ([string](Get-ObjectPropertyValue -InputObject $identityIntegrity -Name "executableIdentityRevision") -ne "1") {
+        $failures.Add("active host executable identity requires an update") | Out-Null
+    }
     if ($null -eq $manifestFiles) {
         $failures.Add("active host marker is missing file hashes") | Out-Null
     }
@@ -462,6 +466,8 @@ function Test-ActiveHostGuardrails {
         $recordedAntiCodexHost = Get-ObjectPropertyValue -InputObject $manifestFiles -Name "antiCodexExe"
         if (-not $recordedAntiCodexHost) {
             $failures.Add("active Anti-Codex.exe fingerprint is missing") | Out-Null
+        } elseif ([string]$recordedAntiCodexHost -eq [string]$recordedSourceHost) {
+            $failures.Add("active host executable identity patch is missing") | Out-Null
         } elseif ([string]$recordedAntiCodexHost -ne [string]$recordedSourceHost) {
             $integrity = Get-ObjectPropertyValue -InputObject $Manifest -Name "asarIntegrity"
             $desktopHostName = [string](Get-ObjectPropertyValue -InputObject $manifestSource -Name "desktopHostName")
@@ -475,9 +481,9 @@ function Test-ActiveHostGuardrails {
                 -not (Test-Path -LiteralPath $node -PathType Leaf)) {
                 $failures.Add("active Anti-Codex.exe ASAR integrity provenance is incomplete") | Out-Null
             } else {
-                & $node $helper --verify $sourceHostPath $required.antiCodexExe $originalHeaderHash $patchedHeaderHash *> $null
+                & $node $helper --verify $sourceHostPath $required.antiCodexExe $originalHeaderHash $patchedHeaderHash --brand *> $null
                 if ($LASTEXITCODE -ne 0) {
-                    $failures.Add("active Anti-Codex.exe differs outside the isolated ASAR integrity hash") | Out-Null
+                    $failures.Add("active Anti-Codex.exe differs outside the approved ASAR and identity patches") | Out-Null
                 }
             }
         }

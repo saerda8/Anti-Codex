@@ -75,6 +75,34 @@ test("normal launchers hold the host sync publication barrier while runtime star
   assert.ok(release > spawnSupervisor, "task launcher must release only after the supervisor exists");
 });
 
+test("legacy recovery releases the publication mutex while the restored task starts", {
+  skip: process.platform !== "win32",
+}, () => {
+  const start = hostSync.indexOf("$restoredReady = $true", hostSync.indexOf("if ($legacyCurrentRecoveryOnly) {", hostSync.indexOf("if ($syncCompleted -and")));
+  const end = hostSync.indexOf("if (-not $restoredReady)", start);
+  assert.ok(start > 0 && end > start);
+  const block = hostSync.slice(start, end);
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
+$ErrorActionPreference = "Stop"
+$script:held = $true
+$syncMutexAcquired = $true
+$syncMutex = [pscustomobject]@{}
+$syncMutex | Add-Member ScriptMethod ReleaseMutex { $script:held = $false }
+$syncMutex | Add-Member ScriptMethod WaitOne { param($timeout) $script:held = $true; return $true }
+$NoRestart = $false
+$activeMarker = "restored-marker"
+$startAntiCodex = "start"
+$ANTICODEX_POST_SYNC_READY_TIMEOUT_SEC = 1
+$originalCodexBeforeSync = @()
+function Get-AntiCodexSha256 { param($Path) "restored-hash" }
+function Start-AntiCodexAfterSync { param($StartScript) if ($script:held) { throw "restored launcher cannot acquire the publication mutex" } }
+function Wait-AntiCodexPostSyncReady { param($TimeoutSeconds, $StableSeconds, $OriginalCodexBefore) if ($script:held) { throw "readiness cannot run under the publication mutex" }; return $true }
+${block}
+if (-not $restoredReady -or -not $syncMutexAcquired -or -not $script:held) { throw "recovery must reacquire the mutex before accepting the restored release" }
+`], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test("formal launcher uses the fixed CodexPlusPlus route as the only model path", () => {
   assert.match(launcher, /start-anticodex-fixed-route\.mjs/);
   assert.match(launcher, /18487/);
@@ -98,16 +126,111 @@ test("formal launcher records startup stages and surfaces hidden-launch failures
   assert.match(launcher, /System\.Windows\.Forms\.MessageBox/);
 });
 
-test("inline supervisor keeps its parent alive and contains native stderr in durable logs", () => {
-  const start = launcher.lastIndexOf("if ($InlineSupervisor) {");
-  const end = launcher.indexOf("\n}", start);
-  const inlineBlock = start >= 0 && end > start ? launcher.slice(start, end + 2) : "";
-  assert.match(inlineBlock, /& \$nodeExecutable @inlineSupervisorArgs 1>> \$launcherOutLog 2>> \$launcherErrLog/);
-  assert.match(inlineBlock, /\$savedErrorActionPreference\s*=\s*\$ErrorActionPreference/);
-  assert.match(inlineBlock, /\$ErrorActionPreference\s*=\s*"Continue"/);
-  assert.match(inlineBlock, /finally\s*\{\s*\$ErrorActionPreference\s*=\s*\$savedErrorActionPreference\s*\}/);
-  assert.match(inlineBlock, /\$inlineExitCode = \[int\]\$LASTEXITCODE/);
-  assert.doesNotMatch(inlineBlock, /Start-Process/);
+function launcherFunction(name) {
+  const start = launcher.indexOf(`function ${name} {`);
+  assert.notEqual(start, -1, `missing ${name}`);
+  const end = launcher.indexOf("\nfunction ", start + 1);
+  assert.notEqual(end, -1, `missing end of ${name}`);
+  return launcher.slice(start, end);
+}
+
+test("inline supervisor releases its publication barrier only after spawning and drains both logs", {
+  skip: process.platform !== "win32",
+}, () => {
+  const temp = mkdtempSync(join(tmpdir(), "anticodex launcher lock "));
+  try {
+    const configPath = join(temp, "config.json");
+    const childPath = join(temp, "child script.cjs");
+    const checkerPath = join(temp, "check mutex.ps1");
+    const harnessPath = join(temp, "harness.ps1");
+    const args = ["plain", "contains spaces", 'embedded"quote', "space and trailing \\", ""];
+    const id = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const config = {
+      node: process.execPath, child: childPath, checker: checkerPath,
+      sleeper: join(temp, "sleeper.cjs"), sleeperPid: join(temp, "sleeper.pid"),
+      out: join(temp, "out.log"), err: join(temp, "err.log"), receipt: join(temp, "receipt.json"),
+      mutexA: `Local\\AntiCodexTestA-${id}`, mutexB: `Local\\AntiCodexTestB-${id}`, args,
+    };
+    writeFileSync(configPath, JSON.stringify(config));
+    writeFileSync(config.out, "prior out\n");
+    writeFileSync(config.err, "prior err\n");
+    writeFileSync(checkerPath, `param($A, $B)
+$one = [Threading.Mutex]::OpenExisting($A)
+$two = [Threading.Mutex]::OpenExisting($B)
+if (-not $one.WaitOne(5000)) { exit 11 }
+if (-not $two.WaitOne(5000)) { exit 12 }
+$two.ReleaseMutex(); $one.ReleaseMutex()
+$two.Dispose(); $one.Dispose()
+`);
+    writeFileSync(childPath, `const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', config.checker, config.mutexA, config.mutexB], { windowsHide: true, timeout: 12000 });
+fs.writeFileSync(config.receipt, JSON.stringify({ status: check.status, args: process.argv.slice(3), pid: process.pid }));
+process.stdout.write('O'.repeat(2 * 1024 * 1024));
+process.stderr.write('E'.repeat(2 * 1024 * 1024));
+setTimeout(() => { process.exitCode = 37; }, 200);
+`);
+    writeFileSync(config.sleeper, `require('node:fs').writeFileSync(process.argv[2], String(process.pid)); setInterval(() => {}, 1000);`);
+    const functions = ["Exit-AntiCodexHostSyncBarrier", "ConvertTo-AntiCodexProcessArgument", "Invoke-AntiCodexInlineSupervisor"]
+      .map(launcherFunction).join("\n");
+    writeFileSync(harnessPath, `param([string]$ConfigPath)
+$ErrorActionPreference = 'Stop'
+${functions}
+function Invoke-AntiCodexFixedRouteShutdown {
+  param($StateRoot)
+  $script:shutdownCount++
+  for ($i = 0; $i -lt 100 -and -not (Test-Path -LiteralPath $config.sleeperPid); $i++) { Start-Sleep -Milliseconds 25 }
+}
+$config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+$script:shutdownCount = 0
+$a = [Threading.Mutex]::new($true, $config.mutexA)
+$b = [Threading.Mutex]::new($true, $config.mutexB)
+$barrier = [pscustomobject]@{ GlobalMutex = $a; LocalMutex = $b; GlobalAcquired = $true; LocalAcquired = $true }
+$code = Invoke-AntiCodexInlineSupervisor -NodeExecutable $config.node -Arguments (@($config.child, $ConfigPath) + @($config.args)) -StdoutLog $config.out -StderrLog $config.err -StateRoot $env:TEMP -Barrier ([ref]$barrier)
+if ($code -ne 37 -or $null -ne $barrier) { throw "exit code or released barrier was lost: code=$code; barrier=$barrier" }
+$a = [Threading.Mutex]::new($true, $config.mutexA)
+$b = [Threading.Mutex]::new($true, $config.mutexB)
+$barrier = [pscustomobject]@{ GlobalMutex = $a; LocalMutex = $b; GlobalAcquired = $true; LocalAcquired = $true }
+$failed = $false
+try { Invoke-AntiCodexInlineSupervisor -NodeExecutable (Join-Path $env:TEMP 'anticodex-no-such-node.exe') -Arguments @() -StdoutLog $config.out -StderrLog $config.err -StateRoot $env:TEMP -Barrier ([ref]$barrier) } catch { $failed = $true }
+if (-not $failed -or $null -eq $barrier -or -not $barrier.GlobalAcquired -or -not $barrier.LocalAcquired) { throw 'spawn failure released the barrier' }
+if ($script:shutdownCount -ne 0) { throw 'spawn failure unexpectedly shut down a service' }
+Exit-AntiCodexHostSyncBarrier $barrier
+$badMutex = [pscustomobject]@{}
+$badMutex | Add-Member ScriptMethod ReleaseMutex { throw 'forced barrier release error' }
+$barrier = [pscustomobject]@{ GlobalMutex = $null; LocalMutex = $badMutex; GlobalAcquired = $false; LocalAcquired = $true }
+$failed = $false
+try { Invoke-AntiCodexInlineSupervisor -NodeExecutable $config.node -Arguments @($config.sleeper, $config.sleeperPid) -StdoutLog $config.out -StderrLog $config.err -StateRoot $env:TEMP -Barrier ([ref]$barrier) } catch { $failed = $true }
+if (-not $failed -or $script:shutdownCount -ne 1 -or -not (Test-Path -LiteralPath $config.sleeperPid)) { throw 'child failure was not shut down' }
+$sleeperId = [int](Get-Content -LiteralPath $config.sleeperPid -Raw)
+try { $sleeper = [Diagnostics.Process]::GetProcessById($sleeperId); if (-not $sleeper.HasExited) { throw 'test child survived cleanup' } } catch [ArgumentException] {}
+`);
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", harnessPath, configPath], {
+      encoding: "utf8", windowsHide: true, timeout: 20_000,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const receipt = JSON.parse(readFileSync(config.receipt, "utf8"));
+    assert.equal(receipt.status, 0, "child could not acquire both barriers while running");
+    assert.deepEqual(receipt.args, args);
+    assert.equal(readFileSync(config.out, "utf8"), `prior out\n${"O".repeat(2 * 1024 * 1024)}`);
+    assert.equal(readFileSync(config.err, "utf8"), `prior err\n${"E".repeat(2 * 1024 * 1024)}`);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("installed launcher delegates before acquiring and only forwards an explicit barrier skip", () => {
+  const delegation = launcher.lastIndexOf("Invoke-InstalledAntiCodexLauncherIfAvailable");
+  const acquisition = launcher.lastIndexOf("$hostSyncBarrier = Enter-AntiCodexHostSyncBarrier");
+  assert.ok(delegation >= 0 && delegation < acquisition);
+  assert.match(launcherFunction("Invoke-InstalledAntiCodexLauncherIfAvailable"), /if \(\$SkipSyncBarrier\) \{ \$forwardArgs\.SkipSyncBarrier = \$true \}/);
+  const inline = launcher.slice(launcher.lastIndexOf("if ($InlineSupervisor) {"));
+  assert.match(inline, /Invoke-AntiCodexInlineSupervisor[\s\S]*?-Barrier \(\[ref\]\$hostSyncBarrier\)/);
+  assert.match(inline, /exit \$inlineExitCode/);
+  const detachedStart = launcher.indexOf("$supervisorProcess = Start-Process");
+  const detachedRelease = launcher.indexOf("Exit-AntiCodexHostSyncBarrier $hostSyncBarrier", detachedStart);
+  assert.ok(detachedStart > acquisition && detachedRelease > detachedStart);
 });
 
 test("every production relaunch keeps the fixed-route supervisor attached", () => {

@@ -272,28 +272,34 @@ try {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($activeMainExe)
     $activeHash = Get-AntiCodexSha256 -Path $activeMainExe
     $sourceHash = if ($sourceHost) { Get-AntiCodexSha256 -Path $sourceHost } else { "" }
-    $hostIntegrityVerified = ($activeHash -eq $sourceHash)
-    if (-not $hostIntegrityVerified -and $sourceHash) {
+    $hostIntegrityVerified = $false
+    if ($sourceHash) {
         $hostManifest = Get-Content -LiteralPath (Join-Path $installRoot "codex-patched-app.ok") -Raw | ConvertFrom-Json
         $integrity = $hostManifest.asarIntegrity
         if ($sourceHash -eq [string]$hostManifest.source.codexHost -and
             $activeHash -eq [string]$hostManifest.files.antiCodexExe) {
             $integrityNode = Join-Path $activeHost "resources\cua_node\bin\node.exe"
             $integrityHelper = Join-Path $PSScriptRoot "electron-asar-integrity-host.mjs"
-            & $integrityNode $integrityHelper --verify $sourceHost $activeMainExe ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) *> $null
-            $hostIntegrityVerified = ($LASTEXITCODE -eq 0)
+            $identityRevision = $integrity.PSObject.Properties["executableIdentityRevision"]
+            if ($identityRevision -and [string]$identityRevision.Value -eq "1") {
+                & $integrityNode $integrityHelper --verify $sourceHost $activeMainExe ([string]$integrity.originalHeaderHash) ([string]$integrity.patchedHeaderHash) --brand *> $null
+                $hostIntegrityVerified = ($LASTEXITCODE -eq 0)
+            }
         }
     }
     $brandingOk = [bool](
         (Split-Path -Leaf $activeMainExe) -eq "Anti-Codex.exe" -and
         $sourceHash -and
-        $hostIntegrityVerified
+        $hostIntegrityVerified -and
+        $version.FileDescription -ceq "Anti-Codex" -and
+        $version.ProductName -ceq "Anti-Codex"
     )
     $branding = [pscustomobject]@{
         processName = (Split-Path -Leaf $activeMainExe)
         sourceHostName = $sourceHostName
         hostBinaryPreserved = ($activeHash -eq $sourceHash)
         hostIntegrityVerified = $hostIntegrityVerified
+        fileDescription = $version.FileDescription
         productName = $version.ProductName
         productVersion = $version.ProductVersion
     }

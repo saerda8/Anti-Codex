@@ -272,9 +272,8 @@ function Install-AntiCodexHostIcon {
     Copy-Item -LiteralPath $icon -Destination $trayIcon -Force
     Copy-Item -LiteralPath $icon -Destination $appRootIcon -Force
 
-    # The executable keeps its original embedded icon resources. Rewriting them
-    # makes current endpoint protection remove the copied host on first launch.
-    # Window, shortcut, taskbar, and tray branding use the isolated icon files.
+    # Earlier embedded-icon rewrites made endpoint protection remove the copied
+    # host on first launch; the guarded candidate must pass a real launch check.
     try { & ie4uinit.exe -show | Out-Null } catch {}
 }
 
@@ -316,6 +315,7 @@ function Write-HostManifest {
             patchedHeaderHash = [string]$AsarIntegrity.patchedHash
             executablePatched = [bool]$AsarIntegrity.patched
             executablePatchOffset = $AsarIntegrity.offset
+            executableIdentityRevision = 1
         }
         unpackedFiles = @($UnpackedFiles)
         files = [ordered]@{
@@ -559,12 +559,12 @@ $asarIntegrityHostScript = Join-Path $ROOT "scripts\electron-asar-integrity-host
 if (-not (Test-Path -LiteralPath $asarIntegrityHostScript -PathType Leaf)) {
     throw "Anti-Codex Electron ASAR integrity host patcher is missing."
 }
-$asarIntegrityOutput = @(& $node $asarIntegrityHostScript --patch $sourceDesktopHostPath $antiCodexHost ([string]$brandResult.oldHeaderHash) ([string]$brandResult.newHeaderHash) 2>&1)
+$asarIntegrityOutput = @(& $node $asarIntegrityHostScript --patch $sourceDesktopHostPath $antiCodexHost ([string]$brandResult.oldHeaderHash) ([string]$brandResult.newHeaderHash) --brand 2>&1)
 if ($LASTEXITCODE -ne 0) {
     throw "Anti-Codex isolated launcher ASAR integrity patch failed."
 }
 $asarIntegrityResult = try { (($asarIntegrityOutput -join [Environment]::NewLine) | ConvertFrom-Json) } catch { throw "Anti-Codex isolated launcher ASAR integrity receipt is invalid." }
-if ($asarIntegrityResult.ok -ne $true -or
+if ($asarIntegrityResult.ok -ne $true -or $asarIntegrityResult.branded -ne $true -or
     [string]$asarIntegrityResult.originalHash -ne [string]$brandResult.oldHeaderHash -or
     [string]$asarIntegrityResult.patchedHash -ne [string]$brandResult.newHeaderHash) {
     throw "Anti-Codex isolated launcher ASAR integrity receipt does not match the patched archive."

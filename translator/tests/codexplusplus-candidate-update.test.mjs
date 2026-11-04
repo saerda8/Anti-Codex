@@ -21,6 +21,16 @@ const cargoRunnerPath = resolve(root, "scripts", "invoke-anticodex-cargo-xwin.ps
 const responseHistoryPatchFile = "patches/0013-v171-response-history.patch";
 const responseHistoryBuildCommand = "test --locked -p codex-plus-core --test response_history -- --test-threads=2";
 
+test("candidate launch probes use an explicit isolated Codex home", () => {
+  const script = readFileSync(scriptPath, "utf8");
+  for (const assignment of [
+    'EnvironmentVariables["ANTICODEX_ISOLATED_INSTANCE"] = "1"',
+    'EnvironmentVariables["CODEX_HOME"] = $probeCodexHome',
+    'EnvironmentVariables["CODEX_HOME_DIR"] = $probeCodexHome',
+    'EnvironmentVariables["CODEX_SQLITE_HOME"] = $probeCodexHome',
+  ]) assert.ok(script.includes(assignment), `missing probe isolation: ${assignment}`);
+});
+
 function write(path, value) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, value);
@@ -45,7 +55,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function createSuccessFixture(t, { annotatedTag = false, plainPatch = false, responseHistoryPatch = true } = {}) {
+function createSuccessFixture(t, { annotatedTag = false, plainPatch = false, responseHistoryPatch = true, version = "1.2.44" } = {}) {
   const sandbox = mkdtempSync(join(tmpdir(), "anticodex-cpp-candidate-"));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
 
@@ -56,9 +66,10 @@ function createSuccessFixture(t, { annotatedTag = false, plainPatch = false, res
   const activeSentinel = join(sandbox, "local-app-data", "Anti-Codex", "active-sentinel.txt");
   const patchFile = responseHistoryPatch ? responseHistoryPatchFile : "patches/0001-test.patch";
   const patchPath = join(project, "third_party", "codexplusplus", patchFile);
+  const tag = `v${version}`;
 
   write(activeSentinel, "active-unchanged\n");
-  write(join(repository, "Cargo.toml"), '[workspace]\nmembers = []\n\n[workspace.package]\nversion = "1.2.44"\n');
+  write(join(repository, "Cargo.toml"), `[workspace]\nmembers = []\n\n[workspace.package]\nversion = "${version}"\n`);
   write(join(repository, "marker.txt"), "base\n");
   run("git.exe", ["init", repository]);
   git(repository, "config", "user.email", "candidate-test@example.invalid");
@@ -68,18 +79,18 @@ function createSuccessFixture(t, { annotatedTag = false, plainPatch = false, res
   git(repository, "commit", "-m", "upstream");
   const upstreamCommit = git(repository, "rev-parse", "HEAD");
   if (annotatedTag) {
-    git(repository, "tag", "-a", "v1.2.44", "-m", "release v1.2.44");
+    git(repository, "tag", "-a", tag, "-m", `release ${tag}`);
   } else {
-    git(repository, "tag", "v1.2.44");
+    git(repository, "tag", tag);
   }
-  const upstreamTagObject = git(repository, "rev-parse", "v1.2.44");
+  const upstreamTagObject = git(repository, "rev-parse", tag);
   write(join(repository, "marker.txt"), "patched\n");
   git(repository, "add", "marker.txt");
   git(repository, "commit", "-m", "isolation patch");
   const patch = plainPatch
-    ? git(repository, "diff", "v1.2.44..HEAD")
+    ? git(repository, "diff", `${tag}..HEAD`)
     : git(repository, "format-patch", "-1", "--stdout");
-  git(repository, "reset", "--hard", "v1.2.44");
+  git(repository, "reset", "--hard", tag);
   write(join(repository, "default-only.txt"), "must not be fetched\n");
   git(repository, "add", "default-only.txt");
   git(repository, "commit", "-m", "default branch only");
@@ -123,6 +134,9 @@ param(
 )
 $image = "test/cargo-xwin:fixed"
 Add-Content -LiteralPath $env:ANTICODEX_TEST_LOG -Value ("cargo " + ($CargoArguments -join " "))
+if ($env:ANTICODEX_TEST_EMPTY_TESTS -and $CargoArguments[0] -eq "test") {
+  Write-Host "test result: ok. 0 passed; 0 failed; 14 filtered out"
+}
 if ($env:ANTICODEX_TEST_FAIL -and $CargoArguments -contains $env:ANTICODEX_TEST_FAIL) {
   throw "managed $env:ANTICODEX_TEST_FAIL failed"
 }
@@ -148,6 +162,7 @@ Add-Content -LiteralPath $env:ANTICODEX_TEST_LOG -Value "hygiene runtime-clean"
 
   return {
     sandbox,
+    tag,
     project,
     repository,
     stateRoot,
@@ -159,7 +174,7 @@ Add-Content -LiteralPath $env:ANTICODEX_TEST_LOG -Value "hygiene runtime-clean"
   };
 }
 
-function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot) {
+function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot, candidateMetadata = "") {
   const result = spawnSync(
     "powershell.exe",
     [
@@ -171,9 +186,10 @@ function runCandidate(fixture, env = {}, stateRoot = fixture.stateRoot) {
       "-File",
       join(fixture.project, "scripts", "prepare-codexplusplus-candidate.ps1"),
       "-Tag",
-      "v1.2.44",
+      fixture.tag,
       "-StateRoot",
       stateRoot,
+      ...(candidateMetadata ? ["-CandidateMetadata", candidateMetadata] : []),
     ],
     {
       cwd: fixture.project,
@@ -200,7 +216,7 @@ test("CodexPlusPlus candidate preparation cannot activate or restart Anti-Codex"
   assert.match(script, /test-codexplusplus-isolation-compatibility\.mjs/);
   assert.match(script, /invoke-anticodex-cargo-xwin\.ps1/);
   assert.match(script, /-CargoArguments\s+\$command/);
-  assert.match(script, /foreach \(\$command in \$commands\)[\s\S]{0,120}\n\s*& \$managedCargoRunner/);
+  assert.match(script, /foreach \(\$command in \$commands\)[\s\S]{0,120}Invoke-CandidateCargoCommand/);
   assert.match(script, /test-anticodex-docker-build-hygiene\.ps1/);
   assert.match(script, /-RequireRuntimeClean/);
   assert.match(script, /upstream\.proposed\.json/);
@@ -253,6 +269,35 @@ test("Docker build hygiene can require zero labeled build containers", () => {
 test("managed Cargo builds cap worker concurrency at one", () => {
   const runner = readFileSync(cargoRunnerPath, "utf8");
   assert.match(runner, /"--env",\s*"CARGO_BUILD_JOBS=1"/);
+});
+
+test("managed Cargo cache preserves cleanup and exports only a successful launcher build", (t) => {
+  const directory=mkdtempSync(join(tmpdir(),"anticodex-cargo-cache-"));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  for(const mode of ["test","build","failure"]){
+    const argumentsFile=join(directory,`${mode}.json`);
+    const harness=join(directory,`${mode}.ps1`);
+    const ps=value=>`'${value.replaceAll("'","''")}'`;
+    write(harness,`$ErrorActionPreference="Stop"
+function global:docker {
+  $parameters=@($args)
+  if($parameters[0] -eq "run") {
+    [IO.File]::WriteAllText(${ps(argumentsFile)},($parameters|ConvertTo-Json -Compress))
+    $global:LASTEXITCODE=${mode==="failure"?41:0}
+  } else { $global:LASTEXITCODE=0 }
+}
+& ${ps(cargoRunnerPath)} -Worktree ${ps(directory)} -CargoArguments @(${mode==="test"?'"test","--locked"':'"xwin","build","--locked","-p","codex-plus-launcher"'})
+`);
+    const result=spawnSync("powershell.exe",["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",harness],{encoding:"utf8",windowsHide:true,timeout:15000,env:{...process.env,ANTICODEX_CARGO_XWIN_BOOTSTRAP:"0"}});
+    const args=JSON.parse(readFileSync(argumentsFile,"utf8"));
+    assert.ok(args.includes("CARGO_TARGET_DIR=/build-cache"));
+    assert.ok(args.includes("anticodex-cargo-target:/build-cache"));
+    assert.ok(args.includes("--rm"));
+    if(mode==="test")assert.equal(args.some(arg=>arg.includes("cp /build-cache")),false);
+    else assert.ok(args.some(arg=>arg.includes("&& cp /build-cache/x86_64-pc-windows-msvc/release/codex-plus-plus.exe")));
+    if(mode==="failure"){assert.notEqual(result.status,0);assert.match(result.stderr,/exited with code 41/);}
+    else assert.equal(result.status,0,result.stderr||result.stdout);
+  }
 });
 
 test("CodexPlusPlus candidate preparation peels and verifies an exact annotated tag", (t) => {
@@ -367,6 +412,81 @@ test("old CodexPlusPlus patch baselines do not request the response history test
   assert.equal(report.checks.includes("response_history"), false);
   assert.ok(report.checks.every((check) => typeof check === "string"));
   assert.equal(calls.includes(`cargo ${responseHistoryBuildCommand}`), false);
+});
+
+test("integrated releases cannot skip history gates after a patch rename", (t) => {
+  for (const version of ["1.12.1", "2.2.0"]) {
+    const fixture = createSuccessFixture(t, {responseHistoryPatch: false, version});
+    const result = runCandidate(fixture);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    const report = JSON.parse(readFileSync(join(fixture.stateRoot, "candidates", version, fixture.upstreamCommit, output.patchCommit, "candidate.json"), "utf8"));
+    assert.ok(report.checks.includes("response_history"), `${version} omitted history verification`);
+    assert.ok(report.build.commands.includes(responseHistoryBuildCommand));
+    if (version === "2.2.0") {
+      assert.ok(report.build.commands.includes("test --locked -p codex-plus-core --lib anticodex_ -- --test-threads=1"));
+      assert.ok(report.build.commands.includes("test --locked -p codex-plus-core --test all protocol_proxy:: -- --test-threads=2"));
+      assert.ok(report.build.commands.includes("test --locked -p codex-plus-core --test all watcher:: -- --test-threads=2"));
+    }
+    assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+  }
+});
+
+test("candidate rejects an empty native test selection without changing the active install", (t) => {
+  const fixture = createSuccessFixture(t);
+  const result = runCandidate(fixture, {ANTICODEX_TEST_EMPTY_TESTS: "1"});
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /selected zero tests/i);
+  const failure = JSON.parse(readFileSync(join(fixture.stateRoot, "failures", "latest.json"), "utf8"));
+  assert.equal(failure.stage, "verification");
+  assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+});
+
+test("candidate cache binds the shared isolation audit implementation", (t) => {
+  const fixture = createSuccessFixture(t);
+  const dependency = join(fixture.project, "scripts", "lib", "codexplusplus-isolation-audit.mjs");
+  write(dependency, "export const revision = 1;\n");
+  const first = runCandidate(fixture);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  write(dependency, "export const revision = 2;\n");
+  const second = runCandidate(fixture);
+  assert.notEqual(second.status, 0, "candidate verified with the old audit was reused");
+  assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+});
+
+test("candidate recipes build separately without promoting accepted metadata", (t) => {
+  const fixture = createSuccessFixture(t);
+  const accepted = join(fixture.project, "third_party", "codexplusplus", "upstream.json");
+  const before = readFileSync(accepted);
+  const proposal = JSON.parse(before);
+  proposal.version = "1.2.44";
+  proposal.tag = fixture.tag;
+  proposal.upstreamCommit = fixture.upstreamCommit;
+  const directory = join(fixture.project, "third_party", "codexplusplus", "candidates", "v1.2.44");
+  const metadata = join(directory, "upstream.proposed.json");
+  const patch = proposal.patches[0];
+  write(join(directory, patch.file), readFileSync(join(fixture.project, "third_party", "codexplusplus", patch.file)));
+  write(metadata, JSON.stringify(proposal));
+  const built = runCandidate(fixture, {}, fixture.stateRoot, metadata);
+  assert.equal(built.status, 0, built.stderr || built.stdout);
+  assert.deepEqual(readFileSync(accepted), before);
+  assert.equal(readFileSync(fixture.activeSentinel, "utf8"), "active-unchanged\n");
+
+  proposal.version = "1.2.45";
+  write(metadata, JSON.stringify(proposal));
+  assert.notEqual(runCandidate(fixture, {}, fixture.stateRoot, metadata).status, 0);
+  assert.deepEqual(readFileSync(accepted), before);
+  for (const invalid of [
+    {...proposal, version: "1.2.44", repository: `${fixture.repository}-different`},
+    {...proposal, version: "1.2.44", upstreamCommit: "0".repeat(40)},
+  ]) {
+    write(metadata, JSON.stringify(invalid));
+    assert.notEqual(runCandidate(fixture, {}, fixture.stateRoot, metadata).status, 0);
+    assert.deepEqual(readFileSync(accepted), before);
+  }
+  const outside = join(fixture.sandbox, "upstream.proposed.json");
+  write(outside, JSON.stringify({...proposal, version: "1.2.44"}));
+  assert.notEqual(runCandidate(fixture, {}, fixture.stateRoot, outside).status, 0);
 });
 
 test("CodexPlusPlus candidate preparation replays a plain unified diff", (t) => {

@@ -24,10 +24,11 @@ import {
 const root = resolve(import.meta.dirname, "..", "..");
 const codexPlusPlusPatches = readCodexPlusPlusPatchManifest(root);
 const codexPlusPlusSource = readCodexPlusPlusAcceptedSource(root, codexPlusPlusPatches.metadata);
-const acceptedProtocolProxySource = codexPlusPlusSource.read("crates/codex-plus-core/src/protocol_proxy.rs");
-const acceptedProtocolProxyTests = codexPlusPlusSource.read("crates/codex-plus-core/tests/protocol_proxy.rs");
+const acceptedProtocolProxySource = codexPlusPlusSource.read("crates/codex-plus-core/src/protocol_proxy.rs")
+  + "\n" + codexPlusPlusSource.read("crates/codex-plus-core/src/protocol_proxy/anticodex.rs");
+const acceptedProtocolProxyTests = codexPlusPlusSource.read("crates/codex-plus-core/tests/all/protocol_proxy.rs");
 const acceptedLauncherSource = codexPlusPlusSource.read("crates/codex-plus-core/src/launcher.rs");
-const acceptedLoopbackHttpSource = codexPlusPlusSource.read("crates/codex-plus-core/src/loopback_http.rs");
+const acceptedHistoryObserverSource = codexPlusPlusSource.read("crates/codex-plus-core/src/protocol_proxy/response_history_sse.rs");
 const acceptedNativeInspectorSource = codexPlusPlusSource.read("assets/native-browser/inspect-service.mjs");
 const installerSource = resolve(root, "scripts", "install-codexplusplus-component.ps1");
 const trustedBinary = Buffer.from("trusted CodexPlusPlus release binary\n", "utf8");
@@ -93,7 +94,7 @@ function writeJson(path, value) {
   writeBytes(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function createInstallerSandbox(t) {
+function createInstallerSandbox(t, version = "test-only") {
   const sandboxRoot = mkdtempSync(join(tmpdir(), "anticodex-component-install-"));
   t.after(() => rmSync(sandboxRoot, { recursive: true, force: true }));
 
@@ -110,7 +111,7 @@ function createInstallerSandbox(t) {
     "component-sources",
     "codexplusplus",
     "candidates",
-    "test-only",
+    version,
     "0".repeat(40),
     "2".repeat(40),
   );
@@ -183,6 +184,7 @@ function writePreparedCandidate(
         Object.entries(candidateInputFiles).map(([key, file]) => [key, {
           path: `scripts/${file}`,
           sha256: sha256(readFileSync(join(scriptsRoot, file))),
+          ...(key === "isolationAudit" ? {bundleSha256: sha256(readFileSync(join(scriptsRoot, file)))} : {}),
         }]),
       ),
     },
@@ -458,6 +460,30 @@ test("automatic selection rejects a prepared candidate after verifier inputs cha
   assert.equal(existsSync(fixture.candidateManifest), false);
 });
 
+test("installer validates integrated test commands and the audit dependency bundle", (t) => {
+  for (const mode of ["valid", "changed", "missing"]) {
+    const fixture = createInstallerSandbox(t, "2.2.0");
+    const metadata = {...createMetadata(sha256(trustedBinary), {responseHistoryPatch: false}), version: "2.2.0", tag: "v2.2.0"};
+    writeJson(fixture.sourceMetadata, metadata);
+    writePreparedCandidate(fixture, trustedBinary, metadata);
+    const module = join(fixture.sourceRoot, "scripts", "lib", "codexplusplus-isolation-audit.mjs");
+    writeBytes(module, Buffer.from("export const revision = 1;\n"));
+    const report = JSON.parse(readFileSync(fixture.preparedCandidateReport, "utf8"));
+    const audit = report.inputs.isolationAudit;
+    audit.bundleSha256 = sha256(Buffer.from(`${audit.sha256}\n${sha256(readFileSync(module))}`));
+    report.build.commands = candidateBuildCommands.map(command => command
+      .replace("--test protocol_proxy", "--test all protocol_proxy::")
+      .replace("--test watcher", "--test all watcher::"));
+    report.build.commands.splice(report.build.commands.length - 3, 0, "test --locked -p codex-plus-core --lib anticodex_ -- --test-threads=1");
+    if (mode === "missing") delete audit.bundleSha256;
+    writeJson(fixture.preparedCandidateReport, report);
+    if (mode === "changed") writeBytes(module, Buffer.from("export const revision = 2;\n"));
+    const result = runInstaller(fixture);
+    if (mode !== "valid") assertFailed(result, /pinned CodexPlusPlus release binary is missing/i);
+    else assertSucceeded(result);
+  }
+});
+
 test("automatic selection rejects a prepared candidate whose identity is not accepted", (t) => {
   const fixture = createInstallerSandbox(t);
   const expectedHash = sha256(trustedBinary);
@@ -673,6 +699,10 @@ test("host sync stages, activates and recovers CodexPlusPlus with the copied Cod
   assert.match(sync, /Test-AntiCodexComponentLaunchability -ComponentRoot \$candidateComponent/);
   assert.ok(sync.indexOf("Test-AntiCodexComponentLaunchability -ComponentRoot $candidateComponent") < stopStage);
   assert.match(sync, /EnvironmentVariables\["CODEX_PLUS_STATE_DIR"\]/);
+  assert.match(sync, /EnvironmentVariables\["ANTICODEX_ISOLATED_INSTANCE"\]\s*=\s*"1"/);
+  assert.match(sync, /EnvironmentVariables\["CODEX_HOME"\]\s*=\s*\$probeCodexHome/);
+  assert.match(sync, /EnvironmentVariables\["CODEX_HOME_DIR"\]\s*=\s*\$probeCodexHome/);
+  assert.ok(sync.includes('EnvironmentVariables["CODEX_SQLITE_HOME"] = $probeCodexHome'));
   assert.match(sync, /codexplusplus-launch-probe-/);
   assert.match(sync, /Wait-AntiCodexComponentRelease/);
   assert.match(sync, /Move-FixedUpdateDirectory -Source \$candidateComponent -Destination \$activeComponent/);
@@ -760,13 +790,16 @@ test("runtime sync carries the manifest-defined CodexPlusPlus patch set", () => 
 
 test("Anti-Codex routing patch follows native model slots without overriding ordinary CodexPlusPlus", () => {
   const patch = codexPlusPlusPatches.text;
-  const hunk = patchWindow("select_anticodex_relay_for_model");
+  const start = acceptedProtocolProxySource.indexOf("pub(crate) fn select_anticodex_relay_for_model(");
+  const end = acceptedProtocolProxySource.indexOf("\n#[cfg(test)]", start);
+  assert.ok(start >= 0 && end > start, "reserved-slot selection must have an inspectable production body");
+  const selection = acceptedProtocolProxySource.slice(start, end);
   assert.match(patch, /select_anticodex_relay_for_model/);
   assert.match(patch, /anticodex\/antigravity/);
   assert.match(patch, /anticodex\/third-party/);
   assert.match(patch, /directed_relay\.is_none\(\)/);
   assert.doesNotMatch(patch, /CODEX_PLUS_FIXED_MODEL|apply_fixed_model_override/);
-  assert.doesNotMatch(hunk, /tool_choice|previous_response_id|retry/i);
+  assert.doesNotMatch(selection, /tool_choice|previous_response_id|retry/i);
 });
 
 test("native compaction routing consumes the current Codex HTTP metadata header", () => {
@@ -777,102 +810,75 @@ test("native compaction routing consumes the current Codex HTTP metadata header"
     acceptedProtocolProxySource,
     /fn request_is_codex_compaction\([\s\S]{0,180}turn_metadata\.is_some_and\(serialized_metadata_marks_codex_compaction\)/,
   );
-  assert.match(acceptedProtocolProxySource, /fn header_marked_compaction_uses_current_third_party_selection/);
-  assert.match(acceptedProtocolProxySource, /fn ordinary_turn_header_does_not_follow_a_different_live_selection/);
+  assert.match(acceptedProtocolProxySource, /fn http_compaction_metadata_uses_current_thread_over_old_routable_request/);
+  assert.match(acceptedProtocolProxySource, /fn direct_provider_keeps_local_compaction_metadata_without_forwarding_identity/);
+  assert.match(acceptedLauncherSource, /session_headers\.clear_forwarded_client_identity\(\)/);
 });
 
 test("native compaction routing follows the current task model without restart", () => {
-  const patch = codexPlusPlusPatches.text;
-  assert.match(patch, /latest_thread_model_from_rollout/);
-  assert.match(patch, /ANTICODEX_THREAD_SELECTION_TAIL_BYTES/);
-  assert.match(patch, /Uuid::parse_str/);
-  assert.match(patch, /latest_thread_selection_beats_previous_routable_model_for_compaction/);
-  assert.match(patch, /latest_thread_antigravity_selection_beats_previous_third_party_compaction_model/);
-  assert.match(patch, /latest_thread_selection_does_not_rewrite_an_ordinary_turn/);
+  assert.match(acceptedProtocolProxySource, /latest_thread_model_from_rollout/);
+  assert.match(acceptedProtocolProxySource, /ANTICODEX_THREAD_SELECTION_TAIL_BYTES/);
+  assert.match(acceptedProtocolProxySource, /Uuid::parse_str/);
+  assert.match(acceptedProtocolProxySource, /fn http_compaction_metadata_uses_current_thread_over_old_routable_request/);
+  assert.match(acceptedProtocolProxySource, /fn antigravity_thread_selection_overrides_old_third_party_compaction_model/);
+  assert.match(acceptedProtocolProxySource, /fn global_model_is_last_fallback_and_ordinary_requests_are_unchanged/);
 });
 
 test("image tool output patch preserves images as multimodal Chat content", () => {
-  const patch = codexPlusPlusPatches.text;
-  const hunk = patchWindow("response_output_to_chat_content");
-  assert.match(patch, /response_output_to_chat_content/);
-  assert.match(patch, /TOOL_IMAGE_PLACEHOLDER/);
-  assert.match(patch, /"type": "image_url"/);
-  assert.match(patch, /responses_input_preserves_mcp_image_tool_output_as_multimodal_content/);
-  assert.match(patch, /responses_input_preserves_direct_view_image_output_without_textual_base64/);
-  assert.doesNotMatch(hunk, /previous_response_id|retry|task control/i);
+  assert.match(acceptedProtocolProxySource, /relocate_tool_output_images/);
+  assert.match(acceptedProtocolProxySource, /take_images_from_tool_message/);
+  assert.match(acceptedProtocolProxySource, /"type": "image_url"/);
+  assert.match(acceptedProtocolProxyTests, /fn tool_output_image_becomes_image_url_part_not_text/);
+  assert.match(acceptedProtocolProxyTests, /fn custom_tool_call_output_image_is_also_converted/);
 });
 
 test("structured patch guidance tells chat providers to avoid Windows shell wrappers", () => {
-  const patch = codexPlusPlusPatches.text;
-  const hunk = patchWindow("PATCH_TOOL_SYSTEM_GUIDANCE", 300, 1200);
-  assert.match(patch, /Call this structured function tool directly/);
-  assert.match(patch, /Do not run apply_patch through shell_command/);
-  assert.match(patch, /especially on Windows/);
-  assert.match(patch, /let mut apply_patch_tools = Vec::new\(\)/);
-  assert.match(patch, /apply_patch_raw_schema/);
-  assert.match(patch, /"required": \["patch"\]/);
-  assert.match(patch, /chat_completion_response_reconstructs_exact_apply_patch_function_call/);
-  assert.match(patch, /let action = name\.strip_prefix\("apply_patch_"\)\?/);
-  assert.match(patch, /chat_completion_response_keeps_ordinary_suffix_named_custom_tools/);
-  assert.match(patch, /artifact_delete_file/);
-  assert.match(patch, /database_batch/);
-  assert.match(patch, /accumulate_streamed_identity/);
-  assert.match(patch, /chat_sse_accumulates_fragmented_tool_identity_before_emitting_added/);
-  assert.match(patch, /guide_command_tools_away_from_file_edits/);
-  assert.match(patch, /Do not use this command tool for file edits/);
-  assert.match(patch, /"exec_command" \| "shell_command"/);
-  assert.doesNotMatch(hunk, /previous_response_id|session reset|retry policy/i);
+  assert.match(acceptedProtocolProxySource, /Do not invoke apply_patch through exec_command, shell_command/);
+  assert.match(acceptedProtocolProxySource, /Windows destructive filesystem safety/);
+  assert.match(acceptedProtocolProxySource, /generic_custom_proxy_tool/);
+  assert.match(acceptedProtocolProxySource, /"required": \["input"\]/);
+  assert.match(acceptedProtocolProxyTests, /fn chat_completion_response_reconstructs_apply_patch_proxy_call/);
+  assert.match(acceptedProtocolProxyTests, /fn chat_sse_waits_for_custom_tool_name_before_assigning_item_id/);
+  assert.match(acceptedProtocolProxySource, /guide_command_tools_away_from_file_edits/);
+  assert.match(acceptedProtocolProxySource, /Do not use this command tool for file edits/);
+  assert.match(acceptedProtocolProxySource, /command_policy_checked_arguments/);
+  assert.match(acceptedProtocolProxySource, /"exec_command" \| "shell_command"/);
 });
 
 test("late reasoning patch preserves one active streamed output item", () => {
   assert.match(
     acceptedProtocolProxySource,
-    /fn push_reasoning_delta_into\([\s\S]{0,180}if self\.text\.added \{\s*return;/,
+    /fn push_reasoning_delta_into\([^\{]*\{\s*(?:\/\/[^\n]*\n\s*)*if self\.text\.added \{\s*return;/,
   );
   const testStart = acceptedProtocolProxyTests.indexOf(
-    "fn chat_sse_does_not_interleave_late_reasoning_with_started_text",
+    "fn anticodex_chat_sse_does_not_interleave_late_reasoning_with_started_text",
   );
   const testEnd = acceptedProtocolProxyTests.indexOf("\n#[test]", testStart + 1);
   const focusedTest = acceptedProtocolProxyTests.slice(testStart, testEnd);
   assert.ok(testStart >= 0 && testEnd > testStart);
-  assert.match(focusedTest, /matches\("event: response\.output_item\.added"\)[\s\S]*\.count\(\),\s*1/);
+  assert.match(focusedTest, /matches\("event: response\.output_item\.added"\)[\s\S]*\.count\(\),\s*if early_reasoning \{\s*2\s*\} else \{\s*1\s*\}/);
   assert.match(focusedTest, /Starting work\. Continuing now\./);
   assert.match(focusedTest, /assert!\(!converted\.contains\("This arrived after visible text\."\)\)/);
 });
 
 test("loopback cancellation transport preserves graceful normal completion", () => {
-  assert.match(acceptedLoopbackHttpSource, /pool_max_idle_per_host\(0\)/);
-  assert.match(acceptedProtocolProxySource, /open_cancel_aware_loopback_responses_proxy_request/);
-  assert.match(acceptedProtocolProxySource, /open_cancel_aware_loopback_chat_completions_proxy_request/);
-  assert.match(
-    acceptedProtocolProxyTests,
-    /open_cancel_aware_loopback_responses_proxy_request\([\s\S]{0,500}assert_eq!\(upstream\.status_code, 200\)/,
-  );
-  const forwardStart = acceptedLauncherSource.indexOf("async fn forward_protocol_proxy_stream");
-  const forwardEnd = acceptedLauncherSource.indexOf("\nfn persist_response_history", forwardStart);
-  const productionForwarder = acceptedLauncherSource.slice(forwardStart, forwardEnd);
-  assert.ok(forwardStart >= 0 && forwardEnd > forwardStart);
-  const raceStart = acceptedLauncherSource.indexOf("async fn await_upstream_or_downstream_disconnect");
-  const raceEnd = acceptedLauncherSource.indexOf("\nasync fn handle_protocol_proxy_connection", raceStart);
-  const cancellationRace = acceptedLauncherSource.slice(raceStart, raceEnd);
-  assert.ok(raceStart >= 0 && raceEnd > raceStart);
-  assert.ok(
-    /tokio::select!/.test(cancellationRace) && /wait_for_downstream_disconnect/.test(cancellationRace),
-    "the shared upstream wait must race upstream reads with downstream disconnects",
-  );
+  assert.match(acceptedLauncherSource, /async fn wait_for_tcp_downstream_disconnect[\s\S]{0,400}stream\.peek\(/);
+  assert.match(acceptedLauncherSource, /async fn await_tcp_upstream_or_downstream_disconnect[\s\S]{0,500}tokio::select!/);
+  assert.match(acceptedLauncherSource, /async fn await_upstream_or_downstream_disconnect[\s\S]{0,500}downstream\.wait_for_disconnect/);
+  assert.match(acceptedLauncherSource, /await_tcp_upstream_or_downstream_disconnect\(\s*downstream,\s*opening\s*,?\s*\)/);
+  assert.match(acceptedLauncherSource, /await_upstream_or_downstream_disconnect\(\s*stream,\s*upstream\.read_body\(\)/);
   assert.equal(
-    (productionForwarder.match(/await_upstream_or_downstream_disconnect\(/g) ?? []).length,
+    (acceptedLauncherSource.match(/(?:while let Some\(chunk\)\s*=\s*await_upstream_or_downstream_disconnect\(stream, chunks\.next\(\)\)|await_upstream_or_downstream_disconnect\(\s*stream,\s*with_upstream_stream_idle_timeout\(chunks\.next\(\),\s*idle_timeout\),?\s*\))/g) ?? []).length,
     3,
-    "native passthrough, native history and Chat forwarding must all use the cancellation race",
+    "native passthrough, observed Responses and Chat streaming must all monitor disconnects",
   );
-  assert.ok(acceptedLauncherSource.includes("await_upstream_or_downstream_disconnect(stream, open_upstream)"));
+  assert.match(acceptedLauncherSource, /async fn stalled_native_and_chat_upstreams_stop_after_downstream_disconnect/);
+  assert.match(acceptedLauncherSource, /async fn stalled_headers_and_nonstream_body_stop_when_client_closes/);
   assert.match(acceptedLauncherSource, /async fn successful_native_passthrough_and_chat_completion_are_preserved/);
-  assert.match(acceptedLauncherSource, /async fn chat_eof_and_error_events_are_not_completed_or_replayed/);
-  assert.match(
-    acceptedLauncherSource,
-    /async fn native_responses_clean_http_eof_without_completed_is_diagnosed_without_replay/,
-  );
-  const transportSource = `${acceptedLoopbackHttpSource}\n${acceptedProtocolProxySource}\n${acceptedLauncherSource}`;
+  assert.match(acceptedHistoryObserverSource, /fn failure_or_truncation_after_completed_wins_over_success/);
+  assert.match(acceptedHistoryObserverSource, /fn incomplete_or_missing_response_cannot_commit/);
+  assert.match(acceptedLauncherSource, /async fn completed_event_with_failed_response_cannot_commit/);
+  const transportSource = `${acceptedProtocolProxySource}\n${acceptedLauncherSource}`;
   assert.doesNotMatch(transportSource, /set_zero_linger|"abortive_loopback"/);
 });
 

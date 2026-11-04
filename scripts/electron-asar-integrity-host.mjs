@@ -2,16 +2,20 @@
 
 import {
   existsSync,
+  mkdtempSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const [mode, sourceArg, targetArg, originalHashArg, patchedHashArg] = process.argv.slice(2);
-if (!["--patch", "--verify"].includes(mode) || !sourceArg || !targetArg) {
-  console.error("Usage: node electron-asar-integrity-host.mjs <--patch|--verify> <source.exe> <target.exe> <original-hash> <patched-hash>");
+const [mode, sourceArg, targetArg, originalHashArg, patchedHashArg, brandOption] = process.argv.slice(2);
+if (!["--patch", "--verify"].includes(mode) || !sourceArg || !targetArg || (brandOption && brandOption !== "--brand")) {
+  console.error("Usage: node electron-asar-integrity-host.mjs <--patch|--verify> <source.exe> <target.exe> <original-hash> <patched-hash> [--brand]");
   process.exit(2);
 }
 
@@ -28,7 +32,6 @@ if (!existsSync(sourcePath) || !existsSync(targetPath)) {
 
 const source = readFileSync(sourcePath);
 const target = readFileSync(targetPath);
-if (source.length !== target.length) throw new Error("Source and isolated launcher sizes differ");
 
 const originalBytes = Buffer.from(originalHash, "ascii");
 const patchedBytes = Buffer.from(patchedHash, "ascii");
@@ -46,27 +49,57 @@ if (originalHash !== patchedHash && originalOffsets.length === 1 && patchedOffse
   throw new Error("Embedded Electron ASAR header hash is missing or ambiguous");
 }
 
+const legacyExpected = expected;
+let branded = false;
+if (brandOption === "--brand" || (mode === "--verify" && !target.equals(legacyExpected))) {
+  expected = brandExecutable(legacyExpected, targetPath);
+  branded = true;
+}
 if (mode === "--patch") {
-  if (!target.equals(source) && !target.equals(expected)) {
-    throw new Error("Isolated launcher differs from its source outside the ASAR header hash");
+  if (!target.equals(source) && !target.equals(legacyExpected) && !target.equals(expected)) {
+    throw new Error("Isolated launcher differs from its source outside the ASAR header hash or approved identity resources");
   }
   if (!target.equals(expected)) replaceAtomically(targetPath, expected);
 }
 
 const verified = readFileSync(targetPath);
 if (!verified.equals(expected)) {
-  throw new Error("Isolated launcher ASAR header hash patch is invalid");
+  const message = "Isolated launcher differs outside the approved ASAR and identity patches";
+  if (mode === "--verify") {
+    console.log(JSON.stringify({ ok: false, mode: "verify", error: message }));
+    process.exit(1);
+  }
+  throw new Error(message);
 }
 
 console.log(JSON.stringify({
   ok: true,
   mode: mode.slice(2),
   patched,
+  branded,
   offset: patched ? offset : null,
   bytes: verified.length,
   originalHash,
   patchedHash,
 }));
+
+function brandExecutable(bytes, target) {
+  if (process.platform !== "win32") throw new Error("Executable identity patch requires Windows");
+  const script = fileURLToPath(new URL("./patch-exe-identity.ps1", import.meta.url));
+  const icon = join(dirname(target), "resources", "icon.ico");
+  if (!existsSync(script) || !existsSync(icon)) throw new Error("Identity patcher or isolated icon is missing");
+  const directory = mkdtempSync(join(tmpdir(), "anticodex-identity-"));
+  try {
+    const fixture = join(directory, "expected.exe");
+    writeFileSync(fixture, bytes);
+    const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
+      "-ExePath", fixture, "-IconPath", icon], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
+    if (result.status !== 0) throw new Error(`Executable identity patch failed: ${result.stderr || result.error?.message || result.stdout}`);
+    return readFileSync(fixture);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 
 function normalizedHash(value, label) {
   const hash = String(value ?? "").trim().toLowerCase();

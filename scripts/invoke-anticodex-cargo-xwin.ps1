@@ -54,18 +54,26 @@ $dockerArgs = @(
     "--label", "com.anticodex.ephemeral-build=true",
     "--env", "CARGO_BUILD_JOBS=1",
     "--env", "CARGO_PROFILE_TEST_DEBUG=0",
+    "--env", "CARGO_TARGET_DIR=/build-cache",
     "--mount", "type=bind,source=$resolvedWorktree,destination=/work",
     "--volume", "anticodex-cargo-xwin-cache:/root/.cache/cargo-xwin",
     "--volume", "anticodex-cargo-git:/usr/local/cargo/git",
     "--volume", "anticodex-cargo-registry:/usr/local/cargo/registry",
+    "--volume", "anticodex-cargo-target:/build-cache",
     "--workdir", "/work"
 )
-if ($bootstrapToolchain) {
+if ($bootstrapToolchain -or ($CargoArguments.Count -ge 2 -and $CargoArguments[0] -ceq "xwin" -and $CargoArguments[1] -ceq "build" -and $CargoArguments -contains "codex-plus-launcher")) {
     $cargoArgsText = ($CargoArguments | ForEach-Object {
         "'" + ([string]$_).Replace("'", "'\\''") + "'"
     }) -join " "
     $tool = if ($CargoArguments[0] -ceq "xwin") { "cargo-xwin" } else { "cargo" }
-    $bootstrapCommand = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang llvm lld && ln -sf `$(command -v clang-19 || command -v clang) /usr/local/bin/clang-cl && ln -sf `$(command -v llvm-lib-19 || command -v llvm-lib || command -v llvm-ar) /usr/local/bin/llvm-lib && export PATH=/usr/local/cargo/bin:`$PATH CC_x86_64_pc_windows_msvc=clang-cl AR_x86_64_pc_windows_msvc=llvm-lib && exec $tool $cargoArgsText"
+    $bootstrapCommand = "export PATH=/usr/local/cargo/bin:`$PATH && $tool $cargoArgsText"
+    if ($bootstrapToolchain) {
+        $bootstrapCommand = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang llvm lld && ln -sf `$(command -v clang-19 || command -v clang) /usr/local/bin/clang-cl && ln -sf `$(command -v llvm-lib-19 || command -v llvm-lib || command -v llvm-ar) /usr/local/bin/llvm-lib && export PATH=/usr/local/cargo/bin:`$PATH CC_x86_64_pc_windows_msvc=clang-cl AR_x86_64_pc_windows_msvc=llvm-lib && $bootstrapCommand"
+    }
+    if ($CargoArguments.Count -ge 2 -and $CargoArguments[1] -ceq "build" -and $CargoArguments -contains "codex-plus-launcher") {
+        $bootstrapCommand += " && mkdir -p /work/target/x86_64-pc-windows-msvc/release && cp /build-cache/x86_64-pc-windows-msvc/release/codex-plus-plus.exe /work/target/x86_64-pc-windows-msvc/release/codex-plus-plus.exe"
+    }
     $dockerArgs += @(
         "--entrypoint", "/bin/sh",
         $image,

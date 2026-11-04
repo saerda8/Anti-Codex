@@ -3,6 +3,25 @@ import assert from "node:assert/strict";
 
 import { patchCompiledProfileDropdownSettings } from "../../scripts/brand-profile-dropdown.mjs";
 
+test("webpack profile keeps Settings and adds a working Manager entry", () => {
+  const source = 'function render(S,a,x,E,b,q,Z){let v,k;S[56]===Symbol.for("react.memo_cache_sentinel")?(v=(0,a.jsx)(x.A,{id:"codex.profileDropdown.settingsPage",defaultMessage:"Settings",description:"Menu item to open Codex settings page"}),S[56]=v):v=S[56],S[57]!==Z||S[58]!==q?(k=(0,a.jsx)(E.tJ,{leftIcon:b,keyboardShortcut:q,onClick:Z,children:v}),S[57]=Z,S[58]=q,S[59]=k):k=S[59];return k}';
+  const patched = patchCompiledProfileDropdownSettings(source);
+  assert.match(patched, /anticodex-manager/);
+  assert.equal(Buffer.byteLength(patched), Buffer.byteLength(source));
+  assert.equal(patchCompiledProfileDropdownSettings(patched), patched);
+  let settingsOpened = 0;
+  let managerOpened = 0;
+  const render = new Function("globalThis", `${patched};return render;`)({__ANTICODEX_OPEN_MANAGER__: () => managerOpened++});
+  const items = render(Array(100).fill(Symbol.for("react.memo_cache_sentinel")), {jsx: (component, props, key) => ({component, props, key})}, {A: "message"}, {tJ: "item"}, "icon", "Ctrl+,", () => settingsOpened++);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].props.children.props.defaultMessage, "Settings");
+  items[0].props.onClick();
+  items[1].props.onClick();
+  assert.equal(settingsOpened, 1);
+  assert.equal(managerOpened, 1);
+  assert.equal(items[1].props.children, "管理");
+});
+
 const latestProfileDropdownFixture = "function dn(e){let t=(0,K.c)(32),{isPetVisible:s,onOpenSettings:d,onTogglePet:p,settingsShortcut:m}=e;let C;t[13]!==p?(C=(0,q.jsx)(M,{electron:!0,children:(0,q.jsx)(F,{LeftIcon:rn,onClick:p})}),t[13]=p,t[15]=C):C=t[15];let w;t[16]===Symbol.for(`react.memo_cache_sentinel`)?(w=(0,q.jsx)(x,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),t[16]=w):w=t[16];let T;t[17]!==d||t[18]!==m?(T=(0,q.jsx)(F,{LeftIcon:it,keyboardShortcut:m,onClick:d,children:w}),t[17]=d,t[18]=m,t[19]=T):T=t[19];let E;return(D=(0,q.jsxs)(`div`,{children:[C,T,E]}),D)}";
 
 const codex2738ProfileDropdownFixture = "function In(e){let t=(0,Rn.c)(44),{onOpenSettings:p,settingsShortcut:y}=e;let re;t[26]===Symbol.for(`react.memo_cache_sentinel`)?(re=(0,q.jsx)(P,{id:`codex.profileDropdown.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`}),t[26]=re):re=t[26];let ie;t[27]!==p||t[28]!==y?(ie=(0,q.jsx)(A,{leftIcon:ne,keyboardShortcut:y,onClick:p,children:re}),t[27]=p,t[28]=y,t[29]=ie):ie=t[29];let ae;return (0,q.jsxs)(`div`,{children:[ie,null,ae]})}";

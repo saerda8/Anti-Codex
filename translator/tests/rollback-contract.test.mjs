@@ -658,7 +658,8 @@ test("rollback host validation covers Anti-Codex branding, icons, manifest, hash
   assert.match(validator, /Test-AntiCodexIconPalette/);
   assert.match(validator, /asarIntegrity/);
   assert.match(validator, /electron-asar-integrity-host\.mjs/);
-  assert.match(validator, /isolated ASAR integrity hash/);
+  assert.match(validator, /approved ASAR and identity patches/);
+  assert.match(validator, /executableIdentityRevision/);
   assert.match(validator, /required\.antiCodexExe/);
   assert.match(validator, /required\.codexHost/);
   assert.match(validator, /Anti-Codex\.exe/);

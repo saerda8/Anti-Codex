@@ -1214,6 +1214,7 @@ test("copied client environment removes original Codex pointers and provider sec
   const supervisorChild = buildSupervisorChildEnvironment(plan, {
     GLOBAL_CODEX_HOME: "C:\\Users\\XD\\.codex",
     DEEPCODEX_SHARED_CODEX_HOME: "C:\\Users\\XD\\.codex",
+    CODEX_SQLITE_HOME: "C:\\Users\\XD\\.codex",
     RUST_LOG: "info",
     CODEX_ELECTRON_DEV_PARENT_PID: "1234",
     CODEX_ELECTRON_DEV_WEBVIEW_PID: "5678",
@@ -1226,6 +1227,8 @@ test("copied client environment removes original Codex pointers and provider sec
     Path: "C:\\Windows\\System32",
   });
   assert.equal(supervisorChild.CODEX_PLUS_STATE_DIR, plan.paths.codexPlusPlusState);
+  assert.equal(supervisorChild.ANTICODEX_ISOLATED_INSTANCE, "1");
+  assert.equal(supervisorChild.CODEX_SQLITE_HOME, plan.paths.codexHome);
   assert.equal(
     supervisorChild.ANTICODEX_PROMPT_POLICY_PATH,
     join(plan.paths.stateRoot, "prompt-policy.json"),
@@ -1254,6 +1257,7 @@ test("copied client environment removes original Codex pointers and provider sec
     "CODEX_PLUS_LAUNCHER_GUARD_PORT",
     "CODEX_PLUS_MANAGER_GUARD_PORT",
     "ANTICODEX_PROMPT_POLICY_PATH",
+    "ANTICODEX_ISOLATED_INSTANCE",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "UPSTREAM_API_KEY",
