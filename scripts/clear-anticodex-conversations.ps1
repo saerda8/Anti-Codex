@@ -2,7 +2,7 @@
 param(
     [string]$StateRoot = $(Join-Path $env:APPDATA "anticodex"),
     [string]$RuntimeRoot = $(Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime"),
-    [string]$WorkspaceRoot = "G:\Trae-Project\Anti-Codex\deepcodex",
+    [string]$WorkspaceRoot = (Split-Path -Parent $PSScriptRoot),
     [string]$BackupRoot = "",
     [int]$StopTimeoutSec = 8,
     [int]$RestartTimeoutSec = 120,

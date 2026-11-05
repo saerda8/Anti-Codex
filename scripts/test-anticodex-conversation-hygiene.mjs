@@ -33,7 +33,7 @@ Options:
 const startedAt = Date.now();
 const stateRoot = resolve(args.get("--state-root") || join(process.env.APPDATA || os.tmpdir(), "anticodex"));
 const reportRoot = resolve(args.get("--report-root") || join(stateRoot, "reports"));
-const workspaceRoot = resolve(args.get("--workspace-root") || "G:\\Trae-Project\\Anti-Codex\\deepcodex");
+const workspaceRoot = resolve(args.get("--workspace-root") || resolve(import.meta.dirname, ".."));
 const codexHome = join(stateRoot, "codex-home-deepseek-app");
 const sessionRoots = [join(codexHome, "sessions"), join(stateRoot, "sessions")];
 const maxFiles = Math.max(1, Number(args.get("--max-files") || 2000));
