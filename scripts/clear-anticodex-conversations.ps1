@@ -2,7 +2,7 @@
 param(
     [string]$StateRoot = $(Join-Path $env:APPDATA "anticodex"),
     [string]$RuntimeRoot = $(Join-Path $env:LOCALAPPDATA "Anti-Codex\runtime"),
-    [string]$WorkspaceRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$WorkspaceRoot = "",
     [string]$BackupRoot = "",
     [int]$StopTimeoutSec = 8,
     [int]$RestartTimeoutSec = 120,
@@ -822,7 +822,8 @@ $globalState = Read-JsonObject $globalStatePath
 $globalStateBak = Read-JsonObject $globalStateBakPath
 $codexGlobalState = Read-JsonObject $codexGlobalStatePath
 $codexGlobalStateBak = Read-JsonObject $codexGlobalStateBakPath
-$workspaceRootFull = if ($WorkspaceRoot) { Normalize-Path $WorkspaceRoot } else { "" }
+$defaultWorkspaceRoot = if ($PSScriptRoot -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) ".git"))) { Split-Path -Parent $PSScriptRoot } else { "" }
+$workspaceRootFull = if ($WorkspaceRoot) { Normalize-Path $WorkspaceRoot } elseif ($defaultWorkspaceRoot) { Normalize-Path $defaultWorkspaceRoot } else { "" }
 
 $savedWorkspaceRoots = @(ConvertTo-Array -Value (Get-JsonValue $globalState "electron-saved-workspace-roots" (Get-JsonValue $globalStateBak "electron-saved-workspace-roots" (Get-JsonValue $codexGlobalState "electron-saved-workspace-roots" (Get-JsonValue $codexGlobalStateBak "electron-saved-workspace-roots" @())))))
 $activeWorkspaceRoots = @(ConvertTo-Array -Value (Get-JsonValue $globalState "active-workspace-roots" (Get-JsonValue $globalStateBak "active-workspace-roots" (Get-JsonValue $codexGlobalState "active-workspace-roots" (Get-JsonValue $codexGlobalStateBak "active-workspace-roots" @())))))
