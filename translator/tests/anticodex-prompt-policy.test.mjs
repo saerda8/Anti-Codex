@@ -20,7 +20,7 @@ const codexPlusPlusPatches = readCodexPlusPlusPatchManifest(projectRoot);
 
 function cumulativePatchGuidance() {
   return codexPlusPlusPatches.text.match(
-    /\+const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/,
+    /\+(?:pub\(crate\)\s+)?const PATCH_TOOL_SYSTEM_GUIDANCE: &str = "([^"]+)";/,
   )?.[1] || "";
 }
 

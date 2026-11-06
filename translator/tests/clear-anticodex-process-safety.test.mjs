@@ -72,6 +72,15 @@ test("conversation cleanup binds identity query and termination to one native pr
   assert.match(stop, /throw "Refusing to stop PID \$processId because its handle-bound identity changed\."/);
 });
 
+test("conversation cleanup clears nested thread references after moving rollout sessions", () => {
+  assert.match(source, /\$conversationStatePropertyPattern\s*=\s*['\"]\^\(\?:thread-/);
+  assert.match(source, /electron-persisted-atom-state/);
+  assert.match(source, /codex-writing-block-deleted-thread-v1/);
+  assert.match(source, /queued-follow-ups/);
+  assert.match(source, /sidebar-project-thread-orders/);
+  assert.match(source, /pinned-thread-ids/);
+});
+
 test("candidate ownership is strict and script hosts require an explicit canonical script path", () => {
   const candidates = functionSource("Get-AntiCodexProcesses");
   const ownership = functionSource("Get-AntiCodexProcessOwnership");

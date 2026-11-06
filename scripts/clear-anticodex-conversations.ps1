@@ -893,7 +893,8 @@ if (-not $WhatIfOnly) {
     [System.IO.File]::WriteAllText((Join-Path $stateRootFull "response-history.json"), '{"entries":[]}', [System.Text.UTF8Encoding]::new($false))
 
     $newGlobalState = if ($codexGlobalState) { $codexGlobalState } elseif ($globalState) { $globalState } else { [pscustomobject]@{} }
-    foreach ($propertyName in @($newGlobalState.PSObject.Properties.Name | Where-Object { $_ -like "thread-client-id-v1:*" })) {
+    $conversationStatePropertyPattern = '^(?:thread-|codex-writing-block-deleted-thread-v1:|queued-follow-ups$|electron-thread-read-state-v1$|sidebar-project-thread-orders$|pinned-thread-ids$)'
+    foreach ($propertyName in @($newGlobalState.PSObject.Properties.Name | Where-Object { $_ -match $conversationStatePropertyPattern })) {
         Remove-JsonProperty -Object $newGlobalState -Name $propertyName
     }
     Add-JsonProperty -Object $newGlobalState -Name "electron-saved-workspace-roots" -Value @($savedWorkspaceRoots)
@@ -916,7 +917,7 @@ if (-not $WhatIfOnly) {
     Add-JsonProperty -Object $newGlobalState -Name "electron:onboarding-welcome-pending" -Value $false
     Add-JsonProperty -Object $newGlobalState -Name "permissions-mode" -Value "full-access"
     $atomState = Get-JsonValue $newGlobalState "electron-persisted-atom-state" ([pscustomobject]@{})
-    foreach ($propertyName in @($atomState.PSObject.Properties.Name | Where-Object { $_ -like "thread-client-id-v1:*" })) {
+    foreach ($propertyName in @($atomState.PSObject.Properties.Name | Where-Object { $_ -match $conversationStatePropertyPattern })) {
         Remove-JsonProperty -Object $atomState -Name $propertyName
     }
     Add-JsonProperty -Object $atomState -Name "composer-permission-mode-visibility" -Value ([pscustomobject]@{
