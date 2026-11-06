@@ -896,7 +896,7 @@ export function patchSettingsExternalNavigationRender(text) {
       + padReplacement(currentProp[0].groups.value, "0")
       + source.slice(valueIndex + currentProp[0].groups.value.length);
   }
-  const currentCall = currentProp.filter((match) => source.startsWith("})", match.index + match[0].length));
+  const currentCall = currentProp.filter((match) => source.slice(match.index + match[0].length).trimStart().startsWith("})"));
   if (account.length === 1 && security.length === 0 && modernExternalSecurity.length === 0 && currentCall.length === 1) {
     source = source.slice(0, account[0].index)
       + padReplacement(account[0][0], "/*anticodex-hide-external-account*/null")
