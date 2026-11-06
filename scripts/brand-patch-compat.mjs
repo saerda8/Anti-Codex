@@ -35,7 +35,7 @@ const SETTINGS_SECURITY_ENABLED_PATTERN =
 const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
   /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
 const SETTINGS_SECURITY_ENABLED_PROP_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)/g;
-const SETTINGS_SECURITY_ENABLED_CALL_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)\}\)/g;
+const SETTINGS_SECURITY_ENABLED_CALL_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)(?=\}\))/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN =
   /\{href:[\w$.]+\.securitySettings\.href,id:(?<quote>[`\"])external:security-settings\k<quote>,kind:\k<quote>external\k<quote>,label:[\w$]+\}/g;
