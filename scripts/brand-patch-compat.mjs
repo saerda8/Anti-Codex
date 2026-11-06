@@ -23,7 +23,7 @@ const STARTUP_MCP_CONFIG_RELOAD_PATTERN =
 const STARTUP_MCP_CONFIG_RELOAD_DEFAULT_PATTERN =
   /async function [\w$]+\(\{(?=[^{}]{0,1600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,1600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,1600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\(`config\/batchWrite`,\{edits:[\w$]+,expectedVersion:null,filePath:null,reloadUserConfig:\k<reload>\}\)/;
 const STARTUP_MCP_CONFIG_RELOAD_LATEST_PATTERN =
-  /async function [\w$]+\(\{(?=[^{}]{0,2600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,2600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,2600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\((?<quote>[`\"])config\/batchWrite\k<quote>,\{[\s\S]{0,2200}?reloadUserConfig:\k<reload>\}\)/;
+  /async function(?: [\w$]+)?\(\{(?=[^{}]{0,2600}\bappServerConnection:(?<connection>[\w$]+))(?=[^{}]{0,2600}\breloadUserConfig:(?<reload>[\w$]+)=!(?<value>[01]))[^{}]{0,2600}\}\)\{[\s\S]{0,20000}?await \k<connection>\.sendAppServerRequest\((?<quote>[`\"])config\/batchWrite\k<quote>,\{[\s\S]{0,2200}?reloadUserConfig:\k<reload>\}\)/;
 const SETTINGS_EXTERNAL_NAVIGATION_PATTERN =
   /(?<binding>[\w$]+)=\{account:\{href:(?<quote>[`\"])https:\/\/chatgpt\.com\/#settings\k<quote>,icon:(?<accountIcon>[\w$.]+),message:(?<messages>[\w$]+)\.account\},securitySettings:\{href:\k<quote>https:\/\/chatgpt\.com\/open-security-settings\k<quote>,icon:(?<securityIcon>[\w$.]+),message:\k<messages>\.securitySettings\}\}/g;
 const SETTINGS_EXTERNAL_NAVIGATION_PATCHED_PATTERN =
@@ -34,6 +34,8 @@ const SETTINGS_SECURITY_ENABLED_PATTERN =
   /(?<prefix>\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:)(?<value>[A-Za-z_$][\w$]*)(?<suffix>(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\))/g;
 const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
   /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
+const SETTINGS_SECURITY_ENABLED_PROP_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)/g;
+const SETTINGS_SECURITY_ENABLED_CALL_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)\}\)/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN =
   /\{href:[\w$.]+\.securitySettings\.href,id:(?<quote>[`\"])external:security-settings\k<quote>,kind:\k<quote>external\k<quote>,label:[\w$]+\}/g;
@@ -876,7 +878,10 @@ export function hasSettingsExternalNavigationRenderPatch(text) {
   const modern = allMatches(source, SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN).length === 1
     && allMatches(source, SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN).length === 1
     && allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN).length === 0;
-  return legacy || modern;
+  const current = allMatches(source, SETTINGS_SECURITY_ENABLED_PROP_PATTERN).length === 1
+    && !/securitySettingsEnabled:[A-Za-z_$][\w$]*/.test(source.replace("securitySettingsEnabled:0", ""));
+  const currentCallPatched = /securitySettingsEnabled:0\}\)/.test(source);
+  return legacy || modern || current || currentCallPatched;
 }
 
 export function patchSettingsExternalNavigationRender(text) {
@@ -885,6 +890,20 @@ export function patchSettingsExternalNavigationRender(text) {
   const account = allMatches(source, SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATTERN);
   const security = allMatches(source, SETTINGS_SECURITY_ENABLED_PATTERN);
   const modernExternalSecurity = allMatches(source, SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN);
+  const currentProp = allMatches(source, SETTINGS_SECURITY_ENABLED_PROP_PATTERN);
+  if (account.length === 0 && security.length === 0 && modernExternalSecurity.length === 0 && currentProp.length === 1) {
+    const valueIndex = currentProp[0].index + currentProp[0][0].indexOf(currentProp[0].groups.value);
+    return source.slice(0, valueIndex)
+      + padReplacement(currentProp[0].groups.value, "0")
+      + source.slice(valueIndex + currentProp[0].groups.value.length);
+  }
+  const currentCall = allMatches(source, SETTINGS_SECURITY_ENABLED_CALL_PATTERN);
+  if (account.length === 0 && security.length === 0 && modernExternalSecurity.length === 0 && currentCall.length === 1) {
+    const valueIndex = currentCall[0].index + currentCall[0][0].indexOf(currentCall[0].groups.value);
+    return source.slice(0, valueIndex)
+      + padReplacement(currentCall[0].groups.value, "0")
+      + source.slice(valueIndex + currentCall[0].groups.value.length);
+  }
   if (account.length === 0 && security.length === 1 && modernExternalSecurity.length === 1) {
     const valueIndex = security[0].index + security[0].groups.prefix.length;
     return source.slice(0, valueIndex)
@@ -1172,9 +1191,9 @@ export function patchPrimaryWindowRestoreRepaint(text) {
 }
 
 export function hasPatchedAuthRequirement(text) {
-  return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===[`"]chatgpt[`"]\?\1\.account\.email:null/.test(
-    String(text ?? ""),
-  );
+  const source = String(text ?? "");
+  return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===[`"]chatgpt[`"]\?\1\.account\.email:null/.test(source)
+    || /[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!1/.test(source);
 }
 
 const MODERN_LOCAL_MODEL_AVAILABILITY_PATTERN = /function [\w$]+\(\{additionalAvailableModels:(?<additional>[\w$]+),apiKeyDaybreakSupported:(?<daybreak>[\w$]+)(?:=!1)?,authMethod:(?<auth>[\w$]+),availableModels:(?<available>[\w$]+),hasConfiguredModelCatalog:(?<catalog>[\w$]+),isCustomModelProvider:(?<custom>[\w$]+),model:(?<model>[\w$]+),useHiddenModels:(?<hidden>[\w$]+)\}\)\{let (?<cyber>[\w$]+)=\k<model>\.availableAccessPrograms\?\.cyber;return \k<auth>===`apikey`&&!\k<daybreak>&&\k<cyber>!=null&&\k<cyber>\.length>0&&!\k<cyber>\.includes\(`standard`\)\?!1:\k<additional>\?\.has\(\k<model>\.model\)===!0\|\|\k<model>\.model!==`codex-auto-review`&&\(\k<catalog>&&!\k<model>\.hidden\|\|\((?<gate>\k<hidden>&&!\k<custom>&&\k<auth>!==`amazonBedrock`|!1\s*)\?\k<available>\.has\(\k<model>\.model\)\|\|\k<auth>===`apikey`&&\k<daybreak>&&!\k<model>\.hidden&&\k<cyber>\?\.some\((?<item>[\w$]+)=>\k<item>!==`standard`\)===!0:!\k<model>\.hidden\)\)\}/;
@@ -1237,7 +1256,8 @@ export function patchLocalModelAvailability(text) {
 
 export function hasModernModelUpgradeDataSurface(text) {
   const source = String(text ?? "");
-  return /modelUpgrades:(?<data>[\w$]+)\.model_upgrades,defaultSliderUpgrades:\k<data>\.default_slider_upgrades/.test(source)
+  return (/modelUpgrades:(?<data>[\w$]+)\.model_upgrades,defaultSliderUpgrades:\k<data>\.default_slider_upgrades/.test(source)
+      || /modelUpgrades:[\w$]+\.model_upgrades\b/.test(source))
     && !source.includes("composer.modelUpgradeBanner.");
 }
 

@@ -342,6 +342,11 @@ function patchI18nLoadingGate(text) {
 
 function patchAuthRequirement(text) {
   let next = text;
+  const modernDefaults = [...next.matchAll(/[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!0/g)];
+  for (const match of modernDefaults.reverse()) {
+    const replacement = match[0].replace("!0", "!1");
+    next = next.slice(0, match.index) + replacement + next.slice(match.index + match[0].length);
+  }
   const webpackRequirement = /requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/g;
   const webpackRequirements = [...next.matchAll(webpackRequirement)];
   if (webpackRequirements.length) {
@@ -660,7 +665,7 @@ function findModelUpgradeBannerPatch(fd, header, dataOffset) {
       return [rel, patchModelUpgradeBanner];
     }
     legacyUi ||= text.includes("composer.modelUpgradeBanner.");
-    if (rel.startsWith("webview/assets/app-shared-") && hasModernModelUpgradeDataSurface(text)) modernData.push(rel);
+    if ((rel.startsWith("webview/assets/app-shared-") || rel.startsWith("webview/assets/async/")) && hasModernModelUpgradeDataSurface(text)) modernData.push(rel);
     if (rel.startsWith("webview/assets/app-initial-") && /\.modelUpgrades\?\.\[/.test(text)) modernConsumer = true;
   }
   // New shells retain upgrade data but removed the banner renderer. Verify both surfaces before a no-op.
@@ -788,6 +793,9 @@ function findAuthRequirementPatch(fd, header, dataOffset) {
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
     if (/requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/.test(text)) {
+      return [rel, patchAuthRequirement];
+    }
+    if (/[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!0/.test(text)) {
       return [rel, patchAuthRequirement];
     }
     if (text.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||

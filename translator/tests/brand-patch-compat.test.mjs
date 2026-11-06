@@ -910,6 +910,16 @@ test("patches the 26.825 startup MCP reload default used by the batch-write call
   assert.equal(brandPatchCompat.hasStartupMcpConfigReload(unrelated), false);
 });
 
+test("patches the anonymous Codex 26.1103 startup MCP reload helper", () => {
+  const source = "async function({appServerConnection:e,appVersion:t,reloadUserConfig:a=!0,resourcesPath:p}){return await e.sendAppServerRequest(\"config/batchWrite\",{edits:I,expectedVersion:null,filePath:null,reloadUserConfig:a})}";
+  assert.equal(brandPatchCompat.hasStartupMcpConfigReload(source), true);
+  const patched = brandPatchCompat.patchStartupMcpConfigReload(source);
+  assert.equal(patched.length, source.length);
+  assert.match(patched, /reloadUserConfig:a=!1/);
+  assert.match(patched, /sendAppServerRequest\(\"config\/batchWrite\"/);
+  assert.equal(brandPatchCompat.patchStartupMcpConfigReload(patched), patched);
+});
+
 test("patches the extracted 26.810 local-model availability helper without changing its new guards", () => {
   const source = "function vti({additionalAvailableModels:e,authMethod:t,availableModels:n,isCustomModelProvider:r,model:i,useHiddenModels:a}){return e?.has(i.model)===!0||i.model!==`codex-auto-review`&&(a&&!r&&t!==`amazonBedrock`?n.has(i.model):!i.hidden)}";
   const patched = brandPatchCompat.patchLocalModelAvailability(source);
