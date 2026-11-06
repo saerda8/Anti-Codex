@@ -35,7 +35,6 @@ const SETTINGS_SECURITY_ENABLED_PATTERN =
 const SETTINGS_SECURITY_ENABLED_PATCHED_PATTERN =
   /\(0,[\w$]+\.jsx\)\([\w$]+,\{\.\.\.[\w$]+,securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\}\)/g;
 const SETTINGS_SECURITY_ENABLED_PROP_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)/g;
-const SETTINGS_SECURITY_ENABLED_CALL_PATTERN = /securitySettingsEnabled:(?<value>[A-Za-z_$][\w$]*)(?=\}\))/g;
 const SETTINGS_EXTERNAL_ACCOUNT_RENDER_PATCHED_PATTERN = /\/\*anticodex-hide-external-account\*\/null/g;
 const SETTINGS_EXTERNAL_SECURITY_ITEM_PATTERN =
   /\{href:[\w$.]+\.securitySettings\.href,id:(?<quote>[`\"])external:security-settings\k<quote>,kind:\k<quote>external\k<quote>,label:[\w$]+\}/g;
@@ -897,7 +896,7 @@ export function patchSettingsExternalNavigationRender(text) {
       + padReplacement(currentProp[0].groups.value, "0")
       + source.slice(valueIndex + currentProp[0].groups.value.length);
   }
-  const currentCall = allMatches(source, SETTINGS_SECURITY_ENABLED_CALL_PATTERN);
+  const currentCall = currentProp.filter((match) => source.startsWith("})", match.index + match[0].length));
   if (account.length === 0 && security.length === 0 && modernExternalSecurity.length === 0 && currentCall.length === 1) {
     const valueIndex = currentCall[0].index + currentCall[0][0].indexOf(currentCall[0].groups.value);
     return source.slice(0, valueIndex)
