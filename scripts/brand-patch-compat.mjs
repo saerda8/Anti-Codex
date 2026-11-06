@@ -897,6 +897,12 @@ export function patchSettingsExternalNavigationRender(text) {
       + source.slice(valueIndex + currentProp[0].groups.value.length);
   }
   const currentCall = currentProp.filter((match) => source.slice(match.index + match[0].length).trimStart().startsWith("})"));
+  if (account.length === 0 && security.length === 1 && modernExternalSecurity.length === 0 && currentCall.length === 1) {
+    const valueIndex = security[0].index + security[0].groups.prefix.length;
+    return source.slice(0, valueIndex)
+      + padReplacement(security[0].groups.value, "0")
+      + source.slice(valueIndex + security[0].groups.value.length);
+  }
   if (account.length === 1 && security.length === 0 && modernExternalSecurity.length === 0 && currentCall.length === 1) {
     source = source.slice(0, account[0].index)
       + padReplacement(account[0][0], "/*anticodex-hide-external-account*/null")
