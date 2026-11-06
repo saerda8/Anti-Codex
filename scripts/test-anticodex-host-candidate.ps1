@@ -484,15 +484,20 @@ $settingsDefinitionPattern = '/\*anticodex-local-settings-only\*/account:\{href:
 $settingsAccountHiddenPattern = '/\*anticodex-hide-external-account\*/null'
 $settingsModernSecurityItemPattern = '\{href:[\w$.]+\.securitySettings\.href,id:[`"]external:security-settings[`"],kind:[`"]external[`"],label:[\w$]+\}'
 $settingsHiddenAccountCount = [regex]::Matches($asarText, $settingsAccountHiddenPattern).Count
-$settingsSupportedRender = $settingsHiddenAccountCount -eq 1 -or
-    ($settingsHiddenAccountCount -eq 0 -and [regex]::Matches($asarText, $settingsModernSecurityItemPattern).Count -eq 1)
 $settingsSecurityDisabledPattern = 'securitySettingsEnabled:0\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
 $settingsDynamicWrapperPattern = '\{\.\.\.[\w$]+,securitySettingsEnabled:[A-Za-z_$][\w$]*\s*(?:,showMiniPetsLabel:[A-Za-z_$][\w$]*)?\s*\}'
+$settingsModernSecurityItemCount = [regex]::Matches($asarText, $settingsModernSecurityItemPattern).Count
+$settingsSecurityDisabledCount = [regex]::Matches($asarText, $settingsSecurityDisabledPattern).Count
+$settingsDynamicWrapperCount = [regex]::Matches($asarText, $settingsDynamicWrapperPattern).Count
+$settingsSupportedRender = $settingsHiddenAccountCount -eq 1 -or
+    ($settingsHiddenAccountCount -eq 0 -and ($settingsModernSecurityItemCount -eq 1 -or
+        ($settingsModernSecurityItemCount -eq 0 -and $settingsSecurityDisabledCount -eq 1 -and $settingsDynamicWrapperCount -eq 0)))
 if ([regex]::Matches($asarText, $settingsDefinitionPattern).Count -ne 1 -or
     -not $settingsSupportedRender -or
-    [regex]::Matches($asarText, $settingsSecurityDisabledPattern).Count -ne 1 -or
-    [regex]::Matches($asarText, $settingsDynamicWrapperPattern).Count -ne 0 -or
-    [regex]::Matches($asarText, '\.securitySettings\.message').Count -lt 1 -or
+    $settingsSecurityDisabledCount -ne 1 -or
+    $settingsDynamicWrapperCount -ne 0 -or
+    ([regex]::Matches($asarText, '\.securitySettings\.message').Count -lt 1 -and
+        [regex]::Matches($asarText, 'message:[A-Za-z_$][\w$]*\.securitySettings').Count -lt 1) -or
     [regex]::Matches($asarText, '/\*anticodex-local-settings-only\*/\s*\}').Count -ne 0) {
     throw "Anti-Codex candidate Settings compatibility patch is invalid."
 }
