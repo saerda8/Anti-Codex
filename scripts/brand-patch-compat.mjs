@@ -1207,6 +1207,8 @@ export function patchPrimaryWindowRestoreRepaint(text) {
 export function hasPatchedAuthRequirement(text) {
   const source = String(text ?? "");
   return /requiresAuth:!1\s*,email:([\w$]+)\.account\?\.type===[`"]chatgpt[`"]\?\1\.account\.email:null/.test(source)
+    || (/let [\w$]+=!1\s*,[\w$]+=([\w$]+)\?\.type===[`"]chatgpt[`"]\?\1\.email:null/.test(source)
+      && /[A-Za-z_$][\w$]*\?\?\{authMethod:[`"]apikey[`"],requiresAuth:!1,\s*email:null,planAtLogin:null\}/.test(source))
     || /[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!1/.test(source);
 }
 

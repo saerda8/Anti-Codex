@@ -358,6 +358,17 @@ function patchAuthRequirement(text) {
     next = replacePadded(next, webpackRequirements[0][0], "requiresAuth:!1");
     next = replacePadded(next, defaults[0][0], `function ${defaults[0].groups.name}(){return{authMethod:\`apikey\`,requiresAuth:!1,`);
   }
+  const compilerRequirement = /let (?<name>[\w$]+)="copilot"===[\w$]+\|\|\([\w$]+\?\.requiresOpenaiAuth\?\?![01]\)(?=,[\w$]+=([\w$]+)\?\.type==="chatgpt"\?\2\.email:null)/g;
+  const compilerRequirements = [...next.matchAll(compilerRequirement)];
+  if (compilerRequirements.length) {
+    const fallback = /(?<prefix>[A-Za-z_$][\w$]*\?\?)\{openAIAuth:null,authMethod:null,requiresAuth:![01],/g;
+    const fallbacks = [...next.matchAll(fallback)];
+    if (compilerRequirements.length !== 1 || fallbacks.length !== 1) {
+      throw new Error("Expected one compiler default and one runtime API auth state");
+    }
+    next = replacePadded(next, compilerRequirements[0][0], `let ${compilerRequirements[0].groups.name}=!1`);
+    next = replacePadded(next, fallbacks[0][0], `${fallbacks[0].groups.prefix}{authMethod:\`apikey\`,requiresAuth:!1,`);
+  }
   if (next.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}")) {
     next = replacePadded(
       next,
@@ -788,17 +799,15 @@ function findI18nLoadingGatePatch(fd, header, dataOffset) {
 }
 
 function findAuthRequirementPatch(fd, header, dataOffset) {
+  const candidates = [];
   for (const [rel, entry] of walkFiles(header)) {
     if (!rel.startsWith("webview/assets/") || !rel.endsWith(".js")) continue;
     const { buf } = readFileFromAsar(fd, entry, dataOffset);
     const text = buf.toString("utf8");
-    if (/requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/.test(text)) {
-      return [rel, patchAuthRequirement];
-    }
-    if (/[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!0/.test(text)) {
-      return [rel, patchAuthRequirement];
-    }
-    if (text.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
+    if (/requiresAuth:"copilot"===[\w$]+\|\|\([\w$]+\.requiresOpenaiAuth\?\?![01]\)/.test(text) ||
+        /let [\w$]+="copilot"===[\w$]+\|\|\([\w$]+\?\.requiresOpenaiAuth\?\?![01]\)(?=,[\w$]+=([\w$]+)\?\.type==="chatgpt"\?\1\.email:null)/.test(text) ||
+        /[A-Za-z_$][\w$]*\?\.requiresAuth\?\?!0/.test(text) ||
+        text.includes("function _(){return{openAIAuth:null,authMethod:null,requiresAuth:!0,email:null,planAtLogin:null}}") ||
         text.includes("function _(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:null}}") ||
         text.includes("requiresAuth:!0 ,email:e.account?.type===`chatgpt`?e.account.email:null") ||
         text.includes("requiresAuth:!1 ,email:e.account?.type===`chatgpt`?e.account.email:null") ||
@@ -808,17 +817,23 @@ function findAuthRequirementPatch(fd, header, dataOffset) {
         text.includes("function T(){return{authMethod:`apikey`,requiresAuth:!1,email:null,planAtLogin:0}}") ||
         text.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!0)") ||
         hasPatchedAuthRequirement(text)) {
-      return [rel, patchAuthRequirement];
+      candidates.push([rel, patchAuthRequirement]);
+      continue;
     }
     if (text.includes("function T(){return{authMethod:`chatgpt`,requiresAuth:!0,email:null,planAtLogin:0}}") &&
         text.includes("requiresAuth:!0")) {
-      return [rel, (text) => text];
+      candidates.push([rel, (text) => text]);
+      continue;
     }
     if (text.includes("function T(){return{openAIAuth:null,authMethod:null,requiresAuth:!1,email:null,planAtLogin:null}}") &&
         (text.includes("requiresAuth:r===`copilot`||(e.requiresOpenaiAuth??!1)") ||
          text.includes("return{openAIAuth:n,authMethod:r,requiresAuth:!1"))) {
-      return [rel, (text) => text];
+      candidates.push([rel, (text) => text]);
+      continue;
     }
+  }
+  if (candidates.length > 0) {
+    return candidates.length === 1 ? candidates[0] : candidates;
   }
   throw new Error("Could not find webview auth requirement hook");
 }
