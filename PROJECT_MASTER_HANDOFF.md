@@ -111,9 +111,9 @@
 
 ### 5.1 两层目录关系说明（搬迁时务必注意）
 当前磁盘上有两层目录：
-- **外层工作区容器目录**：`G:\Trae-Project\Anti-Codex`
+- **外层工作区容器目录**：`H:\CodexProject\Anti-Codex`
   - 包含 `deepcodex/`（真正的 Git 源码仓），以及历史归档 `_archive/`、历史离线验证工作区 `.validation/`、历史交付物 `deliverables/`、参考资料 `antigravity-cli-reference/`。
-- **内层核心 Git 仓库目录（唯一权威源码仓）**：`G:\Trae-Project\Anti-Codex\deepcodex`
+- **内层核心 Git 仓库目录（唯一权威源码仓）**：`H:\CodexProject\Anti-Codex\deepcodex`
   - 包含 `.git/`、全部脚本 `scripts/`、适配层与测试 `translator/`、组件清单 `third_party/`、图标资源 `assets/`、文档 `docs/`。
   - **注意**：您可以只搬迁 `deepcodex` 文件夹（并可将其重命名为任意名字，如 `D:\Projects\Anti-Codex`），也可以连外层一起搬迁。
 
@@ -135,7 +135,7 @@
 
 ## 六、项目路径搬迁指南（改变项目地址时怎么做）
 
-当您把项目文件夹移动到新路径（例如从 `G:\Trae-Project\Anti-Codex\deepcodex` 移到 `D:\NewPath\Anti-Codex`）后，请按以下 **3 步**操作：
+当您把项目文件夹移动到新路径（例如从 `H:\CodexProject\Anti-Codex\deepcodex` 移到 `D:\NewPath\Anti-Codex`）后，请按以下 **3 步**操作：
 
 ### 第 1 步：核心运行脚本已支持动态路径，只需重刷一次 Runtime 同步
 生产主链路脚本（`sync-anticodex-runtime.ps1`、`sync-anticodex.ps1`、`install-anticodex.ps1`、`test-anticodex-source-preflight.ps1` 等）均已使用 `$PSScriptRoot` 动态解析源码路径（提交 `cd7419f3` 已清理主脚本硬编码路径）。
