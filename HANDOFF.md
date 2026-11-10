@@ -29,7 +29,7 @@
 
 | 内容 | 位置 |
 |---|---|
-| 唯一工作仓 | `G:\Trae-Project\Anti-Codex\deepcodex`(main 分支) |
+| 唯一工作仓 | `H:\CodexProject\Anti-Codex\deepcodex`(main 分支) |
 | 安装入口 | `install-windows.bat` → `scripts/install-anticodex.ps1` |
 | 安装落点 / 状态 | `%LOCALAPPDATA%\Anti-Codex` / `%APPDATA%\anticodex` |
 | 启动 supervisor | `scripts/start-anticodex-fixed-route.mjs` |
@@ -97,7 +97,7 @@
 **第 0 步:提交暂存的治理重构**(如果 `git status` 还不干净):
 
 ```powershell
-cd G:\Trae-Project\Anti-Codex\deepcodex
+cd H:\CodexProject\Anti-Codex\deepcodex
 git commit -m "governance: freeze completion baseline, archive append-only ledgers, retire plan-truth test"
 ```
 

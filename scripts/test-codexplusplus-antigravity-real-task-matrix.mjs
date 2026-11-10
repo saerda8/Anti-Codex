@@ -220,7 +220,7 @@ function commandScopeViolations(turnRows) {
   const rules = [
     [/(?:^|[\\/])\.gemini[\\/]antigravity[\\/]brain(?:[\\/]|$)/i, "private_antigravity_history"],
     [/(?:^|[\\/])anticodex[\\/](?:reports|codex-home[^\\/]*|response-history\.json)(?:[\\/]|$)/i, "private_anticodex_runtime"],
-    [/g:[\\/]trae-project[\\/]anti-codex[\\/]deepcodex(?:[\\/]|$)/i, "host_product_source"],
+    [/(?:g:[\\/]trae-project|h:[\\/]codexproject)[\\/]anti-codex[\\/]deepcodex(?:[\\/]|$)/i, "host_product_source"],
     [/(?:^|[\s'"`])\.\.[\\/]/i, "parent_directory_escape"],
   ];
   for (const turn of turnRows) {
