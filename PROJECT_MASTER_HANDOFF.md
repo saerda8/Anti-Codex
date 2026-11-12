@@ -48,7 +48,7 @@
 
 1. **接手与基线摸底**
    - 梳理确认历史 `1.11.2` / `1.12.1` 均已演进至 CodexPlusPlus `v2.2.0`（哈希 `3b63ae6676d111233f853c8c9f2d25ae3832e503c26eca6c93922331a610de0b`）。
-   - 官方 WindowsApps Codex 先后从 `26.1029.7803.0` 自动更新到 `26.1103.4239.0`，随后再次更新到当前最新 `26.1103.7773.0`（内置 `codex-cli 0.167.0-alpha.3.2`）。
+   - 官方 WindowsApps Codex 先后从 `26.1029.7803.0` 自动更新到 `26.1103.7773.0`，随后再次更新到当前最新 `26.1106.6628.0`（内置 `codex-cli 0.167.0-alpha.3.2`）。
 2. **Codex 26.1103 壳补丁适配（前序会话提交 `f29a9662` ~ `914c1053`）**
    - 适配 `26.1103` 匿名启动 MCP 配置重载函数签名（`async function({appServerConnection:...})`）。
    - 适配 `26.1103` 拆分后的 Settings 渲染 bundle（`securitySettingsEnabled:0`）与候选/回滚验证器正则。
@@ -62,7 +62,7 @@
      - **根因**：计划任务 Action 的 `Execute` 被系统/外部工具改成了 `"by user disabled"`，导致 `test-anticodex-sync-readiness.ps1` 报错 `Anti-Codex launch task is missing or stale`，且桌面快捷方式无法拉起客户端。
      - **修复**：执行 `scripts/repair-anticodex-shortcuts.ps1` 重建计划任务与 5 个快捷方式，恢复 `actualExecute: C:\WINDOWS\system32\conhost.exe`。
    - **重刷与实机运行验证**：
-     - 运行 `sync-anticodex-runtime.ps1` 与受管更新任务 `Anti-Codex Updater`，将 `2e421ee7` 补丁完整写入活动宿主 `26.1103.7773.0` 并自动拉起 Anti-Codex。
+     - 运行 `sync-anticodex-runtime.ps1` 与受管更新任务 `Anti-Codex Updater`，将 `2e421ee7` 补丁完整写入活动宿主 `26.1106.6628.0` 并自动拉起 Anti-Codex。
      - 实测 `test-anticodex-sync-readiness.ps1`（`ok: true, failures: []`）与 `test-anticodex-installed-overall.ps1 -NoTraffic -Fast`（`ok: true, failures: []`）全部零失败通过。
 
 ---
@@ -71,9 +71,9 @@
 
 | 维度 | 当前状态 | 详细数据 / 证据 |
 |---|---|---|
-| **官方源版本** | `26.1103.7773.0` | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1103.7773.0_x64__2p2nqsd0c76g0\app` |
-| **活动 Anti-Codex 宿主** | `26.1103.7773.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，Host/CLI 哈希与源完全一致 |
-| **回滚点宿主** | `26.1103.4239.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\rollback-host`，随时可一键回滚 |
+| **官方源版本** | `26.1106.6628.0` | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1106.6628.0_x64__2p2nqsd0c76g0\app` |
+| **活动 Anti-Codex 宿主** | `26.1106.6628.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，Host/CLI 哈希与源完全一致 |
+| **回滚点宿主** | `26.1103.7773.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\rollback-host`，随时可一键回滚 |
 | **CodexPlusPlus 组件** | `2.2.0` | `%LOCALAPPDATA%\Anti-Codex\components\codexplusplus\codex-plus-plus.exe`（SHA256: `3b63ae66...`） |
 | **Fixed Route 状态** | `ready` | UI 就绪、Manager 就绪、Antigravity 就绪（13 个直通模型 / 48 个目录模型）、6/6 共享 MCP 就绪 |
 | **单元测试与总检** | 全绿 | `brand-patch-compat` (62/62)、`host-icon-packaging` (22/22)、`prompt-policy` (10/10)、`shortcut-repair-contract` (28/28)、`sync-readiness` (`ok: true`)、`installed-overall-fast` (`ok: true`) |
