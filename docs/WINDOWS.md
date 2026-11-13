@@ -7,7 +7,7 @@ under `%LOCALAPPDATA%\Anti-Codex`. It does not modify the official installation.
 
 - Official Codex Desktop for Windows
 - Node.js available as `node.exe`
-- A signed-in Antigravity Desktop account when using Antigravity models
+- A running, signed-in Antigravity Desktop client (keep Antigravity Desktop open while using Antigravity models)
 - Provider endpoint, model, and key when using an ordinary third-party API
 
 Third-party providers are handled directly by CodexPlusPlus and bypass

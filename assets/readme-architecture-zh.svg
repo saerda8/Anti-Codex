@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-label="Anti-Codex 三层架构与路由流向">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#db2777"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <marker id="arrowPink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f472b6"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="400" rx="20" fill="url(#bg)"/>
+  <rect x="16" y="16" width="928" height="368" rx="14" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <text x="40" y="54" fill="#f8fafc" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="22" font-weight="700">Anti-Codex 三层锁定架构与双路由流向</text>
+  <text x="40" y="78" fill="#94a3b8" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif" font-size="13">不触碰原版 Codex Desktop · 100% 保留原生任务循环（工具 / 命令 / 审批 / 压缩）</text>
+
+  <!-- Layer 1 -->
+  <rect x="40" y="116" width="248" height="220" rx="14" fill="#1e293b" stroke="url(#pink)" stroke-width="2.5"/>
+  <rect x="56" y="132" width="88" height="24" rx="12" fill="url(#pink)"/>
+  <text x="100" y="149" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700">第一层</text>
+  <text x="56" y="182" fill="#f8fafc" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700">官方 Codex 隔离壳</text>
+  <text x="56" y="208" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• 独立 Anti-Codex.exe 与粉色图标</text>
+  <text x="56" y="232" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• 独占规划、Tools、终端与文件读写</text>
+  <text x="56" y="256" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• 独占审批、重试与上下文压缩</text>
+  <rect x="56" y="280" width="216" height="38" rx="8" fill="#0f172a" stroke="#475569"/>
+  <text x="164" y="304" text-anchor="middle" fill="#f472b6" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600">与原版蓝色 Codex 双开零冲突</text>
+
+  <!-- Arrow L1 -> L2 -->
+  <line x1="288" y1="226" x2="348" y2="226" stroke="#f472b6" stroke-width="2.5" marker-end="url(#arrowPink)"/>
+
+  <!-- Layer 2 -->
+  <rect x="356" y="116" width="248" height="220" rx="14" fill="#1e293b" stroke="url(#blue)" stroke-width="2.5"/>
+  <rect x="372" y="132" width="88" height="24" rx="12" fill="url(#blue)"/>
+  <text x="416" y="149" text-anchor="middle" fill="#ffffff" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700">第二层</text>
+  <text x="372" y="182" fill="#f8fafc" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700">CodexPlusPlus 接入层</text>
+  <text x="372" y="208" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• Responses / Chat 协议标准转换</text>
+  <text x="372" y="232" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• 按所选模型严格分流（失败即报错）</text>
+  <text x="372" y="256" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12.5">• 内置中文「管理」面板一键切换</text>
+  <rect x="372" y="280" width="216" height="38" rx="8" fill="#0f172a" stroke="#475569"/>
+  <text x="480" y="304" text-anchor="middle" fill="#38bdf8" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600">绝不静默串台或降级模型</text>
+
+  <!-- Route A: Direct Third Party -->
+  <path d="M 604 176 L 664 176" stroke="#38bdf8" stroke-width="2.5" fill="none" marker-end="url(#arrowBlue)"/>
+  <rect x="672" y="116" width="248" height="98" rx="14" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+  <text x="688" y="144" fill="#38bdf8" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700">路线 A：普通第三方 API 直连</text>
+  <text x="688" y="168" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12">直接发往目标 API 服务商</text>
+  <text x="688" y="190" fill="#94a3b8" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12">完全绕过 Antigravity（无需开启）</text>
+
+  <!-- Route B: Antigravity Adapter -->
+  <path d="M 604 276 L 664 276" stroke="#fbbf24" stroke-width="2.5" fill="none" marker-end="url(#arrowAmber)"/>
+  <rect x="672" y="228" width="248" height="108" rx="14" fill="#1e293b" stroke="url(#amber)" stroke-width="2.5"/>
+  <text x="688" y="256" fill="#fbbf24" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700">第三层 / 路线 B：Antigravity 适配</text>
+  <text x="688" y="280" fill="#cbd5e1" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12">极薄 Chat → Cascade 适配复用额度</text>
+  <rect x="688" y="292" width="216" height="30" rx="6" fill="#451a03" stroke="#f59e0b"/>
+  <text x="796" y="312" text-anchor="middle" fill="#fde68a" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700">⚠ 必须全程开着 Antigravity 客户端</text>
+</svg>
