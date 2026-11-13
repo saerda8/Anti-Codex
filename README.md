@@ -6,11 +6,11 @@
 
 ### 与原版双开共存的官方 Codex Desktop 隔离副本（Isolated Official Codex）
 
-[![平台](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#三环境要求与前置条件)
+[![平台](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#四环境要求与前置条件)
 [![架构](https://img.shields.io/badge/Architecture-三层锁定架构-EC4899?style=flat-square)](#二核心架构三层锁定设计)
 [![接入层](https://img.shields.io/badge/Provider-CodexPlusPlus%202.2.0-0EA5E9?style=flat-square)](#二核心架构三层锁定设计)
 [![适配路线](https://img.shields.io/badge/Antigravity-需保持客户端开启-F59E0B?style=flat-square)](#必看提示使用-antigravity-模型时必须开着-antigravity)
-[![开源协议](https://img.shields.io/badge/License-Apache--2.0-10B981?style=flat-square)](LICENSE)
+[![许可](https://img.shields.io/badge/License-非商业使用-10B981?style=flat-square)](#许可与声明)
 
 **简体中文说明** · **[English Documentation (README_EN.md)](README_EN.md)** · **[架构文档](docs/THREE_LAYER_ARCHITECTURE.md)** · **[Windows 运行指南](docs/WINDOWS.md)**
 
@@ -66,7 +66,7 @@
 | :--- | :--- |
 | **不想污染原版官方客户端** | 受控复制官方宿主，打最小品牌与路径隔离补丁，配置与状态全部落在独立目录。 |
 | **不想用残血套壳代理** | 不重写任务控制器；文件读写、命令执行、工具调用（`tools`）、权限审批、上下文压缩（`compaction`）全由官方原生 `Codex` 负责。 |
-| **想白嫖/复用本机 Antigravity 额度** | 开着 **Antigravity Desktop** 即可通过极薄适配层（`thin` `Chat`-to-`Cascade` adapter）在原生 Codex 界面里直接选 Gemini / Claude 等模型干活。 |
+| **想复用本机 Antigravity 的模型和额度** | 开着 **Antigravity Desktop** 即可通过极薄适配层（`thin` `Chat`-to-`Cascade` adapter）在原生 Codex 界面里直接选 Gemini / Claude 等模型干活。 |
 | **想随时切普通第三方 API** | 内置中文 **「管理」** 面板，支持配置和测试标准 Responses / Chat Completions 第三方接口，直连不绕路。 |
 | **官方客户端更新频繁怕坏** | 一键同步新版本：先在候选目录打补丁、做哈希重签与门禁自检，全绿才切换激活，并自动留好一键回滚点。 |
 
@@ -94,18 +94,67 @@
 
 ---
 
-## 三、环境要求与前置条件
+## 三、工作原理：它到底是怎么跑起来的？
+
+一句话：**Anti-Codex 让官方 Codex 客户端以为自己在连一个普通的 OpenAI 接口，实际上这个“接口”是本机上的一个中转站，它再按你选的模型，把请求转给第三方 API 或本机的 Antigravity。** 干活的大脑（规划、调工具、执行命令）始终是官方 Codex 自己，中转站只负责“传话”。
+
+### 一次请求的完整路径
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 你
+    participant C as Anti-Codex 客户端<br/>(官方 Codex 隔离副本)
+    participant P as CodexPlusPlus 中转站<br/>127.0.0.1:18484
+    participant A as Antigravity 薄适配层<br/>127.0.0.1:18488
+    participant G as Antigravity Desktop<br/>(本机 language_server 进程)
+    participant T as 第三方 API 服务商
+    U->>C: 输入任务
+    C->>P: 官方原生 Responses 请求
+    alt 选的是第三方模型
+        P->>T: 直接转发（对方只支持 Chat 时自动转格式）
+        T-->>P: 流式回复
+    else 选的是 Antigravity 模型
+        P->>A: 转成标准 Chat Completions 请求
+        A->>G: 调用本机 Cascade 接口
+        G-->>A: 模型回复，或“我想调用某个工具”
+        A-->>P: 文字回复，或标准 tool_calls
+    end
+    P-->>C: 转回 Responses 流
+    C->>C: 由原生 Codex 自己执行工具、审批、压缩上下文
+    C->>P: 带着工具执行结果发起下一轮
+```
+
+### 每一步具体在做什么
+
+| 环节 | 具体做法 |
+| :--- | :--- |
+| **① 复制出一个隔离客户端** | 安装脚本把微软商店里的官方 Codex 整个复制到 `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，原版目录只读不改。复制后把 `ChatGPT.exe` 改名为 `Anti-Codex.exe`、换上粉色图标，并给界面包（`app.asar`）打几处最小补丁（品牌名、「管理」入口等），再重新计算完整性校验值，保证 Electron 能正常加载。 |
+| **② 数据彻底分家** | 启动时给它单独指定 Codex 数据目录（`%APPDATA%\anticodex`）和单独的 Electron 缓存目录，所以登录状态、聊天记录、配置都和原版互不相通。 |
+| **③ 把“模型接口”指向本机中转站** | 隔离客户端的模型接口地址被设成 `http://127.0.0.1:18484/v1`，也就是本机运行的 `CodexPlusPlus`。客户端发出的仍是官方原生格式的请求，它自己感觉不到差别。 |
+| **④ 按模型分流** | `CodexPlusPlus` 看你在模型菜单里选了谁。选第三方模型，就直连你在「管理」里填的 API（ordinary third-party traffic bypasses Antigravity）。选 Antigravity 模型，就转成标准 Chat Completions 格式，交给本机 `18488` 端口的薄适配层。路由对不上时直接报错，不会偷偷换模型。 |
+| **⑤ 薄适配层接上 Antigravity** | 适配层在本机找到 Antigravity Desktop 正在运行的 `language_server` 后台进程，从它的启动参数里读出本地端口和一次性 CSRF 令牌，再用这个令牌调用 Antigravity 的本地 Cascade 接口：读模型列表、读账号状态、发起对话、取回回复、取消请求。用的是你自己已登录账号的额度。 |
+| **⑥ 工具调用仍然交给原生 Codex** | Codex 能用的工具（执行命令、改文件等）会通过一个临时的本机 MCP 服务（随机端口加随机密钥路径）提供给 Antigravity 模型看。模型想调工具时，适配层把它翻译成标准的 `tool_calls` 回给 Codex，**由 Codex 按自己的审批和权限规则真正去执行**，结果再原路送回模型。Antigravity 一侧从不直接执行命令。 |
+| **⑦ 跟随官方更新** | 官方 Codex 更新后，同步程序先在 `update-candidate` 候选目录里重新复制、打补丁、校验，全部通过才替换当前版本，旧版本留在 `rollback-host` 作为回滚点。 |
+
+### 为什么用 Antigravity 模型时必须开着 Antigravity？
+
+因为第 ⑤ 步要连的是 **Antigravity Desktop 在你电脑上跑着的后台进程**。端口和令牌都是这个进程启动时临时生成的，Antigravity 一关，进程就没了，模型列表读不到，对话也发不出去。日常对话只用到这个进程的本地端口和令牌，Anti-Codex 不直接连 Antigravity 的云端服务。只有你主动使用「管理」里的账号切换功能时，才会把 Antigravity 的登录凭据用 Windows 自带加密（仅当前用户可解密）保存在本机。普通第三方 API 走的是第 ④ 步的直连分支，用不到这个进程，所以不需要开 Antigravity。
+
+---
+
+## 四、环境要求与前置条件
 
 | 类别 | 具体要求 |
 | :--- | :--- |
 | **操作系统与宿主** | Windows 10 / 11（x64），本机已安装官方 **Codex Desktop**（Microsoft Store / WindowsApps 版本）。 |
 | **基础运行环境** | 已安装 **Node.js**（确保 `node.exe` 在系统 `PATH` 中可用）及 Windows PowerShell 5.1。 |
-| **路线 A：使用 Antigravity 模型** | 本机已安装、已登录 **Antigravity Desktop**，且 **使用期间必须一直开着 Antigravity 客户端**（网络可正常访问其服务）。 |
-| **路线 B：使用普通第三方 API** | 准备好对应服务商的 API Base URL、模型名与 API Key（此路线无需安装或开启 Antigravity）。 |
+| **路线 A：使用普通第三方 API** | 准备好对应服务商的 API Base URL、模型名与 API Key（此路线无需安装或开启 Antigravity）。 |
+| **路线 B：使用 Antigravity 模型** | 本机已安装、已登录 **Antigravity Desktop**，且 **使用期间必须一直开着 Antigravity 客户端**（网络可正常访问其服务）。 |
 
 ---
 
-## 四、快速安装与日常使用
+## 五、快速安装与日常使用
 
 ### 第 1 步：一键安装
 
@@ -166,7 +215,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-anticodex.ps1
 
 ---
 
-## 五、常见问题排查（FAQ）
+## 六、常见问题排查（FAQ）
 
 1. **问：为什么点发送或刷新模型时提示连接失败 / Antigravity 未就绪？**
    - **答**：90% 是因为 **Antigravity Desktop 没开，或者退出了登录**。请先打开 Antigravity Desktop 确认已登录并保持窗口/后台常驻，再回 Anti-Codex 的「管理」里点一次刷新即可。
@@ -177,7 +226,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-anticodex.ps1
 
 ---
 
-## 六、开发者命令与目录索引
+## 七、开发者命令与目录索引
 
 <details>
 <summary><b>常用排障与自检命令（点击展开）</b></summary>
@@ -220,6 +269,15 @@ node --test --test-concurrency=2 translator/tests/*.test.mjs
 - **已知限制说明**：[KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)
 - **历史兼容命名清理台账**：[docs/LEGACY_REMOVAL_MANIFEST.md](docs/LEGACY_REMOVAL_MANIFEST.md)
 - **开源许可与第三方声明**：[LICENSE](LICENSE) · [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
+---
+
+## 许可与声明
+
+- **项目代码**：采用 [非商业许可](LICENSE)，允许个人、学习、研究等非商业用途使用、修改和分享，禁止商用。
+- **CodexPlusPlus 组件**：来自上游 [BigPizzaV3/CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)，沿用其 AGPL-3.0 许可，补丁单独存放在 `third_party/codexplusplus`。
+- **其他第三方代码**：见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 本项目是个人工具，与 OpenAI、Antigravity 官方均无关联。连接 Antigravity 用的是其本机客户端的内部接口，Antigravity 升级后接口可能变化，导致暂时不可用。请自行遵守各服务的使用条款。
 
 ---
 

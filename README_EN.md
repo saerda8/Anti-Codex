@@ -6,11 +6,11 @@
 
 ### Guarded, Isolated Official Codex Desktop Copy for Windows
 
-[![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#3-requirements--prerequisites)
+[![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#4-requirements--prerequisites)
 [![Architecture](https://img.shields.io/badge/Architecture-Locked%203--Layer-EC4899?style=flat-square)](#2-core-architecture-locked-3-layer-design)
 [![Provider Layer](https://img.shields.io/badge/Provider-CodexPlusPlus%202.2.0-0EA5E9?style=flat-square)](#2-core-architecture-locked-3-layer-design)
 [![Antigravity Route](https://img.shields.io/badge/Antigravity-Keep%20Desktop%20App%20Open-F59E0B?style=flat-square)](#important-keep-antigravity-desktop-open-when-using-antigravity-models)
-[![License](https://img.shields.io/badge/License-Apache--2.0-10B981?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-Non--Commercial-10B981?style=flat-square)](#license--disclaimer)
 
 **[简体中文说明 (README.md)](README.md)** · **English Documentation** · **[3-Layer Architecture](docs/THREE_LAYER_ARCHITECTURE.md)** · **[Windows Guide](docs/WINDOWS.md)**
 
@@ -94,18 +94,67 @@ Anti-Codex is governed by a strict **[Three-Layer Architecture](docs/THREE_LAYER
 
 ---
 
-## 3. Requirements & Prerequisites
+## 3. How It Works
+
+In one sentence: **Anti-Codex makes the official Codex client believe it is talking to an ordinary OpenAI-style endpoint. That endpoint is actually a local relay, which forwards each request either to your third-party API or to your locally running Antigravity Desktop, depending on the model you picked.** Native Codex stays the brain (planning, tool calls, command execution). The relay only passes messages.
+
+### The full path of one request
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as You
+    participant C as Anti-Codex client<br/>(isolated official Codex copy)
+    participant P as CodexPlusPlus relay<br/>127.0.0.1:18484
+    participant A as Thin Antigravity adapter<br/>127.0.0.1:18488
+    participant G as Antigravity Desktop<br/>(local language_server process)
+    participant T as Third-party API provider
+    U->>C: Enter a task
+    C->>P: Native Responses request
+    alt Third-party model selected
+        P->>T: Forward directly (converted to Chat if the provider needs it)
+        T-->>P: Streaming reply
+    else Antigravity model selected
+        P->>A: Standard Chat Completions request
+        A->>G: Local Cascade service call
+        G-->>A: Model output, or a tool call request
+        A-->>P: Text, or standard tool_calls
+    end
+    P-->>C: Converted back to a Responses stream
+    C->>C: Native Codex runs tools, approvals and compaction itself
+    C->>P: Next turn carrying the tool results
+```
+
+### What each step does
+
+| Step | Details |
+| :--- | :--- |
+| **1. Build an isolated client** | The installer copies the official Codex app from WindowsApps into `%LOCALAPPDATA%\Anti-Codex\codex-patched-app` (the original stays read-only). It renames `ChatGPT.exe` to `Anti-Codex.exe`, swaps in the pink icons, applies a few minimal patches to `app.asar` (branding, the `管理` entry, etc.), and recomputes the ASAR integrity hashes so Electron loads it normally. |
+| **2. Separate all data** | The copy launches with its own Codex home (`%APPDATA%\anticodex`) and its own Electron user-data directory, so sign-in state, chat history and config never mix with the original app. |
+| **3. Point the model endpoint at the local relay** | The isolated client's model endpoint is `http://127.0.0.1:18484/v1`, served by `CodexPlusPlus`. The client still sends its native request format and notices no difference. |
+| **4. Route by model** | `CodexPlusPlus` checks which model you picked. Third-party models go straight to the API you configured in `管理` (ordinary third-party traffic bypasses Antigravity). Antigravity models are converted to standard Chat Completions and handed to the thin adapter on port `18488`. Route mismatches fail closed instead of silently switching models. |
+| **5. Thin adapter connects to Antigravity** | The adapter finds the running Antigravity Desktop `language_server` process, reads its local port and per-session CSRF token from the process command line, and calls Antigravity's local Cascade service with that token to list models, read account status, start a conversation, fetch replies and cancel requests. Usage counts against your own signed-in account. |
+| **6. Tools stay with native Codex** | Codex's tools (shell commands, file edits, and so on) are offered to the Antigravity model through a temporary local MCP endpoint (random port plus random secret path). When the model wants a tool, the adapter turns that into standard `tool_calls` for Codex, and **Codex executes it under its own approval and permission rules**. The result is sent back to the model the same way. Antigravity never executes commands itself. |
+| **7. Follow official updates** | After official Codex updates, sync rebuilds and validates a fresh copy in `update-candidate`, swaps it in only when every check passes, and keeps the previous version in `rollback-host`. |
+
+### Why Antigravity Desktop must stay open
+
+Step 5 talks to **the Antigravity Desktop process running on your machine**. Its port and token are generated when that process starts. Once Antigravity is closed, the process is gone, so the model list and chat requests both fail. Normal chats only use that process's local port and token, and Anti-Codex never talks to Antigravity's cloud directly. Only the optional account-switch feature in `管理` saves Antigravity sign-in snapshots locally, encrypted with Windows DPAPI for the current user. Ordinary third-party APIs use the direct branch in step 4 and do not need that process.
+
+---
+
+## 4. Requirements & Prerequisites
 
 | Category | Requirement |
 | :--- | :--- |
 | **OS & Base Client** | Windows 10 / 11 (x64) with the official **Codex Desktop** installed (Microsoft Store / WindowsApps). |
 | **Runtime** | **Node.js** (`node.exe` available on `PATH`) and Windows PowerShell 5.1. |
-| **Route A: Antigravity Models** | **Antigravity Desktop** installed, signed in, and **kept open/running while using Anti-Codex**, with working network access. |
-| **Route B: Ordinary 3rd-Party API** | Provider endpoint URL, model name, and API key (Antigravity does **not** need to be running or installed). |
+| **Route A: Ordinary 3rd-Party API** | Provider endpoint URL, model name, and API key (Antigravity does **not** need to be running or installed). |
+| **Route B: Antigravity Models** | **Antigravity Desktop** installed, signed in, and **kept open/running while using Anti-Codex**, with working network access. |
 
 ---
 
-## 4. Installation & Step-by-Step Usage
+## 5. Installation & Step-by-Step Usage
 
 ### Step 1: First-Time Installation
 
@@ -164,7 +213,7 @@ Start Menu > Anti-Codex > Rollback Anti-Codex
 
 ---
 
-## 5. Quick Troubleshooting (FAQ)
+## 6. Quick Troubleshooting (FAQ)
 
 1. **Why did model refresh or chat fail when using an Antigravity model?**
    - Make sure **Antigravity Desktop is currently open and signed in** on your machine, then click refresh inside Anti-Codex `管理`.
@@ -175,7 +224,7 @@ Start Menu > Anti-Codex > Rollback Anti-Codex
 
 ---
 
-## 6. Developer Commands & Documentation Map
+## 7. Developer Commands & Documentation Map
 
 <details>
 <summary><b>Diagnostic & Verification Commands (click to expand)</b></summary>
@@ -216,3 +265,12 @@ node --test --test-concurrency=2 translator/tests/*.test.mjs
 - **Known Limitations**: [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)
 - **Legacy Removal Manifest**: [docs/LEGACY_REMOVAL_MANIFEST.md](docs/LEGACY_REMOVAL_MANIFEST.md)
 - **License & Third-Party Notices**: [LICENSE](LICENSE) · [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
+---
+
+## License & Disclaimer
+
+- **Project code**: [Non-commercial license](LICENSE). Personal, educational and research use, modification and sharing are allowed. Commercial use is not.
+- **CodexPlusPlus component**: From upstream [BigPizzaV3/CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus) under its AGPL-3.0 license. Patches live separately in `third_party/codexplusplus`.
+- **Other third-party code**: See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- This is a personal tool with no affiliation to OpenAI or Antigravity. The Antigravity connection uses the local desktop client's internal interface, which may change when Antigravity updates and temporarily break the route. Follow each service's terms of use.
