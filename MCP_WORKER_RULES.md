@@ -16,7 +16,7 @@
 
 ## 工作区纪律(新增)
 
-4. 不得在 `G:\Trae-Project\Anti-Codex` 根目录创建新的 `deepcodex-*` 克隆副本或
+4. 不得在 `H:\CodexProject\Anti-Codex` 根目录创建新的 `deepcodex-*` 克隆副本或
    worktree 用于并行实验;历史副本已归档,唯一工作仓是 `deepcodex`。
 5. 不得向 `archive/` 内的任何文件追加内容;状态更新只写入
    `COMPLETION_CHECKLIST.md`(验收结果)或 `MAINTENANCE.md`(上游维护日志)。
