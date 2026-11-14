@@ -8,7 +8,7 @@
 
 [![平台](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#四环境要求与前置条件)
 [![架构](https://img.shields.io/badge/Architecture-三层锁定架构-EC4899?style=flat-square)](#二核心架构三层锁定设计)
-[![接入层](https://img.shields.io/badge/Provider-CodexPlusPlus%202.2.0-0EA5E9?style=flat-square)](#二核心架构三层锁定设计)
+[![接入层](https://img.shields.io/badge/Provider-CodexPlusPlus%202.6.7-0EA5E9?style=flat-square)](#二核心架构三层锁定设计)
 [![适配路线](https://img.shields.io/badge/Antigravity-需保持客户端开启-F59E0B?style=flat-square)](#必看提示使用-antigravity-模型时必须开着-antigravity)
 [![许可](https://img.shields.io/badge/License-非商业使用-10B981?style=flat-square)](#许可与声明)
 

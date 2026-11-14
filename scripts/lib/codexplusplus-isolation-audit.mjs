@@ -207,8 +207,10 @@ function modernIsolationChecks(source) {
     && validateCopy.includes("reject_symlink_components(configured_executable)?")
     && processScope && verifiedStop;
 
-  const scopedStop = ordered(stopBranch, "stop_codex_processes_and_wait_for_app_path(path)?", "returnOk(())");
-  const managerUsesScopedStop = (body) => ordered(body, "validate_isolated_launch_app_path(&request)", "stop_main_codex_process(request.debug_port,target_app_path.as_deref())", "codex_plus_launcher::stop");
+  const scopedStop = ordered(stopBranch, "stop_codex_processes_and_wait_for_app_path(path)?", "returnOk(())")
+    || ordered(stopBranch, "stop_codex_processes_and_wait_for_app_path(path)?", "returnOk(running)");
+  const managerUsesScopedStop = (body) => ordered(body, "validate_isolated_launch_app_path(&request)", "stop_main_codex_process(request.debug_port,target_app_path.as_deref())", "codex_plus_launcher::stop")
+    || ordered(body, "validate_isolated_launch_app_path(&request)", "stop_main_codex_process(&request,target_app_path.as_deref())", "codex_plus_launcher::stop");
   const currentManagerFocus = focus.includes("std::env::current_exe().ok()")
     && /\.any\(\|name\|process\.exe_file\.eq_ignore_ascii_case\(name\)\)&&current_executable\.as_deref\(\)\.is_some_and\(\|current\|\{?process\.executable_path\.as_deref\(\)\.is_some_and\(\|path\|same_windows_executable_path\(path,current\)\)\}?\)&&[\w:]*windows_activate_process_window\(process\.process_id\)/.test(focus)
     && focusCompare.includes("to_string_lossy()") && focusCompare.includes("to_ascii_lowercase()")

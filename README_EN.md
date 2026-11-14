@@ -8,7 +8,7 @@
 
 [![Platform](https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-0078D4?style=flat-square&logo=windows)](#4-requirements--prerequisites)
 [![Architecture](https://img.shields.io/badge/Architecture-Locked%203--Layer-EC4899?style=flat-square)](#2-core-architecture-locked-3-layer-design)
-[![Provider Layer](https://img.shields.io/badge/Provider-CodexPlusPlus%202.2.0-0EA5E9?style=flat-square)](#2-core-architecture-locked-3-layer-design)
+[![Provider Layer](https://img.shields.io/badge/Provider-CodexPlusPlus%202.6.7-0EA5E9?style=flat-square)](#2-core-architecture-locked-3-layer-design)
 [![Antigravity Route](https://img.shields.io/badge/Antigravity-Keep%20Desktop%20App%20Open-F59E0B?style=flat-square)](#important-keep-antigravity-desktop-open-when-using-antigravity-models)
 [![License](https://img.shields.io/badge/License-Non--Commercial-10B981?style=flat-square)](#license--disclaimer)
 

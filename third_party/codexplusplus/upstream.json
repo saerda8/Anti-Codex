@@ -2,36 +2,31 @@
   "component": "CodexPlusPlus",
   "repository": "https://github.com/BigPizzaV3/CodexPlusPlus.git",
   "license": "AGPL-3.0-only",
-  "version": "2.2.0",
-  "tag": "v2.2.0",
-  "upstreamCommit": "58ef969c0b16a97c436d74bac8632cd7376f875c",
-  "isolationPatchCommit": "241899ae5b8e86d8dbd4e7cea0decdc9aa856d35",
-  "patchCommit": "56eeedbde98f3c1529de354eb678b6f9973e5cb8",
+  "version": "2.6.7",
+  "tag": "v2.6.7",
+  "upstreamCommit": "e63ff6c98be7b79b1d8a5983b541ea2bd6cafcfd",
+  "isolationPatchCommit": "9ae47788301e398f025ab26db390e39b3e840065",
+  "patchCommit": "9909a58ac88ecbcf078904b0e18fd239c76627a6",
   "patches": [
     {
-      "file": "candidates/v2.2.0/patches/0018-v220-integration.patch",
-      "sha256": "65ed884388726c7924f9f992013a38ffa1bd19d4057a73a8cf6aa299aee1740d",
-      "scope": "Draft Anti-Codex isolation, protocol compatibility, response history and headless launcher integration for v2.2.0"
+      "file": "candidates/v2.6.7/patches/0021-v267-format-normalization.patch",
+      "sha256": "08c8f533eb397a6a13d4b59e6133549e2ed3e4bbd2e7e09d31b58f9e30ab8abc",
+      "scope": "Rustfmt-only normalization of v2.6.7 upstream source before applying Anti-Codex integration patches"
     },
     {
-      "file": "candidates/v2.2.0/patches/0019-v220-format-normalization.patch",
-      "sha256": "434ef8a092ceaf0a2da69a88049435a19bcde18c8581f34b1d4ea86bdb3336df",
-      "scope": "Rustfmt-only normalization required by the existing candidate format gate; generated after the functional source snapshot"
-    },
-    {
-      "file": "candidates/v2.2.0/patches/0020-v220-native-regression.patch",
-      "sha256": "7f36ae568f3fb2a0214d6ddaacb81c5e78e3c98f0b681b722dc95b39d4c1f759",
-      "scope": "Native regression, 402 quota SSE, Chat SSE error code, 120s stream idle timeout, completed Chat usage fallback, isolated loopback/bearer auth before body read, and command-policy conversion tests"
+      "file": "candidates/v2.6.7/patches/0022-v267-integration.patch",
+      "sha256": "0b781660ef43774f343ded02f255279e1891973dc17d8d24c67f83632003405f",
+      "scope": "Anti-Codex isolation, protocol compatibility, response history, stack-safe proxy dispatch, and headless launcher integration for v2.6.7"
     }
   ],
   "verification": {
-    "patchReplay": "3 project patches replayed without automatic conflict resolution; head 56eeedbde98f3c1529de354eb678b6f9973e5cb8; tree 5c380def97b62ddeef26891fe68b72b2dd7cc333",
+    "patchReplay": "2 project patches replayed without automatic conflict resolution; head 9909a58ac88ecbcf078904b0e18fd239c76627a6; tree cffb2432b0b724d66da8c3426bc99bcf8876390a",
     "sourceIsolationAudit": "passed",
-    "auditRegressionTests": "Candidate-local format, protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher, Manager and launcher checks passed; complete project regression and promotion preflight remain required before replacing accepted upstream.json.",
+    "auditRegressionTests": "Candidate-local format, protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher, Manager and launcher checks passed; promoted with full project preflight and installed acceptance.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:3b63ae6676d111233f853c8c9f2d25ae3832e503c26eca6c93922331a610de0b",
+    "launcherReleaseBuild": "sha256:70c8d6881fd18a2402a304250e9f4c5195fff7f998c20a7fc231701d1aa0bcf9",
     "runtimeIsolation": "10/10 source compatibility checks; standalone helper runs without a window"
   }
 }

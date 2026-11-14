@@ -16,25 +16,24 @@ const patchManifest = readCodexPlusPlusPatchManifest(root);
 test("current promotion targets the reviewed upstream tag and manifest patch set", () => {
   const accepted = patchManifest.metadata;
 
-  assert.equal(accepted.version, "2.2.0");
-  assert.equal(accepted.tag, "v2.2.0");
-  assert.equal(accepted.upstreamCommit, "58ef969c0b16a97c436d74bac8632cd7376f875c");
-  assert.equal(accepted.patchCommit, "56eeedbde98f3c1529de354eb678b6f9973e5cb8");
+  assert.equal(accepted.version, "2.6.7");
+  assert.equal(accepted.tag, "v2.6.7");
+  assert.equal(accepted.upstreamCommit, "e63ff6c98be7b79b1d8a5983b541ea2bd6cafcfd");
+  assert.equal(accepted.patchCommit, "9909a58ac88ecbcf078904b0e18fd239c76627a6");
   assert.deepEqual(accepted.patches.map(({ file }) => file), [
-    "candidates/v2.2.0/patches/0018-v220-integration.patch",
-    "candidates/v2.2.0/patches/0019-v220-format-normalization.patch",
-    "candidates/v2.2.0/patches/0020-v220-native-regression.patch",
+    "candidates/v2.6.7/patches/0021-v267-format-normalization.patch",
+    "candidates/v2.6.7/patches/0022-v267-integration.patch",
   ]);
   assert.equal(patchManifest.patches.length, accepted.patches.length);
   for (const patch of patchManifest.patches) {
-    assert.match(patch.file, /^(?:patches|candidates[\\/]v2\.2\.0[\\/]patches)[\\/]/);
+    assert.match(patch.file, /^(?:patches|candidates[\\/]v2\.6\.7[\\/]patches)[\\/]/);
     assert.equal(
       createHash("sha256").update(readFileSync(patch.path)).digest("hex"),
       patch.sha256,
       patch.file,
     );
   }
-  assert.match(accepted.verification.patchReplay, /3 project patches/);
+  assert.match(accepted.verification.patchReplay, /2 project patches/);
   assert.match(accepted.verification.patchReplay, new RegExp(accepted.patchCommit));
   assert.match(accepted.verification.patchReplay, /tree [0-9a-f]{40}$/);
   assert.match(accepted.verification.launcherReleaseBuild, /^sha256:[0-9a-f]{64}$/);

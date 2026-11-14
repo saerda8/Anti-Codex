@@ -22,7 +22,7 @@
 2. **第二层：CodexPlusPlus 通用接入层（Protocol & Provider Proxy Layer）**
    - 第三方开源 Rust 组件（AGPL-3.0，上游仓库 `https://github.com/BigPizzaV3/CodexPlusPlus.git`）。
    - 负责将官方 Codex 发出的 Responses API 请求转换为第三方 API 或下游所需的协议（含 SSE 流式转发、402 额度错误转换、120s 空闲超时保护、本地回环鉴权、历史记录持久化等）。
-   - 本仓不直接 vendor 全量源码，只通过 `third_party/codexplusplus/upstream.json` 固定已验收的上游版本（当前为 `v2.2.0`，提交 `58ef969c0b16a97c436d74bac8632cd7376f875c`）及 3 个项目补丁（`0018`、`0019`、`0020`）。
+   - 本仓不直接 vendor 全量源码，只通过 `third_party/codexplusplus/upstream.json` 固定已验收的上游版本（已升级至 `v2.6.7`，提交 `e63ff6c98be7b79b1d8a5983b541ea2bd6cafcfd`）及 2 个项目补丁（`0021`、`0022`）。
 3. **第三层：Antigravity 薄适配层（Thin Antigravity Adapter Layer）**
    - 位于 `translator/provider/`，监听本地 `127.0.0.1:18488`。
    - 仅在用户选择 Antigravity 模型（如 `gemini-4-argon-high`、`claude-opus-5-5-high` 等）时，将标准 Chat Completions 请求映射到本机 Antigravity Desktop 的 Cascade 接口，复用其登录态与额度。
@@ -71,10 +71,10 @@
 
 | 维度 | 当前状态 | 详细数据 / 证据 |
 |---|---|---|
-| **官方源版本** | `26.1106.6628.0` | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1106.6628.0_x64__2p2nqsd0c76g0\app` |
-| **活动 Anti-Codex 宿主** | `26.1106.6628.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，Host/CLI 哈希与源完全一致 |
+| **官方源版本** | `26.1111.2228.0` | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1111.2228.0_x64__2p2nqsd0c76g0\app` |
+| **活动 Anti-Codex 宿主** | `26.1111.2228.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，Host/CLI 哈希与源完全一致 |
 | **回滚点宿主** | `26.1103.7773.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\rollback-host`，随时可一键回滚 |
-| **CodexPlusPlus 组件** | `2.2.0` | `%LOCALAPPDATA%\Anti-Codex\components\codexplusplus\codex-plus-plus.exe`（SHA256: `3b63ae66...`） |
+| **CodexPlusPlus 组件** | `2.6.7` | `%LOCALAPPDATA%\Anti-Codex\components\codexplusplus\codex-plus-plus.exe`（SHA256: `70c8d688...`） |
 | **Fixed Route 状态** | `ready` | UI 就绪、Manager 就绪、Antigravity 就绪（13 个直通模型 / 48 个目录模型）、6/6 共享 MCP 就绪 |
 | **单元测试与总检** | 全绿 | `brand-patch-compat` (62/62)、`host-icon-packaging` (22/22)、`prompt-policy` (10/10)、`shortcut-repair-contract` (28/28)、`sync-readiness` (`ok: true`)、`installed-overall-fast` (`ok: true`) |
 | **1.0 完成度清单** | 12 / 13 已勾选 | 详见 `COMPLETION_CHECKLIST.md`（第 1–12 项已完成验收；仅剩第 13 项“长任务端到端”待在需要消耗真实额度时勾选） |
