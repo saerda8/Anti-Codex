@@ -74,7 +74,7 @@
 | **官方源版本** | `26.1111.2228.0` | `C:\Program Files\WindowsApps\OpenAI.Codex_26.1111.2228.0_x64__2p2nqsd0c76g0\app` |
 | **活动 Anti-Codex 宿主** | `26.1111.2228.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\codex-patched-app`，Host/CLI 哈希与源完全一致 |
 | **回滚点宿主** | `26.1103.7773.0`（rev 7） | `%LOCALAPPDATA%\Anti-Codex\rollback-host`，随时可一键回滚 |
-| **CodexPlusPlus 组件** | `2.6.7` | `%LOCALAPPDATA%\Anti-Codex\components\codexplusplus\codex-plus-plus.exe`（SHA256: `70c8d688...`） |
+| **CodexPlusPlus 组件** | `2.6.7` | `%LOCALAPPDATA%\Anti-Codex\components\codexplusplus\codex-plus-plus.exe`（SHA256: `e3293503...`） |
 | **Fixed Route 状态** | `ready` | UI 就绪、Manager 就绪、Antigravity 就绪（13 个直通模型 / 48 个目录模型）、6/6 共享 MCP 就绪 |
 | **单元测试与总检** | 全绿 | `brand-patch-compat` (62/62)、`host-icon-packaging` (22/22)、`prompt-policy` (10/10)、`shortcut-repair-contract` (28/28)、`sync-readiness` (`ok: true`)、`installed-overall-fast` (`ok: true`) |
 | **1.0 完成度清单** | 12 / 13 已勾选 | 详见 `COMPLETION_CHECKLIST.md`（第 1–12 项已完成验收；仅剩第 13 项“长任务端到端”待在需要消耗真实额度时勾选） |

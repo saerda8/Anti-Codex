@@ -5,8 +5,8 @@
   "version": "2.6.7",
   "tag": "v2.6.7",
   "upstreamCommit": "e63ff6c98be7b79b1d8a5983b541ea2bd6cafcfd",
-  "isolationPatchCommit": "9ae47788301e398f025ab26db390e39b3e840065",
-  "patchCommit": "9909a58ac88ecbcf078904b0e18fd239c76627a6",
+  "isolationPatchCommit": "8dd29e1e52eb24686b8ae8ac3a75d7fc08ae9e02",
+  "patchCommit": "0f90cae62d14172ba97d32d154c488b25492c47d",
   "patches": [
     {
       "file": "candidates/v2.6.7/patches/0021-v267-format-normalization.patch",
@@ -20,13 +20,13 @@
     }
   ],
   "verification": {
-    "patchReplay": "2 project patches replayed without automatic conflict resolution; head 9909a58ac88ecbcf078904b0e18fd239c76627a6; tree cffb2432b0b724d66da8c3426bc99bcf8876390a",
+    "patchReplay": "2 project patches replayed without automatic conflict resolution; head 0f90cae62d14172ba97d32d154c488b25492c47d; tree cffb2432b0b724d66da8c3426bc99bcf8876390a",
     "sourceIsolationAudit": "passed",
     "auditRegressionTests": "Candidate-local format, protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher, Manager and launcher checks passed; promoted with full project preflight and installed acceptance.",
     "cargoFmt": "passed",
     "cargoCheck": "protocol proxy, response history (integration and library), native stream forwarding, local helper safeguards and watcher tests passed; Windows x64 Manager check passed",
     "windowsNativeTests": "Windows x64 release launcher build passed through the managed project runner",
-    "launcherReleaseBuild": "sha256:70c8d6881fd18a2402a304250e9f4c5195fff7f998c20a7fc231701d1aa0bcf9",
+    "launcherReleaseBuild": "sha256:e32935032a62988eb37a78122616335b958bd796aec7eadbd9db8c661f56b97f",
     "runtimeIsolation": "10/10 source compatibility checks; standalone helper runs without a window"
   }
 }

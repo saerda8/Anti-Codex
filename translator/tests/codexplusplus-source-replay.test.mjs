@@ -19,7 +19,7 @@ test("current promotion targets the reviewed upstream tag and manifest patch set
   assert.equal(accepted.version, "2.6.7");
   assert.equal(accepted.tag, "v2.6.7");
   assert.equal(accepted.upstreamCommit, "e63ff6c98be7b79b1d8a5983b541ea2bd6cafcfd");
-  assert.equal(accepted.patchCommit, "9909a58ac88ecbcf078904b0e18fd239c76627a6");
+  assert.equal(accepted.patchCommit, "0f90cae62d14172ba97d32d154c488b25492c47d");
   assert.deepEqual(accepted.patches.map(({ file }) => file), [
     "candidates/v2.6.7/patches/0021-v267-format-normalization.patch",
     "candidates/v2.6.7/patches/0022-v267-integration.patch",
